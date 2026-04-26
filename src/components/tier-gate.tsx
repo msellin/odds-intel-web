@@ -1,0 +1,147 @@
+"use client";
+
+import React from "react";
+
+const TIERS = ["scout", "analyst", "sharp", "syndicate"] as const;
+type Tier = (typeof TIERS)[number];
+
+const TIER_PRICES: Record<Tier, string> = {
+  scout: "Free",
+  analyst: "€4.99/mo",
+  sharp: "€14.99/mo",
+  syndicate: "€49.99/mo",
+};
+
+// ── Change this to demo different tiers ──
+const currentTier: Tier = "scout";
+
+function tierIndex(tier: Tier) {
+  return TIERS.indexOf(tier);
+}
+
+interface TierGateProps {
+  requiredTier: Tier;
+  children: React.ReactNode;
+  featureName: string;
+}
+
+export function TierGate({ requiredTier, children, featureName }: TierGateProps) {
+  const hasAccess = tierIndex(currentTier) >= tierIndex(requiredTier);
+
+  if (hasAccess) {
+    return <>{children}</>;
+  }
+
+  return (
+    <div style={{ position: "relative" }}>
+      {/* Blurred content */}
+      <div
+        style={{
+          filter: "blur(8px)",
+          pointerEvents: "none",
+          userSelect: "none",
+        }}
+      >
+        {children}
+      </div>
+
+      {/* Overlay */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: "rgba(10, 10, 20, 0.6)",
+          zIndex: 10,
+        }}
+      >
+        {/* Card */}
+        <div
+          style={{
+            backgroundColor: "#14141f",
+            border: "1px solid rgba(255, 255, 255, 0.1)",
+            borderRadius: "12px",
+            padding: "32px",
+            maxWidth: "360px",
+            width: "100%",
+            textAlign: "center",
+          }}
+        >
+          {/* Lock icon */}
+          <div style={{ marginBottom: "16px" }}>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="40"
+              height="40"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#6b7280"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+          </div>
+
+          <h3
+            style={{
+              color: "#ffffff",
+              fontSize: "20px",
+              fontWeight: 600,
+              margin: "0 0 8px",
+              textTransform: "capitalize",
+            }}
+          >
+            Upgrade to {requiredTier}
+          </h3>
+
+          <p
+            style={{
+              color: "#9ca3af",
+              fontSize: "14px",
+              margin: "0 0 4px",
+              lineHeight: 1.5,
+            }}
+          >
+            {featureName} is available on the{" "}
+            <span style={{ color: "#d1d5db", textTransform: "capitalize" }}>
+              {requiredTier}
+            </span>{" "}
+            plan and above.
+          </p>
+
+          <p
+            style={{
+              color: "#22c55e",
+              fontSize: "24px",
+              fontWeight: 700,
+              margin: "16px 0",
+            }}
+          >
+            {TIER_PRICES[requiredTier]}
+          </p>
+
+          <button
+            style={{
+              backgroundColor: "#22c55e",
+              color: "#000000",
+              border: "none",
+              borderRadius: "8px",
+              padding: "12px 32px",
+              fontSize: "15px",
+              fontWeight: 600,
+              cursor: "pointer",
+              width: "100%",
+            }}
+          >
+            Upgrade Now
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

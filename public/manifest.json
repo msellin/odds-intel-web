@@ -1,0 +1,22 @@
+{
+  "name": "OddsIntel — Sports Betting Intelligence",
+  "short_name": "OddsIntel",
+  "description": "AI-powered pre-match intelligence. Odds, injuries, lineups, value detection.",
+  "start_url": "/matches",
+  "display": "standalone",
+  "background_color": "#0a0a14",
+  "theme_color": "#0a0a14",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
