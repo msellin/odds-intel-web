@@ -1,19 +1,23 @@
 "use client";
 
 import React from "react";
+import { useAuth } from "@/components/auth-provider";
 
 const TIERS = ["scout", "analyst", "sharp", "syndicate"] as const;
 type Tier = (typeof TIERS)[number];
 
 const TIER_PRICES: Record<Tier, string> = {
   scout: "Free",
-  analyst: "€4.99/mo",
-  sharp: "€14.99/mo",
-  syndicate: "€49.99/mo",
+  analyst: "\u20ac4.99/mo",
+  sharp: "\u20ac14.99/mo",
+  syndicate: "\u20ac49.99/mo",
 };
 
-// ── Change this to demo different tiers ──
-const currentTier: Tier = "scout";
+function useCurrentTier(): Tier {
+  const { profile } = useAuth();
+  if (!profile?.tier) return "scout";
+  return profile.tier;
+}
 
 function tierIndex(tier: Tier) {
   return TIERS.indexOf(tier);
@@ -26,6 +30,7 @@ interface TierGateProps {
 }
 
 export function TierGate({ requiredTier, children, featureName }: TierGateProps) {
+  const currentTier = useCurrentTier();
   const hasAccess = tierIndex(currentTier) >= tierIndex(requiredTier);
 
   if (hasAccess) {

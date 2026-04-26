@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { User, Settings, Bell, Monitor } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { User, Settings, Bell, Monitor, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +22,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useAuth } from "@/components/auth-provider";
+import { createSupabaseBrowser } from "@/lib/supabase-browser";
 
 const LEAGUES = [
   "Premier League",
@@ -35,25 +38,90 @@ const LEAGUES = [
 
 const MARKETS = ["1X2", "Over/Under", "BTTS", "Asian Handicap"] as const;
 
-export default function ProfilePage() {
-  const [selectedLeagues, setSelectedLeagues] = useState<string[]>([
-    "Premier League",
-    "Bundesliga",
-  ]);
-  const [selectedMarkets, setSelectedMarkets] = useState<string[]>([
-    "1X2",
-    "Over/Under",
-  ]);
-  const [stake, setStake] = useState("25");
-  const [bankroll, setBankroll] = useState("1000");
+const TIER_LABELS: Record<string, string> = {
+  scout: "Scout — Free",
+  analyst: "Analyst — €4.99/mo",
+  sharp: "Sharp — €14.99/mo",
+  syndicate: "Syndicate — €49.99/mo",
+};
 
+interface NotificationSettings {
+  value_bet_alerts: boolean;
+  lineup_alerts: boolean;
+  injury_alerts: boolean;
+  weekly_report: boolean;
+  edge_threshold: number;
+}
+
+export default function ProfilePage() {
+  const { user, profile, loading, refreshProfile } = useAuth();
+  const router = useRouter();
+  const supabase = createSupabaseBrowser();
+
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+
+  // Profile fields
+  const [selectedLeagues, setSelectedLeagues] = useState<string[]>([]);
+  const [selectedMarkets, setSelectedMarkets] = useState<string[]>([]);
+  const [stake, setStake] = useState("10");
+  const [bankroll, setBankroll] = useState("1000");
+  const [oddsFormat, setOddsFormat] = useState("decimal");
+
+  // Notification fields
   const [valueBetAlerts, setValueBetAlerts] = useState(true);
   const [lineupAlerts, setLineupAlerts] = useState(true);
-  const [injuryAlerts, setInjuryAlerts] = useState(false);
+  const [injuryAlerts, setInjuryAlerts] = useState(true);
   const [weeklyReport, setWeeklyReport] = useState(true);
-  const [edgeThreshold, setEdgeThreshold] = useState("5");
+  const [edgeThreshold, setEdgeThreshold] = useState("3");
 
-  const [oddsFormat, setOddsFormat] = useState("decimal");
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push("/login");
+    }
+  }, [user, loading, router]);
+
+  const fetchData = useCallback(async () => {
+    if (!user) return;
+    setProfileLoading(true);
+
+    // Fetch profile
+    if (profile) {
+      setSelectedLeagues(profile.preferred_leagues ?? []);
+      setSelectedMarkets(profile.preferred_markets ?? []);
+      setStake(String(profile.default_stake ?? 10));
+      setBankroll(String(profile.bankroll ?? 1000));
+      setOddsFormat(profile.odds_format ?? "decimal");
+    }
+
+    // Fetch notification settings
+    const { data: notif } = await supabase
+      .from("user_notification_settings")
+      .select("*")
+      .eq("user_id", user.id)
+      .single();
+
+    if (notif) {
+      const n = notif as NotificationSettings;
+      setValueBetAlerts(n.value_bet_alerts);
+      setLineupAlerts(n.lineup_alerts);
+      setInjuryAlerts(n.injury_alerts);
+      setWeeklyReport(n.weekly_report);
+      setEdgeThreshold(String(n.edge_threshold ?? 3));
+    }
+
+    setProfileLoading(false);
+  }, [user, profile, supabase]);
+
+  useEffect(() => {
+    if (!loading && user) {
+      fetchData();
+    }
+  }, [loading, user, fetchData]);
 
   const toggleLeague = (league: string) => {
     setSelectedLeagues((prev) =>
@@ -73,6 +141,71 @@ export default function ProfilePage() {
 
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
+  const handleSave = async () => {
+    if (!user) return;
+    setSaving(true);
+    setMessage(null);
+
+    // Update profile
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .update({
+        preferred_leagues: selectedLeagues,
+        preferred_markets: selectedMarkets,
+        default_stake: parseFloat(stake) || 10,
+        bankroll: parseFloat(bankroll) || 1000,
+        odds_format: oddsFormat,
+        timezone,
+      })
+      .eq("id", user.id);
+
+    if (profileError) {
+      setMessage({ type: "error", text: `Failed to save profile: ${profileError.message}` });
+      setSaving(false);
+      return;
+    }
+
+    // Upsert notification settings
+    const { error: notifError } = await supabase
+      .from("user_notification_settings")
+      .upsert({
+        user_id: user.id,
+        value_bet_alerts: valueBetAlerts,
+        lineup_alerts: lineupAlerts,
+        injury_alerts: injuryAlerts,
+        weekly_report: weeklyReport,
+        edge_threshold: parseFloat(edgeThreshold) || 3,
+      });
+
+    if (notifError) {
+      setMessage({ type: "error", text: `Failed to save notifications: ${notifError.message}` });
+      setSaving(false);
+      return;
+    }
+
+    // Refresh profile in auth context
+    await refreshProfile();
+
+    setMessage({ type: "success", text: "Settings saved successfully." });
+    setSaving(false);
+
+    // Clear message after 3 seconds
+    setTimeout(() => setMessage(null), 3000);
+  };
+
+  if (loading || profileLoading) {
+    return (
+      <div className="flex items-center justify-center py-20 text-muted-foreground">
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        Loading...
+      </div>
+    );
+  }
+
+  if (!user) return null;
+
+  const tierKey = profile?.tier ?? "scout";
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -88,6 +221,19 @@ export default function ProfilePage() {
         </p>
       </div>
 
+      {/* Status message */}
+      {message && (
+        <div
+          className={`rounded-lg border px-4 py-3 text-sm ${
+            message.type === "success"
+              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+              : "border-red-500/30 bg-red-500/10 text-red-400"
+          }`}
+        >
+          {message.text}
+        </div>
+      )}
+
       {/* Account Section */}
       <Card>
         <CardHeader>
@@ -99,7 +245,7 @@ export default function ProfilePage() {
         <CardContent className="space-y-4">
           <div className="flex flex-col gap-1.5">
             <Label className="text-muted-foreground">Email</Label>
-            <p className="font-mono text-sm">margus@example.com</p>
+            <p className="font-mono text-sm">{user.email}</p>
           </div>
           <Separator />
           <div className="flex items-center justify-between">
@@ -107,7 +253,7 @@ export default function ProfilePage() {
               <Label className="text-muted-foreground">Current Plan</Label>
               <div className="flex items-center gap-2">
                 <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
-                  Sharp — &euro;14.99/mo
+                  {TIER_LABELS[tierKey] ?? "Scout — Free"}
                 </Badge>
               </div>
             </div>
@@ -331,6 +477,20 @@ export default function ProfilePage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Save Button */}
+      <div className="flex justify-end">
+        <Button onClick={handleSave} disabled={saving} className="min-w-[120px]">
+          {saving ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Saving...
+            </>
+          ) : (
+            "Save Settings"
+          )}
+        </Button>
+      </div>
     </div>
   );
 }

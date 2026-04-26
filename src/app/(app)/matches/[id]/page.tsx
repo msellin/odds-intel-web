@@ -16,17 +16,27 @@ export default async function MatchDetailPage({
 
   if (!data) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4">
-        <h1 className="text-2xl font-bold">Match not found</h1>
-        <p className="text-muted-foreground">
-          No detailed data available for this match.
-        </p>
-        <Link
-          href="/"
-          className="text-sm text-blue-400 hover:underline"
-        >
-          Back to dashboard
-        </Link>
+      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-6">
+        <div className="rounded-xl border border-border/50 bg-card px-8 py-10 text-center space-y-4 max-w-md w-full">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-muted bg-muted/30 mx-auto">
+            <Shield className="h-6 w-6 text-muted-foreground" />
+          </div>
+          <div className="space-y-1">
+            <h1 className="text-xl font-semibold text-foreground">
+              Match not found
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              No detailed data available for this match. It may have been removed
+              or hasn&apos;t been analyzed yet.
+            </p>
+          </div>
+          <Link
+            href="/matches"
+            className="inline-flex items-center justify-center rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            Back to Matches
+          </Link>
+        </div>
       </div>
     );
   }
