@@ -2,10 +2,12 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { Clock, CalendarDays, SearchX } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { getTodayOdds } from "@/lib/engine-data";
+import { getPublicMatches } from "@/lib/engine-data";
 import { getCountryFlag } from "@/lib/country-flags";
+import { interestScore, interestIndicator } from "@/lib/match-utils";
 import { LeagueFilter } from "@/components/league-filter";
-import type { LiveMatch } from "@/lib/engine-data";
+import { createSupabaseServer } from "@/lib/supabase-server";
+import type { PublicMatch } from "@/lib/engine-data";
 
 function TierBadge({ tier }: { tier: number }) {
   if (tier === 1) {
@@ -53,7 +55,17 @@ interface MatchesPageProps {
 
 export default async function MatchesPage({ searchParams }: MatchesPageProps) {
   const params = await searchParams;
-  const allMatches = await getTodayOdds();
+  const allMatches = await getPublicMatches();
+
+  // Check if user is authenticated (for sign-up banner / future pro data)
+  const supabase = await createSupabaseServer();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const isAuthenticated = !!user;
+
+  // TODO: If authenticated, fetch additional Pro-tier data (odds detail, form, signals)
+  // This will be implemented in Milestone 2 (B3 — Tier-aware data API)
 
   // Build league info for the filter
   const leagueMap = new Map<string, number>();
@@ -81,7 +93,7 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
   }
 
   // Group by league
-  const grouped = new Map<string, LiveMatch[]>();
+  const grouped = new Map<string, PublicMatch[]>();
   for (const match of filtered) {
     const existing = grouped.get(match.league) ?? [];
     existing.push(match);
@@ -94,11 +106,13 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
   }
 
   // Sort league groups: tier first, then alphabetically
-  const sortedGroups = Array.from(grouped.entries()).sort(([aLeague, aMatches], [bLeague, bMatches]) => {
-    const tierDiff = aMatches[0].tier - bMatches[0].tier;
-    if (tierDiff !== 0) return tierDiff;
-    return aLeague.localeCompare(bLeague);
-  });
+  const sortedGroups = Array.from(grouped.entries()).sort(
+    ([aLeague, aMatches], [bLeague, bMatches]) => {
+      const tierDiff = aMatches[0].tier - bMatches[0].tier;
+      if (tierDiff !== 0) return tierDiff;
+      return aLeague.localeCompare(bLeague);
+    }
+  );
 
   return (
     <div className="space-y-6">
@@ -119,6 +133,21 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
           {filtered.length} match{filtered.length !== 1 ? "es" : ""}
         </Badge>
       </div>
+
+      {/* Sign-up banner for logged-out users */}
+      {!isAuthenticated && (
+        <div className="flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-4 py-3">
+          <p className="text-sm text-muted-foreground">
+            Sign up free to track your favourite leagues
+          </p>
+          <Link
+            href="/signup"
+            className="shrink-0 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 transition-colors"
+          >
+            Sign Up
+          </Link>
+        </div>
+      )}
 
       {/* League filter */}
       {allLeagues.length > 0 && (
@@ -174,7 +203,9 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
   );
 }
 
-function MatchCard({ match }: { match: LiveMatch }) {
+function MatchCard({ match }: { match: PublicMatch }) {
+  const interest = interestScore(match);
+  const indicator = interestIndicator(interest);
   const bestOdds = [match.bestHome, match.bestDraw, match.bestAway];
   const maxOdd = Math.max(...bestOdds);
 
@@ -183,13 +214,16 @@ function MatchCard({ match }: { match: LiveMatch }) {
       href={`/matches/${match.id}`}
       className="group relative flex flex-col gap-3 rounded-xl border border-border/50 bg-card p-4 transition-all hover:border-primary/40 hover:bg-card/80 hover:shadow-[0_0_15px_-4px] hover:shadow-primary/20"
     >
-      {/* Tier badge in corner */}
-      <div className="absolute right-3 top-3">
+      {/* Interest indicator + tier badge in corner */}
+      <div className="absolute right-3 top-3 flex items-center gap-1.5">
+        <span className="text-sm" title={interest}>
+          {indicator}
+        </span>
         <TierBadge tier={match.tier} />
       </div>
 
       {/* Teams */}
-      <div className="pr-10">
+      <div className="pr-16">
         <p className="text-sm font-bold text-foreground truncate">
           {match.homeTeam}
         </p>
@@ -206,13 +240,29 @@ function MatchCard({ match }: { match: LiveMatch }) {
       </div>
 
       {/* Best odds row */}
-      {match.bestHome > 0 && (
+      {match.hasOdds && match.bestHome > 0 ? (
         <div className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 font-mono text-xs">
-          <OddsCell label="H" value={match.bestHome} isBest={match.bestHome === maxOdd} />
+          <OddsCell
+            label="H"
+            value={match.bestHome}
+            isBest={match.bestHome === maxOdd}
+          />
           <span className="text-muted-foreground/40">|</span>
-          <OddsCell label="D" value={match.bestDraw} isBest={match.bestDraw === maxOdd} />
+          <OddsCell
+            label="D"
+            value={match.bestDraw}
+            isBest={match.bestDraw === maxOdd}
+          />
           <span className="text-muted-foreground/40">|</span>
-          <OddsCell label="A" value={match.bestAway} isBest={match.bestAway === maxOdd} />
+          <OddsCell
+            label="A"
+            value={match.bestAway}
+            isBest={match.bestAway === maxOdd}
+          />
+        </div>
+      ) : (
+        <div className="flex items-center rounded-lg bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+          No odds available
         </div>
       )}
     </Link>
@@ -231,7 +281,11 @@ function OddsCell({
   return (
     <span className="flex items-center gap-1">
       <span className="text-muted-foreground">{label}:</span>
-      <span className={isBest ? "text-emerald-400 font-semibold" : "text-foreground"}>
+      <span
+        className={
+          isBest ? "text-emerald-400 font-semibold" : "text-foreground"
+        }
+      >
         {value.toFixed(2)}
       </span>
     </span>

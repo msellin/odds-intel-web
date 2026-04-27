@@ -1,4 +1,5 @@
 import { createSupabaseServer } from "./supabase-server";
+import { createSupabasePublic } from "./supabase-public";
 
 // ─── Frontend types (same interface as before) ──────────────────────────────
 
@@ -71,7 +72,103 @@ interface OddsRow {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SimBetRow = Record<string, any>;
 
+// ─── Public match type (no auth required) ──────────────────────────────────
+
+export interface PublicMatch {
+  id: string;
+  homeTeam: string;
+  awayTeam: string;
+  kickoff: string;
+  league: string;
+  country: string;
+  tier: number;
+  status: string;
+  hasOdds: boolean;
+  bestHome: number;
+  bestDraw: number;
+  bestAway: number;
+}
+
 // ─── Data fetching functions ────────────────────────────────────────────────
+
+/**
+ * Fetch today's matches using the anon key — no user session required.
+ * Tables read (matches, teams, leagues, odds_snapshots) do not have RLS enabled,
+ * so anon reads work. If RLS is ever enabled on these tables, add:
+ *   CREATE POLICY "Public read" ON matches FOR SELECT USING (true);
+ *   CREATE POLICY "Public read" ON teams FOR SELECT USING (true);
+ *   CREATE POLICY "Public read" ON leagues FOR SELECT USING (true);
+ *   CREATE POLICY "Public read" ON odds_snapshots FOR SELECT USING (true);
+ */
+export async function getPublicMatches(): Promise<PublicMatch[]> {
+  const supabase = createSupabasePublic();
+
+  const now = new Date();
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date(now);
+  todayEnd.setHours(23, 59, 59, 999);
+
+  const { data: matches, error } = await supabase
+    .from("matches")
+    .select(
+      `id, date, status,
+       home_team:home_team_id(id, name, country),
+       away_team:away_team_id(id, name, country),
+       league:league_id(id, name, country, tier)`
+    )
+    .gte("date", todayStart.toISOString())
+    .lte("date", todayEnd.toISOString())
+    .order("date", { ascending: true });
+
+  if (error || !matches) return [];
+
+  type PublicMatchRow = Pick<MatchRow, "id" | "date" | "status" | "home_team" | "away_team" | "league">;
+
+  // Check which matches have odds (just need match_ids, not full odds)
+  const matchIds = (matches as PublicMatchRow[]).map((m) => m.id);
+  const { data: oddsRows } = matchIds.length
+    ? await supabase
+        .from("odds_snapshots")
+        .select("match_id, bookmaker, market, selection, odds")
+        .in("match_id", matchIds)
+        .eq("market", "1X2")
+    : { data: [] };
+
+  // Group 1X2 odds by match → compute best H/D/A
+  const oddsByMatch: Record<string, { home: number[]; draw: number[]; away: number[] }> = {};
+  for (const o of (oddsRows || []) as { match_id: string; selection: string; odds: number }[]) {
+    if (!oddsByMatch[o.match_id]) oddsByMatch[o.match_id] = { home: [], draw: [], away: [] };
+    const num = Number(o.odds);
+    if (o.selection === "home") oddsByMatch[o.match_id].home.push(num);
+    if (o.selection === "draw") oddsByMatch[o.match_id].draw.push(num);
+    if (o.selection === "away") oddsByMatch[o.match_id].away.push(num);
+  }
+
+  const matchIdsWithOdds = new Set(Object.keys(oddsByMatch));
+
+  return (matches as PublicMatchRow[]).map((m) => {
+    const homeTeam = Array.isArray(m.home_team) ? m.home_team[0] : m.home_team;
+    const awayTeam = Array.isArray(m.away_team) ? m.away_team[0] : m.away_team;
+    const league = Array.isArray(m.league) ? m.league[0] : m.league;
+    const odds = oddsByMatch[m.id];
+
+    return {
+      id: m.id,
+      homeTeam: homeTeam?.name || "TBD",
+      awayTeam: awayTeam?.name || "TBD",
+      kickoff: m.date,
+      league: league ? `${league.country} / ${league.name}` : "Unknown",
+      country: league?.country || "Unknown",
+      tier: league?.tier || 1,
+      status: m.status,
+      hasOdds: matchIdsWithOdds.has(m.id),
+      bestHome: odds ? Math.max(0, ...odds.home) : 0,
+      bestDraw: odds ? Math.max(0, ...odds.draw) : 0,
+      bestAway: odds ? Math.max(0, ...odds.away) : 0,
+    };
+  });
+}
 
 export async function getTodayOdds(): Promise<LiveMatch[]> {
   const supabase = await createSupabaseServer();
