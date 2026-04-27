@@ -158,6 +158,9 @@ export default function LandingPage() {
             </span>
           </Link>
           <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" render={<Link href="/matches" />}>
+              Matches
+            </Button>
             <Button variant="ghost" size="sm" render={<Link href="/login" />}>
               Log In
             </Button>
@@ -188,17 +191,17 @@ export default function LandingPage() {
             <Button
               size="lg"
               className="h-11 bg-green-600 px-6 text-base text-white hover:bg-green-700"
-              render={<Link href="/signup" />}
+              render={<Link href="/matches" />}
             >
-              Start Free
+              Browse Today&apos;s Matches
             </Button>
             <Button
               variant="outline"
               size="lg"
               className="h-11 px-6 text-base"
-              render={<Link href="/track-record" />}
+              render={<Link href="/signup" />}
             >
-              See Track Record
+              Sign Up Free
             </Button>
           </div>
 
