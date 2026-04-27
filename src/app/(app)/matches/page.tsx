@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { Clock, CalendarDays, SearchX } from "lucide-react";
+import { Clock, CalendarDays, SearchX, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { getPublicMatches } from "@/lib/engine-data";
 import { getCountryFlag } from "@/lib/country-flags";
@@ -8,28 +8,6 @@ import { interestScore, interestIndicator } from "@/lib/match-utils";
 import { LeagueFilter } from "@/components/league-filter";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import type { PublicMatch } from "@/lib/engine-data";
-
-function TierBadge({ tier }: { tier: number }) {
-  if (tier === 1) {
-    return (
-      <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">
-        T1
-      </span>
-    );
-  }
-  if (tier === 2) {
-    return (
-      <span className="inline-flex items-center rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400">
-        T2
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center rounded-full bg-zinc-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-400">
-      T3
-    </span>
-  );
-}
 
 function formatKickoff(iso: string): string {
   const d = new Date(iso);
@@ -50,36 +28,27 @@ function formatDate(): string {
 }
 
 interface MatchesPageProps {
-  searchParams: Promise<{ leagues?: string; tier?: string }>;
+  searchParams: Promise<{ leagues?: string; view?: string }>;
 }
 
 export default async function MatchesPage({ searchParams }: MatchesPageProps) {
   const params = await searchParams;
   const allMatches = await getPublicMatches();
 
-  // Check if user is authenticated (for sign-up banner / future pro data)
+  // Check if user is authenticated (for sign-up banner)
   const supabase = await createSupabaseServer();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   const isAuthenticated = !!user;
 
-  // TODO: If authenticated, fetch additional Pro-tier data (odds detail, form, signals)
-  // This will be implemented in Milestone 2 (B3 — Tier-aware data API)
+  // TODO: If authenticated, fetch additional Pro-tier data (Milestone 2)
 
   // Build league info for the filter
-  const leagueMap = new Map<string, number>();
-  for (const m of allMatches) {
-    if (!leagueMap.has(m.league)) {
-      leagueMap.set(m.league, m.tier);
-    }
-  }
-  const allLeagues = Array.from(leagueMap.entries()).map(([name, tier]) => ({
-    name,
-    tier,
-  }));
+  const leagueNames = [...new Set(allMatches.map((m) => m.league))];
+  const allLeagues = leagueNames.map((name) => ({ name, tier: 1 }));
 
-  // Filter matches based on search params
+  // Filter matches
   let filtered = allMatches;
 
   if (params.leagues) {
@@ -87,9 +56,8 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
     filtered = filtered.filter((m) => selectedSet.has(m.league));
   }
 
-  if (params.tier && params.tier !== "all") {
-    const tierNum = parseInt(params.tier);
-    filtered = filtered.filter((m) => m.tier === tierNum);
+  if (params.view === "odds") {
+    filtered = filtered.filter((m) => m.hasOdds);
   }
 
   // Group by league
@@ -100,38 +68,54 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
     grouped.set(match.league, existing);
   }
 
-  // Sort matches within each group by kickoff
+  // Sort matches within each group: matches with odds first, then by kickoff
   for (const matches of grouped.values()) {
-    matches.sort((a, b) => a.kickoff.localeCompare(b.kickoff));
+    matches.sort((a, b) => {
+      if (a.hasOdds !== b.hasOdds) return a.hasOdds ? -1 : 1;
+      return a.kickoff.localeCompare(b.kickoff);
+    });
   }
 
-  // Sort league groups: tier first, then alphabetically
+  // Sort league groups: leagues with any odds first, then by match count, then alphabetically
   const sortedGroups = Array.from(grouped.entries()).sort(
     ([aLeague, aMatches], [bLeague, bMatches]) => {
-      const tierDiff = aMatches[0].tier - bMatches[0].tier;
-      if (tierDiff !== 0) return tierDiff;
+      const aHasOdds = aMatches.some((m) => m.hasOdds);
+      const bHasOdds = bMatches.some((m) => m.hasOdds);
+      if (aHasOdds !== bHasOdds) return aHasOdds ? -1 : 1;
+      const countDiff = bMatches.length - aMatches.length;
+      if (countDiff !== 0) return countDiff;
       return aLeague.localeCompare(bLeague);
     }
   );
+
+  const totalWithOdds = filtered.filter((m) => m.hasOdds).length;
 
   return (
     <div className="space-y-6">
       {/* Page header */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">
-              Today&apos;s Matches
-            </h1>
-            <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-              <CalendarDays className="size-3.5" />
-              {formatDate()}
-            </p>
-          </div>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Today&apos;s Matches
+          </h1>
+          <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <CalendarDays className="size-3.5" />
+            {formatDate()}
+          </p>
         </div>
-        <Badge variant="secondary" className="w-fit">
-          {filtered.length} match{filtered.length !== 1 ? "es" : ""}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary" className="w-fit">
+            {filtered.length} match{filtered.length !== 1 ? "es" : ""}
+          </Badge>
+          {totalWithOdds > 0 && (
+            <Badge
+              variant="outline"
+              className="w-fit border-emerald-500/30 text-emerald-400"
+            >
+              {totalWithOdds} with odds
+            </Badge>
+          )}
+        </div>
       </div>
 
       {/* Sign-up banner for logged-out users */}
@@ -149,12 +133,40 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
         </div>
       )}
 
-      {/* League filter */}
-      {allLeagues.length > 0 && (
-        <Suspense fallback={null}>
-          <LeagueFilter leagues={allLeagues} />
-        </Suspense>
-      )}
+      {/* View toggle + League filter */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            Show:
+          </span>
+          <Link
+            href="/matches"
+            className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+              params.view !== "odds"
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:bg-muted/80"
+            }`}
+          >
+            All matches
+          </Link>
+          <Link
+            href="/matches?view=odds"
+            className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+              params.view === "odds"
+                ? "bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500/30"
+                : "bg-muted text-muted-foreground hover:bg-muted/80"
+            }`}
+          >
+            With odds only
+          </Link>
+        </div>
+
+        {allLeagues.length > 0 && (
+          <Suspense fallback={null}>
+            <LeagueFilter leagues={allLeagues} />
+          </Suspense>
+        )}
+      </div>
 
       {/* Empty state */}
       {sortedGroups.length === 0 && (
@@ -164,41 +176,63 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
           </div>
           <div className="text-center">
             <p className="text-sm font-medium text-foreground">
-              No matches found for today
+              No matches found
             </p>
             <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-              Check back tomorrow or adjust your league filters above to see
-              available matches.
+              {params.view === "odds"
+                ? "No matches with odds data today. Try showing all matches."
+                : "Check back tomorrow or adjust your league filters above."}
             </p>
           </div>
         </div>
       )}
 
       {/* Grouped by league */}
-      {sortedGroups.map(([league, matches]) => (
-        <section key={league} className="space-y-3">
-          {/* League header */}
-          <div className="flex items-center gap-2 border-b border-border/40 pb-2">
-            <span className="text-lg leading-none">
-              {getCountryFlag(league)}
-            </span>
-            <h2 className="text-sm font-semibold tracking-wide uppercase text-foreground">
-              {league}
-            </h2>
-            <TierBadge tier={matches[0].tier} />
-            <span className="ml-auto text-xs text-muted-foreground">
-              {matches.length} match{matches.length !== 1 ? "es" : ""}
-            </span>
-          </div>
+      {sortedGroups.map(([league, matches]) => {
+        const withOdds = matches.filter((m) => m.hasOdds);
+        const withoutOdds = matches.filter((m) => !m.hasOdds);
 
-          {/* Match cards grid */}
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {matches.map((match) => (
-              <MatchCard key={match.id} match={match} />
-            ))}
-          </div>
-        </section>
-      ))}
+        return (
+          <section key={league} className="space-y-3">
+            {/* League header */}
+            <div className="flex items-center gap-2 border-b border-border/40 pb-2">
+              <span className="text-lg leading-none">
+                {getCountryFlag(league)}
+              </span>
+              <h2 className="text-sm font-semibold tracking-wide uppercase text-foreground">
+                {league}
+              </h2>
+              <span className="ml-auto text-xs text-muted-foreground">
+                {matches.length} match{matches.length !== 1 ? "es" : ""}
+                {withOdds.length > 0 && (
+                  <span className="text-emerald-400">
+                    {" "}
+                    ({withOdds.length} with odds)
+                  </span>
+                )}
+              </span>
+            </div>
+
+            {/* Matches with odds: card grid */}
+            {withOdds.length > 0 && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {withOdds.map((match) => (
+                  <MatchCard key={match.id} match={match} />
+                ))}
+              </div>
+            )}
+
+            {/* Matches without odds: compact rows */}
+            {withoutOdds.length > 0 && (
+              <div className="rounded-lg border border-border/30 divide-y divide-border/20">
+                {withoutOdds.map((match) => (
+                  <CompactMatchRow key={match.id} match={match} />
+                ))}
+              </div>
+            )}
+          </section>
+        );
+      })}
     </div>
   );
 }
@@ -206,24 +240,21 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
 function MatchCard({ match }: { match: PublicMatch }) {
   const interest = interestScore(match);
   const indicator = interestIndicator(interest);
-  const bestOdds = [match.bestHome, match.bestDraw, match.bestAway];
-  const maxOdd = Math.max(...bestOdds);
 
   return (
     <Link
       href={`/matches/${match.id}`}
-      className="group relative flex flex-col gap-3 rounded-xl border border-border/50 bg-card p-4 transition-all hover:border-primary/40 hover:bg-card/80 hover:shadow-[0_0_15px_-4px] hover:shadow-primary/20"
+      className="group relative flex flex-col gap-2.5 rounded-xl border border-border/50 bg-card p-4 transition-all hover:border-primary/40 hover:bg-card/80 hover:shadow-[0_0_15px_-4px] hover:shadow-primary/20"
     >
-      {/* Interest indicator + tier badge in corner */}
-      <div className="absolute right-3 top-3 flex items-center gap-1.5">
+      {/* Interest indicator */}
+      <div className="absolute right-3 top-3">
         <span className="text-sm" title={interest}>
           {indicator}
         </span>
-        <TierBadge tier={match.tier} />
       </div>
 
       {/* Teams */}
-      <div className="pr-16">
+      <div className="pr-10">
         <p className="text-sm font-bold text-foreground truncate">
           {match.homeTeam}
         </p>
@@ -238,56 +269,25 @@ function MatchCard({ match }: { match: PublicMatch }) {
         <Clock className="size-3" />
         <span>{formatKickoff(match.kickoff)}</span>
       </div>
-
-      {/* Best odds row */}
-      {match.hasOdds && match.bestHome > 0 ? (
-        <div className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 font-mono text-xs">
-          <OddsCell
-            label="H"
-            value={match.bestHome}
-            isBest={match.bestHome === maxOdd}
-          />
-          <span className="text-muted-foreground/40">|</span>
-          <OddsCell
-            label="D"
-            value={match.bestDraw}
-            isBest={match.bestDraw === maxOdd}
-          />
-          <span className="text-muted-foreground/40">|</span>
-          <OddsCell
-            label="A"
-            value={match.bestAway}
-            isBest={match.bestAway === maxOdd}
-          />
-        </div>
-      ) : (
-        <div className="flex items-center rounded-lg bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-          No odds available
-        </div>
-      )}
     </Link>
   );
 }
 
-function OddsCell({
-  label,
-  value,
-  isBest,
-}: {
-  label: string;
-  value: number;
-  isBest: boolean;
-}) {
+function CompactMatchRow({ match }: { match: PublicMatch }) {
   return (
-    <span className="flex items-center gap-1">
-      <span className="text-muted-foreground">{label}:</span>
-      <span
-        className={
-          isBest ? "text-emerald-400 font-semibold" : "text-foreground"
-        }
-      >
-        {value.toFixed(2)}
+    <Link
+      href={`/matches/${match.id}`}
+      className="flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-muted/30 group"
+    >
+      <span className="text-xs text-muted-foreground font-mono w-11 shrink-0">
+        {formatKickoff(match.kickoff)}
       </span>
-    </span>
+      <span className="text-sm text-foreground truncate">
+        {match.homeTeam}
+        <span className="text-muted-foreground"> vs </span>
+        {match.awayTeam}
+      </span>
+      <ChevronRight className="size-3.5 text-muted-foreground/40 ml-auto shrink-0 group-hover:text-muted-foreground transition-colors" />
+    </Link>
   );
 }

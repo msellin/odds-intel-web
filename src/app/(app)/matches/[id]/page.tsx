@@ -1,15 +1,16 @@
-import { getMatchById } from "@/lib/engine-data";
+import {
+  getPublicMatchById,
+  getPublicMatchBookmakerCount,
+  getMatchById,
+} from "@/lib/engine-data";
+import type { LiveMatch } from "@/lib/engine-data";
+import { MatchDetailFree } from "@/components/match-detail-free";
 import { MatchDetailLive } from "@/components/match-detail-live";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Clock, Calendar, Shield } from "lucide-react";
 import Link from "next/link";
-
-const TIER_LABELS: Record<number, { label: string; cls: string }> = {
-  1: { label: "Tier 1", cls: "border-green-500/30 text-green-400" },
-  2: { label: "Tier 2", cls: "border-blue-500/30 text-blue-400" },
-  3: { label: "Tier 3", cls: "border-zinc-500/30 text-zinc-400" },
-};
+import { createSupabaseServer } from "@/lib/supabase-server";
 
 export default async function MatchDetailPage({
   params,
@@ -17,9 +18,11 @@ export default async function MatchDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const match = await getMatchById(id);
 
-  if (!match) {
+  // Always fetch public match data (works without auth)
+  const publicMatch = await getPublicMatchById(id);
+
+  if (!publicMatch) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] gap-6">
         <div className="rounded-xl border border-border/50 bg-card px-8 py-10 text-center space-y-4 max-w-md w-full">
@@ -31,8 +34,8 @@ export default async function MatchDetailPage({
               Match not found
             </h1>
             <p className="text-sm text-muted-foreground">
-              No detailed data available for this match. It may have been removed
-              or hasn&apos;t been analyzed yet.
+              No data available for this match. It may have been removed or
+              hasn&apos;t been analyzed yet.
             </p>
           </div>
           <Link
@@ -46,7 +49,26 @@ export default async function MatchDetailPage({
     );
   }
 
-  const kickoffDate = new Date(match.kickoff);
+  // Try to get authenticated data for pro users
+  let liveMatch: LiveMatch | null = null;
+  try {
+    const supabase = await createSupabaseServer();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      liveMatch = await getMatchById(id);
+    }
+  } catch {
+    // Not authenticated — free content only
+  }
+
+  // Bookmaker count for the pro teaser
+  const bookmakerCount = publicMatch.hasOdds
+    ? await getPublicMatchBookmakerCount(id)
+    : 0;
+
+  const kickoffDate = new Date(publicMatch.kickoff);
   const dateStr = kickoffDate.toLocaleDateString("en-GB", {
     weekday: "short",
     day: "numeric",
@@ -56,20 +78,16 @@ export default async function MatchDetailPage({
   const timeStr = kickoffDate.toLocaleTimeString("en-GB", {
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "Europe/Tallinn",
   });
-
-  const tierInfo = TIER_LABELS[match.tier] ?? {
-    label: `Tier ${match.tier}`,
-    cls: "border-border text-muted-foreground",
-  };
 
   return (
     <div className="space-y-6">
-      {/* ── Header ────────────────────────────────────────────────── */}
+      {/* Header */}
       <div className="space-y-3">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Link href="/" className="hover:text-foreground transition-colors">
-            Dashboard
+            Home
           </Link>
           <span>/</span>
           <Link
@@ -79,28 +97,22 @@ export default async function MatchDetailPage({
             Matches
           </Link>
           <span>/</span>
-          <span>Detail</span>
+          <span className="text-foreground">Detail</span>
         </div>
 
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-              {match.homeTeam}{" "}
+              {publicMatch.homeTeam}{" "}
               <span className="text-muted-foreground font-normal">vs</span>{" "}
-              {match.awayTeam}
+              {publicMatch.awayTeam}
             </h1>
             <div className="flex items-center gap-3 mt-1.5 flex-wrap">
               <Badge
                 variant="outline"
                 className="text-xs border-border gap-1.5"
               >
-                {match.league}
-              </Badge>
-              <Badge
-                variant="outline"
-                className={`text-xs ${tierInfo.cls}`}
-              >
-                {tierInfo.label}
+                {publicMatch.league}
               </Badge>
               <span className="flex items-center gap-1 text-xs text-muted-foreground">
                 <Calendar className="h-3 w-3" />
@@ -117,8 +129,13 @@ export default async function MatchDetailPage({
 
       <Separator className="bg-border" />
 
-      {/* ── Live Data Content ─────────────────────────────────────── */}
-      <MatchDetailLive match={match} />
+      {/* Free content — always visible */}
+      <MatchDetailFree match={publicMatch} bookmakerCount={bookmakerCount} />
+
+      {/* Pro content — only if authenticated with full odds data */}
+      {liveMatch && liveMatch.odds.length > 0 && (
+        <MatchDetailLive match={liveMatch} />
+      )}
     </div>
   );
 }

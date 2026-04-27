@@ -170,6 +170,71 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
   });
 }
 
+export async function getPublicMatchById(matchId: string): Promise<PublicMatch | null> {
+  const supabase = createSupabasePublic();
+
+  const { data: match, error } = await supabase
+    .from("matches")
+    .select(
+      `id, date, status,
+       home_team:home_team_id(id, name, country),
+       away_team:away_team_id(id, name, country),
+       league:league_id(id, name, country, tier)`
+    )
+    .eq("id", matchId)
+    .single();
+
+  if (error || !match) return null;
+
+  type PublicMatchRow = Pick<MatchRow, "id" | "date" | "status" | "home_team" | "away_team" | "league">;
+  const m = match as PublicMatchRow;
+
+  const { data: oddsRows } = await supabase
+    .from("odds_snapshots")
+    .select("match_id, selection, odds")
+    .eq("match_id", matchId)
+    .eq("market", "1X2");
+
+  const odds = { home: [] as number[], draw: [] as number[], away: [] as number[] };
+  for (const o of (oddsRows || []) as { match_id: string; selection: string; odds: number }[]) {
+    const num = Number(o.odds);
+    if (o.selection === "home") odds.home.push(num);
+    if (o.selection === "draw") odds.draw.push(num);
+    if (o.selection === "away") odds.away.push(num);
+  }
+
+  const homeTeam = Array.isArray(m.home_team) ? m.home_team[0] : m.home_team;
+  const awayTeam = Array.isArray(m.away_team) ? m.away_team[0] : m.away_team;
+  const league = Array.isArray(m.league) ? m.league[0] : m.league;
+
+  return {
+    id: m.id,
+    homeTeam: homeTeam?.name || "TBD",
+    awayTeam: awayTeam?.name || "TBD",
+    kickoff: m.date,
+    league: league ? `${league.country} / ${league.name}` : "Unknown",
+    country: league?.country || "Unknown",
+    tier: league?.tier || 1,
+    status: m.status,
+    hasOdds: odds.home.length > 0,
+    bestHome: odds.home.length ? Math.max(0, ...odds.home) : 0,
+    bestDraw: odds.draw.length ? Math.max(0, ...odds.draw) : 0,
+    bestAway: odds.away.length ? Math.max(0, ...odds.away) : 0,
+  };
+}
+
+export async function getPublicMatchBookmakerCount(matchId: string): Promise<number> {
+  const supabase = createSupabasePublic();
+  const { data } = await supabase
+    .from("odds_snapshots")
+    .select("bookmaker")
+    .eq("match_id", matchId)
+    .eq("market", "1X2");
+
+  if (!data) return 0;
+  return new Set(data.map((r: { bookmaker: string }) => r.bookmaker)).size;
+}
+
 export async function getTodayOdds(): Promise<LiveMatch[]> {
   const supabase = await createSupabaseServer();
 

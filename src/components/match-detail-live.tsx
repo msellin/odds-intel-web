@@ -16,14 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  BarChart3,
-  Users,
-  Cloud,
-  Sparkles,
-  Lock,
-  Clock,
-} from "lucide-react";
+import { Clock } from "lucide-react";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -35,39 +28,6 @@ function timeAgo(iso: string): string {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
   return `${Math.floor(hrs / 24)}d ago`;
-}
-
-// ── Coming Soon Card ───────────────────────────────────────────────────────
-
-function ComingSoonCard({
-  icon: Icon,
-  title,
-  description,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  title: string;
-  description: string;
-}) {
-  return (
-    <Card className="border-dashed border-border/50 bg-card/50">
-      <CardContent className="flex items-start gap-4 py-6 px-5">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border/40 bg-muted/20">
-          <Icon className="h-5 w-5 text-muted-foreground/60" />
-        </div>
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm font-medium text-muted-foreground">
-              {title}
-            </h3>
-            <Lock className="h-3 w-3 text-muted-foreground/40" />
-          </div>
-          <p className="text-xs text-muted-foreground/60 leading-relaxed">
-            {description}
-          </p>
-        </div>
-      </CardContent>
-    </Card>
-  );
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────
@@ -195,29 +155,6 @@ export function MatchDetailLive({ match }: { match: LiveMatch }) {
         </Card>
       </TierGate>
 
-      {/* ── Coming Soon Sections ────────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <ComingSoonCard
-          icon={BarChart3}
-          title="Stats & Form"
-          description="Team statistics will appear here once data pipeline is fully connected."
-        />
-        <ComingSoonCard
-          icon={Users}
-          title="Team News"
-          description="Injuries, lineups, and suspensions coming soon."
-        />
-        <ComingSoonCard
-          icon={Cloud}
-          title="Conditions"
-          description="Weather and referee data coming soon."
-        />
-        <ComingSoonCard
-          icon={Sparkles}
-          title="AI Analysis"
-          description="AI-powered match analysis and value detection coming soon."
-        />
-      </div>
     </div>
   );
 }
