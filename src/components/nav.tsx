@@ -5,7 +5,6 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   Activity,
   BarChart3,
-  TrendingUp,
   Target,
   User,
   Menu,
@@ -42,9 +41,8 @@ export function Nav() {
     <header className="sticky top-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-xl">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
         <Link href="/" className="flex items-center gap-2">
-          <TrendingUp className="h-5 w-5 text-primary" />
-          <span className="font-mono text-sm font-bold tracking-tight">
-            ODDS<span className="text-primary">INTEL</span>
+          <span className="font-mono text-lg font-black uppercase italic tracking-tight text-white">
+            ODDS<span className="text-green-500">INTEL</span>
           </span>
         </Link>
 
