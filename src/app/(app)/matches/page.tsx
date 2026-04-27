@@ -53,7 +53,7 @@ interface MatchesPageProps {
 
 export default async function MatchesPage({ searchParams }: MatchesPageProps) {
   const params = await searchParams;
-  const allMatches = getTodayOdds();
+  const allMatches = await getTodayOdds();
 
   // Build league info for the filter
   const leagueMap = new Map<string, number>();

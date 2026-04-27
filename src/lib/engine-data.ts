@@ -1,61 +1,6 @@
-import fs from "fs";
-import path from "path";
+import { createSupabaseServer } from "./supabase-server";
 
-const ENGINE_DATA_DIR = path.join(
-  process.cwd(),
-  "..",
-  "odds-intel-engine",
-  "data",
-  "daily"
-);
-
-// ─── Raw types matching the engine's JSON output ────────────────────────────
-
-export interface RawOddsMatch {
-  home_team: string;
-  away_team: string;
-  start_time: string;
-  league_path: string;
-  league_code: string;
-  tier: number;
-  operator: string;
-  odds_home: number;
-  odds_draw: number;
-  odds_away: number;
-  odds_over_25: number;
-  odds_under_25: number;
-  scraped_at: string;
-  operators: Record<
-    string,
-    {
-      home: number;
-      draw: number;
-      away: number;
-      over_25: number;
-      under_25: number;
-    }
-  >;
-}
-
-export interface RawBet {
-  bot: string;
-  match: string;
-  league: string;
-  tier: number;
-  market: string;
-  selection: string;
-  odds: number;
-  model_prob: number;
-  implied_prob: number;
-  edge: number;
-  stake: number;
-  kickoff: string;
-  placed_at: string;
-  result: "pending" | "won" | "lost" | "void";
-  pnl: number;
-}
-
-// ─── Transformed types for the frontend ─────────────────────────────────────
+// ─── Frontend types (same interface as before) ──────────────────────────────
 
 export interface LiveMatch {
   id: string;
@@ -99,174 +44,233 @@ export interface LiveBet {
   pnl: number;
 }
 
-// ─── Helper: parse league_path into sport + league ──────────────────────────
+// ─── Supabase row types ─────────────────────────────────────────────────────
 
-function parseSport(leaguePath: string): string {
-  // All current data is football. Future: "Tennis / WTA", "Esports / CS2"
-  return "Football";
+interface MatchRow {
+  id: string;
+  date: string;
+  status: string;
+  score_home: number | null;
+  score_away: number | null;
+  home_team: { id: string; name: string; country: string }[] | { id: string; name: string; country: string } | null;
+  away_team: { id: string; name: string; country: string }[] | { id: string; name: string; country: string } | null;
+  league: { id: string; name: string; country: string; tier: number }[] | { id: string; name: string; country: string; tier: number } | null;
 }
 
-function parseLeagueName(leaguePath: string): string {
-  return leaguePath; // Keep full path like "England / Premier League"
+interface OddsRow {
+  id: string;
+  match_id: string;
+  bookmaker: string;
+  market: string;
+  selection: string;
+  odds: number;
+  timestamp: string;
+  is_closing: boolean;
 }
 
-// ─── Data loading functions ─────────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type SimBetRow = Record<string, any>;
 
-function getDateString(date?: Date): string {
-  const d = date || new Date();
-  return d.toISOString().split("T")[0];
-}
+// ─── Data fetching functions ────────────────────────────────────────────────
 
-function readJsonFile<T>(filename: string): T | null {
-  const filePath = path.join(ENGINE_DATA_DIR, filename);
-  try {
-    const content = fs.readFileSync(filePath, "utf-8");
-    return JSON.parse(content) as T;
-  } catch {
-    return null;
+export async function getTodayOdds(): Promise<LiveMatch[]> {
+  const supabase = await createSupabaseServer();
+
+  const now = new Date();
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date(now);
+  todayEnd.setHours(23, 59, 59, 999);
+
+  // Fetch today's matches with team + league joins
+  const { data: matches, error } = await supabase
+    .from("matches")
+    .select(
+      `id, date, status, score_home, score_away,
+       home_team:home_team_id(id, name, country),
+       away_team:away_team_id(id, name, country),
+       league:league_id(id, name, country, tier)`
+    )
+    .gte("date", todayStart.toISOString())
+    .lte("date", todayEnd.toISOString())
+    .order("date", { ascending: true });
+
+  if (error || !matches) return [];
+
+  // Fetch odds for all today's matches
+  const matchIds = matches.map((m: MatchRow) => m.id);
+  const { data: oddsRows } = matchIds.length
+    ? await supabase
+        .from("odds_snapshots")
+        .select("*")
+        .in("match_id", matchIds)
+    : { data: [] };
+
+  // Group odds by match
+  const oddsByMatch: Record<string, OddsRow[]> = {};
+  for (const o of (oddsRows || []) as OddsRow[]) {
+    if (!oddsByMatch[o.match_id]) oddsByMatch[o.match_id] = [];
+    oddsByMatch[o.match_id].push(o);
   }
-}
 
-function generateMatchId(m: RawOddsMatch): string {
-  // Deterministic ID from teams + date
-  const dateStr = m.start_time.split("T")[0];
-  const slug = `${m.home_team}-${m.away_team}-${dateStr}`
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-");
-  return slug;
-}
+  return (matches as MatchRow[]).map((m) => {
+    const homeTeam = Array.isArray(m.home_team) ? m.home_team[0] : m.home_team;
+    const awayTeam = Array.isArray(m.away_team) ? m.away_team[0] : m.away_team;
+    const league = Array.isArray(m.league) ? m.league[0] : m.league;
 
-// ─── Public API ─────────────────────────────────────────────────────────────
+    // Transform odds rows into per-operator format
+    const matchOdds = oddsByMatch[m.id] || [];
+    const operatorMap: Record<
+      string,
+      { home: number; draw: number; away: number; over25: number; under25: number }
+    > = {};
 
-export function getTodayOdds(date?: Date): LiveMatch[] {
-  const dateStr = getDateString(date);
-  const raw = readJsonFile<RawOddsMatch[]>(`odds_${dateStr}.json`);
-  if (!raw) return [];
+    for (const o of matchOdds) {
+      if (!operatorMap[o.bookmaker]) {
+        operatorMap[o.bookmaker] = { home: 0, draw: 0, away: 0, over25: 0, under25: 0 };
+      }
+      if (o.market === "1X2") {
+        if (o.selection === "home") operatorMap[o.bookmaker].home = Number(o.odds);
+        if (o.selection === "draw") operatorMap[o.bookmaker].draw = Number(o.odds);
+        if (o.selection === "away") operatorMap[o.bookmaker].away = Number(o.odds);
+      }
+      if (o.market === "OU25") {
+        if (o.selection === "over") operatorMap[o.bookmaker].over25 = Number(o.odds);
+        if (o.selection === "under") operatorMap[o.bookmaker].under25 = Number(o.odds);
+      }
+    }
 
-  return raw.map((m) => {
-    const operators = Object.entries(m.operators).map(([name, odds]) => ({
+    const operators = Object.entries(operatorMap).map(([name, odds]) => ({
       operator: name,
-      home: odds.home,
-      draw: odds.draw,
-      away: odds.away,
-      over25: odds.over_25,
-      under25: odds.under_25,
+      ...odds,
     }));
 
     const validHome = operators.filter((o) => o.home > 0);
     const validDraw = operators.filter((o) => o.draw > 0);
     const validAway = operators.filter((o) => o.away > 0);
 
+    const leagueName = league
+      ? `${league.country} / ${league.name}`
+      : "Unknown";
+
     return {
-      id: generateMatchId(m),
-      homeTeam: m.home_team,
-      awayTeam: m.away_team,
-      kickoff: m.start_time,
-      league: parseLeagueName(m.league_path),
-      leagueCode: m.league_code,
-      sport: parseSport(m.league_path),
-      tier: m.tier,
+      id: m.id,
+      homeTeam: homeTeam?.name || "TBD",
+      awayTeam: awayTeam?.name || "TBD",
+      kickoff: m.date,
+      league: leagueName,
+      leagueCode: league?.id || "",
+      sport: "Football",
+      tier: league?.tier || 1,
       odds: operators,
-      bestHome: validHome.length
-        ? Math.max(...validHome.map((o) => o.home))
-        : 0,
-      bestDraw: validDraw.length
-        ? Math.max(...validDraw.map((o) => o.draw))
-        : 0,
-      bestAway: validAway.length
-        ? Math.max(...validAway.map((o) => o.away))
-        : 0,
-      scrapedAt: m.scraped_at,
+      bestHome: validHome.length ? Math.max(...validHome.map((o) => o.home)) : 0,
+      bestDraw: validDraw.length ? Math.max(...validDraw.map((o) => o.draw)) : 0,
+      bestAway: validAway.length ? Math.max(...validAway.map((o) => o.away)) : 0,
+      scrapedAt: matchOdds[0]?.timestamp || "",
     };
   });
 }
 
-export function getTodayBets(date?: Date): LiveBet[] {
-  const dateStr = getDateString(date);
-  const raw = readJsonFile<RawBet[]>(`bets_${dateStr}.json`);
-  if (!raw) return [];
-
-  return raw.map((b, i) => ({
-    id: `bet-${dateStr}-${i}`,
-    bot: b.bot,
-    match: b.match,
-    league: b.league,
-    tier: b.tier,
-    market: b.market,
-    selection: b.selection,
-    odds: b.odds,
-    modelProb: b.model_prob,
-    impliedProb: b.implied_prob,
-    edge: b.edge,
-    stake: b.stake,
-    kickoff: b.kickoff,
-    placedAt: b.placed_at,
-    result: b.result,
-    pnl: b.pnl,
-  }));
-}
-
-export function getAllBets(): LiveBet[] {
-  // Read all bet files across all dates
-  try {
-    const files = fs.readdirSync(ENGINE_DATA_DIR);
-    const betFiles = files
-      .filter((f) => f.startsWith("bets_") && f.endsWith(".json"))
-      .sort();
-
-    const allBets: LiveBet[] = [];
-    for (const file of betFiles) {
-      const dateStr = file.replace("bets_", "").replace(".json", "");
-      const raw = readJsonFile<RawBet[]>(file);
-      if (raw) {
-        raw.forEach((b, i) => {
-          allBets.push({
-            id: `bet-${dateStr}-${i}`,
-            bot: b.bot,
-            match: b.match,
-            league: b.league,
-            tier: b.tier,
-            market: b.market,
-            selection: b.selection,
-            odds: b.odds,
-            modelProb: b.model_prob,
-            impliedProb: b.implied_prob,
-            edge: b.edge,
-            stake: b.stake,
-            kickoff: b.kickoff,
-            placedAt: b.placed_at,
-            result: b.result,
-            pnl: b.pnl,
-          });
-        });
-      }
-    }
-    return allBets;
-  } catch {
-    return [];
-  }
-}
-
-export function getMatchById(matchId: string, date?: Date): LiveMatch | null {
-  const matches = getTodayOdds(date);
+export async function getMatchById(matchId: string): Promise<LiveMatch | null> {
+  const matches = await getTodayOdds();
   return matches.find((m) => m.id === matchId) || null;
 }
 
-export function getAvailableLeagues(date?: Date): string[] {
-  const matches = getTodayOdds(date);
-  const leagues = [...new Set(matches.map((m) => m.league))];
-  return leagues.sort();
+export async function getTodayBets(): Promise<LiveBet[]> {
+  const supabase = await createSupabaseServer();
+
+  const now = new Date();
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
+
+  const { data, error } = await supabase
+    .from("simulated_bets")
+    .select(
+      `id, match_id, market, selection, odds_at_pick, pick_time, stake,
+       model_probability, edge_percent, closing_odds, clv, result, pnl,
+       bankroll_after, news_triggered, reasoning,
+       bot:bot_id(id, name, strategy),
+       match:match_id(id, date,
+         home_team:home_team_id(name),
+         away_team:away_team_id(name),
+         league:league_id(name, country, tier)
+       )`
+    )
+    .gte("pick_time", todayStart.toISOString())
+    .order("pick_time", { ascending: false });
+
+  if (error || !data) return [];
+
+  return (data as SimBetRow[]).map(toBet);
 }
 
-export function getAvailableDates(): string[] {
-  try {
-    const files = fs.readdirSync(ENGINE_DATA_DIR);
-    return files
-      .filter((f) => f.startsWith("odds_") && f.endsWith(".json"))
-      .map((f) => f.replace("odds_", "").replace(".json", ""))
-      .sort()
-      .reverse();
-  } catch {
-    return [];
-  }
+export async function getAllBets(): Promise<LiveBet[]> {
+  const supabase = await createSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("simulated_bets")
+    .select(
+      `id, match_id, market, selection, odds_at_pick, pick_time, stake,
+       model_probability, edge_percent, closing_odds, clv, result, pnl,
+       bankroll_after, news_triggered, reasoning,
+       bot:bot_id(id, name, strategy),
+       match:match_id(id, date,
+         home_team:home_team_id(name),
+         away_team:away_team_id(name),
+         league:league_id(name, country, tier)
+       )`
+    )
+    .order("pick_time", { ascending: false })
+    .limit(500);
+
+  if (error || !data) return [];
+
+  return (data as SimBetRow[]).map(toBet);
+}
+
+function toBet(row: SimBetRow): LiveBet {
+  const bot = Array.isArray(row.bot) ? row.bot[0] : row.bot;
+  const match = Array.isArray(row.match) ? row.match[0] : row.match;
+  const homeTeam = match?.home_team
+    ? Array.isArray(match.home_team) ? match.home_team[0] : match.home_team
+    : null;
+  const awayTeam = match?.away_team
+    ? Array.isArray(match.away_team) ? match.away_team[0] : match.away_team
+    : null;
+  const league = match?.league
+    ? Array.isArray(match.league) ? match.league[0] : match.league
+    : null;
+
+  const matchName = homeTeam && awayTeam
+    ? `${homeTeam.name} vs ${awayTeam.name}`
+    : "Unknown Match";
+
+  const leagueName = league
+    ? `${league.country} / ${league.name}`
+    : "Unknown";
+
+  return {
+    id: row.id,
+    bot: bot?.name || "unknown",
+    match: matchName,
+    league: leagueName,
+    tier: league?.tier || 1,
+    market: row.market,
+    selection: row.selection,
+    odds: Number(row.odds_at_pick),
+    modelProb: Number(row.model_probability),
+    impliedProb: row.odds_at_pick > 0 ? 1 / Number(row.odds_at_pick) : 0,
+    edge: Number(row.edge_percent) / 100, // DB stores as percentage, frontend expects decimal
+    stake: Number(row.stake),
+    kickoff: match?.date || "",
+    placedAt: row.pick_time,
+    result: row.result,
+    pnl: Number(row.pnl || 0),
+  };
+}
+
+export async function getAvailableLeagues(): Promise<string[]> {
+  const matches = await getTodayOdds();
+  const leagues = [...new Set(matches.map((m) => m.league))];
+  return leagues.sort();
 }

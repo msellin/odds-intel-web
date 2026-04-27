@@ -1,8 +1,8 @@
 import { getAllBets } from "@/lib/engine-data";
 import { TrackRecordLive } from "@/components/track-record-live";
 
-export default function TrackRecordPage() {
-  const bets = getAllBets();
+export default async function TrackRecordPage() {
+  const bets = await getAllBets();
 
   // Calculate stats from real data
   const totalBets = bets.length;
