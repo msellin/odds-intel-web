@@ -18,6 +18,13 @@ export const metadata: Metadata = {
   description:
     "All your pre-match intelligence. One screen. AI-powered value detection, real-time odds, injuries, lineups, and transparent track record.",
   manifest: "/manifest.json",
+  icons: {
+    icon: [
+      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
