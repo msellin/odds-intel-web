@@ -53,6 +53,8 @@ interface MatchRow {
   status: string;
   score_home: number | null;
   score_away: number | null;
+  venue_name?: string | null;
+  referee?: string | null;
   home_team: { id: string; name: string; country: string }[] | { id: string; name: string; country: string } | null;
   away_team: { id: string; name: string; country: string }[] | { id: string; name: string; country: string } | null;
   league: { id: string; name: string; country: string; tier: number }[] | { id: string; name: string; country: string; tier: number } | null;
@@ -84,6 +86,28 @@ export interface PublicMatch {
   tier: number;
   status: string;
   hasOdds: boolean;
+  bestHome: number;
+  bestDraw: number;
+  bestAway: number;
+  // populated only on match detail (getPublicMatchById)
+  score_home?: number | null;
+  score_away?: number | null;
+  venue_name?: string | null;
+  referee?: string | null;
+}
+
+export interface MatchStatsData {
+  shots_home: number | null;
+  shots_away: number | null;
+  shots_on_target_home: number | null;
+  shots_on_target_away: number | null;
+  possession_home: number | null;
+  corners_home: number | null;
+  corners_away: number | null;
+}
+
+export interface OddsMovementPoint {
+  timestamp: string;
   bestHome: number;
   bestDraw: number;
   bestAway: number;
@@ -176,7 +200,7 @@ export async function getPublicMatchById(matchId: string): Promise<PublicMatch |
   const { data: match, error } = await supabase
     .from("matches")
     .select(
-      `id, date, status,
+      `id, date, status, score_home, score_away, venue_name, referee,
        home_team:home_team_id(id, name, country),
        away_team:away_team_id(id, name, country),
        league:league_id(id, name, country, tier)`
@@ -186,7 +210,7 @@ export async function getPublicMatchById(matchId: string): Promise<PublicMatch |
 
   if (error || !match) return null;
 
-  type PublicMatchRow = Pick<MatchRow, "id" | "date" | "status" | "home_team" | "away_team" | "league">;
+  type PublicMatchRow = Pick<MatchRow, "id" | "date" | "status" | "score_home" | "score_away" | "venue_name" | "referee" | "home_team" | "away_team" | "league">;
   const m = match as PublicMatchRow;
 
   const { data: oddsRows } = await supabase
@@ -220,6 +244,10 @@ export async function getPublicMatchById(matchId: string): Promise<PublicMatch |
     bestHome: odds.home.length ? Math.max(0, ...odds.home) : 0,
     bestDraw: odds.draw.length ? Math.max(0, ...odds.draw) : 0,
     bestAway: odds.away.length ? Math.max(0, ...odds.away) : 0,
+    score_home: m.score_home,
+    score_away: m.score_away,
+    venue_name: m.venue_name,
+    referee: m.referee,
   };
 }
 
@@ -435,4 +463,51 @@ export async function getAvailableLeagues(): Promise<string[]> {
   const matches = await getTodayOdds();
   const leagues = [...new Set(matches.map((m) => m.league))];
   return leagues.sort();
+}
+
+export async function getMatchStats(matchId: string): Promise<MatchStatsData | null> {
+  const supabase = createSupabasePublic();
+  const { data, error } = await supabase
+    .from("match_stats")
+    .select(
+      "shots_home, shots_away, shots_on_target_home, shots_on_target_away, possession_home, corners_home, corners_away"
+    )
+    .eq("match_id", matchId)
+    .single();
+  if (error || !data) return null;
+  return data as MatchStatsData;
+}
+
+export async function getOddsMovement(matchId: string): Promise<OddsMovementPoint[]> {
+  const supabase = createSupabasePublic();
+  const { data, error } = await supabase
+    .from("odds_snapshots")
+    .select("timestamp, selection, odds")
+    .eq("match_id", matchId)
+    .eq("market", "1X2")
+    .order("timestamp", { ascending: true });
+  if (error || !data) return [];
+
+  // Bucket by hour → best odds per bucket
+  const byHour: Record<string, { home: number[]; draw: number[]; away: number[] }> = {};
+  for (const row of data as { timestamp: string; selection: string; odds: number }[]) {
+    const ts = new Date(row.timestamp);
+    ts.setMinutes(0, 0, 0);
+    const key = ts.toISOString();
+    if (!byHour[key]) byHour[key] = { home: [], draw: [], away: [] };
+    const num = Number(row.odds);
+    if (row.selection === "home") byHour[key].home.push(num);
+    if (row.selection === "draw") byHour[key].draw.push(num);
+    if (row.selection === "away") byHour[key].away.push(num);
+  }
+
+  return Object.entries(byHour)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([ts, odds]) => ({
+      timestamp: ts,
+      bestHome: odds.home.length ? Math.max(...odds.home) : 0,
+      bestDraw: odds.draw.length ? Math.max(...odds.draw) : 0,
+      bestAway: odds.away.length ? Math.max(...odds.away) : 0,
+    }))
+    .filter((p) => p.bestHome > 0 || p.bestDraw > 0 || p.bestAway > 0);
 }
