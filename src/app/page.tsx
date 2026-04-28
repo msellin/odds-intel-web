@@ -32,7 +32,7 @@ const comparisonRows = [
   { feature: "Match notes & saved matches", anonymous: false, free: true, pro: true, elite: true },
   { feature: "Community match voting", anonymous: false, free: true, pro: true, elite: true },
   { feature: "1 free AI value pick per day", anonymous: false, free: true, pro: true, elite: true },
-  { feature: "Full odds — 13 bookmakers", anonymous: false, free: false, pro: true, elite: true },
+  { feature: "Full odds — multiple bookmakers", anonymous: false, free: false, pro: true, elite: true },
   { feature: "Odds movement chart", anonymous: false, free: false, pro: true, elite: true },
   { feature: "Injury & suspension alerts", anonymous: false, free: false, pro: true, elite: true },
   { feature: "Confirmed lineups + formations", anonymous: false, free: false, pro: true, elite: true },
@@ -90,7 +90,7 @@ export default function LandingPage() {
             <span className="text-green-500">One screen.</span>
           </h1>
           <p className="mx-auto mt-6 max-w-xl text-balance text-base text-muted-foreground sm:text-lg">
-            Odds from 13 bookmakers, lineups, injuries, AI value picks — everything a serious bettor needs. Free to start.
+            Compare odds across bookmakers, check lineups and injuries, track your picks — all in one place. Free to start.
           </p>
           <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
             <Button
@@ -307,7 +307,7 @@ export default function LandingPage() {
               <ul className="mt-5 flex-1 space-y-2.5">
                 {[
                   "Everything in Free",
-                  "Odds comparison — 13 bookmakers",
+                  "Odds comparison — multiple bookmakers",
                   "Odds movement chart",
                   "AI injury & suspension alerts",
                   "Lineups + formation view",
