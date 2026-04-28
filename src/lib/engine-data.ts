@@ -96,6 +96,41 @@ export interface PublicMatch {
   referee?: string | null;
 }
 
+export interface H2HMatch {
+  date: string;
+  homeTeam: string;
+  awayTeam: string;
+  scoreHome: number | null;
+  scoreAway: number | null;
+}
+
+export interface MatchH2H {
+  homeWins: number;
+  draws: number;
+  awayWins: number;
+  recent: H2HMatch[];
+}
+
+export interface TeamStanding {
+  teamName: string;
+  rank: number;
+  points: number;
+  played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  form: string;
+}
+
+export interface MatchInjury {
+  playerName: string;
+  teamSide: "home" | "away";
+  status: string;
+  reason: string | null;
+}
+
 export interface MatchStatsData {
   shots_home: number | null;
   shots_away: number | null;
@@ -508,6 +543,124 @@ export async function getLiveSnapshots(matchIds: string[]): Promise<LiveSnapshot
     seen.add(row.match_id);
     return true;
   });
+}
+
+export async function getMatchH2H(matchId: string): Promise<MatchH2H | null> {
+  const supabase = createSupabasePublic();
+  const { data, error } = await supabase
+    .from("matches")
+    .select("h2h_home_wins, h2h_draws, h2h_away_wins, h2h_raw")
+    .eq("id", matchId)
+    .single();
+
+  if (error || !data) return null;
+
+  const row = data as {
+    h2h_home_wins: number | null;
+    h2h_draws: number | null;
+    h2h_away_wins: number | null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    h2h_raw: any[] | null;
+  };
+
+  if (row.h2h_home_wins === null && row.h2h_draws === null && row.h2h_away_wins === null) return null;
+
+  const recent: H2HMatch[] = [];
+  if (Array.isArray(row.h2h_raw)) {
+    for (const m of row.h2h_raw) {
+      try {
+        recent.push({
+          date: m.fixture?.date || m.date || "",
+          homeTeam: m.teams?.home?.name || "",
+          awayTeam: m.teams?.away?.name || "",
+          scoreHome: m.goals?.home ?? null,
+          scoreAway: m.goals?.away ?? null,
+        });
+      } catch { /* skip malformed entries */ }
+    }
+  }
+
+  return {
+    homeWins: row.h2h_home_wins ?? 0,
+    draws: row.h2h_draws ?? 0,
+    awayWins: row.h2h_away_wins ?? 0,
+    recent: recent.slice(0, 5),
+  };
+}
+
+export async function getMatchInjuries(matchId: string): Promise<MatchInjury[]> {
+  const supabase = createSupabasePublic();
+  const { data, error } = await supabase
+    .from("match_injuries")
+    .select("player_name, team_side, status, reason")
+    .eq("match_id", matchId);
+
+  if (error || !data) return [];
+
+  return (data as { player_name: string; team_side: string; status: string; reason: string | null }[]).map((r) => ({
+    playerName: r.player_name,
+    teamSide: r.team_side as "home" | "away",
+    status: r.status,
+    reason: r.reason,
+  }));
+}
+
+export async function getTeamStandings(
+  homeTeam: string,
+  awayTeam: string
+): Promise<{ home: TeamStanding | null; away: TeamStanding | null }> {
+  const supabase = createSupabasePublic();
+  const { data, error } = await supabase
+    .from("league_standings")
+    .select("team_name, rank, points, played, wins, draws, losses, goals_for, goals_against, form")
+    .in("team_name", [homeTeam, awayTeam])
+    .order("fetched_date", { ascending: false });
+
+  if (error || !data) return { home: null, away: null };
+
+  type Row = {
+    team_name: string;
+    rank: number;
+    points: number;
+    played: number;
+    wins: number;
+    draws: number;
+    losses: number;
+    goals_for: number;
+    goals_against: number;
+    form: string;
+  };
+
+  // dedupe by team_name — keep most recent (first due to desc sort)
+  const seen = new Set<string>();
+  const rows: Row[] = [];
+  for (const r of data as Row[]) {
+    if (!seen.has(r.team_name)) {
+      seen.add(r.team_name);
+      rows.push(r);
+    }
+  }
+
+  const toStanding = (r: Row | undefined): TeamStanding | null => {
+    if (!r) return null;
+    return {
+      teamName: r.team_name,
+      rank: r.rank,
+      points: r.points,
+      played: r.played,
+      wins: r.wins,
+      draws: r.draws,
+      losses: r.losses,
+      goalsFor: r.goals_for,
+      goalsAgainst: r.goals_against,
+      form: r.form || "",
+    };
+  };
+
+  return {
+    home: toStanding(rows.find((r) => r.team_name === homeTeam)),
+    away: toStanding(rows.find((r) => r.team_name === awayTeam)),
+  };
 }
 
 export async function getOddsMovement(matchId: string): Promise<OddsMovementPoint[]> {

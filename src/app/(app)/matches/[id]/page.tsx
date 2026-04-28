@@ -5,6 +5,8 @@ import {
   getMatchStats,
   getOddsMovement,
   getLiveSnapshots,
+  getMatchH2H,
+  getTeamStandings,
 } from "@/lib/engine-data";
 import type { LiveMatch, MatchStatsData, OddsMovementPoint } from "@/lib/engine-data";
 import { MatchDetailFree } from "@/components/match-detail-free";
@@ -69,11 +71,14 @@ export default async function MatchDetailPage({
     // Not authenticated — free content only
   }
 
-  // Odds movement is public data (fetched for everyone, display gated client-side)
-  const oddsMovement: OddsMovementPoint[] = await getOddsMovement(id);
+  // Fetch free-tier enrichment data (H2H, standings) in parallel with other public data
+  const [oddsMovement, liveSnapshotsArr, h2h, standings] = await Promise.all([
+    getOddsMovement(id) as Promise<OddsMovementPoint[]>,
+    getLiveSnapshots([id]),
+    getMatchH2H(id),
+    getTeamStandings(publicMatch.homeTeam, publicMatch.awayTeam),
+  ]);
 
-  // Initial live snapshot for the score display (null if not live or no data yet)
-  const liveSnapshotsArr = await getLiveSnapshots([id]);
   const initialSnapshot = liveSnapshotsArr[0] ?? null;
 
   // Bookmaker count for the pro teaser
@@ -160,7 +165,13 @@ export default async function MatchDetailPage({
       <Separator className="bg-border" />
 
       {/* Free content — always visible */}
-      <MatchDetailFree match={publicMatch} bookmakerCount={bookmakerCount} />
+      <MatchDetailFree
+        match={publicMatch}
+        bookmakerCount={bookmakerCount}
+        h2h={h2h}
+        homeStanding={standings.home}
+        awayStanding={standings.away}
+      />
 
       {/* Pro content — only if authenticated with full odds data */}
       {liveMatch && liveMatch.odds.length > 0 && (
