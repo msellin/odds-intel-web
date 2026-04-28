@@ -20,6 +20,7 @@ const TIER_PRICES: Record<Tier, string> = {
 
 function useCurrentTier(): Tier {
   const { profile } = useAuth();
+  if (profile?.is_superadmin) return "elite";
   if (!profile?.tier) return "free";
   return profile.tier;
 }
