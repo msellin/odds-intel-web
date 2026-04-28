@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Star } from "lucide-react";
+import { Star, Bookmark } from "lucide-react";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
 import { useAuth } from "@/components/auth-provider";
 import type { PublicMatch, LiveSnapshot } from "@/lib/engine-data";
@@ -12,10 +12,28 @@ interface Props {
   initialSnapshots: Record<string, LiveSnapshot>;
 }
 
+type ViewTab = "all" | "favorites" | "saved";
+
 export function MatchesClient({ sortedGroups, initialSnapshots }: Props) {
   const [snapshots, setSnapshots] = useState<Record<string, LiveSnapshot>>(initialSnapshots);
-  const [showFavorites, setShowFavorites] = useState(false);
+  const [activeTab, setActiveTab] = useState<ViewTab>("all");
+  const [savedMatchIds, setSavedMatchIds] = useState<Set<string>>(new Set());
   const { user, profile } = useAuth();
+
+  // Fetch saved match IDs
+  useEffect(() => {
+    if (!user) return;
+    const supabase = createSupabaseBrowser();
+    supabase
+      .from("saved_matches")
+      .select("match_id")
+      .eq("user_id", user.id)
+      .then(({ data }) => {
+        if (data) {
+          setSavedMatchIds(new Set(data.map((r: { match_id: string }) => r.match_id)));
+        }
+      });
+  }, [user]);
 
   // Stable list of live match IDs (matches table status === 'live')
   const liveMatchIds = useMemo(
@@ -59,18 +77,29 @@ export function MatchesClient({ sortedGroups, initialSnapshots }: Props) {
   const favoriteTeams = profile?.favorite_teams ?? [];
   const favoriteLeagues = profile?.preferred_leagues ?? [];
   const hasFavorites = favoriteTeams.length > 0 || favoriteLeagues.length > 0;
+  const hasSaved = savedMatchIds.size > 0;
 
   const filteredGroups = useMemo(() => {
-    if (!showFavorites || !hasFavorites) return sortedGroups;
+    if (activeTab === "all") return sortedGroups;
 
+    if (activeTab === "saved") {
+      return sortedGroups
+        .map(([league, matches]) => {
+          const filtered = matches.filter((m) => savedMatchIds.has(m.id));
+          if (filtered.length === 0) return null;
+          return [league, filtered] as [string, PublicMatch[]];
+        })
+        .filter(Boolean) as [string, PublicMatch[]][];
+    }
+
+    // favorites
+    if (!hasFavorites) return sortedGroups;
     return sortedGroups
       .map(([league, matches]) => {
         const leagueMatch = favoriteLeagues.some((fl) =>
           league.toLowerCase().includes(fl.toLowerCase())
         );
-        // If entire league is favorited, include all its matches
         if (leagueMatch) return [league, matches] as [string, PublicMatch[]];
-        // Otherwise filter to matches with favorited teams
         const filtered = matches.filter(
           (m) =>
             favoriteTeams.includes(m.homeTeam) ||
@@ -80,7 +109,7 @@ export function MatchesClient({ sortedGroups, initialSnapshots }: Props) {
         return [league, filtered] as [string, PublicMatch[]];
       })
       .filter(Boolean) as [string, PublicMatch[]][];
-  }, [sortedGroups, showFavorites, hasFavorites, favoriteTeams, favoriteLeagues]);
+  }, [sortedGroups, activeTab, hasFavorites, favoriteTeams, favoriteLeagues, savedMatchIds]);
 
   const favoriteMatchCount = useMemo(() => {
     if (!hasFavorites) return 0;
@@ -97,45 +126,75 @@ export function MatchesClient({ sortedGroups, initialSnapshots }: Props) {
 
   return (
     <div className="space-y-3">
-      {/* My Matches / All toggle */}
-      {user && hasFavorites && (
+      {/* View tabs: All / My Matches / Saved */}
+      {user && (hasFavorites || hasSaved) && (
         <div className="flex rounded-lg border border-white/[0.06] bg-muted/20 p-1 w-fit">
           <button
-            onClick={() => setShowFavorites(false)}
+            onClick={() => setActiveTab("all")}
             className={`rounded-md px-4 py-1.5 text-xs font-bold transition-all ${
-              !showFavorites
+              activeTab === "all"
                 ? "bg-muted text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
             All matches
           </button>
-          <button
-            onClick={() => setShowFavorites(true)}
-            className={`flex items-center gap-1.5 rounded-md px-4 py-1.5 text-xs font-bold transition-all ${
-              showFavorites
-                ? "bg-muted text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
-            My Matches
-            {favoriteMatchCount > 0 && (
-              <span className="rounded-full bg-amber-400/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-400">
-                {favoriteMatchCount}
+          {hasFavorites && (
+            <button
+              onClick={() => setActiveTab("favorites")}
+              className={`flex items-center gap-1.5 rounded-md px-4 py-1.5 text-xs font-bold transition-all ${
+                activeTab === "favorites"
+                  ? "bg-muted text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+              My Matches
+              {favoriteMatchCount > 0 && (
+                <span className="rounded-full bg-amber-400/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-400">
+                  {favoriteMatchCount}
+                </span>
+              )}
+            </button>
+          )}
+          {hasSaved && (
+            <button
+              onClick={() => setActiveTab("saved")}
+              className={`flex items-center gap-1.5 rounded-md px-4 py-1.5 text-xs font-bold transition-all ${
+                activeTab === "saved"
+                  ? "bg-muted text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Bookmark className="h-3 w-3 fill-emerald-400 text-emerald-400" />
+              Saved
+              <span className="rounded-full bg-emerald-400/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400">
+                {savedMatchIds.size}
               </span>
-            )}
-          </button>
+            </button>
+          )}
         </div>
       )}
 
-      {showFavorites && filteredGroups.length === 0 && (
+      {activeTab !== "all" && filteredGroups.length === 0 && (
         <div className="rounded-xl border border-white/[0.06] bg-card/40 py-10 text-center">
-          <Star className="mx-auto h-8 w-8 text-muted-foreground/30 mb-3" />
-          <p className="text-sm font-medium text-foreground">No favorite matches today</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Star teams or leagues to see them here
-          </p>
+          {activeTab === "favorites" ? (
+            <>
+              <Star className="mx-auto h-8 w-8 text-muted-foreground/30 mb-3" />
+              <p className="text-sm font-medium text-foreground">No favorite matches today</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Star teams or leagues to see them here
+              </p>
+            </>
+          ) : (
+            <>
+              <Bookmark className="mx-auto h-8 w-8 text-muted-foreground/30 mb-3" />
+              <p className="text-sm font-medium text-foreground">No saved matches</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Bookmark matches to track them here
+              </p>
+            </>
+          )}
         </div>
       )}
 

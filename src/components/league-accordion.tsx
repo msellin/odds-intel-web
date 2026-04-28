@@ -6,6 +6,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import type { PublicMatch, LiveSnapshot } from "@/lib/engine-data";
 import { getCountryFlag } from "@/lib/country-flags";
 import { FavoriteButton } from "@/components/favorite-button";
+import { SaveMatchButton } from "@/components/save-match-button";
 
 function formatKickoff(iso: string): string {
   const d = new Date(iso);
@@ -126,8 +127,9 @@ function MatchRow({ match, liveSnapshot }: { match: PublicMatch; liveSnapshot?: 
         )}
       </div>
 
-      {/* Arrow */}
-      <div className="ml-2 shrink-0">
+      {/* Save + Arrow */}
+      <SaveMatchButton matchId={match.id} className="ml-1 shrink-0" />
+      <div className="ml-1 shrink-0">
         <ChevronRight className="size-4 text-muted-foreground/30 transition-colors group-hover:text-green-500" />
       </div>
     </Link>
