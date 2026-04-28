@@ -259,7 +259,7 @@ export default function ProfilePage() {
               </div>
             </div>
             {tierKey === "scout" ? (
-              <Button variant="outline" size="sm" render={<Link href="/signup" />}>
+              <Button variant="outline" size="sm" nativeButton={false} render={<Link href="/signup" />}>
                 Upgrade — coming soon
               </Button>
             ) : (

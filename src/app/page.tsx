@@ -68,7 +68,7 @@ export default function LandingPage() {
             <Link href="/login" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
               Log In
             </Link>
-            <Button size="sm" className="bg-green-600 text-white hover:bg-green-700" render={<Link href="/signup" />}>
+            <Button size="sm" className="bg-green-600 text-white hover:bg-green-700" nativeButton={false} render={<Link href="/signup" />}>
               Sign Up Free
             </Button>
           </div>
@@ -96,11 +96,11 @@ export default function LandingPage() {
             <Button
               size="lg"
               className="h-12 bg-green-600 px-8 text-base font-bold text-white hover:bg-green-700"
-              render={<Link href="/signup" />}
+              nativeButton={false} render={<Link href="/signup" />}
             >
               Create Free Account
             </Button>
-            <Button variant="outline" size="lg" className="h-12 px-8 text-base" render={<Link href="/matches" />}>
+            <Button variant="outline" size="lg" className="h-12 px-8 text-base" nativeButton={false} render={<Link href="/matches" />}>
               Browse Matches
             </Button>
           </div>
@@ -233,7 +233,7 @@ export default function LandingPage() {
           </div>
 
           <div className="mt-6 text-center">
-            <Button size="lg" className="h-12 bg-green-600 px-8 text-base font-bold text-white hover:bg-green-700" render={<Link href="/signup" />}>
+            <Button size="lg" className="h-12 bg-green-600 px-8 text-base font-bold text-white hover:bg-green-700" nativeButton={false} render={<Link href="/signup" />}>
               Create Free Account
             </Button>
           </div>
@@ -279,7 +279,7 @@ export default function LandingPage() {
                 ))}
               </ul>
               <div className="mt-6">
-                <Button className="w-full" variant="outline" render={<Link href="/signup" />}>
+                <Button className="w-full" variant="outline" nativeButton={false} render={<Link href="/signup" />}>
                   Create Free Account
                 </Button>
               </div>
@@ -320,7 +320,7 @@ export default function LandingPage() {
                 ))}
               </ul>
               <div className="mt-6">
-                <Button className="w-full bg-green-500 font-bold text-black hover:bg-green-400" render={<Link href="/signup" />}>
+                <Button className="w-full bg-green-500 font-bold text-black hover:bg-green-400" nativeButton={false} render={<Link href="/signup" />}>
                   Start Pro
                 </Button>
               </div>
@@ -361,7 +361,7 @@ export default function LandingPage() {
                 ))}
               </ul>
               <div className="mt-6">
-                <Button className="w-full border-amber-500/40 text-amber-400 hover:bg-amber-500/10" variant="outline" render={<Link href="/signup" />}>
+                <Button className="w-full border-amber-500/40 text-amber-400 hover:bg-amber-500/10" variant="outline" nativeButton={false} render={<Link href="/signup" />}>
                   Join Waitlist
                 </Button>
               </div>
