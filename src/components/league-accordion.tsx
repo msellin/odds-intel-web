@@ -156,9 +156,13 @@ export function LeagueAccordion({
   return (
     <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-card/40">
       {/* League header */}
-      <button
+      {/* League header – uses a div+onClick instead of <button> to avoid nesting buttons (FavoriteButton) */}
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setExpanded(!expanded)}
-        className="flex h-12 w-full items-center justify-between bg-muted/30 px-4 transition-colors hover:bg-muted/50"
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpanded(!expanded); } }}
+        className="flex h-12 w-full cursor-pointer items-center justify-between bg-muted/30 px-4 transition-colors hover:bg-muted/50"
         aria-expanded={expanded}
       >
         <div className="flex items-center gap-3">
@@ -181,7 +185,7 @@ export function LeagueAccordion({
         ) : (
           <ChevronRight className="size-4 text-muted-foreground" />
         )}
-      </button>
+      </div>
 
       {/* Match rows */}
       {expanded && (

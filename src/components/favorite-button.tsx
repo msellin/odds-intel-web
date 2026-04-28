@@ -62,7 +62,7 @@ export function FavoriteButton({ type, value, className }: FavoriteButtonProps) 
 
   return (
     <button
-      onClick={handleToggle}
+      onClick={(e) => { e.stopPropagation(); handleToggle(); }}
       className={cn(
         "inline-flex items-center justify-center rounded p-1 transition-colors hover:bg-white/10",
         className
