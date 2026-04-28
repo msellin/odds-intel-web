@@ -8,9 +8,9 @@ type Tier = (typeof TIERS)[number];
 
 const TIER_PRICES: Record<Tier, string> = {
   scout: "Free",
-  analyst: "\u20ac4.99/mo",
-  sharp: "\u20ac14.99/mo",
-  syndicate: "\u20ac49.99/mo",
+  analyst: "\u20ac19/mo",
+  sharp: "\u20ac49/mo",
+  syndicate: "\u20ac49/mo",
 };
 
 function useCurrentTier(): Tier {

@@ -22,6 +22,21 @@ export const metadata: Metadata = {
   verification: {
     google: "ix-rQvuyTbEjWYRefDYn7o-yi2S_8oUB7ahHhI56W38",
   },
+  openGraph: {
+    title: "OddsIntel — Sports Betting Intelligence",
+    description:
+      "467 daily fixtures. 13 bookmakers. AI injury alerts. H2H, form, standings — all on one screen.",
+    url: "https://oddsintel.app",
+    siteName: "OddsIntel",
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "OddsIntel — Sports Betting Intelligence",
+    description:
+      "467 daily fixtures. 13 bookmakers. AI injury alerts. H2H, form, standings — all on one screen.",
+  },
   manifest: "/manifest.json",
   icons: {
     icon: [
