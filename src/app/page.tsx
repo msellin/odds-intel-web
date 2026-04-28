@@ -76,12 +76,13 @@ const tiers = [
     ctaHref: "/matches",
     comingSoon: false,
     features: [
-      "All today's fixtures",
+      "All today's fixtures + live scores",
       "Best H/D/A odds (one bookmaker)",
-      "H2H record & recent meetings",
-      "League standings + team form",
-      "Venue & referee info",
-      "Live scores during matches",
+      "H2H record, standings & team form",
+      "Favorite teams & \"My Matches\" feed",
+      "Prediction tracker with hit rate",
+      "Daily free AI value pick",
+      "Match notes & community voting",
     ],
   },
   {

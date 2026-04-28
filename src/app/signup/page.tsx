@@ -14,11 +14,13 @@ import { Button } from "@/components/ui/button";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
 
 const FREE_FEATURES = [
-  "All today's fixtures",
-  "Best odds (H/D/A)",
-  "H2H record & recent meetings",
-  "League standings + team form",
-  "Live scores during matches",
+  "All today's fixtures + live scores",
+  "Best odds (H/D/A) from 2 bookmakers",
+  "H2H record, standings & team form",
+  "Favorite teams & personalized \"My Matches\" feed",
+  "Prediction tracker — log picks & track your hit rate",
+  "Daily free AI value bet pick",
+  "Match notes & community voting",
 ];
 
 export default function SignUpPage() {

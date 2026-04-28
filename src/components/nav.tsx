@@ -6,6 +6,7 @@ import {
   Activity,
   BarChart3,
   Target,
+  Crosshair,
   User,
   Menu,
   X,
@@ -17,9 +18,10 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/auth-provider";
 
 const links = [
-  { href: "/matches", label: "Matches", icon: Activity },
-  { href: "/value-bets", label: "Value Bets", icon: Target },
-  { href: "/track-record", label: "Track Record", icon: BarChart3 },
+  { href: "/matches", label: "Matches", icon: Activity, authOnly: false },
+  { href: "/my-picks", label: "My Picks", icon: Crosshair, authOnly: true },
+  { href: "/value-bets", label: "Value Bets", icon: Target, authOnly: false },
+  { href: "/track-record", label: "Track Record", icon: BarChart3, authOnly: false },
 ];
 
 export function Nav() {
@@ -48,7 +50,7 @@ export function Nav() {
 
         {/* Desktop nav */}
         <nav className="hidden items-center gap-1 md:flex">
-          {links.map((link) => {
+          {links.filter((link) => !link.authOnly || user).map((link) => {
             const Icon = link.icon;
             const active =
               pathname === link.href || pathname.startsWith(link.href + "/");
@@ -125,7 +127,7 @@ export function Nav() {
       {/* Mobile nav */}
       {open && (
         <nav className="border-t border-border/50 bg-background px-4 pb-4 pt-2 md:hidden">
-          {links.map((link) => {
+          {links.filter((link) => !link.authOnly || user).map((link) => {
             const Icon = link.icon;
             const active =
               pathname === link.href || pathname.startsWith(link.href + "/");

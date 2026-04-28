@@ -17,6 +17,9 @@ import type { LiveMatch, MatchStatsData, OddsMovementPoint } from "@/lib/engine-
 import { MatchDetailFree } from "@/components/match-detail-free";
 import { MatchDetailLive } from "@/components/match-detail-live";
 import { MatchScoreDisplay } from "@/components/match-score-display";
+import { MatchPickButton } from "@/components/match-pick-button";
+import { MatchNotes } from "@/components/match-notes";
+import { CommunityVote } from "@/components/community-vote";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Clock, Calendar, Shield, MapPin, User } from "lucide-react";
@@ -185,6 +188,24 @@ export default async function MatchDetailPage({
 
       <Separator className="bg-border" />
 
+      {/* User pick + community vote + notes — free signed-in features */}
+      <MatchPickButton
+        matchId={publicMatch.id}
+        homeTeam={publicMatch.homeTeam}
+        awayTeam={publicMatch.awayTeam}
+        bestHome={publicMatch.bestHome}
+        bestDraw={publicMatch.bestDraw}
+        bestAway={publicMatch.bestAway}
+        matchStatus={publicMatch.status}
+      />
+
+      <CommunityVote
+        matchId={publicMatch.id}
+        homeTeam={publicMatch.homeTeam}
+        awayTeam={publicMatch.awayTeam}
+        matchStatus={publicMatch.status}
+      />
+
       {/* Free content — always visible */}
       <MatchDetailFree
         match={publicMatch}
@@ -196,6 +217,9 @@ export default async function MatchDetailPage({
         hasLineups={publicMatch.hasLineups}
         hasStats={publicMatch.status === "finished"}
       />
+
+      {/* Match notes — free signed-in feature */}
+      <MatchNotes matchId={publicMatch.id} />
 
       {/* Pro content — show for all authenticated users */}
       {isAuthenticated && (liveMatch || matchEvents.length > 0 || injuries.length > 0 || lineups || playerStats.length > 0 || seasonStats.home || seasonStats.away || matchStats) && (

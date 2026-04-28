@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { PublicMatch, LiveSnapshot } from "@/lib/engine-data";
 import { getCountryFlag } from "@/lib/country-flags";
+import { FavoriteButton } from "@/components/favorite-button";
 
 function formatKickoff(iso: string): string {
   const d = new Date(iso);
@@ -87,9 +88,12 @@ function MatchRow({ match, liveSnapshot }: { match: PublicMatch; liveSnapshot?: 
 
       {/* Teams — with live score inline when live */}
       <div className="flex flex-1 items-center justify-center gap-2 overflow-hidden px-2 text-sm">
-        <span className="flex-1 truncate text-right font-medium text-foreground">
-          {match.homeTeam}
-        </span>
+        <div className="flex flex-1 items-center justify-end gap-1">
+          <span className="truncate font-medium text-foreground">
+            {match.homeTeam}
+          </span>
+          <FavoriteButton type="team" value={match.homeTeam} />
+        </div>
         {isLive ? (
           <span className="shrink-0 font-mono text-sm font-bold tabular-nums text-foreground">
             {liveSnapshot!.score_home}&thinsp;–&thinsp;{liveSnapshot!.score_away}
@@ -99,9 +103,12 @@ function MatchRow({ match, liveSnapshot }: { match: PublicMatch; liveSnapshot?: 
             VS
           </span>
         )}
-        <span className="flex-1 truncate text-left font-medium text-foreground">
-          {match.awayTeam}
-        </span>
+        <div className="flex flex-1 items-center gap-1">
+          <FavoriteButton type="team" value={match.awayTeam} />
+          <span className="truncate font-medium text-foreground">
+            {match.awayTeam}
+          </span>
+        </div>
       </div>
 
       {/* Odds */}
@@ -157,6 +164,7 @@ export function LeagueAccordion({
           <span className="text-xs font-black tracking-widest text-foreground uppercase">
             {league}
           </span>
+          <FavoriteButton type="league" value={league} />
           <span className="rounded bg-white/[0.06] px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
             {matches.length} {matches.length === 1 ? "match" : "matches"}
           </span>

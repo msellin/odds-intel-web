@@ -21,6 +21,7 @@ export interface UserProfile {
   tier: UserTier;
   preferred_leagues: string[];
   preferred_markets: string[];
+  favorite_teams: string[];
   default_stake: number;
   bankroll: number;
   odds_format: OddsFormat;
