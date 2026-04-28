@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
+import { GoogleSignIn, AuthDivider } from "@/components/google-sign-in";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -57,6 +58,9 @@ export default function LoginPage() {
               {error}
             </div>
           )}
+
+          <GoogleSignIn />
+          <AuthDivider />
 
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>

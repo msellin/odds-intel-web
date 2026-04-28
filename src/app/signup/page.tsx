@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
+import { GoogleSignIn, AuthDivider } from "@/components/google-sign-in";
 
 const FREE_FEATURES = [
   "All today's fixtures + live scores",
@@ -91,6 +92,9 @@ export default function SignUpPage() {
                   {error}
                 </div>
               )}
+
+              <GoogleSignIn />
+              <AuthDivider />
 
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
