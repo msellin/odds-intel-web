@@ -41,9 +41,9 @@ const MARKETS = ["1X2", "Over/Under", "BTTS", "Asian Handicap"] as const;
 
 const TIER_LABELS: Record<string, string> = {
   scout: "Free",
-  analyst: "Pro — €19/mo",
-  sharp: "Elite — €49/mo",
-  syndicate: "Elite — €49/mo",
+  analyst: "Pro — €4.99/mo",
+  sharp: "Elite — €14.99/mo",
+  syndicate: "Elite — €14.99/mo",
 };
 
 interface NotificationSettings {
