@@ -51,17 +51,17 @@ const features = [
   {
     icon: "📊",
     title: "Interest Indicators",
-    description: "Visual heatmaps for smart money movement.",
+    description: "At-a-glance signal showing which matches have the most data coverage.",
   },
   {
     icon: "⚖️",
-    title: "Bookie Comparison",
-    description: "Best odds across 2–3 tier-1 bookmakers.",
+    title: "13 Bookmakers",
+    description: "Best odds across 13 bookmakers including Pinnacle, Bet365, and William Hill.",
   },
   {
     icon: "⚡",
     title: "Daily Fixtures",
-    description: "400+ matches per day across 30+ leagues.",
+    description: "467 matches tracked per day across 100+ leagues worldwide.",
   },
 ];
 
@@ -72,11 +72,16 @@ const tiers = [
     priceNote: "/mo",
     badge: null,
     highlight: false,
-    cta: "Get Started",
+    cta: "Browse Matches",
+    ctaHref: "/matches",
+    comingSoon: false,
     features: [
-      "All matches, basic odds (best H/D/A)",
-      "Interest indicators",
-      "Match detail pages",
+      "All today's fixtures",
+      "Best H/D/A odds (one bookmaker)",
+      "H2H record & recent meetings",
+      "League standings + team form",
+      "Venue & referee info",
+      "Live scores during matches",
     ],
   },
   {
@@ -85,26 +90,33 @@ const tiers = [
     priceNote: "/mo",
     badge: "Most Popular",
     highlight: true,
-    cta: "Upgrade to Pro",
+    cta: "Sign Up",
+    ctaHref: "/signup",
+    comingSoon: false,
     features: [
-      "Full odds comparison",
-      "Form & H2H stats",
-      "AI injury alerts",
-      "Odds movement history",
+      "Everything in Free",
+      "Full odds comparison — 13 bookmakers",
+      "Odds movement chart (pre-match timeline)",
+      "AI injury & suspension alerts",
+      "Directional model signal (Home / Draw / Away lean)",
+      "Full match history, not just today",
     ],
   },
   {
     name: "Elite",
     price: "€49",
     priceNote: "/mo",
-    badge: null,
+    badge: "Coming Soon",
     highlight: false,
-    cta: "Contact Sales",
+    cta: "Sign Up for Early Access",
+    ctaHref: "/signup",
+    comingSoon: true,
     features: [
-      "Model probabilities",
-      "Value bet picks",
-      "CLV tracking",
-      "Tips from validated bots",
+      "Everything in Pro",
+      "Exact model probability % + edge %",
+      "Value bet list (today's picks)",
+      "CLV tracking — beat the closing line",
+      "Tips from validated bots (60+ bets, positive ROI)",
     ],
   },
 ];
@@ -350,11 +362,13 @@ export default function LandingPage() {
                 className={`relative flex flex-col rounded-xl p-8 ${
                   tier.highlight
                     ? "border-2 border-green-500 bg-card/60 shadow-2xl shadow-green-500/5"
-                    : "border border-white/[0.06] bg-card/20"
+                    : tier.comingSoon
+                      ? "border border-white/[0.04] bg-card/10 opacity-80"
+                      : "border border-white/[0.06] bg-card/20"
                 }`}
               >
                 {tier.badge && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-green-500 px-4 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-black">
+                  <div className={`absolute -top-3 left-1/2 -translate-x-1/2 rounded-full px-4 py-1 text-[10px] font-black uppercase tracking-[0.2em] ${tier.comingSoon ? "bg-muted text-muted-foreground" : "bg-green-500 text-black"}`}>
                     {tier.badge}
                   </div>
                 )}
@@ -369,6 +383,11 @@ export default function LandingPage() {
                     {tier.priceNote}
                   </span>
                 </div>
+                {tier.comingSoon && (
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Launches when model ROI is validated (est. Q2 2026)
+                  </p>
+                )}
                 <ul className="mt-6 flex-1 space-y-3">
                   {tier.features.map((feat) => (
                     <li
@@ -388,7 +407,7 @@ export default function LandingPage() {
                         : ""
                     }`}
                     variant={tier.highlight ? "default" : "outline"}
-                    render={<Link href="/signup" />}
+                    render={<Link href={tier.ctaHref} />}
                   >
                     {tier.cta}
                   </Button>
