@@ -98,8 +98,8 @@ const tiers = [
       "Full odds comparison — 13 bookmakers",
       "Odds movement chart (pre-match timeline)",
       "AI injury & suspension alerts",
-      "Directional model signal (Home / Draw / Away lean)",
-      "Full match history, not just today",
+      "Post-match stats (shots, xG, possession, corners)",
+      "Lineup cards + formation view",
     ],
   },
   {

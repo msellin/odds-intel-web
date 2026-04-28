@@ -13,38 +13,18 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
 
-const PLANS = [
-  {
-    id: "scout",
-    name: "Scout",
-    price: "Free",
-    description: "Basic match data",
-  },
-  {
-    id: "analyst",
-    name: "Analyst",
-    price: "\u20ac4.99/mo",
-    description: "Odds comparison & alerts",
-  },
-  {
-    id: "sharp",
-    name: "Sharp",
-    price: "\u20ac14.99/mo",
-    description: "Value bets & AI insights",
-  },
-  {
-    id: "syndicate",
-    name: "Syndicate",
-    price: "\u20ac49.99/mo",
-    description: "Full access & API",
-  },
-] as const;
+const FREE_FEATURES = [
+  "All today's fixtures",
+  "Best odds (H/D/A)",
+  "H2H record & recent meetings",
+  "League standings + team form",
+  "Live scores during matches",
+];
 
 export default function SignUpPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [selectedPlan, setSelectedPlan] = useState("sharp");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -63,15 +43,7 @@ export default function SignUpPage() {
 
     setLoading(true);
     const supabase = createSupabaseBrowser();
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          selected_plan: selectedPlan,
-        },
-      },
-    });
+    const { error } = await supabase.auth.signUp({ email, password });
     setLoading(false);
 
     if (error) {
@@ -91,9 +63,12 @@ export default function SignUpPage() {
               ODDS<span className="text-primary">INTEL</span>
             </span>
           </Link>
-          <h1 className="text-center text-lg font-semibold">
-            Create your account
-          </h1>
+          <div className="text-center">
+            <h1 className="text-lg font-semibold">Create your free account</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Free forever — upgrade to Pro when you&apos;re ready
+            </p>
+          </div>
         </CardHeader>
         <CardContent className="space-y-5">
           {success ? (
@@ -116,6 +91,7 @@ export default function SignUpPage() {
                   placeholder="you@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSignUp()}
                 />
               </div>
               <div className="space-y-2">
@@ -136,47 +112,23 @@ export default function SignUpPage() {
                   placeholder="Confirm your password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSignUp()}
                 />
               </div>
 
-              {/* Plan Selection */}
-              <div className="space-y-3">
-                <Label>Choose your plan</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {PLANS.map((plan) => {
-                    const active = selectedPlan === plan.id;
-                    return (
-                      <button
-                        key={plan.id}
-                        onClick={() => setSelectedPlan(plan.id)}
-                        className={`relative rounded-lg border p-3 text-left transition-colors ${
-                          active
-                            ? "border-primary bg-primary/10"
-                            : "border-border bg-card hover:border-primary/50"
-                        }`}
-                      >
-                        {active && (
-                          <div className="absolute right-2 top-2 flex h-4 w-4 items-center justify-center rounded-full bg-primary">
-                            <Check className="h-2.5 w-2.5 text-primary-foreground" />
-                          </div>
-                        )}
-                        <p
-                          className={`text-sm font-medium ${
-                            active ? "text-primary" : "text-foreground"
-                          }`}
-                        >
-                          {plan.name}
-                        </p>
-                        <p className="font-mono text-xs font-semibold text-muted-foreground">
-                          {plan.price}
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {plan.description}
-                        </p>
-                      </button>
-                    );
-                  })}
-                </div>
+              {/* What you get */}
+              <div className="rounded-lg border border-border/50 bg-muted/20 p-4 space-y-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Free account includes
+                </p>
+                <ul className="space-y-1.5">
+                  {FREE_FEATURES.map((f) => (
+                    <li key={f} className="flex items-center gap-2 text-sm text-foreground/80">
+                      <Check className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
               </div>
 
               <Button
@@ -187,9 +139,16 @@ export default function SignUpPage() {
                 {loading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  "Create Account"
+                  "Create Free Account"
                 )}
               </Button>
+
+              <p className="text-center text-xs text-muted-foreground">
+                By signing up you agree to our{" "}
+                <Link href="/terms" className="text-primary hover:underline">Terms</Link>
+                {" "}and{" "}
+                <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>.
+              </p>
 
               <p className="text-center text-sm text-muted-foreground">
                 Already have an account?{" "}

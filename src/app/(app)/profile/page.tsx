@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { User, Settings, Bell, Monitor, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,10 +40,10 @@ const LEAGUES = [
 const MARKETS = ["1X2", "Over/Under", "BTTS", "Asian Handicap"] as const;
 
 const TIER_LABELS: Record<string, string> = {
-  scout: "Scout — Free",
-  analyst: "Analyst — €4.99/mo",
-  sharp: "Sharp — €14.99/mo",
-  syndicate: "Syndicate — €49.99/mo",
+  scout: "Free",
+  analyst: "Pro — €19/mo",
+  sharp: "Elite — €49/mo",
+  syndicate: "Elite — €49/mo",
 };
 
 interface NotificationSettings {
@@ -257,9 +258,15 @@ export default function ProfilePage() {
                 </Badge>
               </div>
             </div>
-            <Button variant="outline" disabled>
-              Manage Subscription
-            </Button>
+            {tierKey === "scout" ? (
+              <Button variant="outline" size="sm" render={<Link href="/signup" />}>
+                Upgrade — coming soon
+              </Button>
+            ) : (
+              <Button variant="outline" size="sm" disabled>
+                Manage Subscription
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>

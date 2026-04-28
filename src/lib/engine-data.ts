@@ -94,6 +94,7 @@ export interface PublicMatch {
   score_away?: number | null;
   venue_name?: string | null;
   referee?: string | null;
+  hasLineups?: boolean;
 }
 
 export interface H2HMatch {
@@ -243,7 +244,7 @@ export async function getPublicMatchById(matchId: string): Promise<PublicMatch |
   const { data: match, error } = await supabase
     .from("matches")
     .select(
-      `id, date, status, score_home, score_away, venue_name, referee,
+      `id, date, status, score_home, score_away, venue_name, referee, lineups_home,
        home_team:home_team_id(id, name, country),
        away_team:away_team_id(id, name, country),
        league:league_id(id, name, country, tier)`
@@ -253,7 +254,7 @@ export async function getPublicMatchById(matchId: string): Promise<PublicMatch |
 
   if (error || !match) return null;
 
-  type PublicMatchRow = Pick<MatchRow, "id" | "date" | "status" | "score_home" | "score_away" | "venue_name" | "referee" | "home_team" | "away_team" | "league">;
+  type PublicMatchRow = Pick<MatchRow, "id" | "date" | "status" | "score_home" | "score_away" | "venue_name" | "referee" | "home_team" | "away_team" | "league"> & { lineups_home?: unknown };
   const m = match as PublicMatchRow;
 
   const { data: oddsRows } = await supabase
@@ -291,6 +292,7 @@ export async function getPublicMatchById(matchId: string): Promise<PublicMatch |
     score_away: m.score_away,
     venue_name: m.venue_name,
     referee: m.referee,
+    hasLineups: m.lineups_home != null,
   };
 }
 

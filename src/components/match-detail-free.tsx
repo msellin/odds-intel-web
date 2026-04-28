@@ -9,7 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, BarChart3, Lock, History, TableIcon } from "lucide-react";
+import { TrendingUp, BarChart3, Lock, History, TableIcon, Zap } from "lucide-react";
 import Link from "next/link";
 
 interface MatchDetailFreeProps {
@@ -18,6 +18,9 @@ interface MatchDetailFreeProps {
   h2h?: MatchH2H | null;
   homeStanding?: TeamStanding | null;
   awayStanding?: TeamStanding | null;
+  hasInjuries?: boolean;
+  hasLineups?: boolean;
+  hasStats?: boolean;
 }
 
 function FormBadge({ form }: { form: string }) {
@@ -48,6 +51,9 @@ export function MatchDetailFree({
   h2h,
   homeStanding,
   awayStanding,
+  hasInjuries,
+  hasLineups,
+  hasStats,
 }: MatchDetailFreeProps) {
   const interest = interestScore(match);
   const indicator = interestIndicator(interest);
@@ -224,7 +230,7 @@ export function MatchDetailFree({
         </Card>
       )}
 
-      {/* Data Availability */}
+      {/* Data Coverage + Pro hints */}
       <Card className="border-border bg-card">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center gap-2">
@@ -232,7 +238,7 @@ export function MatchDetailFree({
             Data Coverage
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <span className="text-xl">{indicator}</span>
@@ -246,13 +252,48 @@ export function MatchDetailFree({
               </Badge>
             )}
           </div>
-          <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
-            {interest === "hot"
-              ? "This match has odds coverage from multiple bookmakers."
-              : interest === "warm"
-                ? "This match is live. Odds data may update during play."
-                : "No odds data available yet — enrichment data shown above is from our match database."}
-          </p>
+
+          {/* Pro locked hints — only show if there's actually data behind the lock */}
+          {(bookmakerCount > 1 || hasInjuries || hasLineups || hasStats) && (
+            <div className="rounded-lg border border-dashed border-white/10 bg-white/[0.02] p-3 space-y-2">
+              <p className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                <Zap className="h-3 w-3 text-amber-400" />
+                Pro data available for this match
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {bookmakerCount > 1 && (
+                  <span className="flex items-center gap-1 rounded border border-white/[0.06] bg-muted/30 px-2 py-1 text-[11px] text-muted-foreground">
+                    <Lock className="h-2.5 w-2.5" />
+                    {bookmakerCount} bookmakers odds
+                  </span>
+                )}
+                {hasInjuries && (
+                  <span className="flex items-center gap-1 rounded border border-white/[0.06] bg-muted/30 px-2 py-1 text-[11px] text-muted-foreground">
+                    <Lock className="h-2.5 w-2.5" />
+                    Injury list
+                  </span>
+                )}
+                {hasLineups && (
+                  <span className="flex items-center gap-1 rounded border border-white/[0.06] bg-muted/30 px-2 py-1 text-[11px] text-muted-foreground">
+                    <Lock className="h-2.5 w-2.5" />
+                    Confirmed lineups
+                  </span>
+                )}
+                {hasStats && (
+                  <span className="flex items-center gap-1 rounded border border-white/[0.06] bg-muted/30 px-2 py-1 text-[11px] text-muted-foreground">
+                    <Lock className="h-2.5 w-2.5" />
+                    Match stats
+                  </span>
+                )}
+              </div>
+              <Link
+                href="/signup"
+                className="inline-flex items-center gap-1 text-[11px] text-emerald-400 hover:text-emerald-300 transition-colors"
+              >
+                Unlock with Pro →
+              </Link>
+            </div>
+          )}
         </CardContent>
       </Card>
 

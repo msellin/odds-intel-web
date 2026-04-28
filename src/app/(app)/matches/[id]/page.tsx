@@ -7,6 +7,7 @@ import {
   getLiveSnapshots,
   getMatchH2H,
   getTeamStandings,
+  getMatchInjuries,
 } from "@/lib/engine-data";
 import type { LiveMatch, MatchStatsData, OddsMovementPoint } from "@/lib/engine-data";
 import { MatchDetailFree } from "@/components/match-detail-free";
@@ -71,12 +72,13 @@ export default async function MatchDetailPage({
     // Not authenticated — free content only
   }
 
-  // Fetch free-tier enrichment data (H2H, standings) in parallel with other public data
-  const [oddsMovement, liveSnapshotsArr, h2h, standings] = await Promise.all([
+  // Fetch free-tier enrichment data in parallel
+  const [oddsMovement, liveSnapshotsArr, h2h, standings, injuries] = await Promise.all([
     getOddsMovement(id) as Promise<OddsMovementPoint[]>,
     getLiveSnapshots([id]),
     getMatchH2H(id),
     getTeamStandings(publicMatch.homeTeam, publicMatch.awayTeam),
+    getMatchInjuries(id),
   ]);
 
   const initialSnapshot = liveSnapshotsArr[0] ?? null;
@@ -171,6 +173,9 @@ export default async function MatchDetailPage({
         h2h={h2h}
         homeStanding={standings.home}
         awayStanding={standings.away}
+        hasInjuries={injuries.length > 0}
+        hasLineups={publicMatch.hasLineups}
+        hasStats={publicMatch.status === "finished"}
       />
 
       {/* Pro content — only if authenticated with full odds data */}
