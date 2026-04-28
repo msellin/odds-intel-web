@@ -420,6 +420,69 @@ export default function LandingPage() {
 
       <Separator />
 
+      {/* ───────── Elite Coming Soon ───────── */}
+      <section className="py-16">
+        <div className="mx-auto max-w-3xl px-4 sm:px-6">
+          <div className="relative overflow-hidden rounded-2xl border border-amber-500/20 bg-amber-500/[0.04] px-8 py-10 text-center">
+            {/* Glow */}
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_50%_0%,rgba(245,158,11,0.06),transparent)]" />
+
+            <div className="relative space-y-4">
+              <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                <span className="font-mono text-[10px] uppercase tracking-widest text-amber-400">
+                  Elite Tier — Coming Q2 2026
+                </span>
+              </div>
+
+              <h2 className="text-2xl font-black tracking-tight text-foreground">
+                We only launch picks when the data says so.
+              </h2>
+
+              <p className="mx-auto max-w-lg text-sm text-muted-foreground leading-relaxed">
+                Our bots have been running live since April 2026, accumulating real
+                settlement data. Elite launches the moment we hit 60+ settled bets
+                with verified positive ROI — not before. No hype, no early launch.
+              </p>
+
+              <div className="flex flex-col items-center gap-3 pt-2 sm:flex-row sm:justify-center">
+                <Link
+                  href="/signup"
+                  className="inline-flex items-center justify-center rounded-lg bg-amber-500 px-6 py-2.5 text-sm font-bold text-black transition-colors hover:bg-amber-400"
+                >
+                  Get Notified at Launch
+                </Link>
+                <span className="text-xs text-muted-foreground">
+                  Free account — no card required
+                </span>
+              </div>
+
+              <div className="pt-4 grid grid-cols-1 gap-3 sm:grid-cols-3 text-left">
+                {[
+                  { stat: "6", label: "bots running live" },
+                  { stat: "60+", label: "settled bets needed to launch" },
+                  { stat: "+21%", label: "ROI on best backtest signal" },
+                ].map((item) => (
+                  <div
+                    key={item.label}
+                    className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-4 py-3"
+                  >
+                    <p className="font-mono text-xl font-bold text-amber-400">
+                      {item.stat}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {item.label}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <Separator />
+
       {/* ───────── Trust ───────── */}
       <section className="py-16 text-center">
         <div className="mx-auto max-w-2xl px-4 sm:px-6">
