@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import type { PublicMatch } from "@/lib/engine-data";
+import type { PublicMatch, LiveSnapshot } from "@/lib/engine-data";
 import { getCountryFlag } from "@/lib/country-flags";
 
 function formatKickoff(iso: string): string {
@@ -42,13 +42,15 @@ function OddsCell({
   );
 }
 
-function MatchRow({ match }: { match: PublicMatch }) {
+function MatchRow({ match, liveSnapshot }: { match: PublicMatch; liveSnapshot?: LiveSnapshot }) {
   const hasOdds = match.hasOdds && (match.bestHome > 0 || match.bestDraw > 0 || match.bestAway > 0);
 
   // Determine which odds is best (highest = best value for punter)
   const bestIsHome = hasOdds && match.bestHome >= match.bestDraw && match.bestHome >= match.bestAway;
   const bestIsDraw = hasOdds && match.bestDraw > match.bestHome && match.bestDraw >= match.bestAway;
   const bestIsAway = hasOdds && !bestIsHome && !bestIsDraw;
+
+  const isLive = match.status === "live" && !!liveSnapshot;
 
   return (
     <Link
@@ -64,19 +66,39 @@ function MatchRow({ match }: { match: PublicMatch }) {
         )}
       </div>
 
-      {/* Kickoff time */}
-      <div className="w-14 shrink-0 font-mono text-xs text-muted-foreground">
-        {formatKickoff(match.kickoff)}
+      {/* Kickoff time or live score */}
+      <div className="w-[4.5rem] shrink-0">
+        {isLive ? (
+          <div className="flex flex-col items-start gap-0.5">
+            <span className="inline-flex items-center gap-1 rounded bg-green-500/15 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider text-green-400 leading-none">
+              <span className="size-1.5 animate-pulse rounded-full bg-green-400" />
+              LIVE
+            </span>
+            <span className="font-mono text-[10px] text-muted-foreground leading-none">
+              {liveSnapshot!.minute}&apos;
+            </span>
+          </div>
+        ) : (
+          <span className="font-mono text-xs text-muted-foreground">
+            {formatKickoff(match.kickoff)}
+          </span>
+        )}
       </div>
 
-      {/* Teams */}
+      {/* Teams — with live score inline when live */}
       <div className="flex flex-1 items-center justify-center gap-2 overflow-hidden px-2 text-sm">
         <span className="flex-1 truncate text-right font-medium text-foreground">
           {match.homeTeam}
         </span>
-        <span className="shrink-0 text-[10px] font-bold text-muted-foreground/60">
-          VS
-        </span>
+        {isLive ? (
+          <span className="shrink-0 font-mono text-sm font-bold tabular-nums text-foreground">
+            {liveSnapshot!.score_home}&thinsp;–&thinsp;{liveSnapshot!.score_away}
+          </span>
+        ) : (
+          <span className="shrink-0 text-[10px] font-bold text-muted-foreground/60">
+            VS
+          </span>
+        )}
         <span className="flex-1 truncate text-left font-medium text-foreground">
           {match.awayTeam}
         </span>
@@ -109,12 +131,14 @@ interface LeagueAccordionProps {
   league: string;
   matches: PublicMatch[];
   defaultExpanded: boolean;
+  liveSnapshots?: Record<string, LiveSnapshot>;
 }
 
 export function LeagueAccordion({
   league,
   matches,
   defaultExpanded,
+  liveSnapshots,
 }: LeagueAccordionProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const hasOdds = matches.some((m) => m.hasOdds);
@@ -153,7 +177,11 @@ export function LeagueAccordion({
       {expanded && (
         <div className="divide-y divide-white/[0.04]">
           {matches.map((match) => (
-            <MatchRow key={match.id} match={match} />
+            <MatchRow
+              key={match.id}
+              match={match}
+              liveSnapshot={liveSnapshots?.[match.id]}
+            />
           ))}
         </div>
       )}

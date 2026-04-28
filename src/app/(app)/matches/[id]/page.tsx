@@ -4,10 +4,12 @@ import {
   getMatchById,
   getMatchStats,
   getOddsMovement,
+  getLiveSnapshots,
 } from "@/lib/engine-data";
 import type { LiveMatch, MatchStatsData, OddsMovementPoint } from "@/lib/engine-data";
 import { MatchDetailFree } from "@/components/match-detail-free";
 import { MatchDetailLive } from "@/components/match-detail-live";
+import { MatchScoreDisplay } from "@/components/match-score-display";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Clock, Calendar, Shield, MapPin, User } from "lucide-react";
@@ -70,6 +72,10 @@ export default async function MatchDetailPage({
   // Odds movement is public data (fetched for everyone, display gated client-side)
   const oddsMovement: OddsMovementPoint[] = await getOddsMovement(id);
 
+  // Initial live snapshot for the score display (null if not live or no data yet)
+  const liveSnapshotsArr = await getLiveSnapshots([id]);
+  const initialSnapshot = liveSnapshotsArr[0] ?? null;
+
   // Bookmaker count for the pro teaser
   const bookmakerCount = publicMatch.hasOdds
     ? await getPublicMatchBookmakerCount(id)
@@ -109,22 +115,16 @@ export default async function MatchDetailPage({
 
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
           <div>
-            {/* Score for finished matches */}
-            {publicMatch.score_home != null && publicMatch.score_away != null ? (
-              <div className="flex items-center gap-4 mb-2">
-                <span className="text-lg font-semibold text-foreground">{publicMatch.homeTeam}</span>
-                <span className="font-mono text-3xl font-bold text-foreground tabular-nums">
-                  {publicMatch.score_home} – {publicMatch.score_away}
-                </span>
-                <span className="text-lg font-semibold text-foreground">{publicMatch.awayTeam}</span>
-              </div>
-            ) : (
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-                {publicMatch.homeTeam}{" "}
-                <span className="text-muted-foreground font-normal">vs</span>{" "}
-                {publicMatch.awayTeam}
-              </h1>
-            )}
+            {/* Score display — handles live (with polling), finished, and pre-match */}
+            <MatchScoreDisplay
+              matchId={publicMatch.id}
+              status={publicMatch.status}
+              homeTeam={publicMatch.homeTeam}
+              awayTeam={publicMatch.awayTeam}
+              finishedScoreHome={publicMatch.score_home ?? null}
+              finishedScoreAway={publicMatch.score_away ?? null}
+              initialSnapshot={initialSnapshot}
+            />
             <div className="flex items-center gap-3 mt-1.5 flex-wrap">
               <Badge
                 variant="outline"

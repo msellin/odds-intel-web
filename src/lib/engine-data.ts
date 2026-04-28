@@ -113,6 +113,14 @@ export interface OddsMovementPoint {
   bestAway: number;
 }
 
+export interface LiveSnapshot {
+  match_id: string;
+  score_home: number;
+  score_away: number;
+  minute: number;
+  captured_at: string;
+}
+
 // ─── Data fetching functions ────────────────────────────────────────────────
 
 /**
@@ -476,6 +484,30 @@ export async function getMatchStats(matchId: string): Promise<MatchStatsData | n
     .single();
   if (error || !data) return null;
   return data as MatchStatsData;
+}
+
+/**
+ * Fetch latest live snapshot per match for a list of match IDs.
+ * Uses the public client — works server-side. For client-side polling
+ * use createSupabaseBrowser() directly (see components/matches-client.tsx).
+ */
+export async function getLiveSnapshots(matchIds: string[]): Promise<LiveSnapshot[]> {
+  if (!matchIds.length) return [];
+  const supabase = createSupabasePublic();
+  const { data, error } = await supabase
+    .from("live_match_snapshots")
+    .select("match_id, score_home, score_away, minute, captured_at")
+    .in("match_id", matchIds)
+    .order("captured_at", { ascending: false });
+  if (error || !data) return [];
+
+  // Keep only the latest snapshot per match (rows are already desc-sorted)
+  const seen = new Set<string>();
+  return (data as LiveSnapshot[]).filter((row) => {
+    if (seen.has(row.match_id)) return false;
+    seen.add(row.match_id);
+    return true;
+  });
 }
 
 export async function getOddsMovement(matchId: string): Promise<OddsMovementPoint[]> {

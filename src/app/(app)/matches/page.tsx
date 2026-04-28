@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { CalendarDays, SearchX } from "lucide-react";
-import { getPublicMatches } from "@/lib/engine-data";
+import { getPublicMatches, getLiveSnapshots } from "@/lib/engine-data";
 import { LeagueFilter } from "@/components/league-filter";
-import { LeagueAccordion } from "@/components/league-accordion";
+import { MatchesClient } from "@/components/matches-client";
 import { createSupabaseServer } from "@/lib/supabase-server";
-import type { PublicMatch } from "@/lib/engine-data";
+import type { PublicMatch, LiveSnapshot } from "@/lib/engine-data";
 
 function formatDate(): string {
   return new Date().toLocaleDateString("en-US", {
@@ -73,6 +73,14 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
   );
 
   const totalWithOdds = allMatches.filter((m) => m.hasOdds).length;
+
+  // Fetch initial live snapshots for live matches
+  const liveMatchIds = allMatches.filter((m) => m.status === "live").map((m) => m.id);
+  const liveSnapshotsArr = await getLiveSnapshots(liveMatchIds);
+  const initialSnapshots: Record<string, LiveSnapshot> = {};
+  for (const s of liveSnapshotsArr) {
+    initialSnapshots[s.match_id] = s;
+  }
 
   return (
     <div className="space-y-5">
@@ -165,20 +173,11 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
         </div>
       )}
 
-      {/* League accordions */}
-      <div className="space-y-3">
-        {sortedGroups.map(([league, matches]) => {
-          const leagueHasOdds = matches.some((m) => m.hasOdds);
-          return (
-            <LeagueAccordion
-              key={league}
-              league={league}
-              matches={matches}
-              defaultExpanded={leagueHasOdds}
-            />
-          );
-        })}
-      </div>
+      {/* League accordions — MatchesClient handles live score polling */}
+      <MatchesClient
+        sortedGroups={sortedGroups}
+        initialSnapshots={initialSnapshots}
+      />
     </div>
   );
 }
