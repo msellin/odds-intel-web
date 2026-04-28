@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth-provider";
 import { Analytics } from "@vercel/analytics/next";
+import { CookieBanner } from "@/components/cookie-banner";
 
 const inter = Inter({
   variable: "--font-sans",
@@ -51,6 +52,7 @@ export default function RootLayout({
     >
       <body className="min-h-dvh bg-background text-foreground antialiased">
         <AuthProvider>{children}</AuthProvider>
+        <CookieBanner />
         <Analytics />
       </body>
     </html>
