@@ -379,7 +379,7 @@ export function MatchDetailTabs({ data }: { data: MatchDetail }) {
 
       {/* ═══════════ ODDS TAB ═══════════ */}
       <TabsContent value="odds" className="space-y-4 mt-4">
-        <TierGate requiredTier="analyst" featureName="Odds Comparison">
+        <TierGate requiredTier="pro" featureName="Odds Comparison">
         {/* Odds Comparison */}
         <Card className="border-border bg-card">
           <CardHeader className="pb-2">
@@ -515,7 +515,7 @@ export function MatchDetailTabs({ data }: { data: MatchDetail }) {
 
       {/* ═══════════ TEAM NEWS TAB ═══════════ */}
       <TabsContent value="team-news" className="space-y-4 mt-4">
-        <TierGate requiredTier="analyst" featureName="Team News & Lineups">
+        <TierGate requiredTier="pro" featureName="Team News & Lineups">
         {/* Injuries */}
         <Card className="border-border bg-card">
           <CardHeader className="pb-2">
@@ -647,7 +647,7 @@ export function MatchDetailTabs({ data }: { data: MatchDetail }) {
 
       {/* ═══════════ CONDITIONS TAB ═══════════ */}
       <TabsContent value="conditions" className="space-y-4 mt-4">
-        <TierGate requiredTier="analyst" featureName="Match Conditions">
+        <TierGate requiredTier="pro" featureName="Match Conditions">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Weather */}
           <Card className="border-border bg-card">
@@ -835,7 +835,7 @@ export function MatchDetailTabs({ data }: { data: MatchDetail }) {
 
       {/* ═══════════ AI ANALYSIS TAB ═══════════ */}
       <TabsContent value="ai" className="space-y-4 mt-4">
-        <TierGate requiredTier="sharp" featureName="AI Analysis">
+        <TierGate requiredTier="elite" featureName="AI Analysis">
         <div className="space-y-4">
           {predictions.map((pred, i) => {
             const hasValue = pred.edgePercent > 0;

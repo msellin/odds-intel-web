@@ -40,10 +40,9 @@ const LEAGUES = [
 const MARKETS = ["1X2", "Over/Under", "BTTS", "Asian Handicap"] as const;
 
 const TIER_LABELS: Record<string, string> = {
-  scout: "Free",
-  analyst: "Pro — €4.99/mo",
-  sharp: "Elite — €14.99/mo",
-  syndicate: "Elite — €14.99/mo",
+  free: "Free",
+  pro: "Pro — €4.99/mo",
+  elite: "Elite — €14.99/mo",
 };
 
 interface NotificationSettings {
@@ -205,7 +204,7 @@ export default function ProfilePage() {
 
   if (!user) return null;
 
-  const tierKey = profile?.tier ?? "scout";
+  const tierKey = profile?.tier ?? "free";
 
   return (
     <div className="space-y-6">
@@ -254,11 +253,11 @@ export default function ProfilePage() {
               <Label className="text-muted-foreground">Current Plan</Label>
               <div className="flex items-center gap-2">
                 <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
-                  {TIER_LABELS[tierKey] ?? "Scout — Free"}
+                  {TIER_LABELS[tierKey] ?? "Free"}
                 </Badge>
               </div>
             </div>
-            {tierKey === "scout" ? (
+            {tierKey === "free" ? (
               <Button variant="outline" size="sm" nativeButton={false} render={<Link href="/signup" />}>
                 Upgrade — coming soon
               </Button>

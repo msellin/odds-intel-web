@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { TierGate } from "@/components/tier-gate";
+import { useAuth } from "@/components/auth-provider";
 import type { LiveBet } from "@/lib/engine-data";
 
 interface Stats {
@@ -124,6 +124,7 @@ function formatDate(isoStr: string): string {
 }
 
 export function TrackRecordLive({ bets, stats }: TrackRecordLiveProps) {
+  const { profile } = useAuth();
   const [botFilter, setBotFilter] = useState(ALL);
   const [leagueFilter, setLeagueFilter] = useState(ALL);
   const [resultFilter, setResultFilter] = useState(ALL);
@@ -166,7 +167,14 @@ export function TrackRecordLive({ bets, stats }: TrackRecordLiveProps) {
         </Badge>
       </div>
 
-      <TierGate requiredTier="sharp" featureName="Track Record">
+      {!profile?.is_superadmin ? (
+        <div className="rounded-lg border border-border/50 bg-card px-6 py-12 text-center">
+          <p className="text-sm text-muted-foreground">
+            Track Record is not available yet. Stay tuned.
+          </p>
+        </div>
+      ) : (
+        <>
         {/* Empty state */}
         {stats.totalBets === 0 ? (
           <div className="rounded-lg border border-border/50 bg-card px-6 py-12 text-center">
@@ -449,7 +457,8 @@ export function TrackRecordLive({ bets, stats }: TrackRecordLiveProps) {
             </p>
           </>
         )}
-      </TierGate>
+        </>
+      )}
     </div>
   );
 }

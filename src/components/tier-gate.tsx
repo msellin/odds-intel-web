@@ -3,19 +3,24 @@
 import React from "react";
 import { useAuth } from "@/components/auth-provider";
 
-const TIERS = ["scout", "analyst", "sharp", "syndicate"] as const;
+const TIERS = ["free", "pro", "elite"] as const;
 type Tier = (typeof TIERS)[number];
 
+const TIER_LABELS: Record<Tier, string> = {
+  free: "Free",
+  pro: "Pro",
+  elite: "Elite",
+};
+
 const TIER_PRICES: Record<Tier, string> = {
-  scout: "Free",
-  analyst: "\u20ac4.99/mo",
-  sharp: "\u20ac14.99/mo",
-  syndicate: "\u20ac14.99/mo",
+  free: "Free",
+  pro: "\u20ac4.99/mo",
+  elite: "\u20ac14.99/mo",
 };
 
 function useCurrentTier(): Tier {
   const { profile } = useAuth();
-  if (!profile?.tier) return "scout";
+  if (!profile?.tier) return "free";
   return profile.tier;
 }
 
@@ -101,7 +106,7 @@ export function TierGate({ requiredTier, children, featureName }: TierGateProps)
               textTransform: "capitalize",
             }}
           >
-            Upgrade to {requiredTier}
+            Upgrade to {TIER_LABELS[requiredTier]}
           </h3>
 
           <p
@@ -113,8 +118,8 @@ export function TierGate({ requiredTier, children, featureName }: TierGateProps)
             }}
           >
             {featureName} is available on the{" "}
-            <span style={{ color: "#d1d5db", textTransform: "capitalize" }}>
-              {requiredTier}
+            <span style={{ color: "#d1d5db" }}>
+              {TIER_LABELS[requiredTier]}
             </span>{" "}
             plan and above.
           </p>

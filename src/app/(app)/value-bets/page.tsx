@@ -4,8 +4,8 @@ import { getTodayBets } from "@/lib/engine-data";
 import { ValueBetsLive } from "@/components/value-bets-live";
 
 // TODO F5: proper Elite tier gating needed here before paid launch.
-// Currently requires login only. Full fix: check profile.tier === 'sharp'
-// and show a locked teaser for free/analyst users instead of the full picks.
+// Currently requires login only. Full fix: check profile.tier === 'elite'
+// and show a locked teaser for free/pro users instead of the full picks.
 // Depends on Stripe integration (F8) so tier is meaningful.
 
 export default async function ValueBetsPage() {

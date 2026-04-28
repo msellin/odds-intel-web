@@ -127,7 +127,7 @@ export function ValueBetsLive({ bets }: ValueBetsLiveProps) {
         </p>
       </div>
 
-      <TierGate requiredTier="sharp" featureName="Value Bets">
+      <TierGate requiredTier="elite" featureName="Value Bets">
         {/* Summary stats */}
         <div className="grid grid-cols-3 gap-3">
           <div className="rounded-lg border border-border/50 bg-card px-4 py-3">

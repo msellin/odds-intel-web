@@ -11,7 +11,7 @@ import {
 import type { Session, User } from "@supabase/supabase-js";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
 
-export type UserTier = "scout" | "analyst" | "sharp" | "syndicate";
+export type UserTier = "free" | "pro" | "elite";
 export type OddsFormat = "decimal" | "american" | "fractional";
 
 export interface UserProfile {
@@ -19,6 +19,7 @@ export interface UserProfile {
   email: string;
   display_name: string | null;
   tier: UserTier;
+  is_superadmin: boolean;
   preferred_leagues: string[];
   preferred_markets: string[];
   favorite_teams: string[];

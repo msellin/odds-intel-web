@@ -261,7 +261,7 @@ export function MatchDetailLive({
 
             {/* Pro: full events (subs etc.) */}
             {matchEvents.length > freeEvents.length && (
-              <TierGate requiredTier="analyst" featureName="Full Match Events">
+              <TierGate requiredTier="pro" featureName="Full Match Events">
                 <div className="mt-3 pt-3 border-t border-border space-y-1.5">
                   {matchEvents
                     .filter((e) => !freeEvents.includes(e))
@@ -291,7 +291,7 @@ export function MatchDetailLive({
 
       {/* ── Odds Comparison ─────────────────────────────────────────── */}
       {match.odds.length > 0 && (
-        <TierGate requiredTier="analyst" featureName="Odds Comparison">
+        <TierGate requiredTier="pro" featureName="Odds Comparison">
           <Card className="border-border bg-card">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
@@ -368,7 +368,7 @@ export function MatchDetailLive({
 
       {/* ── Injury List (#7) ─────────────────────────────────────────── */}
       {injuries.length > 0 && (
-        <TierGate requiredTier="analyst" featureName="Injury Report">
+        <TierGate requiredTier="pro" featureName="Injury Report">
           <Card className="border-border bg-card">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
@@ -415,7 +415,7 @@ export function MatchDetailLive({
 
       {/* ── Lineup Card (#11) ────────────────────────────────────────── */}
       {lineups && (lineups.startXIHome.length > 0 || lineups.startXIAway.length > 0) && (
-        <TierGate requiredTier="analyst" featureName="Confirmed Lineups">
+        <TierGate requiredTier="pro" featureName="Confirmed Lineups">
           <Card className="border-border bg-card">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
@@ -457,7 +457,7 @@ export function MatchDetailLive({
 
       {/* ── Team Season Stats (#6) ────────────────────────────────────── */}
       {(homeSeasonStats || awaySeasonStats) && (
-        <TierGate requiredTier="analyst" featureName="Team Season Stats">
+        <TierGate requiredTier="pro" featureName="Team Season Stats">
           <Card className="border-border bg-card">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
@@ -514,7 +514,7 @@ export function MatchDetailLive({
 
       {/* ── Post-match Stats ─────────────────────────────────────────── */}
       {matchStats && (
-        <TierGate requiredTier="analyst" featureName="Match Statistics">
+        <TierGate requiredTier="pro" featureName="Match Statistics">
           <Card className="border-border bg-card">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
@@ -552,7 +552,7 @@ export function MatchDetailLive({
       {matchStats &&
         matchStats.shots_home_ht != null &&
         matchStats.shots_away_ht != null && (
-          <TierGate requiredTier="analyst" featureName="HT vs FT Comparison">
+          <TierGate requiredTier="pro" featureName="HT vs FT Comparison">
             <Card className="border-border bg-card">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
@@ -611,7 +611,7 @@ export function MatchDetailLive({
 
       {/* ── Player Ratings (#15) ─────────────────────────────────────── */}
       {playerStats.length > 0 && (
-        <TierGate requiredTier="analyst" featureName="Player Ratings">
+        <TierGate requiredTier="pro" featureName="Player Ratings">
           <Card className="border-border bg-card">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
@@ -685,7 +685,7 @@ export function MatchDetailLive({
 
       {/* ── Odds Movement Chart ───────────────────────────────────────── */}
       {movementChartData.length > 1 && (
-        <TierGate requiredTier="analyst" featureName="Odds Movement">
+        <TierGate requiredTier="pro" featureName="Odds Movement">
           <Card className="border-border bg-card">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
