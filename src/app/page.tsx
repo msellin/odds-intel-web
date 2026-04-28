@@ -41,7 +41,7 @@ const comparisonRows = [
   { feature: "Model probability & edge %", anonymous: false, free: false, pro: false, elite: true },
   { feature: "CLV tracking", anonymous: false, free: false, pro: false, elite: true },
   { feature: "Track record & ROI analytics", anonymous: false, free: false, pro: false, elite: true },
-  { feature: "Bot-validated strategies", anonymous: false, free: false, pro: false, elite: true },
+  { feature: "AI strategy performance data", anonymous: false, free: false, pro: false, elite: true },
 ];
 
 function CellIcon({ value }: { value: boolean }) {
@@ -352,7 +352,7 @@ export default function LandingPage() {
                   "Model probability & edge %",
                   "CLV tracking — beat the closing line",
                   "Track record & ROI analytics",
-                  "Bot-validated strategies",
+                  "AI strategy performance data",
                 ].map((f) => (
                   <li key={f} className="flex items-start gap-2 text-sm text-muted-foreground">
                     <Check className="mt-0.5 size-3.5 shrink-0 text-amber-400" />
@@ -395,11 +395,11 @@ export default function LandingPage() {
                 </span>
               </div>
               <h2 className="text-2xl font-black tracking-tight text-foreground">
-                We only launch picks when the data says so.
+                We only launch picks when the data proves it.
               </h2>
               <p className="mx-auto max-w-lg text-sm text-muted-foreground leading-relaxed">
-                Our bots are running live, accumulating real settlement data. Elite launches
-                the moment we hit 60+ settled bets with verified positive ROI.
+                Multiple AI strategies are placing paper bets daily, building a real track record.
+                Elite launches once we have enough settled bets to verify positive ROI — no hype, no guessing.
               </p>
               <div className="flex flex-col items-center gap-3 pt-2 sm:flex-row sm:justify-center">
                 <Link
@@ -411,9 +411,9 @@ export default function LandingPage() {
               </div>
               <div className="pt-4 grid grid-cols-1 gap-3 sm:grid-cols-3 text-left">
                 {[
-                  { stat: "6", label: "bots running live" },
-                  { stat: "60+", label: "settled bets to launch" },
-                  { stat: "+21%", label: "ROI on best signal" },
+                  { stat: "9", label: "AI strategies running live" },
+                  { stat: "Daily", label: "new bets settled & tracked" },
+                  { stat: "100%", label: "transparent track record" },
                 ].map((item) => (
                   <div key={item.label} className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-4 py-3">
                     <p className="font-mono text-xl font-bold text-amber-400">{item.stat}</p>
