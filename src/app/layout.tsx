@@ -19,6 +19,9 @@ export const metadata: Metadata = {
   title: "OddsIntel — Sports Betting Intelligence",
   description:
     "All your pre-match intelligence. One screen. AI-powered value detection, real-time odds, injuries, lineups, and transparent track record.",
+  verification: {
+    google: "ix-rQvuyTbEjWYRefDYn7o-yi2S_8oUB7ahHhI56W38",
+  },
   manifest: "/manifest.json",
   icons: {
     icon: [
