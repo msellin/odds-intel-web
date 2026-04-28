@@ -2,13 +2,15 @@ import {
   getPublicMatchById,
   getPublicMatchBookmakerCount,
   getMatchById,
+  getMatchStats,
+  getOddsMovement,
 } from "@/lib/engine-data";
-import type { LiveMatch } from "@/lib/engine-data";
+import type { LiveMatch, MatchStatsData, OddsMovementPoint } from "@/lib/engine-data";
 import { MatchDetailFree } from "@/components/match-detail-free";
 import { MatchDetailLive } from "@/components/match-detail-live";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Clock, Calendar, Shield } from "lucide-react";
+import { Clock, Calendar, Shield, MapPin, User } from "lucide-react";
 import Link from "next/link";
 import { createSupabaseServer } from "@/lib/supabase-server";
 
@@ -51,6 +53,7 @@ export default async function MatchDetailPage({
 
   // Try to get authenticated data for pro users
   let liveMatch: LiveMatch | null = null;
+  let matchStats: MatchStatsData | null = null;
   try {
     const supabase = await createSupabaseServer();
     const {
@@ -58,10 +61,14 @@ export default async function MatchDetailPage({
     } = await supabase.auth.getUser();
     if (user) {
       liveMatch = await getMatchById(id);
+      matchStats = await getMatchStats(id);
     }
   } catch {
     // Not authenticated — free content only
   }
+
+  // Odds movement is public data (fetched for everyone, display gated client-side)
+  const oddsMovement: OddsMovementPoint[] = await getOddsMovement(id);
 
   // Bookmaker count for the pro teaser
   const bookmakerCount = publicMatch.hasOdds
@@ -102,11 +109,22 @@ export default async function MatchDetailPage({
 
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-              {publicMatch.homeTeam}{" "}
-              <span className="text-muted-foreground font-normal">vs</span>{" "}
-              {publicMatch.awayTeam}
-            </h1>
+            {/* Score for finished matches */}
+            {publicMatch.score_home != null && publicMatch.score_away != null ? (
+              <div className="flex items-center gap-4 mb-2">
+                <span className="text-lg font-semibold text-foreground">{publicMatch.homeTeam}</span>
+                <span className="font-mono text-3xl font-bold text-foreground tabular-nums">
+                  {publicMatch.score_home} – {publicMatch.score_away}
+                </span>
+                <span className="text-lg font-semibold text-foreground">{publicMatch.awayTeam}</span>
+              </div>
+            ) : (
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
+                {publicMatch.homeTeam}{" "}
+                <span className="text-muted-foreground font-normal">vs</span>{" "}
+                {publicMatch.awayTeam}
+              </h1>
+            )}
             <div className="flex items-center gap-3 mt-1.5 flex-wrap">
               <Badge
                 variant="outline"
@@ -122,6 +140,18 @@ export default async function MatchDetailPage({
                 <Clock className="h-3 w-3" />
                 <span className="font-mono">{timeStr}</span>
               </span>
+              {publicMatch.venue_name && (
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <MapPin className="h-3 w-3" />
+                  <span>{publicMatch.venue_name}</span>
+                </span>
+              )}
+              {publicMatch.referee && (
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <User className="h-3 w-3" />
+                  <span>{publicMatch.referee}</span>
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -134,7 +164,11 @@ export default async function MatchDetailPage({
 
       {/* Pro content — only if authenticated with full odds data */}
       {liveMatch && liveMatch.odds.length > 0 && (
-        <MatchDetailLive match={liveMatch} />
+        <MatchDetailLive
+          match={liveMatch}
+          matchStats={matchStats}
+          oddsMovement={oddsMovement}
+        />
       )}
     </div>
   );
