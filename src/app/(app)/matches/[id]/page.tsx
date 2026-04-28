@@ -8,6 +8,10 @@ import {
   getMatchH2H,
   getTeamStandings,
   getMatchInjuries,
+  getMatchEvents,
+  getMatchLineups,
+  getMatchPlayerStats,
+  getTeamSeasonStats,
 } from "@/lib/engine-data";
 import type { LiveMatch, MatchStatsData, OddsMovementPoint } from "@/lib/engine-data";
 import { MatchDetailFree } from "@/components/match-detail-free";
@@ -57,6 +61,7 @@ export default async function MatchDetailPage({
   }
 
   // Try to get authenticated data for pro users
+  let isAuthenticated = false;
   let liveMatch: LiveMatch | null = null;
   let matchStats: MatchStatsData | null = null;
   try {
@@ -65,6 +70,7 @@ export default async function MatchDetailPage({
       data: { user },
     } = await supabase.auth.getUser();
     if (user) {
+      isAuthenticated = true;
       liveMatch = await getMatchById(id);
       matchStats = await getMatchStats(id);
     }
@@ -80,6 +86,19 @@ export default async function MatchDetailPage({
     getTeamStandings(publicMatch.homeTeam, publicMatch.awayTeam),
     getMatchInjuries(id),
   ]);
+
+  // Fetch Pro-tier enrichment data if authenticated
+  const [matchEvents, lineups, playerStats, seasonStats] = isAuthenticated
+    ? await Promise.all([
+        getMatchEvents(id),
+        getMatchLineups(id),
+        getMatchPlayerStats(id),
+        getTeamSeasonStats(
+          standings.home?.teamApiId ?? null,
+          standings.away?.teamApiId ?? null
+        ),
+      ])
+    : [[], null, [], { home: null, away: null }];
 
   const initialSnapshot = liveSnapshotsArr[0] ?? null;
 
@@ -178,12 +197,32 @@ export default async function MatchDetailPage({
         hasStats={publicMatch.status === "finished"}
       />
 
-      {/* Pro content — only if authenticated with full odds data */}
-      {liveMatch && liveMatch.odds.length > 0 && (
+      {/* Pro content — show for all authenticated users */}
+      {isAuthenticated && (liveMatch || matchEvents.length > 0 || injuries.length > 0 || lineups || playerStats.length > 0 || seasonStats.home || seasonStats.away || matchStats) && (
         <MatchDetailLive
-          match={liveMatch}
+          match={liveMatch ?? {
+            id: publicMatch.id,
+            homeTeam: publicMatch.homeTeam,
+            awayTeam: publicMatch.awayTeam,
+            kickoff: publicMatch.kickoff,
+            league: publicMatch.league,
+            leagueCode: "",
+            sport: "soccer",
+            tier: publicMatch.tier,
+            odds: [],
+            bestHome: publicMatch.bestHome,
+            bestDraw: publicMatch.bestDraw,
+            bestAway: publicMatch.bestAway,
+            scrapedAt: new Date().toISOString(),
+          }}
           matchStats={matchStats}
           oddsMovement={oddsMovement}
+          injuries={injuries}
+          matchEvents={matchEvents}
+          lineups={lineups}
+          playerStats={playerStats}
+          homeSeasonStats={seasonStats.home}
+          awaySeasonStats={seasonStats.away}
         />
       )}
     </div>

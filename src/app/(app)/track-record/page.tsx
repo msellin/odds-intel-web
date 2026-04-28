@@ -1,7 +1,16 @@
+import { redirect } from "next/navigation";
+import { createSupabaseServer } from "@/lib/supabase-server";
 import { getAllBets } from "@/lib/engine-data";
 import { TrackRecordLive } from "@/components/track-record-live";
 
 export default async function TrackRecordPage() {
+  const supabase = await createSupabaseServer();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
   const bets = await getAllBets();
 
   // Calculate stats from real data

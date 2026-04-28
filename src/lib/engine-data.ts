@@ -114,6 +114,7 @@ export interface MatchH2H {
 
 export interface TeamStanding {
   teamName: string;
+  teamApiId: number;
   rank: number;
   points: number;
   played: number;
@@ -132,6 +133,64 @@ export interface MatchInjury {
   reason: string | null;
 }
 
+export interface MatchEvent {
+  minute: number;
+  addedTime: number;
+  eventType: string;
+  team: "home" | "away";
+  playerName: string | null;
+  assistName: string | null;
+  detail: string | null;
+}
+
+export interface LineupPlayer {
+  name: string;
+  number: number | null;
+  position: string | null;
+  grid: string | null;
+}
+
+export interface LineupData {
+  formationHome: string | null;
+  formationAway: string | null;
+  coachHome: string | null;
+  coachAway: string | null;
+  startXIHome: LineupPlayer[];
+  startXIAway: LineupPlayer[];
+}
+
+export interface PlayerStat {
+  playerName: string | null;
+  teamSide: "home" | "away";
+  position: string | null;
+  shirtNumber: number | null;
+  minutesPlayed: number | null;
+  rating: number | null;
+  goals: number | null;
+  assists: number | null;
+  passesKey: number | null;
+  yellowCards: number | null;
+  redCards: number | null;
+}
+
+export interface TeamSeasonStat {
+  form: string | null;
+  playedTotal: number | null;
+  winsTotal: number | null;
+  drawsTotal: number | null;
+  lossesTotal: number | null;
+  goalsForAvg: number | null;
+  goalsAgainstAvg: number | null;
+  cleanSheetPct: number | null;
+  mostUsedFormation: string | null;
+  playedHome: number | null;
+  goalsForHome: number | null;
+  goalsAgainstHome: number | null;
+  playedAway: number | null;
+  goalsForAway: number | null;
+  goalsAgainstAway: number | null;
+}
+
 export interface MatchStatsData {
   shots_home: number | null;
   shots_away: number | null;
@@ -140,6 +199,16 @@ export interface MatchStatsData {
   possession_home: number | null;
   corners_home: number | null;
   corners_away: number | null;
+  xg_home: number | null;
+  xg_away: number | null;
+  // Half-time
+  shots_home_ht: number | null;
+  shots_away_ht: number | null;
+  possession_home_ht: number | null;
+  corners_home_ht: number | null;
+  corners_away_ht: number | null;
+  xg_home_ht: number | null;
+  xg_away_ht: number | null;
 }
 
 export interface OddsMovementPoint {
@@ -515,7 +584,10 @@ export async function getMatchStats(matchId: string): Promise<MatchStatsData | n
   const { data, error } = await supabase
     .from("match_stats")
     .select(
-      "shots_home, shots_away, shots_on_target_home, shots_on_target_away, possession_home, corners_home, corners_away"
+      `shots_home, shots_away, shots_on_target_home, shots_on_target_away,
+       possession_home, corners_home, corners_away, xg_home, xg_away,
+       shots_home_ht, shots_away_ht, possession_home_ht,
+       corners_home_ht, corners_away_ht, xg_home_ht, xg_away_ht`
     )
     .eq("match_id", matchId)
     .single();
@@ -614,7 +686,7 @@ export async function getTeamStandings(
   const supabase = createSupabasePublic();
   const { data, error } = await supabase
     .from("league_standings")
-    .select("team_name, rank, points, played, wins, draws, losses, goals_for, goals_against, form")
+    .select("team_name, team_api_id, rank, points, played, wins, draws, losses, goals_for, goals_against, form")
     .in("team_name", [homeTeam, awayTeam])
     .order("fetched_date", { ascending: false });
 
@@ -622,6 +694,7 @@ export async function getTeamStandings(
 
   type Row = {
     team_name: string;
+    team_api_id: number;
     rank: number;
     points: number;
     played: number;
@@ -647,6 +720,7 @@ export async function getTeamStandings(
     if (!r) return null;
     return {
       teamName: r.team_name,
+      teamApiId: r.team_api_id,
       rank: r.rank,
       points: r.points,
       played: r.played,
@@ -663,6 +737,185 @@ export async function getTeamStandings(
     home: toStanding(rows.find((r) => r.team_name === homeTeam)),
     away: toStanding(rows.find((r) => r.team_name === awayTeam)),
   };
+}
+
+export async function getMatchEvents(matchId: string): Promise<MatchEvent[]> {
+  const supabase = createSupabasePublic();
+  const { data, error } = await supabase
+    .from("match_events")
+    .select("minute, added_time, event_type, team, player_name, assist_name, detail")
+    .eq("match_id", matchId)
+    .order("minute", { ascending: true });
+  if (error || !data) return [];
+  return (data as {
+    minute: number;
+    added_time: number;
+    event_type: string;
+    team: string;
+    player_name: string | null;
+    assist_name: string | null;
+    detail: string | null;
+  }[]).map((r) => ({
+    minute: r.minute,
+    addedTime: r.added_time,
+    eventType: r.event_type,
+    team: r.team as "home" | "away",
+    playerName: r.player_name,
+    assistName: r.assist_name,
+    detail: r.detail,
+  }));
+}
+
+export async function getMatchLineups(matchId: string): Promise<LineupData | null> {
+  const supabase = createSupabasePublic();
+  const { data, error } = await supabase
+    .from("matches")
+    .select("lineups_home, lineups_away, formation_home, formation_away, coach_home, coach_away")
+    .eq("id", matchId)
+    .single();
+  if (error || !data) return null;
+  const row = data as {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    lineups_home: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    lineups_away: any;
+    formation_home: string | null;
+    formation_away: string | null;
+    coach_home: string | null;
+    coach_away: string | null;
+  };
+  if (!row.lineups_home && !row.lineups_away) return null;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const parseXI = (lineup: any): LineupPlayer[] => {
+    if (!lineup?.startXI) return [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return lineup.startXI.map((e: any) => ({
+      name: e.player?.name || "",
+      number: e.player?.number ?? null,
+      position: e.player?.pos ?? null,
+      grid: e.player?.grid ?? null,
+    }));
+  };
+
+  return {
+    formationHome: row.formation_home,
+    formationAway: row.formation_away,
+    coachHome: row.coach_home,
+    coachAway: row.coach_away,
+    startXIHome: parseXI(row.lineups_home),
+    startXIAway: parseXI(row.lineups_away),
+  };
+}
+
+export async function getMatchPlayerStats(matchId: string): Promise<PlayerStat[]> {
+  const supabase = createSupabasePublic();
+  const { data, error } = await supabase
+    .from("match_player_stats")
+    .select(
+      "player_name, team_side, position, shirt_number, minutes_played, rating, goals, assists, passes_key, yellow_cards, red_cards"
+    )
+    .eq("match_id", matchId)
+    .order("rating", { ascending: false });
+  if (error || !data) return [];
+  return (data as {
+    player_name: string | null;
+    team_side: string;
+    position: string | null;
+    shirt_number: number | null;
+    minutes_played: number | null;
+    rating: number | null;
+    goals: number | null;
+    assists: number | null;
+    passes_key: number | null;
+    yellow_cards: number | null;
+    red_cards: number | null;
+  }[]).map((r) => ({
+    playerName: r.player_name,
+    teamSide: r.team_side as "home" | "away",
+    position: r.position,
+    shirtNumber: r.shirt_number,
+    minutesPlayed: r.minutes_played,
+    rating: r.rating,
+    goals: r.goals,
+    assists: r.assists,
+    passesKey: r.passes_key,
+    yellowCards: r.yellow_cards,
+    redCards: r.red_cards,
+  }));
+}
+
+export async function getTeamSeasonStats(
+  homeApiId: number | null,
+  awayApiId: number | null
+): Promise<{ home: TeamSeasonStat | null; away: TeamSeasonStat | null }> {
+  const ids = [homeApiId, awayApiId].filter((id): id is number => id !== null);
+  if (!ids.length) return { home: null, away: null };
+
+  const supabase = createSupabasePublic();
+  const { data, error } = await supabase
+    .from("team_season_stats")
+    .select(
+      `team_api_id, form, played_total, wins_total, draws_total, losses_total,
+       goals_for_avg, goals_against_avg, clean_sheet_pct, most_used_formation,
+       played_home, goals_for_home, goals_against_home,
+       played_away, goals_for_away, goals_against_away`
+    )
+    .in("team_api_id", ids)
+    .order("fetched_date", { ascending: false });
+
+  if (error || !data) return { home: null, away: null };
+
+  type Row = {
+    team_api_id: number;
+    form: string | null;
+    played_total: number | null;
+    wins_total: number | null;
+    draws_total: number | null;
+    losses_total: number | null;
+    goals_for_avg: number | null;
+    goals_against_avg: number | null;
+    clean_sheet_pct: number | null;
+    most_used_formation: string | null;
+    played_home: number | null;
+    goals_for_home: number | null;
+    goals_against_home: number | null;
+    played_away: number | null;
+    goals_for_away: number | null;
+    goals_against_away: number | null;
+  };
+
+  // dedupe — keep most recent per team
+  const seen = new Set<number>();
+  const rows: Row[] = [];
+  for (const r of data as Row[]) {
+    if (!seen.has(r.team_api_id)) { seen.add(r.team_api_id); rows.push(r); }
+  }
+
+  const toStat = (id: number | null): TeamSeasonStat | null => {
+    if (!id) return null;
+    const r = rows.find((x) => x.team_api_id === id);
+    if (!r) return null;
+    return {
+      form: r.form,
+      playedTotal: r.played_total,
+      winsTotal: r.wins_total,
+      drawsTotal: r.draws_total,
+      lossesTotal: r.losses_total,
+      goalsForAvg: r.goals_for_avg,
+      goalsAgainstAvg: r.goals_against_avg,
+      cleanSheetPct: r.clean_sheet_pct,
+      mostUsedFormation: r.most_used_formation,
+      playedHome: r.played_home,
+      goalsForHome: r.goals_for_home,
+      goalsAgainstHome: r.goals_against_home,
+      playedAway: r.played_away,
+      goalsForAway: r.goals_for_away,
+      goalsAgainstAway: r.goals_against_away,
+    };
+  };
+
+  return { home: toStat(homeApiId), away: toStat(awayApiId) };
 }
 
 export async function getOddsMovement(matchId: string): Promise<OddsMovementPoint[]> {

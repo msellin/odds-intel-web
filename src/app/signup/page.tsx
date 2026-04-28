@@ -72,8 +72,15 @@ export default function SignUpPage() {
         </CardHeader>
         <CardContent className="space-y-5">
           {success ? (
-            <div className="rounded-md bg-emerald-500/10 border border-emerald-500/30 px-4 py-3 text-center text-sm text-emerald-400">
-              Check your email to confirm your account. You can close this page.
+            <div className="space-y-4">
+              <div className="rounded-md bg-emerald-500/10 border border-emerald-500/30 px-4 py-3 text-center text-sm text-emerald-400">
+                Check your email to confirm your account, then come back to sign in.
+              </div>
+              <Link href="/login">
+                <Button className="w-full" variant="outline">
+                  Go to sign in
+                </Button>
+              </Link>
             </div>
           ) : (
             <>
