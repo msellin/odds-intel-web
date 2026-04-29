@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import { CalendarDays, SearchX, Info } from "lucide-react";
 import { getPublicMatches, getLiveSnapshots } from "@/lib/engine-data";
 import { LeagueFilter } from "@/components/league-filter";
