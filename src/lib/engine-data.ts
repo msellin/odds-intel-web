@@ -862,6 +862,10 @@ export interface ModelPredictionRow {
   confidence: number;    // 0-1, the winning probability
   actual: "home" | "draw" | "away";
   correct: boolean;
+  // Real historical odds for this match (null if no odds tracked for this match)
+  bestOddsForPick: number | null;   // best bookmaker odds for the model's selection
+  worstOddsForPick: number | null;  // worst bookmaker odds for the model's selection
+  bookmakerCount: number;           // how many bookmakers had odds
 }
 
 export interface ModelAccuracyStats {
@@ -878,6 +882,87 @@ export interface ModelAccuracyStats {
 export interface ModelAccuracyData {
   rows: ModelPredictionRow[];
   stats: ModelAccuracyStats;
+}
+
+// Today's upcoming picks — no odds sent (intentionally; that's Pro data)
+export interface TodayPick {
+  matchId: string;
+  kickoff: string;   // ISO timestamp
+  home: string;
+  away: string;
+  league: string;
+  modelCall: "home" | "draw" | "away";
+  confidence: number;
+}
+
+export async function getTodayPicks(): Promise<TodayPick[]> {
+  const supabase = await createSupabaseServer();
+  const today = new Date().toISOString().split("T")[0];
+
+  // Fetch today's not-yet-finished matches that have ensemble predictions
+  const { data: matches } = await supabase
+    .from("matches")
+    .select(`
+      id, date,
+      home_team:home_team_id(name),
+      away_team:away_team_id(name),
+      league:league_id(name, country)
+    `)
+    .gte("date", today)
+    .lte("date", today)
+    .in("status", ["scheduled", "not_started", "1h", "2h", "ht", "live"])
+    .limit(30);
+
+  if (!matches || matches.length === 0) return [];
+
+  const matchIds = (matches as Array<Record<string, unknown>>).map((m) => m.id as string);
+
+  const { data: preds } = await supabase
+    .from("predictions")
+    .select("match_id, market, model_probability")
+    .in("match_id", matchIds)
+    .in("market", ["1x2_home", "1x2_draw", "1x2_away"])
+    .eq("source", "ensemble");
+
+  if (!preds) return [];
+
+  const predsByMatch: Record<string, Record<string, number>> = {};
+  for (const p of preds as Array<{ match_id: string; market: string; model_probability: number }>) {
+    if (!predsByMatch[p.match_id]) predsByMatch[p.match_id] = {};
+    predsByMatch[p.match_id][p.market] = Number(p.model_probability);
+  }
+
+  const picks: TodayPick[] = [];
+  for (const m of matches as Array<Record<string, unknown>>) {
+    const pMap = predsByMatch[m.id as string];
+    if (!pMap) continue;
+
+    const homeProb = pMap["1x2_home"] ?? 0;
+    const drawProb = pMap["1x2_draw"] ?? 0;
+    const awayProb = pMap["1x2_away"] ?? 0;
+    if (homeProb === 0 && drawProb === 0 && awayProb === 0) continue;
+
+    let modelCall: "home" | "draw" | "away" = "home";
+    let confidence = homeProb;
+    if (drawProb > confidence) { modelCall = "draw"; confidence = drawProb; }
+    if (awayProb > confidence) { modelCall = "away"; confidence = awayProb; }
+
+    const homeTeam = Array.isArray(m.home_team) ? m.home_team[0] : m.home_team as Record<string, unknown>;
+    const awayTeam = Array.isArray(m.away_team) ? m.away_team[0] : m.away_team as Record<string, unknown>;
+    const league   = Array.isArray(m.league)    ? m.league[0]    : m.league    as Record<string, unknown>;
+
+    picks.push({
+      matchId: m.id as string,
+      kickoff: m.date as string,
+      home: (homeTeam?.name as string) ?? "?",
+      away: (awayTeam?.name as string) ?? "?",
+      league: league ? `${league.country} / ${league.name}` : "Unknown",
+      modelCall,
+      confidence,
+    });
+  }
+
+  return picks.sort((a, b) => a.kickoff.localeCompare(b.kickoff));
 }
 
 export async function getModelAccuracy(): Promise<ModelAccuracyData> {
@@ -918,6 +1003,23 @@ export async function getModelAccuracy(): Promise<ModelAccuracyData> {
     predsByMatch[p.match_id][p.market] = Number(p.model_probability);
   }
 
+  // Fetch historical odds for all matched match IDs via RPC (no time window)
+  const { data: oddsData } = await supabase.rpc("get_historical_match_odds", {
+    p_match_ids: matchIds,
+  });
+
+  // Index: matchId → selection → { best, worst, bookmakerCount }
+  type OddsRow = { match_id: string; selection: string; best_odds: number; worst_odds: number; bookmaker_count: number };
+  const oddsIndex: Record<string, Record<string, { best: number; worst: number; count: number }>> = {};
+  for (const o of (oddsData ?? []) as OddsRow[]) {
+    if (!oddsIndex[o.match_id]) oddsIndex[o.match_id] = {};
+    oddsIndex[o.match_id][o.selection] = {
+      best: Number(o.best_odds),
+      worst: Number(o.worst_odds),
+      count: Number(o.bookmaker_count),
+    };
+  }
+
   const rows: ModelPredictionRow[] = [];
 
   for (const m of matches as Array<Record<string, unknown>>) {
@@ -940,6 +1042,10 @@ export async function getModelAccuracy(): Promise<ModelAccuracyData> {
     const awayTeam = Array.isArray(m.away_team) ? m.away_team[0] : m.away_team as Record<string, unknown>;
     const league   = Array.isArray(m.league)    ? m.league[0]    : m.league    as Record<string, unknown>;
 
+    // Real historical odds for the model's pick
+    const matchOdds = oddsIndex[m.id as string];
+    const pickOdds = matchOdds?.[modelCall];
+
     rows.push({
       matchId:    m.id as string,
       date:       (m.date as string).split("T")[0],
@@ -950,6 +1056,9 @@ export async function getModelAccuracy(): Promise<ModelAccuracyData> {
       confidence,
       actual,
       correct: modelCall === actual,
+      bestOddsForPick:  pickOdds?.best  ?? null,
+      worstOddsForPick: pickOdds?.worst ?? null,
+      bookmakerCount:   pickOdds?.count ?? 0,
     });
   }
 

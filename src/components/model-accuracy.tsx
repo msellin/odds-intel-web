@@ -279,7 +279,7 @@ export function ModelAccuracy({ data }: Props) {
               {/* Table */}
               <Card className="overflow-hidden border-border/50 bg-card/80">
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[600px]">
+                  <table className="w-full min-w-[700px]">
                     <thead>
                       <tr className="border-b border-border/30">
                         <th className="py-2.5 pl-4 pr-2 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -297,8 +297,13 @@ export function ModelAccuracy({ data }: Props) {
                         <th className="py-2.5 px-2 text-center text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                           Confidence
                         </th>
-                        <th className="py-2.5 px-2 text-center text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                        <th className="py-2.5 px-2 text-center text-[11px] font-medium uppercase tracking-wider text-muted-foreground hidden md:table-cell">
                           Actual
+                        </th>
+                        <th className="py-2.5 px-2 text-center text-[11px] font-medium uppercase tracking-wider text-muted-foreground hidden lg:table-cell">
+                          <span title="Best bookmaker odds tracked for the model's pick">
+                            Best odds ↗
+                          </span>
                         </th>
                         <th className="py-2.5 pl-2 pr-4 text-center text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                           Result
@@ -306,7 +311,11 @@ export function ModelAccuracy({ data }: Props) {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/20">
-                      {visibleRows.map((row: ModelPredictionRow) => (
+                      {visibleRows.map((row: ModelPredictionRow) => {
+                        const flatPnl = row.bestOddsForPick !== null
+                          ? (row.correct ? 10 * (row.bestOddsForPick - 1) : -10)
+                          : null;
+                        return (
                         <tr key={row.matchId} className="hover:bg-muted/10">
                           <td className="py-2.5 pl-4 pr-2 font-mono text-xs text-muted-foreground">
                             {row.date}
@@ -325,10 +334,27 @@ export function ModelAccuracy({ data }: Props) {
                           <td className="py-2.5 px-2 text-center">
                             {confidenceBadge(row.confidence)}
                           </td>
-                          <td className="py-2.5 px-2 text-center">
+                          <td className="py-2.5 px-2 text-center hidden md:table-cell">
                             <span className="text-xs text-muted-foreground">
                               {outcomeLabel(row.actual)}
                             </span>
+                          </td>
+                          {/* Best odds — revealed after settlement (was locked in today's pending preview) */}
+                          <td className="py-2.5 px-2 text-center hidden lg:table-cell">
+                            {row.bestOddsForPick !== null ? (
+                              <span className="inline-flex flex-col items-center gap-0.5">
+                                <span className="font-mono text-xs font-medium text-foreground/80">
+                                  {row.bestOddsForPick.toFixed(2)}
+                                </span>
+                                {flatPnl !== null && (
+                                  <span className={`text-[10px] font-mono ${flatPnl >= 0 ? "text-emerald-400" : "text-red-400/70"}`}>
+                                    {flatPnl >= 0 ? "+" : ""}€{flatPnl.toFixed(1)}
+                                  </span>
+                                )}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-muted-foreground/40">—</span>
+                            )}
                           </td>
                           <td className="py-2.5 pl-2 pr-4 text-center">
                             {row.correct ? (
@@ -338,7 +364,8 @@ export function ModelAccuracy({ data }: Props) {
                             )}
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

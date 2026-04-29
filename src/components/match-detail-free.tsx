@@ -9,7 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, BarChart3, History, TableIcon, Zap, Info } from "lucide-react";
+import { TrendingUp, BarChart3, History, TableIcon, Zap, Info, Lock } from "lucide-react";
 import Link from "next/link";
 
 function Tooltip({ children, content }: { children: React.ReactNode; content: React.ReactNode }) {
