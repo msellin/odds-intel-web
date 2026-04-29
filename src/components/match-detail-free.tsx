@@ -9,7 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, BarChart3, Lock, History, TableIcon, Zap, Info } from "lucide-react";
+import { TrendingUp, BarChart3, History, TableIcon, Zap, Info } from "lucide-react";
 import Link from "next/link";
 
 function Tooltip({ children, content }: { children: React.ReactNode; content: React.ReactNode }) {
@@ -74,7 +74,7 @@ export function MatchDetailFree({
   const indicator = interestIndicator(interest);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       {/* Best Odds Summary */}
       {match.hasOdds && match.bestHome > 0 ? (
         <Card className="border-border bg-card">
@@ -343,44 +343,6 @@ export function MatchDetailFree({
         </CardContent>
       </Card>
 
-      {/* Pro teaser — hidden for Pro/Elite users who already have access */}
-      {!isPro && match.hasOdds && bookmakerCount > 1 && (
-        <div className="relative overflow-hidden rounded-xl border border-border bg-card">
-          {/* Blurred skeleton content */}
-          <div className="p-5 blur-[6px] pointer-events-none select-none">
-            <p className="text-sm font-medium mb-3">Full Odds Comparison</p>
-            <div className="space-y-2.5">
-              {Array.from({ length: Math.min(bookmakerCount, 4) }).map((_, i) => (
-                <div key={i} className="flex items-center gap-4 py-1.5">
-                  <div className="h-3.5 w-20 rounded bg-muted/60" />
-                  <div className="h-3.5 w-14 rounded bg-muted/40 ml-auto" />
-                  <div className="h-3.5 w-14 rounded bg-muted/40" />
-                  <div className="h-3.5 w-14 rounded bg-muted/40" />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Overlay */}
-          <div className="absolute inset-0 flex items-center justify-center bg-background/70">
-            <div className="text-center space-y-3 px-6">
-              <Lock className="h-5 w-5 text-muted-foreground mx-auto" />
-              <p className="text-sm font-medium text-foreground">
-                Compare odds from {bookmakerCount} bookmakers
-              </p>
-              <p className="text-xs text-muted-foreground max-w-xs">
-                See which bookmaker offers the best price for every market.
-              </p>
-              <Link
-                href={isAuthenticated ? "/profile" : "/signup"}
-                className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700"
-              >
-                {isAuthenticated ? "Upgrade to Pro" : "Sign Up Free"}
-              </Link>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

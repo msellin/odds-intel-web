@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Users, Lock } from "lucide-react";
+import { Users } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,7 @@ interface CommunityVoteProps {
   homeTeam: string;
   awayTeam: string;
   matchStatus: string;
+  isAuthenticated?: boolean;
 }
 
 type Vote = "home" | "draw" | "away";
@@ -28,6 +29,7 @@ export function CommunityVote({
   homeTeam,
   awayTeam,
   matchStatus,
+  isAuthenticated,
 }: CommunityVoteProps) {
   const { user } = useAuth();
   const [myVote, setMyVote] = useState<Vote | null>(null);
@@ -102,32 +104,22 @@ export function CommunityVote({
     { vote: "away", label: awayTeam },
   ];
 
-  // Anonymous users see locked results
+  // Not yet signed in — show a compact one-liner, not locked empty boxes
   if (!user) {
+    if (!loaded) return null;
     return (
-      <div className="rounded-lg border border-white/[0.06] bg-card/40 p-4 space-y-3">
-        <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-          <Users className="h-3 w-3" />
-          Community Prediction
-        </p>
-        <div className="grid grid-cols-3 gap-2">
-          {options.map((opt) => (
-            <div
-              key={opt.vote}
-              className="flex flex-col items-center gap-1 rounded-lg border border-white/[0.06] bg-muted/20 px-3 py-3"
-            >
-              <span className="text-xs text-muted-foreground truncate max-w-full">
-                {opt.label}
-              </span>
-              <Lock className="h-3.5 w-3.5 text-muted-foreground/40" />
-            </div>
-          ))}
-        </div>
+      <div className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-card/40 px-4 py-3">
+        <Users className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
+        <span className="text-xs text-muted-foreground">
+          {counts.total > 0
+            ? `${counts.total} user${counts.total !== 1 ? "s" : ""} have predicted this match`
+            : "Be the first to predict this match"}
+        </span>
         <Link
           href="/signup"
-          className="inline-flex items-center gap-1 text-[11px] text-emerald-400 hover:text-emerald-300 transition-colors"
+          className="ml-auto shrink-0 text-[11px] font-medium text-emerald-400 hover:text-emerald-300 transition-colors"
         >
-          Sign up to vote and see results
+          Sign up to vote →
         </Link>
       </div>
     );

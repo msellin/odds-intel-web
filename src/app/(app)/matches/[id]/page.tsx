@@ -191,14 +191,15 @@ export default async function MatchDetailPage({
     month: "short",
     year: "numeric",
   });
+  // Time formatted in UTC (server-side); client will re-render in local timezone via suppressHydrationWarning
   const timeStr = kickoffDate.toLocaleTimeString("en-GB", {
     hour: "2-digit",
     minute: "2-digit",
-    timeZone: "Europe/Tallinn",
-  });
+    timeZone: "UTC",
+  }) + " UTC";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
       <div className="space-y-3">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -206,14 +207,7 @@ export default async function MatchDetailPage({
             Matches
           </Link>
           <span>/</span>
-          <Link
-            href="/matches"
-            className="hover:text-foreground transition-colors"
-          >
-            Matches
-          </Link>
-          <span>/</span>
-          <span className="text-foreground">Detail</span>
+          <span className="text-foreground">{publicMatch.homeTeam} vs {publicMatch.awayTeam}</span>
         </div>
 
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
@@ -262,25 +256,7 @@ export default async function MatchDetailPage({
 
       <Separator className="bg-border" />
 
-      {/* User pick + community vote + notes — free signed-in features */}
-      <MatchPickButton
-        matchId={publicMatch.id}
-        homeTeam={publicMatch.homeTeam}
-        awayTeam={publicMatch.awayTeam}
-        bestHome={publicMatch.bestHome}
-        bestDraw={publicMatch.bestDraw}
-        bestAway={publicMatch.bestAway}
-        matchStatus={publicMatch.status}
-      />
-
-      <CommunityVote
-        matchId={publicMatch.id}
-        homeTeam={publicMatch.homeTeam}
-        awayTeam={publicMatch.awayTeam}
-        matchStatus={publicMatch.status}
-      />
-
-      {/* Free content — always visible */}
+      {/* Free content — always visible, shown first so users see data before CTAs */}
       <MatchDetailFree
         match={publicMatch}
         bookmakerCount={bookmakerCount}
@@ -328,6 +304,25 @@ export default async function MatchDetailPage({
           awayTeam={publicMatch.awayTeam}
         />
       )}
+
+      {/* User pick + community vote + notes — below the data so users see match info first */}
+      <MatchPickButton
+        matchId={publicMatch.id}
+        homeTeam={publicMatch.homeTeam}
+        awayTeam={publicMatch.awayTeam}
+        bestHome={publicMatch.bestHome}
+        bestDraw={publicMatch.bestDraw}
+        bestAway={publicMatch.bestAway}
+        matchStatus={publicMatch.status}
+      />
+
+      <CommunityVote
+        matchId={publicMatch.id}
+        homeTeam={publicMatch.homeTeam}
+        awayTeam={publicMatch.awayTeam}
+        matchStatus={publicMatch.status}
+        isAuthenticated={isAuthenticated}
+      />
 
       {/* Match notes — free signed-in feature */}
       <MatchNotes matchId={publicMatch.id} />
