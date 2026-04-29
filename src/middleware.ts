@@ -1,7 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PROTECTED_ROUTES = ["/value-bets", "/track-record", "/profile", "/my-picks"];
+// Only routes that require login and have no graceful guest state
+// /value-bets and /track-record handle unauthenticated users within the page itself
+const PROTECTED_ROUTES = ["/profile", "/my-picks"];
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });

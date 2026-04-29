@@ -84,6 +84,22 @@ export default function ProfilePage() {
     }
   }, []);
 
+  const upgradeToElite = useCallback(async () => {
+    setUpgrading("elite");
+    try {
+      const res = await fetch("/api/stripe/upgrade", { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        setCheckoutMsg("Upgraded to Elite! Refreshing...");
+        await refreshProfile();
+      } else {
+        setCheckoutMsg(data.error ?? "Upgrade failed. Please try again.");
+      }
+    } finally {
+      setUpgrading(null);
+    }
+  }, [refreshProfile]);
+
   useEffect(() => {
     if (!loading && !user) router.push("/login");
   }, [user, loading, router]);
@@ -196,7 +212,17 @@ export default function ProfilePage() {
                 <p className="text-[10px] text-muted-foreground">Founding member rates — locked forever</p>
               </div>
             ) : (
-              <div className="flex flex-col items-end gap-0.5">
+              <div className="flex flex-col items-end gap-2">
+                {tierKey === "pro" && (
+                  <button
+                    onClick={upgradeToElite}
+                    disabled={!!upgrading}
+                    className="flex items-center gap-1.5 rounded-md border border-amber-500/40 px-3 py-1.5 text-xs font-medium text-amber-400 hover:bg-amber-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {upgrading === "elite" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                    Upgrade to Elite — €9.99/mo
+                  </button>
+                )}
                 <button
                   onClick={openPortal}
                   disabled={!!upgrading}

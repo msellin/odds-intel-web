@@ -1,8 +1,43 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
+import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServer } from "@/lib/supabase-server";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  (process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY)!
+);
+
+const PRO_FOUNDING_CAP = 500;
+const ELITE_FOUNDING_CAP = 200;
+
+// Returns the price to actually charge — founding rate if cap not reached, else regular
+async function resolvePrice(requestedPriceId: string): Promise<string> {
+  const proFounding = process.env.STRIPE_PRO_FOUNDING_PRICE_ID!;
+  const eliteFounding = process.env.STRIPE_ELITE_FOUNDING_PRICE_ID!;
+  const proMonthly = process.env.STRIPE_PRO_MONTHLY_PRICE_ID!;
+  const eliteMonthly = process.env.STRIPE_ELITE_MONTHLY_PRICE_ID!;
+
+  if (requestedPriceId === proFounding) {
+    const { count } = await supabaseAdmin
+      .from("profiles")
+      .select("*", { count: "exact", head: true })
+      .eq("tier", "pro");
+    return (count ?? 0) >= PRO_FOUNDING_CAP ? proMonthly : proFounding;
+  }
+
+  if (requestedPriceId === eliteFounding) {
+    const { count } = await supabaseAdmin
+      .from("profiles")
+      .select("*", { count: "exact", head: true })
+      .eq("tier", "elite");
+    return (count ?? 0) >= ELITE_FOUNDING_CAP ? eliteMonthly : eliteFounding;
+  }
+
+  return requestedPriceId;
+}
 
 export async function POST(req: NextRequest) {
   const supabase = await createSupabaseServer();
@@ -14,10 +49,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { priceId } = await req.json();
-  if (!priceId) {
+  const { priceId: requestedPriceId } = await req.json();
+  if (!requestedPriceId) {
     return NextResponse.json({ error: "Missing priceId" }, { status: 400 });
   }
+  const priceId = await resolvePrice(requestedPriceId);
 
   const { data: profile } = await supabase
     .from("profiles")
