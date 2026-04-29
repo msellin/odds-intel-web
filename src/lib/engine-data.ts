@@ -89,6 +89,11 @@ export interface PublicMatch {
   bestHome: number;
   bestDraw: number;
   bestAway: number;
+  // Signal intelligence (SUX-1/2/3) — populated by getPublicMatches(), omitted on detail
+  signalCount: number;
+  dataGrade: "A" | "B" | "D" | null;
+  pulse: "routine" | "interesting" | "high-alert";
+  teasers: string[];
   // populated only on match detail (getPublicMatchById)
   score_home?: number | null;
   score_away?: number | null;
@@ -228,6 +233,145 @@ export interface LiveSnapshot {
 
 // ─── Data fetching functions ────────────────────────────────────────────────
 
+// ─── Signal intelligence batch fetch (SUX-1/2/3) ───────────────────────────
+
+const PULSE_SIGNAL_NAMES = [
+  "bookmaker_disagreement",
+  "importance_diff",
+  "overnight_line_move",
+  "odds_volatility",
+  "form_slope_home",
+  "form_slope_away",
+  "injury_count_home",
+  "injury_count_away",
+  "news_impact_score",
+];
+
+interface MatchSignalSummary {
+  signalCount: number;
+  dataGrade: "A" | "B" | "D" | null;
+  pulse: "routine" | "interesting" | "high-alert";
+  teasers: string[];
+}
+
+async function batchFetchSignalSummary(
+  matchIds: string[],
+  todayStart: Date
+): Promise<Record<string, MatchSignalSummary>> {
+  if (!matchIds.length) return {};
+  const supabase = createSupabasePublic();
+
+  const [signalNamesResult, keySignalsResult, predsResult] = await Promise.all([
+    // All distinct signal names per match (for count)
+    supabase
+      .from("match_signals")
+      .select("match_id, signal_name")
+      .in("match_id", matchIds)
+      .gte("captured_at", todayStart.toISOString())
+      .limit(60000),
+    // Latest values of key signals (for pulse + teasers)
+    supabase
+      .from("match_signals")
+      .select("match_id, signal_name, signal_value, captured_at")
+      .in("match_id", matchIds)
+      .in("signal_name", PULSE_SIGNAL_NAMES)
+      .gte("captured_at", todayStart.toISOString())
+      .order("captured_at", { ascending: false })
+      .limit(20000),
+    // Prediction sources (for data grade A/B/D)
+    supabase
+      .from("predictions")
+      .select("match_id, source")
+      .in("match_id", matchIds)
+      .eq("market", "1x2_home"),
+  ]);
+
+  // Count distinct signal names per match
+  const signalNamesSeen: Record<string, Set<string>> = {};
+  for (const s of (signalNamesResult.data || []) as { match_id: string; signal_name: string }[]) {
+    if (!signalNamesSeen[s.match_id]) signalNamesSeen[s.match_id] = new Set();
+    signalNamesSeen[s.match_id].add(s.signal_name);
+  }
+
+  // Latest value per key signal per match (results already ordered desc by captured_at)
+  const keySignals: Record<string, Record<string, number>> = {};
+  const seenKeySignals: Record<string, Set<string>> = {};
+  for (const s of (keySignalsResult.data || []) as {
+    match_id: string; signal_name: string; signal_value: number;
+  }[]) {
+    if (!keySignals[s.match_id]) {
+      keySignals[s.match_id] = {};
+      seenKeySignals[s.match_id] = new Set();
+    }
+    if (!seenKeySignals[s.match_id].has(s.signal_name)) {
+      keySignals[s.match_id][s.signal_name] = Number(s.signal_value);
+      seenKeySignals[s.match_id].add(s.signal_name);
+    }
+  }
+
+  // Prediction sources per match
+  const predSources: Record<string, Set<string>> = {};
+  for (const p of (predsResult.data || []) as { match_id: string; source: string }[]) {
+    if (!predSources[p.match_id]) predSources[p.match_id] = new Set();
+    predSources[p.match_id].add(p.source);
+  }
+
+  const result: Record<string, MatchSignalSummary> = {};
+
+  for (const matchId of matchIds) {
+    const sigs = keySignals[matchId] || {};
+    const signalCount = signalNamesSeen[matchId]?.size ?? 0;
+
+    // Grade: A = XGBoost ran, B = Poisson only, D = AF prediction only
+    const sources = predSources[matchId] ?? new Set<string>();
+    let dataGrade: "A" | "B" | "D" | null = null;
+    if (sources.has("xgboost")) dataGrade = "A";
+    else if (sources.has("poisson")) dataGrade = "B";
+    else if (sources.has("af")) dataGrade = "D";
+
+    // Pulse: derived from market + context signals available in match_signals
+    const bdm = sigs["bookmaker_disagreement"] ?? 0;
+    const olm = Math.abs(sigs["overnight_line_move"] ?? 0);
+    const vol = sigs["odds_volatility"] ?? 0;
+    const impDiff = Math.abs(sigs["importance_diff"] ?? 0);
+
+    let pulse: "routine" | "interesting" | "high-alert" = "routine";
+    if (bdm > 0.12 && (olm > 0.04 || vol > 0.008)) {
+      pulse = "high-alert";
+    } else if (bdm > 0.08 || olm > 0.03 || vol > 0.005 || impDiff > 0.3) {
+      pulse = "interesting";
+    }
+
+    // Teasers: plain-English hooks, max 2, no numbers
+    const teasers: string[] = [];
+
+    if (bdm > 0.12) teasers.push("High bookmaker disagreement");
+    else if (olm > 0.04) teasers.push("Odds shifted significantly overnight");
+    else if (vol > 0.007) teasers.push("Volatile odds market");
+
+    const news = sigs["news_impact_score"] ?? 0;
+    const injTotal = (sigs["injury_count_home"] ?? 0) + (sigs["injury_count_away"] ?? 0);
+    if (news < -0.3) teasers.push("Key injury news detected");
+    else if (injTotal >= 3) teasers.push(`${Math.round(injTotal)} absences reported`);
+
+    const slopeHome = sigs["form_slope_home"] ?? 0;
+    const slopeAway = sigs["form_slope_away"] ?? 0;
+    if (slopeHome < -0.15 && slopeAway >= -0.15) teasers.push("Home team in declining form");
+    else if (slopeAway < -0.15 && slopeHome >= -0.15) teasers.push("Away team in declining form");
+
+    if (impDiff > 0.4) teasers.push("One team with nothing to play for");
+
+    result[matchId] = {
+      signalCount,
+      dataGrade,
+      pulse,
+      teasers: teasers.slice(0, 2),
+    };
+  }
+
+  return result;
+}
+
 /**
  * Fetch today's matches using the anon key — no user session required.
  * Tables read (matches, teams, leagues, odds_snapshots) do not have RLS enabled,
@@ -312,11 +456,15 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
 
   const matchIdsWithOdds = new Set(Object.keys(oddsByMatch));
 
+  // Fetch signal intelligence for all matches (SUX-1/2/3)
+  const signalSummary = await batchFetchSignalSummary(matchIds, todayStart);
+
   return (matches as PublicMatchRow[]).map((m) => {
     const homeTeam = Array.isArray(m.home_team) ? m.home_team[0] : m.home_team;
     const awayTeam = Array.isArray(m.away_team) ? m.away_team[0] : m.away_team;
     const league = Array.isArray(m.league) ? m.league[0] : m.league;
     const odds = oddsByMatch[m.id];
+    const sig = signalSummary[m.id];
 
     return {
       id: m.id,
@@ -331,6 +479,10 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
       bestHome: odds ? Math.max(0, ...odds.home) : 0,
       bestDraw: odds ? Math.max(0, ...odds.draw) : 0,
       bestAway: odds ? Math.max(0, ...odds.away) : 0,
+      signalCount: sig?.signalCount ?? 0,
+      dataGrade: sig?.dataGrade ?? null,
+      pulse: sig?.pulse ?? "routine",
+      teasers: sig?.teasers ?? [],
     };
   });
 }
@@ -385,6 +537,11 @@ export async function getPublicMatchById(matchId: string): Promise<PublicMatch |
     bestHome: odds.home.length ? Math.max(0, ...odds.home) : 0,
     bestDraw: odds.draw.length ? Math.max(0, ...odds.draw) : 0,
     bestAway: odds.away.length ? Math.max(0, ...odds.away) : 0,
+    // Signal fields not fetched on detail page (handled by match detail components directly)
+    signalCount: 0,
+    dataGrade: null,
+    pulse: "routine" as const,
+    teasers: [],
     score_home: m.score_home,
     score_away: m.score_away,
     venue_name: m.venue_name,

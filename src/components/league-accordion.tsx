@@ -43,6 +43,12 @@ function OddsCell({
   );
 }
 
+const GRADE_STYLES = {
+  A: "bg-green-500/20 text-green-400",
+  B: "bg-amber-500/20 text-amber-500",
+  D: "bg-white/[0.06] text-muted-foreground/50",
+} as const;
+
 function MatchRow({ match, liveSnapshot }: { match: PublicMatch; liveSnapshot?: LiveSnapshot }) {
   const hasOdds = match.hasOdds && (match.bestHome > 0 || match.bestDraw > 0 || match.bestAway > 0);
 
@@ -52,81 +58,112 @@ function MatchRow({ match, liveSnapshot }: { match: PublicMatch; liveSnapshot?: 
   const bestIsAway = hasOdds && !bestIsHome && !bestIsDraw;
 
   const isLive = match.status === "live" && !!liveSnapshot;
+  const hasTeasers = (match.teasers?.length ?? 0) > 0;
 
   return (
     <Link
       href={`/matches/${match.id}`}
-      className="group flex h-10 items-center gap-0 px-4 transition-colors hover:bg-white/[0.03]"
+      className={`group flex flex-col px-4 transition-colors hover:bg-white/[0.03] ${hasTeasers ? "py-1.5" : "h-10 justify-center"}`}
     >
-      {/* Interest indicator */}
-      <div className="w-5 shrink-0 text-xs">
-        {match.hasOdds ? (
-          <span className="text-orange-400">🔥</span>
-        ) : (
-          <span className="text-transparent select-none">🔥</span>
-        )}
-      </div>
-
-      {/* Kickoff time or live score */}
-      <div className="w-[4.5rem] shrink-0">
-        {isLive ? (
-          <div className="flex flex-col items-start gap-0.5">
-            <span className="inline-flex items-center gap-1 rounded bg-green-500/15 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider text-green-400 leading-none">
-              <span className="size-1.5 animate-pulse rounded-full bg-green-400" />
-              LIVE
+      {/* Main row */}
+      <div className="flex items-center gap-0">
+        {/* SUX-1: Grade badge + SUX-2: Pulse indicator */}
+        <div className="w-8 shrink-0 flex items-center gap-0.5">
+          {match.dataGrade ? (
+            <span
+              className={`inline-block rounded px-1 text-[9px] font-bold leading-4 ${GRADE_STYLES[match.dataGrade]}`}
+              title={`Data grade ${match.dataGrade}${match.signalCount ? ` · ${match.signalCount} signals` : ""}`}
+            >
+              {match.dataGrade}
             </span>
-            <span className="font-mono text-[10px] text-muted-foreground leading-none">
-              {liveSnapshot!.minute}&apos;
+          ) : (
+            <span className="inline-block w-4" />
+          )}
+          {match.pulse === "high-alert" && (
+            <span
+              className="text-[10px] text-orange-400 leading-none"
+              title="Sharp activity or market divergence"
+            >
+              ⚡
+            </span>
+          )}
+          {match.pulse === "interesting" && !match.dataGrade && (
+            <span className="size-1 rounded-full bg-amber-500/60 shrink-0" />
+          )}
+        </div>
+
+        {/* Kickoff time or live score */}
+        <div className="w-[4.5rem] shrink-0">
+          {isLive ? (
+            <div className="flex flex-col items-start gap-0.5">
+              <span className="inline-flex items-center gap-1 rounded bg-green-500/15 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider text-green-400 leading-none">
+                <span className="size-1.5 animate-pulse rounded-full bg-green-400" />
+                LIVE
+              </span>
+              <span className="font-mono text-[10px] text-muted-foreground leading-none">
+                {liveSnapshot!.minute}&apos;
+              </span>
+            </div>
+          ) : (
+            <span className="font-mono text-xs text-muted-foreground">
+              {formatKickoff(match.kickoff)}
+            </span>
+          )}
+        </div>
+
+        {/* Teams — with live score inline when live */}
+        <div className="flex flex-1 items-center justify-center gap-2 overflow-hidden px-2 text-sm">
+          <div className="flex flex-1 items-center justify-end gap-1">
+            <span className="truncate font-medium text-foreground">
+              {match.homeTeam}
             </span>
           </div>
-        ) : (
-          <span className="font-mono text-xs text-muted-foreground">
-            {formatKickoff(match.kickoff)}
-          </span>
-        )}
-      </div>
-
-      {/* Teams — with live score inline when live */}
-      <div className="flex flex-1 items-center justify-center gap-2 overflow-hidden px-2 text-sm">
-        <div className="flex flex-1 items-center justify-end gap-1">
-          <span className="truncate font-medium text-foreground">
-            {match.homeTeam}
-          </span>
-        </div>
-        {isLive ? (
-          <span className="shrink-0 font-mono text-sm font-bold tabular-nums text-foreground">
-            {liveSnapshot!.score_home}&thinsp;–&thinsp;{liveSnapshot!.score_away}
-          </span>
-        ) : (
-          <span className="shrink-0 text-[10px] font-bold text-muted-foreground/60">
-            VS
-          </span>
-        )}
-        <div className="flex flex-1 items-center gap-1">
-          <span className="truncate font-medium text-foreground">
-            {match.awayTeam}
-          </span>
-        </div>
-      </div>
-
-      {/* Odds */}
-      <div className="ml-4 flex shrink-0 items-center gap-1">
-        {hasOdds ? (
-          <>
-            <OddsCell value={match.bestHome} isBest={bestIsHome} />
-            <OddsCell value={match.bestDraw} isBest={bestIsDraw} />
-            <OddsCell value={match.bestAway} isBest={bestIsAway} />
-          </>
-        ) : (
-          <div className="w-44 text-center font-mono text-sm text-muted-foreground/40">
-            — — —
+          {isLive ? (
+            <span className="shrink-0 font-mono text-sm font-bold tabular-nums text-foreground">
+              {liveSnapshot!.score_home}&thinsp;–&thinsp;{liveSnapshot!.score_away}
+            </span>
+          ) : (
+            <span className="shrink-0 text-[10px] font-bold text-muted-foreground/60">
+              VS
+            </span>
+          )}
+          <div className="flex flex-1 items-center gap-1">
+            <span className="truncate font-medium text-foreground">
+              {match.awayTeam}
+            </span>
           </div>
-        )}
+        </div>
+
+        {/* Odds */}
+        <div className="ml-4 flex shrink-0 items-center gap-1">
+          {hasOdds ? (
+            <>
+              <OddsCell value={match.bestHome} isBest={bestIsHome} />
+              <OddsCell value={match.bestDraw} isBest={bestIsDraw} />
+              <OddsCell value={match.bestAway} isBest={bestIsAway} />
+            </>
+          ) : (
+            <div className="w-44 text-center font-mono text-sm text-muted-foreground/40">
+              — — —
+            </div>
+          )}
+        </div>
+
+        <div className="ml-1 shrink-0">
+          <ChevronRight className="size-4 text-muted-foreground/30 transition-colors group-hover:text-green-500" />
+        </div>
       </div>
 
-      <div className="ml-1 shrink-0">
-        <ChevronRight className="size-4 text-muted-foreground/30 transition-colors group-hover:text-green-500" />
-      </div>
+      {/* SUX-3: Free-tier signal teasers — only on notable matches */}
+      {hasTeasers && (
+        <div className="flex gap-3 pl-8 mt-0.5">
+          {match.teasers.map((teaser, i) => (
+            <span key={i} className="text-[10px] italic text-muted-foreground/50">
+              {teaser}
+            </span>
+          ))}
+        </div>
+      )}
     </Link>
   );
 }
