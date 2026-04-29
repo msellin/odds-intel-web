@@ -173,7 +173,7 @@ function MatchRow({
               FT
             </span>
           ) : (
-            <span className="font-mono text-xs text-muted-foreground">
+            <span className="font-mono text-xs text-muted-foreground" suppressHydrationWarning>
               {formatKickoff(match.kickoff)}
             </span>
           )}
