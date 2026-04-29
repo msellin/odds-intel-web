@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { User, Settings, X, Plus, Loader2, Zap } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -34,25 +34,29 @@ const TIER_LABELS: Record<string, string> = {
 const PRO_PRICE_ID = process.env.NEXT_PUBLIC_STRIPE_PRO_FOUNDING_PRICE_ID ?? "";
 const ELITE_PRICE_ID = process.env.NEXT_PUBLIC_STRIPE_ELITE_FOUNDING_PRICE_ID ?? "";
 
+function CheckoutBanner({ onMessage }: { onMessage: (msg: string) => void }) {
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const result = searchParams.get("checkout");
+    if (result === "success") onMessage("Subscription activated! Your tier will update shortly.");
+    else if (result === "cancelled") onMessage("Checkout cancelled.");
+  }, [searchParams, onMessage]);
+  return null;
+}
+
 export default function ProfilePage() {
   const { user, profile, loading, refreshProfile } = useAuth();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const supabase = createSupabaseBrowser();
 
   const [saving, setSaving] = useState<string | null>(null); // league name being saved
   const [upgrading, setUpgrading] = useState<string | null>(null); // "pro" | "elite" | "portal"
   const [checkoutMsg, setCheckoutMsg] = useState<string | null>(null);
 
-  useEffect(() => {
-    const result = searchParams.get("checkout");
-    if (result === "success") {
-      setCheckoutMsg("Subscription activated! Your tier will update shortly.");
-      refreshProfile();
-    } else if (result === "cancelled") {
-      setCheckoutMsg("Checkout cancelled.");
-    }
-  }, [searchParams, refreshProfile]);
+  const handleCheckoutResult = useCallback((msg: string) => {
+    setCheckoutMsg(msg);
+    if (msg.includes("activated")) refreshProfile();
+  }, [refreshProfile]);
 
   const startCheckout = useCallback(async (priceId: string, tierLabel: string) => {
     setUpgrading(tierLabel);
@@ -125,6 +129,10 @@ export default function ProfilePage() {
 
   return (
     <div className="space-y-6">
+      <Suspense fallback={null}>
+        <CheckoutBanner onMessage={handleCheckoutResult} />
+      </Suspense>
+
       {checkoutMsg && (
         <div className={`rounded-lg border px-4 py-3 text-sm ${
           checkoutMsg.includes("activated")
