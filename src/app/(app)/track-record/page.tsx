@@ -8,13 +8,21 @@ export default async function TrackRecordPage() {
   const { data: { user } } = await supabase.auth.getUser();
 
   // Model accuracy is public — no login required
-  // Bot P&L is superadmin-only — only fetch bets if user is logged in
-  const [bets, accuracy] = await Promise.all([
-    user ? getAllBets() : Promise.resolve([]),
-    getModelAccuracy(),
-  ]);
+  const accuracy = await getModelAccuracy();
 
-  // Bot stats for the superadmin section
+  // Bot P&L — only fetch and render for superadmins
+  let isSuperadmin = false;
+  if (user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("is_superadmin")
+      .eq("id", user.id)
+      .single();
+    isSuperadmin = profile?.is_superadmin === true;
+  }
+
+  const bets = isSuperadmin ? await getAllBets() : [];
+
   const totalBets = bets.length;
   const pending = bets.filter((b) => b.result === "pending").length;
   const won = bets.filter((b) => b.result === "won").length;
@@ -27,16 +35,15 @@ export default async function TrackRecordPage() {
   const allPending = totalBets > 0 && pending === totalBets;
 
   const botStats = { totalBets, pending, won, lost, hitRate, roi, totalStaked, totalPnl, allPending };
-
   const sortedBets = [...bets].sort((a, b) => b.placedAt.localeCompare(a.placedAt));
 
   return (
     <div className="space-y-12">
-      {/* ── Section A: Model accuracy — all users, no login required ── */}
+      {/* Section A: Model accuracy — all users, no login required */}
       <ModelAccuracy data={accuracy} />
 
-      {/* ── Section B: Bot paper trading — superadmin only (gated inside component) ── */}
-      {user && <TrackRecordLive bets={sortedBets} stats={botStats} />}
+      {/* Section B: Bot paper trading — superadmin only */}
+      {isSuperadmin && <TrackRecordLive bets={sortedBets} stats={botStats} />}
     </div>
   );
 }

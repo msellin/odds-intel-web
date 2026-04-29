@@ -165,7 +165,11 @@ export function ModelAccuracy({ data }: Props) {
               </CardHeader>
               <CardContent className="px-4 pb-3 pt-0">
                 <span className={`font-mono text-xl font-bold tabular-nums ${
-                  filteredStats.hitRate >= 50 ? "text-emerald-400" : "text-red-400"
+                  filteredStats.hitRate >= 45
+                    ? "text-emerald-400"
+                    : filteredStats.hitRate >= 33
+                    ? "text-amber-400"
+                    : "text-red-400"
                 }`}>
                   {filteredStats.total > 0 ? `${filteredStats.hitRate.toFixed(1)}%` : "—"}
                 </span>
@@ -175,12 +179,16 @@ export function ModelAccuracy({ data }: Props) {
             <Card className="border-border/50 bg-card/80">
               <CardHeader className="pb-1 pt-3 px-4">
                 <CardTitle className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                  Random baseline
+                  vs Random
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-4 pb-3 pt-0">
-                <span className="font-mono text-xl font-bold tabular-nums text-muted-foreground">
-                  33%
+                <span className={`font-mono text-xl font-bold tabular-nums ${
+                  filteredStats.total > 0 && filteredStats.hitRate > 33 ? "text-emerald-400" : "text-muted-foreground"
+                }`}>
+                  {filteredStats.total > 0
+                    ? `${filteredStats.hitRate - 33 >= 0 ? "+" : ""}${(filteredStats.hitRate - 33).toFixed(1)}%`
+                    : "—"}
                 </span>
               </CardContent>
             </Card>
@@ -196,7 +204,7 @@ export function ModelAccuracy({ data }: Props) {
                   <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                     {outcomeLabel(o)} win
                   </p>
-                  <p className={`mt-1 font-mono text-lg font-bold ${rate >= 50 ? "text-emerald-400" : "text-muted-foreground"}`}>
+                  <p className={`mt-1 font-mono text-lg font-bold ${rate >= 45 ? "text-emerald-400" : rate >= 33 ? "text-amber-400" : "text-muted-foreground"}`}>
                     {s.total > 0 ? `${rate.toFixed(0)}%` : "—"}
                   </p>
                   <p className="text-[10px] text-muted-foreground/60">
