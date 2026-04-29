@@ -109,6 +109,7 @@ export default async function MatchDetailPage({
   // Try to get authenticated user + tier (server-side field stripping — B3)
   let isAuthenticated = false;
   let isPro = false; // true for pro, elite, and superadmin
+  let isElite = false; // true for elite and superadmin only
   let liveMatch: LiveMatch | null = null;
   let matchStats: MatchStatsData | null = null;
   try {
@@ -124,10 +125,10 @@ export default async function MatchDetailPage({
         .select("tier, is_superadmin")
         .eq("id", user.id)
         .single();
+      isElite = profile?.is_superadmin === true || profile?.tier === "elite";
       isPro =
-        profile?.is_superadmin === true ||
-        profile?.tier === "pro" ||
-        profile?.tier === "elite";
+        isElite ||
+        profile?.tier === "pro";
       if (isPro) {
         liveMatch = await getMatchById(id);
         matchStats = await getMatchStats(id);
@@ -278,11 +279,12 @@ export default async function MatchDetailPage({
         isAuthenticated={isAuthenticated}
       />
 
-      {/* Intelligence Summary (SUX-4) — teaser for free, full for pro/elite */}
+      {/* Intelligence Summary (SUX-4/7) — teaser for free, full for pro/elite, +Elite hook for Pro */}
       {matchSignals.length > 0 && (
         <MatchSignalSummary
           signals={matchSignals}
           isPro={isPro}
+          isElite={isElite}
           homeTeam={publicMatch.homeTeam}
           awayTeam={publicMatch.awayTeam}
         />

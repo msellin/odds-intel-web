@@ -27,6 +27,7 @@ import {
 interface MatchSignalSummaryProps {
   signals: MatchSignalRow[];
   isPro: boolean; // pro or elite
+  isElite?: boolean; // elite only
   homeTeam: string;
   awayTeam: string;
 }
@@ -189,9 +190,39 @@ function buildSignalInsights(
   return insights.slice(0, 5).map(({ label, signalName }) => ({ label, signalName }));
 }
 
+/** Detect if signals diverge meaningfully from market consensus */
+function detectSignalDivergence(signals: MatchSignalRow[]): {
+  hasDivergence: boolean;
+  description: string;
+} {
+  const byName: Record<string, number> = {};
+  for (const s of signals) byName[s.signal_name] = Number(s.signal_value);
+
+  const bdm = byName["bookmaker_disagreement"] ?? 0;
+  const olm = byName["overnight_line_move"] ?? 0;
+  const slopeHome = byName["form_slope_home"] ?? 0;
+  const slopeAway = byName["form_slope_away"] ?? 0;
+
+  // Sharp overnight move toward home but form suggests away is improving
+  if (olm > 0.03 && slopeAway > 0.2 && slopeAway > slopeHome + 0.2) {
+    return { hasDivergence: true, description: "Market moved toward Home, but Away form is trending stronger" };
+  }
+  if (olm < -0.03 && slopeHome > 0.2 && slopeHome > slopeAway + 0.2) {
+    return { hasDivergence: true, description: "Market moved toward Away, but Home form is trending stronger" };
+  }
+
+  // High disagreement without a clear overnight directional move
+  if (bdm > 0.12 && Math.abs(olm) < 0.015) {
+    return { hasDivergence: true, description: "Bookmakers disagree significantly — no clear consensus on this match" };
+  }
+
+  return { hasDivergence: false, description: "" };
+}
+
 export function MatchSignalSummary({
   signals,
   isPro,
+  isElite = false,
   homeTeam,
   awayTeam,
 }: MatchSignalSummaryProps) {
@@ -202,7 +233,7 @@ export function MatchSignalSummary({
   // Count how many signals exist
   const totalSignals = new Set(signals.map((s) => s.signal_name)).size;
 
-  // Free users: show teaser heading + first insight + locked overlay
+  // ── Free users: show teaser heading + first insight + locked overlay ───────
   if (!isPro) {
     const topInsight = insights[0];
     if (!topInsight) return null;
@@ -223,12 +254,9 @@ export function MatchSignalSummary({
         <div className="flex items-center gap-3 px-4 py-3 bg-muted/20 border-t border-border/30">
           <Lock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
           <p className="text-xs text-muted-foreground flex-1">
-            {insights.length - 1} more signals available on Pro
+            {insights.length > 1 ? `${insights.length - 1} more signals` : "Full analysis"} available on Pro
           </p>
-          <a
-            href="/profile"
-            className="text-xs font-semibold text-primary hover:underline shrink-0"
-          >
+          <a href="/profile" className="text-xs font-semibold text-primary hover:underline shrink-0">
             Upgrade →
           </a>
         </div>
@@ -236,7 +264,10 @@ export function MatchSignalSummary({
     );
   }
 
-  // Pro/Elite: full signal summary
+  // ── Pro/Elite: full signal summary ─────────────────────────────────────────
+  const divergence = detectSignalDivergence(signals);
+  const showEliteLock = !isElite; // Pro users see the Elite conversion hook
+
   return (
     <div className="rounded-xl border border-border/50 bg-card overflow-hidden">
       <div className="flex items-center gap-2 px-4 pt-4 pb-3 border-b border-border/30">
@@ -246,6 +277,17 @@ export function MatchSignalSummary({
           {totalSignals} signals
         </span>
       </div>
+
+      {/* Signal divergence alert (SUX-7) */}
+      {divergence.hasDivergence && (
+        <div className="flex items-start gap-2 px-4 py-2.5 bg-amber-500/5 border-b border-amber-500/20">
+          <Zap className="h-3.5 w-3.5 text-amber-400 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-xs font-semibold text-amber-400">Signal divergence detected</p>
+            <p className="text-[11px] text-muted-foreground">{divergence.description}</p>
+          </div>
+        </div>
+      )}
 
       {insights.length === 0 ? (
         <div className="px-4 py-6 text-center">
@@ -261,14 +303,37 @@ export function MatchSignalSummary({
         </div>
       )}
 
-      {insights.length > 0 && (
+      {/* Footer: stats + Pro→Elite conversion hook (SUX-7) */}
+      {showEliteLock ? (
+        <div className="border-t border-border/30 bg-muted/10">
+          <div className="flex items-center gap-2 px-4 py-2.5">
+            <TrendingUp className="h-3 w-3 text-muted-foreground" />
+            <p className="text-[11px] text-muted-foreground">
+              {totalSignals} signals analysed · Top {Math.min(insights.length, 5)} shown
+            </p>
+          </div>
+          {/* Elite conversion hook */}
+          <div className="flex items-center gap-3 px-4 py-3 border-t border-border/20">
+            <Lock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <p className="text-xs text-muted-foreground flex-1">
+              Our model analysed all {totalSignals} signals. See the full probability breakdown and edge %.
+            </p>
+            <a
+              href="/profile"
+              className="shrink-0 rounded-md bg-primary/10 border border-primary/30 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors whitespace-nowrap"
+            >
+              Elite →
+            </a>
+          </div>
+        </div>
+      ) : insights.length > 0 ? (
         <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/10 border-t border-border/30">
           <TrendingUp className="h-3 w-3 text-muted-foreground" />
           <p className="text-[11px] text-muted-foreground">
             {totalSignals} signals analysed · Top {Math.min(insights.length, 5)} shown
           </p>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
