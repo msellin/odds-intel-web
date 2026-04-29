@@ -246,6 +246,35 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
   const todayEnd = new Date(now);
   todayEnd.setHours(23, 59, 59, 999);
 
+  // Step 1: Get today's matches that have at least one odds snapshot
+  const { data: allTodayMatches } = await supabase
+    .from("matches")
+    .select("id")
+    .gte("date", todayStart.toISOString())
+    .lte("date", todayEnd.toISOString())
+    .not("api_football_id", "is", null);
+
+  const todayIds = (allTodayMatches || []).map((r: { id: string }) => r.id);
+  if (todayIds.length === 0) return [];
+
+  // Find which of today's matches have odds (batch query)
+  const idsWithOdds = new Set<string>();
+  const batchSize = 80;
+  for (let i = 0; i < todayIds.length; i += batchSize) {
+    const batch = todayIds.slice(i, i + batchSize);
+    const { data: oddsRows } = await supabase
+      .from("odds_snapshots")
+      .select("match_id")
+      .in("match_id", batch);
+    for (const r of (oddsRows || []) as { match_id: string }[]) {
+      idsWithOdds.add(r.match_id);
+    }
+  }
+
+  const filteredIds = [...idsWithOdds];
+  if (filteredIds.length === 0) return [];
+
+  // Step 2: Fetch only matches that have odds
   const { data: matches, error } = await supabase
     .from("matches")
     .select(
@@ -254,8 +283,7 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
        away_team:away_team_id(id, name, country),
        league:league_id(id, name, country, tier)`
     )
-    .gte("date", todayStart.toISOString())
-    .lte("date", todayEnd.toISOString())
+    .in("id", filteredIds)
     .order("date", { ascending: true });
 
   if (error || !matches) return [];
