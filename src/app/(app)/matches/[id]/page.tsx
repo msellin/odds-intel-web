@@ -16,11 +16,13 @@ import {
   getMatchSignals,
 } from "@/lib/engine-data";
 import type { LiveMatch, MatchStatsData, OddsMovementPoint } from "@/lib/engine-data";
+import { getLiveMatchOdds } from "@/lib/engine-data";
 import { MatchDetailFree } from "@/components/match-detail-free";
 import { MatchDetailLive } from "@/components/match-detail-live";
 import { MatchScoreDisplay } from "@/components/match-score-display";
 import { MatchSignalSummary } from "@/components/match-signal-summary";
 import { SignalAccordion } from "@/components/signal-accordion";
+import { LiveOddsChart } from "@/components/live-odds-chart";
 import { MatchPickButton } from "@/components/match-pick-button";
 import { MatchNotes } from "@/components/match-notes";
 import { CommunityVote } from "@/components/community-vote";
@@ -151,7 +153,7 @@ export default async function MatchDetailPage({
   ]);
 
   // Fetch Pro-tier data only when tier is confirmed server-side — never sent to free/anon users
-  const [oddsMovement, matchEvents, lineups, playerStats, seasonStats] = isPro
+  const [oddsMovement, matchEvents, lineups, playerStats, seasonStats, liveOdds] = isPro
     ? await Promise.all([
         getOddsMovement(id) as Promise<OddsMovementPoint[]>,
         getMatchEvents(id),
@@ -161,8 +163,9 @@ export default async function MatchDetailPage({
           standings.home?.teamApiId ?? null,
           standings.away?.teamApiId ?? null
         ),
+        getLiveMatchOdds(id),
       ])
-    : [[], [], null, [], { home: null, away: null }];
+    : [[], [], null, [], { home: null, away: null }, []];
 
   const initialSnapshot = liveSnapshotsArr[0] ?? null;
 
@@ -307,6 +310,17 @@ export default async function MatchDetailPage({
 
       {/* Match notes — free signed-in feature */}
       <MatchNotes matchId={publicMatch.id} />
+
+      {/* Live in-play odds chart (FE-LIVE) — Pro only, shown for live/finished matches with live odds */}
+      {isPro && (publicMatch.status === "live" || publicMatch.status === "finished") && (
+        <LiveOddsChart
+          matchId={publicMatch.id}
+          initialData={liveOdds}
+          isLive={publicMatch.status === "live"}
+          homeTeam={publicMatch.homeTeam}
+          awayTeam={publicMatch.awayTeam}
+        />
+      )}
 
       {/* Pro content — only rendered server-side for pro/elite users (B3: server-side field stripping) */}
       {isPro && (liveMatch || matchEvents.length > 0 || injuries.length > 0 || lineups || playerStats.length > 0 || seasonStats.home || seasonStats.away || matchStats) && (

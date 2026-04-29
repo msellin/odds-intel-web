@@ -1294,6 +1294,63 @@ export async function getOddsMovement(matchId: string): Promise<OddsMovementPoin
     .filter((p) => p.bestHome > 0 || p.bestDraw > 0 || p.bestAway > 0 || p.bestOver25 > 0);
 }
 
+// ─── Live in-play odds for FE-LIVE ──────────────────────────────────────────
+
+export interface LiveOddsPoint {
+  minute: number; // match minute (minutes_to_kickoff stored as minute elapsed)
+  bookmaker: string;
+  market: string;
+  selection: string;
+  odds: number;
+  timestamp: string;
+}
+
+export interface LiveOddsSnapshot {
+  minute: number;
+  bestHome: number;
+  bestDraw: number;
+  bestAway: number;
+}
+
+/**
+ * Fetch live in-play odds for a match, aggregated by minute.
+ * Returns best odds per (minute, selection) across all bookmakers.
+ */
+export async function getLiveMatchOdds(matchId: string): Promise<LiveOddsSnapshot[]> {
+  const supabase = createSupabasePublic();
+  const { data, error } = await supabase
+    .from("odds_snapshots")
+    .select("bookmaker, market, selection, odds, minutes_to_kickoff, timestamp")
+    .eq("match_id", matchId)
+    .eq("is_live", true)
+    .eq("market", "1x2")
+    .order("minutes_to_kickoff", { ascending: true });
+
+  if (error || !data) return [];
+
+  // Group by match minute, find best odds per selection
+  const byMinute: Record<number, { home: number[]; draw: number[]; away: number[] }> = {};
+  for (const row of data as { bookmaker: string; market: string; selection: string; odds: number; minutes_to_kickoff: number | null; timestamp: string }[]) {
+    const minute = row.minutes_to_kickoff ?? 0;
+    if (!byMinute[minute]) byMinute[minute] = { home: [], draw: [], away: [] };
+    const odds = Number(row.odds);
+    if (!odds || odds <= 1) continue;
+    if (row.selection === "home") byMinute[minute].home.push(odds);
+    if (row.selection === "draw") byMinute[minute].draw.push(odds);
+    if (row.selection === "away") byMinute[minute].away.push(odds);
+  }
+
+  return Object.entries(byMinute)
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .map(([minute, odds]) => ({
+      minute: Number(minute),
+      bestHome: odds.home.length ? Math.max(...odds.home) : 0,
+      bestDraw: odds.draw.length ? Math.max(...odds.draw) : 0,
+      bestAway: odds.away.length ? Math.max(...odds.away) : 0,
+    }))
+    .filter((p) => p.bestHome > 0 || p.bestDraw > 0 || p.bestAway > 0);
+}
+
 // ─── Match signals for SUX-4 summary tab ────────────────────────────────────
 
 export interface MatchSignalRow {
