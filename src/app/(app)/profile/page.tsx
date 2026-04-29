@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { User, Settings, X, Plus, Loader2, Zap } from "lucide-react";
+import { BillingToggle } from "@/components/billing-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -33,6 +34,8 @@ const TIER_LABELS: Record<string, string> = {
 
 const PRO_PRICE_ID = process.env.NEXT_PUBLIC_STRIPE_PRO_FOUNDING_PRICE_ID ?? "";
 const ELITE_PRICE_ID = process.env.NEXT_PUBLIC_STRIPE_ELITE_FOUNDING_PRICE_ID ?? "";
+const PRO_ANNUAL_PRICE_ID = process.env.NEXT_PUBLIC_STRIPE_PRO_ANNUAL_PRICE_ID ?? "";
+const ELITE_ANNUAL_PRICE_ID = process.env.NEXT_PUBLIC_STRIPE_ELITE_ANNUAL_PRICE_ID ?? "";
 
 function CheckoutBanner({ onMessage }: { onMessage: (msg: string) => void }) {
   const searchParams = useSearchParams();
@@ -52,6 +55,7 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState<string | null>(null); // league name being saved
   const [upgrading, setUpgrading] = useState<string | null>(null); // "pro" | "elite" | "portal"
   const [checkoutMsg, setCheckoutMsg] = useState<string | null>(null);
+  const [annual, setAnnual] = useState(false);
 
   const handleCheckoutResult = useCallback((msg: string) => {
     setCheckoutMsg(msg);
@@ -193,23 +197,26 @@ export default function ProfilePage() {
             </div>
             {tierKey === "free" ? (
               <div className="flex flex-col items-end gap-2">
+                <BillingToggle annual={annual} onChange={setAnnual} />
                 <button
-                  onClick={() => startCheckout(PRO_PRICE_ID, "pro")}
+                  onClick={() => startCheckout(annual ? PRO_ANNUAL_PRICE_ID : PRO_PRICE_ID, "pro")}
                   disabled={!!upgrading}
                   className="flex items-center gap-1.5 rounded-md bg-green-500 px-3 py-1.5 text-xs font-bold text-black hover:bg-green-400 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {upgrading === "pro" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
-                  Upgrade to Pro — €3.99/mo
+                  {annual ? "Upgrade to Pro — €39.99/yr" : "Upgrade to Pro — €3.99/mo"}
                 </button>
                 <button
-                  onClick={() => startCheckout(ELITE_PRICE_ID, "elite")}
+                  onClick={() => startCheckout(annual ? ELITE_ANNUAL_PRICE_ID : ELITE_PRICE_ID, "elite")}
                   disabled={!!upgrading}
                   className="flex items-center gap-1.5 rounded-md border border-amber-500/40 px-3 py-1.5 text-xs font-medium text-amber-400 hover:bg-amber-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {upgrading === "elite" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
-                  Upgrade to Elite — €9.99/mo
+                  {annual ? "Upgrade to Elite — €119.99/yr" : "Upgrade to Elite — €9.99/mo"}
                 </button>
-                <p className="text-[10px] text-muted-foreground">Founding member rates — locked forever</p>
+                <p className="text-[10px] text-muted-foreground">
+                  {annual ? "Annual billing — save 33%" : "Founding member rates — locked forever"}
+                </p>
               </div>
             ) : (
               <div className="flex flex-col items-end gap-2">

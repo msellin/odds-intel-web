@@ -222,7 +222,7 @@ function ValueBetsProView({ bets }: { bets: LiveBet[] }) {
       <div className="flex items-center gap-3">
         <Select value={league} onValueChange={(v) => setLeague(v ?? ALL)}>
           <SelectTrigger className="h-8 w-[200px] text-xs">
-            <SelectValue placeholder="All leagues" />
+            <SelectValue>{league === ALL ? "All leagues" : league}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>All leagues</SelectItem>
@@ -362,7 +362,7 @@ function ValueBetsEliteView({ bets }: { bets: LiveBet[] }) {
       <div className="flex flex-wrap items-center gap-3">
         <Select value={league} onValueChange={(v) => setLeague(v ?? ALL)}>
           <SelectTrigger className="h-8 w-[200px] text-xs">
-            <SelectValue placeholder="All leagues" />
+            <SelectValue>{league === ALL ? "All leagues" : league}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>All leagues</SelectItem>
@@ -374,7 +374,7 @@ function ValueBetsEliteView({ bets }: { bets: LiveBet[] }) {
 
         <Select value={bot} onValueChange={(v) => setBot(v ?? ALL)}>
           <SelectTrigger className="h-8 w-[180px] text-xs">
-            <SelectValue placeholder="All strategies" />
+            <SelectValue>{bot === ALL ? "All strategies" : formatBot(bot)}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>All strategies</SelectItem>

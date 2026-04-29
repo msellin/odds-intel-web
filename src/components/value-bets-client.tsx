@@ -53,7 +53,7 @@ export function ValueBetsClient({ bets }: ValueBetsClientProps) {
       <div className="flex flex-wrap items-center gap-3">
         <Select value={league} onValueChange={(v) => setLeague(v ?? ALL)}>
           <SelectTrigger className="h-8 w-[180px] text-xs">
-            <SelectValue placeholder="All leagues" />
+            <SelectValue>{league === ALL ? "All leagues" : league}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>All leagues</SelectItem>
@@ -67,7 +67,7 @@ export function ValueBetsClient({ bets }: ValueBetsClientProps) {
 
         <Select value={market} onValueChange={(v) => setMarket(v ?? ALL)}>
           <SelectTrigger className="h-8 w-[140px] text-xs">
-            <SelectValue placeholder="All markets" />
+            <SelectValue>{market === ALL ? "All markets" : market}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>All markets</SelectItem>
@@ -79,7 +79,9 @@ export function ValueBetsClient({ bets }: ValueBetsClientProps) {
 
         <Select value={confidence} onValueChange={(v) => setConfidence(v ?? ALL)}>
           <SelectTrigger className="h-8 w-[150px] text-xs">
-            <SelectValue placeholder="All confidence" />
+            <SelectValue>
+              {confidence === ALL ? "All confidence" : confidence.charAt(0).toUpperCase() + confidence.slice(1)}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>All confidence</SelectItem>

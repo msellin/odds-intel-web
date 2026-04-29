@@ -33,6 +33,7 @@ interface MatchDetailFreeProps {
   hasLineups?: boolean;
   hasStats?: boolean;
   isAuthenticated?: boolean;
+  isPro?: boolean;
 }
 
 function FormBadge({ form }: { form: string }) {
@@ -67,6 +68,7 @@ export function MatchDetailFree({
   hasLineups,
   hasStats,
   isAuthenticated,
+  isPro,
 }: MatchDetailFreeProps) {
   const interest = interestScore(match);
   const indicator = interestIndicator(interest);
@@ -297,8 +299,8 @@ export function MatchDetailFree({
             )}
           </div>
 
-          {/* Pro locked hints — only show if there's actually data behind the lock */}
-          {(bookmakerCount > 1 || hasInjuries || hasLineups || hasStats) && (
+          {/* Pro locked hints — only show if there's actually data behind the lock and user is not already Pro */}
+          {!isPro && (bookmakerCount > 1 || hasInjuries || hasLineups || hasStats) && (
             <div className="rounded-lg border border-dashed border-white/10 bg-white/[0.02] p-3 space-y-2">
               <p className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
                 <Zap className="h-3 w-3 text-amber-400" />
@@ -341,8 +343,8 @@ export function MatchDetailFree({
         </CardContent>
       </Card>
 
-      {/* Pro teaser */}
-      {match.hasOdds && bookmakerCount > 1 && (
+      {/* Pro teaser — hidden for Pro/Elite users who already have access */}
+      {!isPro && match.hasOdds && bookmakerCount > 1 && (
         <div className="relative overflow-hidden rounded-xl border border-border bg-card">
           {/* Blurred skeleton content */}
           <div className="p-5 blur-[6px] pointer-events-none select-none">

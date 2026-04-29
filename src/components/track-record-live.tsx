@@ -271,7 +271,7 @@ export function TrackRecordLive({ bets, stats }: TrackRecordLiveProps) {
                 onValueChange={(v) => v && setBotFilter(v)}
               >
                 <SelectTrigger className="w-[180px] text-xs">
-                  <SelectValue placeholder="Bot strategy" />
+                  <SelectValue>{botFilter === ALL ? "All strategies" : formatBot(botFilter)}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={ALL}>All strategies</SelectItem>
@@ -288,7 +288,7 @@ export function TrackRecordLive({ bets, stats }: TrackRecordLiveProps) {
                 onValueChange={(v) => v && setLeagueFilter(v)}
               >
                 <SelectTrigger className="w-[200px] text-xs">
-                  <SelectValue placeholder="League" />
+                  <SelectValue>{leagueFilter === ALL ? "All leagues" : leagueFilter}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={ALL}>All leagues</SelectItem>
@@ -305,7 +305,9 @@ export function TrackRecordLive({ bets, stats }: TrackRecordLiveProps) {
                 onValueChange={(v) => v && setResultFilter(v)}
               >
                 <SelectTrigger className="w-[140px] text-xs">
-                  <SelectValue placeholder="Result" />
+                  <SelectValue>
+                    {resultFilter === ALL ? "All results" : resultFilter.charAt(0).toUpperCase() + resultFilter.slice(1)}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={ALL}>All results</SelectItem>

@@ -207,6 +207,9 @@ export function MatchDetailLive({
   awaySeasonStats,
 }: MatchDetailLiveProps) {
   const hasOver25 = match.odds.some((o) => o.over25 > 0);
+  const hasOver15 = match.odds.some((o) => o.over15 > 0);
+  const hasOver35 = match.odds.some((o) => o.over35 > 0);
+  const hasBtts = match.odds.some((o) => o.bttsYes > 0);
 
   // Format movement data for recharts
   const movementChartData = (oddsMovement ?? []).map((p) => ({
@@ -215,6 +218,14 @@ export function MatchDetailLive({
     Draw: p.bestDraw > 0 ? p.bestDraw : null,
     Away: p.bestAway > 0 ? p.bestAway : null,
   }));
+
+  const ou25ChartData = (oddsMovement ?? [])
+    .filter((p) => p.bestOver25 > 0 || p.bestUnder25 > 0)
+    .map((p) => ({
+      time: fmtHour(p.timestamp),
+      Over: p.bestOver25 > 0 ? p.bestOver25 : null,
+      Under: p.bestUnder25 > 0 ? p.bestUnder25 : null,
+    }));
 
   // Free events: goals + cards only
   const freeEvents = matchEvents.filter(
@@ -317,6 +328,12 @@ export function MatchDetailLive({
                           <TableHead className="text-xs text-center">U 2.5</TableHead>
                         </>
                       )}
+                      {hasBtts && (
+                        <>
+                          <TableHead className="text-xs text-center">BTTS Y</TableHead>
+                          <TableHead className="text-xs text-center">BTTS N</TableHead>
+                        </>
+                      )}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -332,6 +349,14 @@ export function MatchDetailLive({
                         : 0;
                       const isBestOver = o.over25 > 0 && o.over25 === bestOver;
                       const isBestUnder = o.under25 > 0 && o.under25 === bestUnder;
+                      const bestBttsYes = hasBtts
+                        ? Math.max(...match.odds.filter((x) => x.bttsYes > 0).map((x) => x.bttsYes))
+                        : 0;
+                      const bestBttsNo = hasBtts
+                        ? Math.max(...match.odds.filter((x) => x.bttsNo > 0).map((x) => x.bttsNo))
+                        : 0;
+                      const isBestBttsYes = o.bttsYes > 0 && o.bttsYes === bestBttsYes;
+                      const isBestBttsNo = o.bttsNo > 0 && o.bttsNo === bestBttsNo;
 
                       return (
                         <TableRow key={o.operator} className="border-border">
@@ -355,9 +380,89 @@ export function MatchDetailLive({
                               </TableCell>
                             </>
                           )}
+                          {hasBtts && (
+                            <>
+                              <TableCell className={`text-center font-mono text-xs py-2 ${isBestBttsYes ? "text-green-400 font-bold" : ""}`}>
+                                {o.bttsYes > 0 ? o.bttsYes.toFixed(2) : "-"}
+                              </TableCell>
+                              <TableCell className={`text-center font-mono text-xs py-2 ${isBestBttsNo ? "text-green-400 font-bold" : ""}`}>
+                                {o.bttsNo > 0 ? o.bttsNo.toFixed(2) : "-"}
+                              </TableCell>
+                            </>
+                          )}
                         </TableRow>
                       );
                     })}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TierGate>
+      )}
+
+      {/* ── Additional O/U Lines ────────────────────────────────────── */}
+      {(hasOver15 || hasOver35) && (
+        <TierGate requiredTier="pro" featureName="Additional O/U Lines">
+          <Card className="border-border bg-card">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Over/Under Lines</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-border">
+                      <TableHead className="text-xs">Operator</TableHead>
+                      {hasOver15 && (
+                        <>
+                          <TableHead className="text-xs text-center">O 1.5</TableHead>
+                          <TableHead className="text-xs text-center">U 1.5</TableHead>
+                        </>
+                      )}
+                      {hasOver35 && (
+                        <>
+                          <TableHead className="text-xs text-center">O 3.5</TableHead>
+                          <TableHead className="text-xs text-center">U 3.5</TableHead>
+                        </>
+                      )}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {match.odds
+                      .filter((o) => (hasOver15 && (o.over15 > 0 || o.under15 > 0)) || (hasOver35 && (o.over35 > 0 || o.under35 > 0)))
+                      .map((o) => {
+                        const bestO15 = hasOver15 ? Math.max(...match.odds.filter((x) => x.over15 > 0).map((x) => x.over15)) : 0;
+                        const bestU15 = hasOver15 ? Math.max(...match.odds.filter((x) => x.under15 > 0).map((x) => x.under15)) : 0;
+                        const bestO35 = hasOver35 ? Math.max(...match.odds.filter((x) => x.over35 > 0).map((x) => x.over35)) : 0;
+                        const bestU35 = hasOver35 ? Math.max(...match.odds.filter((x) => x.under35 > 0).map((x) => x.under35)) : 0;
+
+                        return (
+                          <TableRow key={o.operator} className="border-border">
+                            <TableCell className="text-xs font-medium py-2">{o.operator}</TableCell>
+                            {hasOver15 && (
+                              <>
+                                <TableCell className={`text-center font-mono text-xs py-2 ${o.over15 > 0 && o.over15 === bestO15 ? "text-green-400 font-bold" : ""}`}>
+                                  {o.over15 > 0 ? o.over15.toFixed(2) : "-"}
+                                </TableCell>
+                                <TableCell className={`text-center font-mono text-xs py-2 ${o.under15 > 0 && o.under15 === bestU15 ? "text-green-400 font-bold" : ""}`}>
+                                  {o.under15 > 0 ? o.under15.toFixed(2) : "-"}
+                                </TableCell>
+                              </>
+                            )}
+                            {hasOver35 && (
+                              <>
+                                <TableCell className={`text-center font-mono text-xs py-2 ${o.over35 > 0 && o.over35 === bestO35 ? "text-green-400 font-bold" : ""}`}>
+                                  {o.over35 > 0 ? o.over35.toFixed(2) : "-"}
+                                </TableCell>
+                                <TableCell className={`text-center font-mono text-xs py-2 ${o.under35 > 0 && o.under35 === bestU35 ? "text-green-400 font-bold" : ""}`}>
+                                  {o.under35 > 0 ? o.under35.toFixed(2) : "-"}
+                                </TableCell>
+                              </>
+                            )}
+                          </TableRow>
+                        );
+                      })}
                   </TableBody>
                 </Table>
               </div>
@@ -683,14 +788,14 @@ export function MatchDetailLive({
         </TierGate>
       )}
 
-      {/* ── Odds Movement Chart ───────────────────────────────────────── */}
+      {/* ── Odds Movement Chart (1X2) ─────────────────────────────────── */}
       {movementChartData.length > 1 && (
         <TierGate requiredTier="pro" featureName="Odds Movement">
           <Card className="border-border bg-card">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
                 <TrendingUp className="h-4 w-4 text-emerald-400" />
-                Odds Movement
+                Odds Movement (1X2)
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -740,6 +845,66 @@ export function MatchDetailLive({
                     type="monotone"
                     dataKey="Away"
                     stroke="#3b82f6"
+                    dot={false}
+                    strokeWidth={1.5}
+                    connectNulls
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </TierGate>
+      )}
+
+      {/* ── Odds Movement Chart (O/U 2.5) ────────────────────────────── */}
+      {ou25ChartData.length > 1 && (
+        <TierGate requiredTier="pro" featureName="O/U 2.5 Movement">
+          <Card className="border-border bg-card">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-purple-400" />
+                Odds Movement (O/U 2.5)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={ou25ChartData} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                  <XAxis
+                    dataKey="time"
+                    tick={{ fontSize: 10, fill: "#6b7280" }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    domain={["auto", "auto"]}
+                    tick={{ fontSize: 10, fill: "#6b7280" }}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(v: number) => v.toFixed(2)}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "#14141f",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      borderRadius: "8px",
+                      fontSize: "12px",
+                    }}
+                    formatter={(value) => (typeof value === "number" ? value.toFixed(2) : value)}
+                  />
+                  <Legend wrapperStyle={{ fontSize: "11px" }} />
+                  <Line
+                    type="monotone"
+                    dataKey="Over"
+                    stroke="#a855f7"
+                    dot={false}
+                    strokeWidth={1.5}
+                    connectNulls
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="Under"
+                    stroke="#f97316"
                     dot={false}
                     strokeWidth={1.5}
                     connectNulls

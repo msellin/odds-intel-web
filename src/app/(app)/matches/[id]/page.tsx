@@ -282,6 +282,7 @@ export default async function MatchDetailPage({
         hasLineups={publicMatch.hasLineups}
         hasStats={publicMatch.status === "finished"}
         isAuthenticated={isAuthenticated}
+        isPro={isPro}
       />
 
       {/* Signal Delta (SUX-9) — "what changed since last visit" — Pro only, client-side localStorage */}

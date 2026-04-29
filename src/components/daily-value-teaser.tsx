@@ -104,28 +104,69 @@ export function DailyValueTeaser() {
 
   if (loading || !teaser) return null;
 
-  // Anonymous — show locked teaser
+  // Anonymous — show top pick publicly as teaser
   if (!user) {
     return (
       <div className="relative overflow-hidden rounded-xl border border-amber-500/20 bg-amber-500/[0.04] p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-2">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Zap className="h-4 w-4 text-amber-400" />
               <span className="text-xs font-bold uppercase tracking-wider text-amber-400">
-                Today&apos;s Free Value Pick
+                Today&apos;s AI Pick
               </span>
             </div>
-            <p className="text-sm text-muted-foreground">
-              Our AI found {totalBets} value bet{totalBets !== 1 ? "s" : ""} today.
-              Sign up to reveal the top pick free every day.
-            </p>
+            {totalBets > 1 && (
+              <span className="text-[11px] text-muted-foreground">
+                +{totalBets - 1} more with free account
+              </span>
+            )}
           </div>
+
+          <div className="rounded-lg border border-amber-500/20 bg-black/20 p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="space-y-1 min-w-0">
+                <p className="text-sm font-medium text-foreground truncate">
+                  {teaser.match}
+                </p>
+                <p className="text-xs text-muted-foreground">{teaser.league}</p>
+              </div>
+              <div className="text-right shrink-0">
+                <p className="font-mono text-lg font-bold text-amber-400">
+                  +{teaser.edge.toFixed(1)}%
+                </p>
+                <p className="text-[10px] text-muted-foreground">edge</p>
+              </div>
+            </div>
+            <div className="mt-3 flex items-center gap-3 text-sm">
+              <span className="rounded border border-white/10 bg-white/5 px-2 py-0.5 text-xs">
+                {teaser.market}
+              </span>
+              <span className="font-medium text-foreground">{teaser.selection}</span>
+              <span className="font-mono text-muted-foreground">
+                @ {teaser.odds.toFixed(2)}
+              </span>
+              <span
+                className={cn(
+                  "ml-auto rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                  teaser.result === "won"
+                    ? "bg-emerald-500/20 text-emerald-400"
+                    : teaser.result === "lost"
+                      ? "bg-red-500/20 text-red-400"
+                      : "bg-amber-500/20 text-amber-400"
+                )}
+              >
+                {teaser.result}
+              </span>
+            </div>
+          </div>
+
           <Link
             href="/signup"
-            className="shrink-0 rounded-md bg-amber-500 px-4 py-2 text-sm font-bold text-black transition-colors hover:bg-amber-400"
+            className="flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-bold text-black transition-colors hover:bg-amber-400"
           >
-            Sign Up Free
+            Sign up free for 1 more pick daily
+            <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
       </div>
