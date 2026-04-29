@@ -14,7 +14,7 @@ interface Props {
 
 export function MatchesClient({ sortedGroups, initialSnapshots }: Props) {
   const [snapshots, setSnapshots] = useState<Record<string, LiveSnapshot>>(initialSnapshots);
-  const [activeTab, setActiveTab] = useState<"all" | "favorites">("all");
+  const [activeTab, setActiveTab] = useState<"all" | "favorites" | "odds">("all");
   const { user, profile } = useAuth();
 
   // Stable list of live match IDs
@@ -58,13 +58,21 @@ export function MatchesClient({ sortedGroups, initialSnapshots }: Props) {
   const favoriteLeagues = profile?.preferred_leagues ?? [];
 
   const filteredGroups = useMemo(() => {
-    if (activeTab === "all") return sortedGroups;
+    if (activeTab === "odds") {
+      // Only show leagues + matches that have odds
+      return sortedGroups
+        .map(([league, matches]) => [league, matches.filter((m) => m.hasOdds)] as [string, typeof matches])
+        .filter(([, matches]) => matches.length > 0);
+    }
 
-    // favorites — filter to leagues the user has starred
-    if (favoriteLeagues.length === 0) return [];
-    return sortedGroups.filter(([league]) =>
-      favoriteLeagues.some((fl) => league.toLowerCase().includes(fl.toLowerCase()))
-    );
+    if (activeTab === "favorites") {
+      if (favoriteLeagues.length === 0) return [];
+      return sortedGroups.filter(([league]) =>
+        favoriteLeagues.some((fl) => league.toLowerCase().includes(fl.toLowerCase()))
+      );
+    }
+
+    return sortedGroups;
   }, [sortedGroups, activeTab, favoriteLeagues]);
 
   const favoriteMatchCount = useMemo(() => {
@@ -77,21 +85,45 @@ export function MatchesClient({ sortedGroups, initialSnapshots }: Props) {
     }, 0);
   }, [sortedGroups, favoriteLeagues]);
 
+  const oddsMatchCount = useMemo(
+    () => sortedGroups.reduce((n, [, matches]) => n + matches.filter((m) => m.hasOdds).length, 0),
+    [sortedGroups]
+  );
+
   return (
     <div className="space-y-3">
-      {/* Tabs: All / My Matches — always shown for logged-in users */}
-      {user && (
-        <div className="flex rounded-lg border border-white/[0.06] bg-muted/20 p-1 w-fit">
-          <button
-            onClick={() => setActiveTab("all")}
-            className={`rounded-md px-4 py-1.5 text-xs font-bold transition-all ${
-              activeTab === "all"
-                ? "bg-muted text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            All matches
-          </button>
+      {/* Tabs: All / With Odds / My Matches */}
+      <div className="flex rounded-lg border border-white/[0.06] bg-muted/20 p-1 w-fit">
+        <button
+          onClick={() => setActiveTab("all")}
+          className={`rounded-md px-4 py-1.5 text-xs font-bold transition-all ${
+            activeTab === "all"
+              ? "bg-muted text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          All matches
+        </button>
+        <button
+          onClick={() => setActiveTab("odds")}
+          className={`flex items-center gap-1.5 rounded-md px-4 py-1.5 text-xs font-bold transition-all ${
+            activeTab === "odds"
+              ? "bg-muted text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          With odds
+          {oddsMatchCount > 0 && (
+            <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+              activeTab === "odds"
+                ? "bg-green-500/20 text-green-400"
+                : "bg-green-500/10 text-green-500/70"
+            }`}>
+              {oddsMatchCount}
+            </span>
+          )}
+        </button>
+        {user && (
           <button
             onClick={() => setActiveTab("favorites")}
             className={`flex items-center gap-1.5 rounded-md px-4 py-1.5 text-xs font-bold transition-all ${
@@ -108,8 +140,8 @@ export function MatchesClient({ sortedGroups, initialSnapshots }: Props) {
               </span>
             )}
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       {activeTab === "favorites" && filteredGroups.length === 0 && (
         <div className="rounded-xl border border-white/[0.06] bg-card/40 py-10 text-center">

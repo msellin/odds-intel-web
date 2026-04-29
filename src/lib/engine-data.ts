@@ -409,7 +409,6 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
     )
     .gte("date", todayStart.toISOString())
     .lte("date", todayEnd.toISOString())
-    .not("api_football_id", "is", null)
     .order("date", { ascending: true })
     .limit(1000);
 
