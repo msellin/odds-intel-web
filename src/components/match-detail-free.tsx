@@ -32,6 +32,7 @@ interface MatchDetailFreeProps {
   hasInjuries?: boolean;
   hasLineups?: boolean;
   hasStats?: boolean;
+  isAuthenticated?: boolean;
 }
 
 function FormBadge({ form }: { form: string }) {
@@ -65,6 +66,7 @@ export function MatchDetailFree({
   hasInjuries,
   hasLineups,
   hasStats,
+  isAuthenticated,
 }: MatchDetailFreeProps) {
   const interest = interestScore(match);
   const indicator = interestIndicator(interest);
@@ -329,10 +331,10 @@ export function MatchDetailFree({
                 )}
               </div>
               <Link
-                href="/signup"
+                href={isAuthenticated ? "/profile" : "/signup"}
                 className="inline-flex items-center gap-1 text-[11px] text-emerald-400 hover:text-emerald-300 transition-colors"
               >
-                Unlock with Pro →
+                {isAuthenticated ? "Upgrade to Pro →" : "Unlock with Pro →"}
               </Link>
             </div>
           )}
@@ -368,10 +370,10 @@ export function MatchDetailFree({
                 See which bookmaker offers the best price for every market.
               </p>
               <Link
-                href="/signup"
+                href={isAuthenticated ? "/profile" : "/signup"}
                 className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700"
               >
-                Sign Up Free
+                {isAuthenticated ? "Upgrade to Pro" : "Sign Up Free"}
               </Link>
             </div>
           </div>

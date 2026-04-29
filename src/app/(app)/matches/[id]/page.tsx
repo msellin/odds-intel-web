@@ -104,8 +104,9 @@ export default async function MatchDetailPage({
     );
   }
 
-  // Try to get authenticated data for pro users
+  // Try to get authenticated user + tier (server-side field stripping — B3)
   let isAuthenticated = false;
+  let isPro = false; // true for pro, elite, and superadmin
   let liveMatch: LiveMatch | null = null;
   let matchStats: MatchStatsData | null = null;
   try {
@@ -115,25 +116,38 @@ export default async function MatchDetailPage({
     } = await supabase.auth.getUser();
     if (user) {
       isAuthenticated = true;
-      liveMatch = await getMatchById(id);
-      matchStats = await getMatchStats(id);
+      // Fetch tier from profiles — determines what data to serve
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("tier, is_superadmin")
+        .eq("id", user.id)
+        .single();
+      isPro =
+        profile?.is_superadmin === true ||
+        profile?.tier === "pro" ||
+        profile?.tier === "elite";
+      if (isPro) {
+        liveMatch = await getMatchById(id);
+        matchStats = await getMatchStats(id);
+      }
     }
   } catch {
     // Not authenticated — free content only
   }
 
-  // Fetch free-tier enrichment data in parallel
-  const [oddsMovement, liveSnapshotsArr, h2h, standings, injuries] = await Promise.all([
-    getOddsMovement(id) as Promise<OddsMovementPoint[]>,
+  // Fetch free-tier enrichment data in parallel (all users)
+  // Injuries are fetched for all users — used only as a boolean hint in free tier
+  const [liveSnapshotsArr, h2h, standings, injuries] = await Promise.all([
     getLiveSnapshots([id]),
     getMatchH2H(id),
     getTeamStandings(publicMatch.homeTeam, publicMatch.awayTeam),
     getMatchInjuries(id),
   ]);
 
-  // Fetch Pro-tier enrichment data if authenticated
-  const [matchEvents, lineups, playerStats, seasonStats] = isAuthenticated
+  // Fetch Pro-tier data only when tier is confirmed server-side — never sent to free/anon users
+  const [oddsMovement, matchEvents, lineups, playerStats, seasonStats] = isPro
     ? await Promise.all([
+        getOddsMovement(id) as Promise<OddsMovementPoint[]>,
         getMatchEvents(id),
         getMatchLineups(id),
         getMatchPlayerStats(id),
@@ -142,7 +156,7 @@ export default async function MatchDetailPage({
           standings.away?.teamApiId ?? null
         ),
       ])
-    : [[], null, [], { home: null, away: null }];
+    : [[], [], null, [], { home: null, away: null }];
 
   const initialSnapshot = liveSnapshotsArr[0] ?? null;
 
@@ -257,13 +271,14 @@ export default async function MatchDetailPage({
         hasInjuries={injuries.length > 0}
         hasLineups={publicMatch.hasLineups}
         hasStats={publicMatch.status === "finished"}
+        isAuthenticated={isAuthenticated}
       />
 
       {/* Match notes — free signed-in feature */}
       <MatchNotes matchId={publicMatch.id} />
 
-      {/* Pro content — show for all authenticated users */}
-      {isAuthenticated && (liveMatch || matchEvents.length > 0 || injuries.length > 0 || lineups || playerStats.length > 0 || seasonStats.home || seasonStats.away || matchStats) && (
+      {/* Pro content — only rendered server-side for pro/elite users (B3: server-side field stripping) */}
+      {isPro && (liveMatch || matchEvents.length > 0 || injuries.length > 0 || lineups || playerStats.length > 0 || seasonStats.home || seasonStats.away || matchStats) && (
         <MatchDetailLive
           match={liveMatch ?? {
             id: publicMatch.id,
