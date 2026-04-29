@@ -7,6 +7,7 @@ import {
   BarChart3,
   Target,
   Crosshair,
+  Info,
   User,
   Menu,
   X,
@@ -22,6 +23,7 @@ const links = [
   { href: "/my-picks", label: "My Picks", icon: Crosshair, authOnly: true },
   { href: "/value-bets", label: "Value Bets", icon: Target, authOnly: false },
   { href: "/track-record", label: "Track Record", icon: BarChart3, authOnly: false },
+  { href: "/how-it-works", label: "How it works", icon: Info, authOnly: false, guestOnly: true },
 ];
 
 export function Nav() {
@@ -50,7 +52,7 @@ export function Nav() {
 
         {/* Desktop nav */}
         <nav className="hidden items-center gap-1 md:flex">
-          {links.filter((link) => !link.authOnly || user).map((link) => {
+          {links.filter((link) => (!link.authOnly || user) && (!link.guestOnly || !user)).map((link) => {
             const Icon = link.icon;
             const active =
               pathname === link.href || pathname.startsWith(link.href + "/");
@@ -127,7 +129,7 @@ export function Nav() {
       {/* Mobile nav */}
       {open && (
         <nav className="border-t border-border/50 bg-background px-4 pb-4 pt-2 md:hidden">
-          {links.filter((link) => !link.authOnly || user).map((link) => {
+          {links.filter((link) => (!link.authOnly || user) && (!link.guestOnly || !user)).map((link) => {
             const Icon = link.icon;
             const active =
               pathname === link.href || pathname.startsWith(link.href + "/");

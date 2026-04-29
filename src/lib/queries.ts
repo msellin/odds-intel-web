@@ -1,5 +1,5 @@
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
-import type { UserProfile, OddsFormat } from "@/components/auth-provider";
+import type { UserProfile } from "@/components/auth-provider";
 import type { Match, MatchDetail, ValueBet, HistoricalBet, TrackRecordStats } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -31,12 +31,7 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
 export async function updateUserProfile(
   userId: string,
   updates: Partial<{
-    display_name: string;
     preferred_leagues: string[];
-    preferred_markets: string[];
-    default_stake: number;
-    bankroll: number;
-    odds_format: OddsFormat;
     timezone: string;
   }>
 ): Promise<{ success: boolean; error?: string }> {

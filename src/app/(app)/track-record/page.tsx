@@ -1,19 +1,20 @@
-import { redirect } from "next/navigation";
 import { createSupabaseServer } from "@/lib/supabase-server";
-import { getAllBets } from "@/lib/engine-data";
+import { getAllBets, getModelAccuracy } from "@/lib/engine-data";
 import { TrackRecordLive } from "@/components/track-record-live";
+import { ModelAccuracy } from "@/components/model-accuracy";
 
 export default async function TrackRecordPage() {
   const supabase = await createSupabaseServer();
   const { data: { user } } = await supabase.auth.getUser();
 
-  if (!user) {
-    redirect("/login");
-  }
+  // Model accuracy is public — no login required
+  // Bot P&L is superadmin-only — only fetch bets if user is logged in
+  const [bets, accuracy] = await Promise.all([
+    user ? getAllBets() : Promise.resolve([]),
+    getModelAccuracy(),
+  ]);
 
-  const bets = await getAllBets();
-
-  // Calculate stats from real data
+  // Bot stats for the superadmin section
   const totalBets = bets.length;
   const pending = bets.filter((b) => b.result === "pending").length;
   const won = bets.filter((b) => b.result === "won").length;
@@ -25,22 +26,17 @@ export default async function TrackRecordPage() {
   const roi = totalStaked > 0 && settled > 0 ? (totalPnl / totalStaked) * 100 : 0;
   const allPending = totalBets > 0 && pending === totalBets;
 
-  const stats = {
-    totalBets,
-    pending,
-    won,
-    lost,
-    hitRate,
-    roi,
-    totalStaked,
-    totalPnl,
-    allPending,
-  };
+  const botStats = { totalBets, pending, won, lost, hitRate, roi, totalStaked, totalPnl, allPending };
 
-  // Sort by placedAt descending
-  const sorted = [...bets].sort(
-    (a, b) => b.placedAt.localeCompare(a.placedAt)
+  const sortedBets = [...bets].sort((a, b) => b.placedAt.localeCompare(a.placedAt));
+
+  return (
+    <div className="space-y-12">
+      {/* ── Section A: Model accuracy — all users, no login required ── */}
+      <ModelAccuracy data={accuracy} />
+
+      {/* ── Section B: Bot paper trading — superadmin only (gated inside component) ── */}
+      {user && <TrackRecordLive bets={sortedBets} stats={botStats} />}
+    </div>
   );
-
-  return <TrackRecordLive bets={sorted} stats={stats} />;
 }

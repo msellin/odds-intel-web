@@ -601,6 +601,142 @@ function toBet(row: SimBetRow): LiveBet {
   };
 }
 
+// ── Model accuracy (public) ─────────────────────────────────────────────────
+// For each finished match that has 1x2 predictions, determine what the model
+// called (highest probability among home/draw/away) and whether it was correct.
+
+export interface ModelPredictionRow {
+  matchId: string;
+  date: string;          // ISO date string
+  home: string;
+  away: string;
+  league: string;
+  modelCall: "home" | "draw" | "away";
+  confidence: number;    // 0-1, the winning probability
+  actual: "home" | "draw" | "away";
+  correct: boolean;
+}
+
+export interface ModelAccuracyStats {
+  total: number;
+  correct: number;
+  hitRate: number;       // 0-100
+  byOutcome: {
+    home:  { total: number; correct: number };
+    draw:  { total: number; correct: number };
+    away:  { total: number; correct: number };
+  };
+}
+
+export interface ModelAccuracyData {
+  rows: ModelPredictionRow[];
+  stats: ModelAccuracyStats;
+}
+
+export async function getModelAccuracy(): Promise<ModelAccuracyData> {
+  const supabase = await createSupabaseServer();
+
+  // Fetch finished matches that have a result
+  const { data: matches, error: mErr } = await supabase
+    .from("matches")
+    .select(`
+      id, result, date,
+      home_team:home_team_id(name),
+      away_team:away_team_id(name),
+      league:league_id(name, country)
+    `)
+    .eq("status", "finished")
+    .in("result", ["home", "draw", "away"])
+    .order("date", { ascending: false })
+    .limit(500);
+
+  if (mErr || !matches || matches.length === 0) return emptyAccuracy();
+
+  const matchIds = matches.map((m: Record<string, unknown>) => m.id as string);
+
+  // Fetch 1x2 predictions for those matches (ensemble source only)
+  const { data: preds, error: pErr } = await supabase
+    .from("predictions")
+    .select("match_id, market, model_probability")
+    .in("match_id", matchIds)
+    .in("market", ["1x2_home", "1x2_draw", "1x2_away"])
+    .eq("source", "ensemble");
+
+  if (pErr || !preds) return emptyAccuracy();
+
+  // Group predictions by match
+  const predsByMatch: Record<string, Record<string, number>> = {};
+  for (const p of preds as Array<{ match_id: string; market: string; model_probability: number }>) {
+    if (!predsByMatch[p.match_id]) predsByMatch[p.match_id] = {};
+    predsByMatch[p.match_id][p.market] = Number(p.model_probability);
+  }
+
+  const rows: ModelPredictionRow[] = [];
+
+  for (const m of matches as Array<Record<string, unknown>>) {
+    const pMap = predsByMatch[m.id as string];
+    if (!pMap) continue; // no prediction for this match
+
+    const homeProb  = pMap["1x2_home"]  ?? 0;
+    const drawProb  = pMap["1x2_draw"]  ?? 0;
+    const awayProb  = pMap["1x2_away"]  ?? 0;
+    if (homeProb === 0 && drawProb === 0 && awayProb === 0) continue;
+
+    // Model's call = highest probability
+    let modelCall: "home" | "draw" | "away" = "home";
+    let confidence = homeProb;
+    if (drawProb > confidence) { modelCall = "draw"; confidence = drawProb; }
+    if (awayProb > confidence) { modelCall = "away"; confidence = awayProb; }
+
+    const actual = m.result as "home" | "draw" | "away";
+    const homeTeam = Array.isArray(m.home_team) ? m.home_team[0] : m.home_team as Record<string, unknown>;
+    const awayTeam = Array.isArray(m.away_team) ? m.away_team[0] : m.away_team as Record<string, unknown>;
+    const league   = Array.isArray(m.league)    ? m.league[0]    : m.league    as Record<string, unknown>;
+
+    rows.push({
+      matchId:    m.id as string,
+      date:       (m.date as string).split("T")[0],
+      home:       (homeTeam?.name as string) ?? "?",
+      away:       (awayTeam?.name as string) ?? "?",
+      league:     league ? `${league.country} / ${league.name}` : "Unknown",
+      modelCall,
+      confidence,
+      actual,
+      correct: modelCall === actual,
+    });
+  }
+
+  const total   = rows.length;
+  const correct = rows.filter((r) => r.correct).length;
+  const hitRate = total > 0 ? (correct / total) * 100 : 0;
+
+  const byOutcome = {
+    home:  { total: 0, correct: 0 },
+    draw:  { total: 0, correct: 0 },
+    away:  { total: 0, correct: 0 },
+  };
+  for (const r of rows) {
+    byOutcome[r.modelCall].total++;
+    if (r.correct) byOutcome[r.modelCall].correct++;
+  }
+
+  return { rows, stats: { total, correct, hitRate, byOutcome } };
+}
+
+function emptyAccuracy(): ModelAccuracyData {
+  return {
+    rows: [],
+    stats: {
+      total: 0, correct: 0, hitRate: 0,
+      byOutcome: {
+        home: { total: 0, correct: 0 },
+        draw: { total: 0, correct: 0 },
+        away: { total: 0, correct: 0 },
+      },
+    },
+  };
+}
+
 export async function getAvailableLeagues(): Promise<string[]> {
   const matches = await getTodayOdds();
   const leagues = [...new Set(matches.map((m) => m.league))];

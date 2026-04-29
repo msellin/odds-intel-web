@@ -12,7 +12,6 @@ import type { Session, User } from "@supabase/supabase-js";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
 
 export type UserTier = "free" | "pro" | "elite";
-export type OddsFormat = "decimal" | "american" | "fractional";
 
 export interface UserProfile {
   id: string;
@@ -21,11 +20,6 @@ export interface UserProfile {
   tier: UserTier;
   is_superadmin: boolean;
   preferred_leagues: string[];
-  preferred_markets: string[];
-  favorite_teams: string[];
-  default_stake: number;
-  bankroll: number;
-  odds_format: OddsFormat;
   timezone: string;
   stripe_customer_id: string | null;
   created_at: string;

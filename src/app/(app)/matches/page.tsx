@@ -18,7 +18,7 @@ function formatDate(): string {
 }
 
 interface MatchesPageProps {
-  searchParams: Promise<{ leagues?: string; view?: string }>;
+  searchParams: Promise<{ leagues?: string }>;
 }
 
 export default async function MatchesPage({ searchParams }: MatchesPageProps) {
@@ -39,10 +39,6 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
   if (params.leagues) {
     const selectedSet = new Set(params.leagues.split(",").filter(Boolean));
     filtered = filtered.filter((m) => selectedSet.has(m.league));
-  }
-
-  if (params.view === "odds") {
-    filtered = filtered.filter((m) => m.hasOdds);
   }
 
   // Group by league
@@ -109,35 +105,11 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
         </div>
 
         {/* Filters */}
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          {allLeagues.length > 0 && (
-            <Suspense fallback={null}>
-              <LeagueFilter leagues={allLeagues} />
-            </Suspense>
-          )}
-          <div className="flex rounded-lg border border-white/[0.06] bg-muted/20 p-1">
-            <Link
-              href="/matches"
-              className={`rounded-md px-4 py-1.5 text-xs font-bold transition-all ${
-                params.view !== "odds"
-                  ? "bg-muted text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              All matches
-            </Link>
-            <Link
-              href="/matches?view=odds"
-              className={`rounded-md px-4 py-1.5 text-xs font-bold transition-all ${
-                params.view === "odds"
-                  ? "bg-muted text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              With odds only
-            </Link>
-          </div>
-        </div>
+        {allLeagues.length > 0 && (
+          <Suspense fallback={null}>
+            <LeagueFilter leagues={allLeagues} />
+          </Suspense>
+        )}
       </div>
 
       {/* Sign-up banner */}
@@ -174,9 +146,7 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
               No matches found
             </p>
             <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-              {params.view === "odds"
-                ? "No matches with odds data today. Try showing all matches."
-                : "Check back tomorrow or adjust your league filters above."}
+              Check back tomorrow or adjust your league filters above.
             </p>
           </div>
         </div>
