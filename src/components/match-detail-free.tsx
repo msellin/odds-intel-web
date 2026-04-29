@@ -9,8 +9,19 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, BarChart3, Lock, History, TableIcon, Zap } from "lucide-react";
+import { TrendingUp, BarChart3, Lock, History, TableIcon, Zap, Info } from "lucide-react";
 import Link from "next/link";
+
+function Tooltip({ children, content }: { children: React.ReactNode; content: React.ReactNode }) {
+  return (
+    <span className="group relative inline-flex items-center">
+      {children}
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-64 -translate-x-1/2 rounded-lg border border-border/60 bg-popover p-3 text-xs text-muted-foreground opacity-0 shadow-xl transition-opacity group-hover:opacity-100">
+        {content}
+      </span>
+    </span>
+  );
+}
 
 interface MatchDetailFreeProps {
   match: PublicMatch;
@@ -67,6 +78,17 @@ export function MatchDetailFree({
             <CardTitle className="text-sm flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-emerald-400" />
               Best Available Odds
+              <Tooltip content={
+                <span>
+                  <span className="mb-1 block font-semibold text-foreground">Decimal odds explained</span>
+                  The highest odds available across all bookmakers we track. Higher = better return.
+                  <span className="mt-1.5 block"><strong className="text-foreground/80">2.00</strong> — doubles your stake (even money)</span>
+                  <span className="block"><strong className="text-foreground/80">1.50</strong> — 50% profit on stake</span>
+                  <span className="mt-1.5 block text-muted-foreground/70">Pro tier shows the full comparison across all {`bookmakers`} so you always get the best price.</span>
+                </span>
+              }>
+                <Info className="h-3.5 w-3.5 cursor-help text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors" />
+              </Tooltip>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -236,16 +258,36 @@ export function MatchDetailFree({
           <CardTitle className="text-sm flex items-center gap-2">
             <BarChart3 className="h-4 w-4" />
             Data Coverage
+            <Tooltip content={
+              <span>
+                <span className="mb-1 block font-semibold text-foreground">What is data coverage?</span>
+                Our model ingests up to 58 signals per match — form, ELO, H2H, injuries, referee stats, market signals and more. Coverage grade reflects how many signals are available:
+                <span className="mt-1.5 block"><strong className="text-foreground/80">Grade A</strong> — European top leagues, full signal set</span>
+                <span className="block"><strong className="text-foreground/80">Grade B</strong> — Global leagues with ELO data</span>
+                <span className="block"><strong className="text-foreground/80">Grade C/D</strong> — Limited data, prediction only</span>
+              </span>
+            }>
+              <Info className="ml-1 h-3.5 w-3.5 cursor-help text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors" />
+            </Tooltip>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">{indicator}</span>
-              <span className="text-sm capitalize text-foreground font-medium">
-                {interest}
+            <Tooltip content={
+              <span>
+                <span className="mb-1 block font-semibold text-foreground">Match interest score</span>
+                <span className="block">🔥 <strong className="text-foreground/80">Hot</strong> — odds available, high data coverage</span>
+                <span className="block">⚡ <strong className="text-foreground/80">Notable</strong> — some signals detected</span>
+                <span className="block">— <strong className="text-foreground/80">Low</strong> — limited data, treat prediction with caution</span>
               </span>
-            </div>
+            }>
+              <div className="flex cursor-help items-center gap-2">
+                <span className="text-xl">{indicator}</span>
+                <span className="text-sm capitalize text-foreground font-medium">
+                  {interest}
+                </span>
+              </div>
+            </Tooltip>
             {bookmakerCount > 0 && (
               <Badge variant="outline" className="text-xs border-border">
                 {bookmakerCount} bookmaker{bookmakerCount !== 1 ? "s" : ""} tracked

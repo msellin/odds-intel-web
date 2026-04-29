@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Target } from "lucide-react";
+import { Target, Info } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -220,7 +220,17 @@ export function ValueBetsLive({ bets }: ValueBetsLiveProps) {
                           Implied Prob
                         </TableHead>
                         <TableHead className="text-xs text-right">
-                          Edge %
+                          <span className="group relative inline-flex items-center gap-1 cursor-default">
+                            Edge %
+                            <Info className="h-3 w-3 text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors" />
+                            <span className="pointer-events-none absolute bottom-full right-0 z-50 mb-2 w-64 rounded-lg border border-border/60 bg-popover p-3 text-left text-xs text-muted-foreground font-normal opacity-0 shadow-xl transition-opacity group-hover:opacity-100">
+                              <span className="mb-1 block font-semibold text-foreground">What is edge %?</span>
+                              Edge = model probability minus bookmaker&apos;s implied probability.
+                              <span className="mt-1.5 block"><strong className="text-emerald-400">+10%</strong> — model thinks this is 10 percentage points more likely than the odds imply. Strong edge.</span>
+                              <span className="mt-1 block"><strong className="text-amber-400">+5%</strong> — moderate edge. Still positive expected value.</span>
+                              <span className="mt-1.5 block text-muted-foreground/70">Consistently finding positive edge is what produces long-term profitable betting.</span>
+                            </span>
+                          </span>
                         </TableHead>
                         <TableHead className="text-xs text-right">
                           Stake

@@ -287,15 +287,17 @@ export default function MyPicksPage() {
             <p className="text-sm font-medium text-foreground">
               No picks yet
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Go to any match and make your prediction to start tracking your
-              record.
+            <p className="mt-2 text-xs text-muted-foreground max-w-xs mx-auto">
+              Open any match, scroll to the <strong className="text-foreground/70">Make Your Pick</strong> section, and tap Home / Draw / Away. Your prediction is saved here automatically.
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground/60 max-w-xs mx-auto">
+              Once you have 5+ picks, you&apos;ll see your hit rate compared to the model.
             </p>
             <Link
               href="/matches"
-              className="mt-4 inline-flex items-center justify-center rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700"
+              className="mt-5 inline-flex items-center justify-center rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700"
             >
-              Browse Matches
+              Browse Today&apos;s Matches
             </Link>
           </CardContent>
         </Card>
