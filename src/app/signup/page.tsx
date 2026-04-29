@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { TrendingUp, Check, Loader2 } from "lucide-react";
 import {
   Card,
@@ -12,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
-import { GoogleSignIn, AuthDivider } from "@/components/google-sign-in";
+import { GoogleSignIn, DiscordSignIn, AuthDivider } from "@/components/google-sign-in";
 
 const FREE_FEATURES = [
   "All today's fixtures + live scores",
@@ -26,33 +27,44 @@ const FREE_FEATURES = [
 
 export default function SignUpPage() {
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  const [code, setCode] = useState("");
+  const [step, setStep] = useState<"email" | "code">("email");
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const router = useRouter();
 
-  const handleSignUp = async () => {
+  const handleSendCode = async () => {
+    if (!email) return;
     setError(null);
-
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
-      return;
-    }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters");
-      return;
-    }
-
     setLoading(true);
     const supabase = createSupabaseBrowser();
-    const { error } = await supabase.auth.signUp({ email, password });
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: true },
+    });
     setLoading(false);
-
     if (error) {
       setError(error.message);
     } else {
-      setSuccess(true);
+      setStep("code");
+    }
+  };
+
+  const handleVerify = async () => {
+    if (!code) return;
+    setError(null);
+    setLoading(true);
+    const supabase = createSupabaseBrowser();
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token: code,
+      type: "email",
+    });
+    setLoading(false);
+    if (error) {
+      setError(error.message);
+    } else {
+      router.push("/welcome");
     }
   };
 
@@ -74,26 +86,16 @@ export default function SignUpPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-5">
-          {success ? (
-            <div className="space-y-4">
-              <div className="rounded-md bg-emerald-500/10 border border-emerald-500/30 px-4 py-3 text-center text-sm text-emerald-400">
-                Check your email to confirm your account, then come back to sign in.
-              </div>
-              <Link href="/login">
-                <Button className="w-full" variant="outline">
-                  Go to sign in
-                </Button>
-              </Link>
+          {error && (
+            <div className="rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2 text-sm text-destructive">
+              {error}
             </div>
-          ) : (
-            <>
-              {error && (
-                <div className="rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2 text-sm text-destructive">
-                  {error}
-                </div>
-              )}
+          )}
 
+          {step === "email" ? (
+            <>
               <GoogleSignIn />
+              <DiscordSignIn />
               <AuthDivider />
 
               <div className="space-y-2">
@@ -104,28 +106,7 @@ export default function SignUpPage() {
                   placeholder="you@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSignUp()}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="Create a password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="confirm-password">Confirm Password</Label>
-                <Input
-                  id="confirm-password"
-                  type="password"
-                  placeholder="Confirm your password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSignUp()}
+                  onKeyDown={(e) => e.key === "Enter" && handleSendCode()}
                 />
               </div>
 
@@ -146,14 +127,10 @@ export default function SignUpPage() {
 
               <Button
                 className="w-full bg-emerald-600 text-white hover:bg-emerald-700"
-                onClick={handleSignUp}
-                disabled={loading}
+                onClick={handleSendCode}
+                disabled={loading || !email}
               >
-                {loading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  "Create Free Account"
-                )}
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Free Account"}
               </Button>
 
               <p className="text-center text-xs text-muted-foreground">
@@ -169,6 +146,43 @@ export default function SignUpPage() {
                   Sign in
                 </Link>
               </p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">
+                We sent a 6-digit code to{" "}
+                <span className="text-foreground">{email}</span>. Enter it below to confirm your account.
+              </p>
+
+              <div className="space-y-2">
+                <Label htmlFor="code">Code</Label>
+                <Input
+                  id="code"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="123456"
+                  maxLength={6}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                  onKeyDown={(e) => e.key === "Enter" && handleVerify()}
+                  autoFocus
+                />
+              </div>
+
+              <Button
+                className="w-full bg-emerald-600 text-white hover:bg-emerald-700"
+                onClick={handleVerify}
+                disabled={loading || code.length < 6}
+              >
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm account"}
+              </Button>
+
+              <button
+                className="w-full text-center text-sm text-muted-foreground hover:text-primary transition-colors"
+                onClick={() => { setStep("email"); setCode(""); setError(null); }}
+              >
+                Use a different email
+              </button>
             </>
           )}
         </CardContent>

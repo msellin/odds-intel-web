@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { User, Settings, Bell, Monitor, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -258,13 +257,16 @@ export default function ProfilePage() {
               </div>
             </div>
             {tierKey === "free" ? (
-              <Button variant="outline" size="sm" nativeButton={false} render={<Link href="/signup" />}>
-                Upgrade — coming soon
-              </Button>
+              <span className="rounded-md border border-dashed border-border px-3 py-1.5 text-xs text-muted-foreground">
+                Pro &amp; Elite — launching soon
+              </span>
             ) : (
-              <Button variant="outline" size="sm" disabled>
-                Manage Subscription
-              </Button>
+              <div className="flex flex-col items-end gap-0.5">
+                <Button variant="outline" size="sm" disabled>
+                  Manage Subscription
+                </Button>
+                <p className="text-xs text-muted-foreground">Billing portal coming soon</p>
+              </div>
             )}
           </div>
         </CardContent>
@@ -369,6 +371,9 @@ export default function ProfilePage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
+          <p className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+            Preferences saved — email delivery launching soon.
+          </p>
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <Label>Value bet alerts</Label>

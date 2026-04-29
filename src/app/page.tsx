@@ -319,10 +319,11 @@ export default function LandingPage() {
                   </li>
                 ))}
               </ul>
-              <div className="mt-6">
+              <div className="mt-6 space-y-2">
                 <Button className="w-full bg-green-500 font-bold text-black hover:bg-green-400" nativeButton={false} render={<Link href="/signup" />}>
-                  Start Pro
+                  Sign up free — Pro coming soon
                 </Button>
+                <p className="text-center text-[10px] text-muted-foreground">Free account now · billing activates at launch</p>
               </div>
             </div>
 

@@ -136,8 +136,10 @@ export function TierGate({ requiredTier, children, featureName }: TierGateProps)
             {TIER_PRICES[requiredTier]}
           </p>
 
-          <button
+          <a
+            href="/#pricing"
             style={{
+              display: "block",
               backgroundColor: "#22c55e",
               color: "#000000",
               border: "none",
@@ -147,10 +149,13 @@ export function TierGate({ requiredTier, children, featureName }: TierGateProps)
               fontWeight: 600,
               cursor: "pointer",
               width: "100%",
+              textDecoration: "none",
+              textAlign: "center",
+              boxSizing: "border-box",
             }}
           >
-            Upgrade Now
-          </button>
+            View Plans
+          </a>
         </div>
       </div>
     </div>

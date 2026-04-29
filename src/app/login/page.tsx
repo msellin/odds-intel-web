@@ -13,22 +13,42 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
-import { GoogleSignIn, AuthDivider } from "@/components/google-sign-in";
+import { GoogleSignIn, DiscordSignIn, AuthDivider } from "@/components/google-sign-in";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
+  const [step, setStep] = useState<"email" | "code">("email");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  const handleSignIn = async () => {
+  const handleSendCode = async () => {
+    if (!email) return;
     setError(null);
     setLoading(true);
     const supabase = createSupabaseBrowser();
-    const { error } = await supabase.auth.signInWithPassword({
+    const { error } = await supabase.auth.signInWithOtp({
       email,
-      password,
+      options: { shouldCreateUser: false },
+    });
+    setLoading(false);
+    if (error) {
+      setError(error.message);
+    } else {
+      setStep("code");
+    }
+  };
+
+  const handleVerify = async () => {
+    if (!code) return;
+    setError(null);
+    setLoading(true);
+    const supabase = createSupabaseBrowser();
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token: code,
+      type: "email",
     });
     setLoading(false);
     if (error) {
@@ -59,52 +79,77 @@ export default function LoginPage() {
             </div>
           )}
 
-          <GoogleSignIn />
-          <AuthDivider />
+          {step === "email" ? (
+            <>
+              <GoogleSignIn />
+              <DiscordSignIn />
+              <AuthDivider />
 
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSignIn()}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              placeholder="Your password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSignIn()}
-            />
-          </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSendCode()}
+                />
+              </div>
 
-          <Button
-            className="w-full bg-emerald-600 text-white hover:bg-emerald-700"
-            onClick={handleSignIn}
-            disabled={loading}
-          >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sign In"}
-          </Button>
+              <Button
+                className="w-full bg-emerald-600 text-white hover:bg-emerald-700"
+                onClick={handleSendCode}
+                disabled={loading || !email}
+              >
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send code"}
+              </Button>
 
-          <div className="flex items-center justify-between text-sm">
-            <Link
-              href="/signup"
-              className="text-muted-foreground hover:text-primary transition-colors"
-            >
-              Don&apos;t have an account?{" "}
-              <span className="text-primary">Sign up</span>
-            </Link>
-            <button className="text-muted-foreground hover:text-primary transition-colors">
-              Forgot password?
-            </button>
-          </div>
+              <p className="text-center text-sm text-muted-foreground">
+                No account?{" "}
+                <Link href="/signup" className="text-primary hover:underline">
+                  Sign up free
+                </Link>
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">
+                We sent a 6-digit code to{" "}
+                <span className="text-foreground">{email}</span>.
+              </p>
+
+              <div className="space-y-2">
+                <Label htmlFor="code">Code</Label>
+                <Input
+                  id="code"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="123456"
+                  maxLength={6}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                  onKeyDown={(e) => e.key === "Enter" && handleVerify()}
+                  autoFocus
+                />
+              </div>
+
+              <Button
+                className="w-full bg-emerald-600 text-white hover:bg-emerald-700"
+                onClick={handleVerify}
+                disabled={loading || code.length < 6}
+              >
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verify"}
+              </Button>
+
+              <button
+                className="w-full text-center text-sm text-muted-foreground hover:text-primary transition-colors"
+                onClick={() => { setStep("email"); setCode(""); setError(null); }}
+              >
+                Use a different email
+              </button>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

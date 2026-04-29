@@ -67,7 +67,7 @@ export default async function WelcomePage() {
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-xs font-medium text-emerald-400">
-              Scout — Free
+              Free
             </span>
             Your current plan
           </CardTitle>
@@ -102,7 +102,7 @@ export default async function WelcomePage() {
           ))}
           <div className="pt-3">
             <Button variant="outline" className="w-full" disabled>
-              Pro — €19/mo (coming soon)
+              Pro — €4.99/mo (coming soon)
             </Button>
           </div>
         </CardContent>
