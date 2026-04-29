@@ -321,7 +321,7 @@ export function LeagueAccordion({
             {matches.length} {matches.length === 1 ? "match" : "matches"}
           </span>
           {hasOdds && (
-            <span className="text-sm" title={`${oddsCount} with odds`}>
+            <span className="text-sm" title={`Odds available — ${oddsCount} match${oddsCount === 1 ? "" : "es"} with bookmaker data`}>
               🔥
             </span>
           )}

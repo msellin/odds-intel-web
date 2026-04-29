@@ -411,12 +411,16 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
   const supabase = createSupabasePublic();
 
   const now = new Date();
-  const todayStart = new Date(now);
-  todayStart.setUTCHours(0, 0, 0, 0);
+  // Include yesterday so recently-finished matches stay visible in the Finished tab.
+  // Settlement marks status='finished' at 21:00 UTC; without this, yesterday's results
+  // disappear at midnight UTC and today's unresolved matches show as 'upcoming' all day.
+  const windowStart = new Date(now);
+  windowStart.setUTCHours(0, 0, 0, 0);
+  windowStart.setUTCDate(windowStart.getUTCDate() - 1); // yesterday 00:00 UTC
   const todayEnd = new Date(now);
   todayEnd.setUTCHours(23, 59, 59, 999);
 
-  // Step 1: Fetch all of today's matches (no pre-filter by odds — show all fixtures)
+  // Step 1: Fetch yesterday + today's matches (no pre-filter by odds — show all fixtures)
   const { data: matches, error } = await supabase
     .from("matches")
     .select(
@@ -425,7 +429,7 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
        away_team:away_team_id(id, name, country, logo_url),
        league:league_id(id, name, country, tier)`
     )
-    .gte("date", todayStart.toISOString())
+    .gte("date", windowStart.toISOString())
     .lte("date", todayEnd.toISOString())
     .order("date", { ascending: true })
     .limit(1000);

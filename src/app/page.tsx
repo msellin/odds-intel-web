@@ -28,9 +28,9 @@ type ComparisonRow =
 
 const comparisonRows: ComparisonRow[] = [
   { type: "category", label: "Always available — no account needed" },
-  { type: "row", feature: "Browse 400+ daily fixtures", free: true, pro: true, elite: true },
+  { type: "row", feature: "All fixtures across 280+ leagues", free: true, pro: true, elite: true },
   { type: "row", feature: "Live scores (auto-refresh)", free: true, pro: true, elite: true },
-  { type: "row", feature: "Best odds (1 bookmaker)", free: true, pro: true, elite: true },
+  { type: "row", feature: "Best available odds (across all bookmakers)", free: true, pro: true, elite: true },
   { type: "row", feature: "H2H, standings & team form", free: true, pro: true, elite: true },
 
   { type: "category", label: "Free account" },
@@ -44,7 +44,7 @@ const comparisonRows: ComparisonRow[] = [
   { type: "category", label: "Pro — real-time edge" },
   { type: "row", feature: "Full odds — 13 bookmakers compared", free: false, pro: true, elite: true },
   { type: "row", feature: "Odds movement chart", free: false, pro: true, elite: true },
-  { type: "row", feature: "Injury & suspension alerts", free: false, pro: true, elite: true },
+  { type: "row", feature: "Injury & suspension reports", free: false, pro: true, elite: true },
   { type: "row", feature: "Confirmed lineups + formations", free: false, pro: true, elite: true },
   { type: "row", feature: "Post-match stats (xG, shots, possession)", free: false, pro: true, elite: true },
 
@@ -59,7 +59,7 @@ const comparisonRows: ComparisonRow[] = [
 const faqItems = [
   {
     q: "What sports and leagues does OddsIntel cover?",
-    a: "Football (soccer) — 30+ leagues including the Premier League, La Liga, Bundesliga, Serie A, and Champions League. More leagues and sports are on the roadmap.",
+    a: "Football (soccer) — 280+ leagues worldwide, including the Premier League, La Liga, Bundesliga, Serie A, Ligue 1, Champions League, and hundreds of lower-division and international leagues. More sports are on the roadmap.",
   },
   {
     q: "Which bookmakers are compared?",
@@ -67,7 +67,7 @@ const faqItems = [
   },
   {
     q: "Is the free plan really free forever?",
-    a: "Yes. No credit card, no trial period that expires. The free tier gives you 400+ daily fixtures, live scores, personalisation, and 1 AI value pick per day — permanently.",
+    a: "Yes. No credit card, no trial period that expires. The free tier gives you fixtures across 280+ leagues, live scores, personalisation, and 1 AI value pick per day — permanently.",
   },
   {
     q: "How do the AI picks work?",
@@ -75,7 +75,7 @@ const faqItems = [
   },
   {
     q: "What is CLV tracking?",
-    a: "Closing Line Value (CLV) measures whether the odds you took were better than the final pre-match odds. It's the most reliable long-term indicator of profitable betting — and OddsIntel Elite tracks it for every bet automatically.",
+    a: "Closing Line Value (CLV) measures whether a bet was placed at better odds than where the market closed. It's the most reliable long-term indicator of a profitable strategy. OddsIntel Elite tracks CLV for every AI model pick, so you can see whether the model is consistently finding genuine value.",
   },
   {
     q: "What are the founding member rates?",
@@ -97,8 +97,9 @@ export default function LandingPage() {
       {/* ───────── Nav ───────── */}
       <nav className="sticky top-0 z-50 border-b border-white/[0.06] bg-background/90 backdrop-blur-lg">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
-          <Link href="/" className="font-mono text-xl font-black uppercase italic tracking-tight text-white">
+          <Link href="/" className="flex items-center gap-2 font-mono text-xl font-black uppercase italic tracking-tight text-white">
             ODDS<span className="text-green-500">INTEL</span>
+            <span className="rounded text-[10px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-400 px-1.5 py-0.5 border border-amber-500/30">Beta</span>
           </Link>
           <div className="flex items-center gap-4">
             <Link href="/matches" className="hidden text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:block">
@@ -121,7 +122,7 @@ export default function LandingPage() {
           <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1">
             <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
             <span className="font-mono text-[10px] uppercase tracking-widest text-green-400">
-              Tracking 400+ fixtures daily · Football / Soccer
+              Tracking 280+ leagues worldwide · Football / Soccer
             </span>
           </div>
           <h1 className="text-balance text-4xl font-black leading-[1.1] tracking-tight text-foreground sm:text-5xl lg:text-6xl">
@@ -165,7 +166,7 @@ export default function LandingPage() {
                   <span className="rounded bg-green-500/15 px-2 py-0.5 font-mono text-[10px] font-bold text-green-400">PREMIER LEAGUE</span>
                   <span className="text-xs text-muted-foreground">Today · 20:45</span>
                 </div>
-                <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[10px] font-bold text-amber-400">⚡ VALUE BET DETECTED</span>
+                <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[10px] font-bold text-amber-400">⚡ High market activity</span>
               </div>
               <div className="mt-3 flex items-center justify-between">
                 <span className="text-base font-bold sm:text-lg">Manchester City</span>
@@ -192,18 +193,18 @@ export default function LandingPage() {
               {/* Signal badges */}
               <div className="mt-3 flex flex-wrap gap-2">
                 <span className="flex items-center gap-1.5 rounded-full bg-white/[0.04] px-2.5 py-1 text-[11px] text-muted-foreground">
-                  <span>⚠️</span> Ederson OUT (injury)
+                  <span>⚠️</span> Key player — injury doubt
                 </span>
                 <span className="flex items-center gap-1.5 rounded-full bg-white/[0.04] px-2.5 py-1 text-[11px] text-muted-foreground">
-                  <span className="text-green-400">●</span> AI confidence: <span className="ml-1 font-medium text-green-400">68% City</span>
+                  <span className="text-blue-400">●</span> Bookmakers disagree — spread wide
                 </span>
                 <span className="flex items-center gap-1.5 rounded-full bg-white/[0.04] px-2.5 py-1 text-[11px] text-muted-foreground">
-                  <span>📈</span> Odds moved <span className="ml-1 font-medium text-green-400">+0.15 City</span>
+                  <span>📈</span> Odds shifted overnight
                 </span>
               </div>
             </div>
           </div>
-          <p className="mt-2 text-center text-[10px] text-muted-foreground/40">Sample data — actual interface</p>
+          <p className="mt-2 text-center text-[10px] text-muted-foreground/40">Sample data — illustrative</p>
         </div>
       </section>
 
@@ -251,7 +252,7 @@ export default function LandingPage() {
               Live data preview
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Football · Premier League · La Liga · Bundesliga · Serie A · Champions League + 25 more leagues
+              Football · Premier League · La Liga · Bundesliga · Serie A · Champions League · and 280+ more leagues worldwide
             </p>
           </div>
 
@@ -313,10 +314,10 @@ export default function LandingPage() {
           </div>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             {[
-              { stat: "400+", label: "fixtures tracked daily" },
+              { stat: "280+", label: "leagues tracked worldwide" },
               { stat: "13",   label: "bookmakers compared" },
               { stat: "9",    label: "AI strategies running live" },
-              { stat: "30+",  label: "leagues across Europe" },
+              { stat: "100+",  label: "European leagues covered" },
             ].map((item) => (
               <div key={item.label} className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-5 py-6 text-center">
                 <p className="font-mono text-3xl font-black text-green-400">{item.stat}</p>
