@@ -2,7 +2,6 @@ import { createSupabaseServer } from "@/lib/supabase-server";
 import { getAllBets, getModelAccuracy, getTodayPicks } from "@/lib/engine-data";
 import { TrackRecordLive } from "@/components/track-record-live";
 import { ModelAccuracy } from "@/components/model-accuracy";
-import { LayeredSimulation } from "@/components/layered-simulation";
 import { TodayPicksPreview } from "@/components/today-picks-preview";
 
 export default async function TrackRecordPage() {
@@ -44,20 +43,15 @@ export default async function TrackRecordPage() {
 
   return (
     <div className="space-y-12">
-      {/* Section A: Model accuracy — all users */}
+      {/* Section A: Model accuracy + layered simulation (shares filter state) */}
       <ModelAccuracy data={accuracy} />
 
-      {/* Section B: Today's picks preview — pending picks with locked Pro columns */}
+      {/* Section B: Today's picks — pending with locked Pro/Elite columns */}
       {todayPicks.length > 0 && (
         <TodayPicksPreview picks={todayPicks} />
       )}
 
-      {/* Section C: Layered simulation — what adding more layers would have done */}
-      {accuracy.rows.length > 0 && (
-        <LayeredSimulation rows={accuracy.rows} />
-      )}
-
-      {/* Section D: Bot paper trading — superadmin only */}
+      {/* Section C: Bot paper trading — superadmin only */}
       {isSuperadmin && <TrackRecordLive bets={sortedBets} stats={botStats} />}
     </div>
   );

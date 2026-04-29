@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { ModelAccuracyData, ModelPredictionRow } from "@/lib/engine-data";
+import { LayeredSimulation } from "@/components/layered-simulation";
 
 const INITIAL_SHOW = 50;
 
@@ -50,6 +51,10 @@ function confidenceBadge(confidence: number) {
       {(confidence * 100).toFixed(0)}%
     </span>
   );
+}
+
+function pnlColor(pnl: number) {
+  return pnl >= 0 ? "text-emerald-400" : "text-red-400/70";
 }
 
 export function ModelAccuracy({ data }: Props) {
@@ -93,6 +98,8 @@ export function ModelAccuracy({ data }: Props) {
 
   const visibleRows = filtered.slice(0, visible);
   const hasMore = visible < filtered.length;
+
+  const isFiltered = filtered.length !== rows.length;
 
   return (
     <div className="space-y-6">
@@ -141,6 +148,11 @@ export function ModelAccuracy({ data }: Props) {
                 <span className="font-mono text-xl font-bold tabular-nums">
                   {filteredStats.total}
                 </span>
+                {isFiltered && (
+                  <span className="ml-1.5 font-mono text-xs text-muted-foreground/60">
+                    of {stats.total}
+                  </span>
+                )}
               </CardContent>
             </Card>
 
@@ -260,12 +272,6 @@ export function ModelAccuracy({ data }: Props) {
                 </div>
               </div>
             </div>
-
-            {(filtered.length !== rows.length) && (
-              <span className="text-xs text-muted-foreground">
-                {filtered.length} of {rows.length} predictions
-              </span>
-            )}
           </div>
 
           {filteredStats.total === 0 ? (
@@ -279,7 +285,7 @@ export function ModelAccuracy({ data }: Props) {
               {/* Table */}
               <Card className="overflow-hidden border-border/50 bg-card/80">
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[700px]">
+                  <table className="w-full min-w-[720px]">
                     <thead>
                       <tr className="border-b border-border/30">
                         <th className="py-2.5 pl-4 pr-2 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -292,18 +298,20 @@ export function ModelAccuracy({ data }: Props) {
                           League
                         </th>
                         <th className="py-2.5 px-2 text-center text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                          Model called
+                          Pick
                         </th>
                         <th className="py-2.5 px-2 text-center text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                          Confidence
+                          Conf
                         </th>
                         <th className="py-2.5 px-2 text-center text-[11px] font-medium uppercase tracking-wider text-muted-foreground hidden md:table-cell">
                           Actual
                         </th>
+                        {/* Odds columns — worst → best, revealed after settlement */}
                         <th className="py-2.5 px-2 text-center text-[11px] font-medium uppercase tracking-wider text-muted-foreground hidden lg:table-cell">
-                          <span title="Best bookmaker odds tracked for the model's pick">
-                            Best odds ↗
-                          </span>
+                          <span title="Worst bookmaker odds tracked for this pick">Worst odds</span>
+                        </th>
+                        <th className="py-2.5 px-2 text-center text-[11px] font-medium uppercase tracking-wider text-muted-foreground hidden lg:table-cell">
+                          <span title="Best bookmaker odds tracked for this pick">Best odds ↗</span>
                         </th>
                         <th className="py-2.5 pl-2 pr-4 text-center text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                           Result
@@ -312,58 +320,78 @@ export function ModelAccuracy({ data }: Props) {
                     </thead>
                     <tbody className="divide-y divide-border/20">
                       {visibleRows.map((row: ModelPredictionRow) => {
-                        const flatPnl = row.bestOddsForPick !== null
+                        const worstPnl = row.worstOddsForPick !== null
+                          ? (row.correct ? 10 * (row.worstOddsForPick - 1) : -10)
+                          : null;
+                        const bestPnl = row.bestOddsForPick !== null
                           ? (row.correct ? 10 * (row.bestOddsForPick - 1) : -10)
                           : null;
                         return (
-                        <tr key={row.matchId} className="hover:bg-muted/10">
-                          <td className="py-2.5 pl-4 pr-2 font-mono text-xs text-muted-foreground">
-                            {row.date}
-                          </td>
-                          <td className="py-2.5 px-2 text-xs font-medium max-w-[180px] truncate">
-                            {row.home} vs {row.away}
-                          </td>
-                          <td className="py-2.5 px-2 text-xs text-muted-foreground hidden sm:table-cell max-w-[160px] truncate">
-                            {row.league}
-                          </td>
-                          <td className="py-2.5 px-2 text-center">
-                            <span className="rounded bg-white/[0.06] px-2 py-0.5 text-xs font-medium">
-                              {outcomeLabel(row.modelCall)}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-2 text-center">
-                            {confidenceBadge(row.confidence)}
-                          </td>
-                          <td className="py-2.5 px-2 text-center hidden md:table-cell">
-                            <span className="text-xs text-muted-foreground">
-                              {outcomeLabel(row.actual)}
-                            </span>
-                          </td>
-                          {/* Best odds — revealed after settlement (was locked in today's pending preview) */}
-                          <td className="py-2.5 px-2 text-center hidden lg:table-cell">
-                            {row.bestOddsForPick !== null ? (
-                              <span className="inline-flex flex-col items-center gap-0.5">
-                                <span className="font-mono text-xs font-medium text-foreground/80">
-                                  {row.bestOddsForPick.toFixed(2)}
-                                </span>
-                                {flatPnl !== null && (
-                                  <span className={`text-[10px] font-mono ${flatPnl >= 0 ? "text-emerald-400" : "text-red-400/70"}`}>
-                                    {flatPnl >= 0 ? "+" : ""}€{flatPnl.toFixed(1)}
-                                  </span>
-                                )}
+                          <tr key={row.matchId} className="hover:bg-muted/10">
+                            <td className="py-2.5 pl-4 pr-2 font-mono text-xs text-muted-foreground">
+                              {row.date}
+                            </td>
+                            <td className="py-2.5 px-2 text-xs font-medium max-w-[180px] truncate">
+                              {row.home} vs {row.away}
+                            </td>
+                            <td className="py-2.5 px-2 text-xs text-muted-foreground hidden sm:table-cell max-w-[160px] truncate">
+                              {row.league}
+                            </td>
+                            <td className="py-2.5 px-2 text-center">
+                              <span className="rounded bg-white/[0.06] px-2 py-0.5 text-xs font-medium">
+                                {outcomeLabel(row.modelCall)}
                               </span>
-                            ) : (
-                              <span className="text-[10px] text-muted-foreground/40">—</span>
-                            )}
-                          </td>
-                          <td className="py-2.5 pl-2 pr-4 text-center">
-                            {row.correct ? (
-                              <Check className="mx-auto h-4 w-4 text-emerald-400" />
-                            ) : (
-                              <X className="mx-auto h-4 w-4 text-red-400/60" />
-                            )}
-                          </td>
-                        </tr>
+                            </td>
+                            <td className="py-2.5 px-2 text-center">
+                              {confidenceBadge(row.confidence)}
+                            </td>
+                            <td className="py-2.5 px-2 text-center hidden md:table-cell">
+                              <span className="text-xs text-muted-foreground">
+                                {outcomeLabel(row.actual)}
+                              </span>
+                            </td>
+                            {/* Worst odds */}
+                            <td className="py-2.5 px-2 text-center hidden lg:table-cell">
+                              {row.worstOddsForPick !== null ? (
+                                <span className="inline-flex flex-col items-center gap-0.5">
+                                  <span className="font-mono text-xs text-muted-foreground/70">
+                                    {row.worstOddsForPick.toFixed(2)}
+                                  </span>
+                                  {worstPnl !== null && (
+                                    <span className={`text-[10px] font-mono ${pnlColor(worstPnl)}`}>
+                                      {worstPnl >= 0 ? "+" : ""}€{worstPnl.toFixed(1)}
+                                    </span>
+                                  )}
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-muted-foreground/40">—</span>
+                              )}
+                            </td>
+                            {/* Best odds */}
+                            <td className="py-2.5 px-2 text-center hidden lg:table-cell">
+                              {row.bestOddsForPick !== null ? (
+                                <span className="inline-flex flex-col items-center gap-0.5">
+                                  <span className="font-mono text-xs font-medium text-foreground/80">
+                                    {row.bestOddsForPick.toFixed(2)}
+                                  </span>
+                                  {bestPnl !== null && (
+                                    <span className={`text-[10px] font-mono ${pnlColor(bestPnl)}`}>
+                                      {bestPnl >= 0 ? "+" : ""}€{bestPnl.toFixed(1)}
+                                    </span>
+                                  )}
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-muted-foreground/40">—</span>
+                              )}
+                            </td>
+                            <td className="py-2.5 pl-2 pr-4 text-center">
+                              {row.correct ? (
+                                <Check className="mx-auto h-4 w-4 text-emerald-400" />
+                              ) : (
+                                <X className="mx-auto h-4 w-4 text-red-400/60" />
+                              )}
+                            </td>
+                          </tr>
                         );
                       })}
                     </tbody>
@@ -392,6 +420,9 @@ export function ModelAccuracy({ data }: Props) {
                   How does the model work, and what do Pro & Elite add? →
                 </Link>
               </div>
+
+              {/* Layered simulation — uses the same filtered rows so numbers always match */}
+              <LayeredSimulation rows={filtered} />
             </>
           )}
         </>

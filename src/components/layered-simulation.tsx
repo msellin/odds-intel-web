@@ -2,17 +2,12 @@
 
 /**
  * Layered simulation — shows how each additional layer changes the outcome
- * of the same model predictions. Uses REAL historical odds from our bookmaker
- * data when available; only falls back to probability-derived odds when a match
- * had no odds tracked.
+ * of the same model predictions, using REAL historical bookmaker odds.
  *
- * Layer 1: Flat €10, worst bookmaker odds  (any odds, any book — Free baseline)
- * Layer 2: Flat €10, best bookmaker odds   (Pro: odds comparison)
- * Layer 3: Flat €10, best odds + 60%+ conf (Pro: signal filtering)
- * Layer 4: Kelly staking, best odds + 60%+ (Elite: optimal sizing)
- *
- * Bookmaker names are intentionally hidden for free users — Pro shows which
- * specific bookmaker had the best price on live picks.
+ * Layer 1: Flat €10, worst bookmaker odds  (Free baseline)
+ * Layer 2: Flat €10, best bookmaker odds   (Pro: odds comparison — 1 of 6 Pro signals)
+ * Layer 3: Flat €10, best odds + 60%+ conf (Pro: confidence filtering)
+ * Layer 4: Kelly staking, best odds + 60%+ (Elite: optimal stake sizing — 1 of 4 Elite extras)
  */
 
 import { useMemo } from "react";
@@ -27,7 +22,7 @@ import {
   ReferenceLine,
   ResponsiveContainer,
 } from "recharts";
-import { Lock, TrendingUp, Database } from "lucide-react";
+import { Lock, TrendingUp, Database, Info } from "lucide-react";
 import type { ModelPredictionRow } from "@/lib/engine-data";
 
 interface Props {
@@ -38,16 +33,11 @@ const START_BANKROLL = 1000;
 const FLAT_STAKE = 10;
 const MAX_KELLY_FRACTION = 0.08;
 
-// For a match without real odds, derive from model confidence + margin
-function derivedOdds(confidence: number, margin: number): number {
-  return Math.max(1.05, (1 / confidence) * margin);
-}
-
 interface BetResult { stake: number; pnl: number }
 
 function runSimulation(
   rows: ModelPredictionRow[],
-  oddsSelector: (row: ModelPredictionRow) => number | null,  // returns odds to use, null = skip
+  oddsSelector: (row: ModelPredictionRow) => number,
   minConfidence: number,
   useKelly: boolean
 ): {
@@ -59,7 +49,6 @@ function runSimulation(
   roi: number;
   finalBankroll: number;
   series: BetResult[];
-  matchesWithRealOdds: number;
 } {
   const sorted = [...rows].sort((a, b) => a.date.localeCompare(b.date));
   const eligible = sorted.filter((r) => r.confidence >= minConfidence);
@@ -68,14 +57,11 @@ function runSimulation(
   let totalStaked = 0;
   let totalPnl = 0;
   let won = 0;
-  let matchesWithRealOdds = 0;
   const series: BetResult[] = [];
 
   for (const row of eligible) {
     const odds = oddsSelector(row);
-    if (odds === null || odds <= 1) continue;
-
-    if (row.bestOddsForPick !== null) matchesWithRealOdds++;
+    if (odds <= 1) continue;
 
     let stake: number;
     if (useKelly) {
@@ -109,7 +95,6 @@ function runSimulation(
     roi,
     finalBankroll: Math.round(bankroll * 100) / 100,
     series,
-    matchesWithRealOdds,
   };
 }
 
@@ -159,32 +144,13 @@ const LAYERS = [
 ];
 
 export function LayeredSimulation({ rows }: Props) {
-  const rowsWithOdds = useMemo(
-    () => rows.filter((r) => r.bestOddsForPick !== null && r.worstOddsForPick !== null),
-    [rows]
-  );
-
-  const hasRealOdds = rowsWithOdds.length >= 10;
-
-  const simulations = useMemo(() => {
-    if (hasRealOdds) {
-      // Use real historical bookmaker odds
-      return [
-        runSimulation(rows, (r) => r.worstOddsForPick, 0, false),
-        runSimulation(rows, (r) => r.bestOddsForPick, 0, false),
-        runSimulation(rows, (r) => r.bestOddsForPick, 0.6, false),
-        runSimulation(rows, (r) => r.bestOddsForPick, 0.6, true),
-      ];
-    } else {
-      // Fallback: derive odds from model confidence
-      return [
-        runSimulation(rows, (r) => derivedOdds(r.confidence, 0.92), 0, false),
-        runSimulation(rows, (r) => derivedOdds(r.confidence, 0.97), 0, false),
-        runSimulation(rows, (r) => derivedOdds(r.confidence, 0.97), 0.6, false),
-        runSimulation(rows, (r) => derivedOdds(r.confidence, 0.97), 0.6, true),
-      ];
-    }
-  }, [rows, hasRealOdds]);
+  // All rows have real odds (data layer filters out rows without odds)
+  const simulations = useMemo(() => [
+    runSimulation(rows, (r) => r.worstOddsForPick, 0, false),
+    runSimulation(rows, (r) => r.bestOddsForPick, 0, false),
+    runSimulation(rows, (r) => r.bestOddsForPick, 0.6, false),
+    runSimulation(rows, (r) => r.bestOddsForPick, 0.6, true),
+  ], [rows]);
 
   const chartData = useMemo(() => {
     const curves = simulations.map((s) => buildBankrollCurve(s.series));
@@ -209,18 +175,23 @@ export function LayeredSimulation({ rows }: Props) {
           <h2 className="text-base font-semibold text-foreground">What if you added more layers?</h2>
         </div>
         <p className="text-xs text-muted-foreground leading-relaxed max-w-2xl">
-          The same {rows.length} model predictions, starting with €{START_BANKROLL.toLocaleString()}.
+          The same {rows.length} predictions above, starting with €{START_BANKROLL.toLocaleString()}.
           Each layer stacks one more advantage — better odds, sharper filtering, smarter sizing.
         </p>
 
+        {/* "One signal" callout */}
+        <div className="flex items-start gap-1.5 rounded-md border px-3 py-1.5 w-fit mt-1 border-amber-500/20 bg-amber-500/5">
+          <Info className="h-3 w-3 shrink-0 text-amber-400/70 mt-0.5" />
+          <p className="text-[11px] text-muted-foreground">
+            This simulation isolates <strong className="text-foreground/80">one signal per tier</strong> — Pro has 6 advantages stacked, Elite adds 4 more on top. The real edge compounds further.
+          </p>
+        </div>
+
         {/* Data source badge */}
-        <div className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 w-fit mt-1 border-border/40 bg-card/40">
+        <div className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 w-fit border-border/40 bg-card/40">
           <Database className="h-3 w-3 shrink-0 text-muted-foreground/60" />
           <p className="text-[11px] text-muted-foreground">
-            {hasRealOdds
-              ? <>Using <strong className="text-foreground/80">{rowsWithOdds.length}</strong> matches with real bookmaker odds from our database</>
-              : "Odds estimated from model probability — real odds data not yet available for these matches"
-            }
+            Real bookmaker odds from our database — same {rows.length} matches shown above
           </p>
         </div>
       </div>
@@ -347,6 +318,11 @@ export function LayeredSimulation({ rows }: Props) {
         <p>
           <strong className="text-foreground/80">Kelly staking</strong> bets more when the model&apos;s edge is larger, less when it&apos;s smaller — compounding gains and reducing drawdown on uncertain picks.
         </p>
+        <p className="border-t border-border/20 pt-2 text-muted-foreground/60">
+          Each simulated layer represents <strong className="text-foreground/60">one signal</strong> from its tier.
+          Pro stacks 6 advantages total; Elite adds 4 more — value bet alerts, AI-powered bet reasoning, and more.
+          The full stack compounds further than what you see here.
+        </p>
       </div>
 
       {/* CTA */}
@@ -354,7 +330,7 @@ export function LayeredSimulation({ rows }: Props) {
         <div>
           <p className="text-xs font-semibold text-foreground">Capture this edge on today&apos;s picks</p>
           <p className="text-[11px] text-muted-foreground mt-0.5">
-            Pro shows odds across 13 bookmakers. Elite adds Kelly stake sizing and value bet alerts.
+            Pro: odds across 13 bookmakers + 5 more signals. Elite: Kelly sizing + value alerts + AI reasoning.
           </p>
         </div>
         <a

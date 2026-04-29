@@ -862,10 +862,10 @@ export interface ModelPredictionRow {
   confidence: number;    // 0-1, the winning probability
   actual: "home" | "draw" | "away";
   correct: boolean;
-  // Real historical odds for this match (null if no odds tracked for this match)
-  bestOddsForPick: number | null;   // best bookmaker odds for the model's selection
-  worstOddsForPick: number | null;  // worst bookmaker odds for the model's selection
-  bookmakerCount: number;           // how many bookmakers had odds
+  // Real historical bookmaker odds — only rows with odds are included
+  bestOddsForPick: number;    // best bookmaker odds for the model's selection
+  worstOddsForPick: number;   // worst bookmaker odds for the model's selection
+  bookmakerCount: number;     // how many distinct bookmakers had odds
 }
 
 export interface ModelAccuracyStats {
@@ -1046,6 +1046,9 @@ export async function getModelAccuracy(): Promise<ModelAccuracyData> {
     const matchOdds = oddsIndex[m.id as string];
     const pickOdds = matchOdds?.[modelCall];
 
+    // Only include matches where we have real bookmaker odds — keeps all counts consistent
+    if (!pickOdds) continue;
+
     rows.push({
       matchId:    m.id as string,
       date:       (m.date as string).split("T")[0],
@@ -1056,9 +1059,9 @@ export async function getModelAccuracy(): Promise<ModelAccuracyData> {
       confidence,
       actual,
       correct: modelCall === actual,
-      bestOddsForPick:  pickOdds?.best  ?? null,
-      worstOddsForPick: pickOdds?.worst ?? null,
-      bookmakerCount:   pickOdds?.count ?? 0,
+      bestOddsForPick:  pickOdds.best,
+      worstOddsForPick: pickOdds.worst,
+      bookmakerCount:   pickOdds.count,
     });
   }
 
