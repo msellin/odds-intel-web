@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth-provider";
 import { Analytics } from "@vercel/analytics/next";
@@ -37,6 +38,9 @@ export const metadata: Metadata = {
     description:
       "467 daily fixtures. 13 bookmakers. AI injury alerts. H2H, form, standings — all on one screen.",
   },
+  alternates: {
+    canonical: "https://oddsintel.app",
+  },
   manifest: "/manifest.json",
   icons: {
     icon: [
@@ -69,9 +73,35 @@ export default function RootLayout({
       className={`${inter.variable} ${jetbrainsMono.variable} dark`}
     >
       <body className="min-h-dvh bg-background text-foreground antialiased">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "Organization",
+              name: "OddsIntel",
+              url: "https://oddsintel.app",
+              description:
+                "AI-powered sports betting intelligence. Live odds from 13 bookmakers, injuries, H2H, standings, and transparent model track record.",
+              sameAs: [],
+            }),
+          }}
+        />
         <AuthProvider>{children}</AuthProvider>
         <CookieBanner />
         <Analytics />
+        <Script id="hotjar" strategy="afterInteractive">
+          {`
+            (function(h,o,t,j,a,r){
+              h.hj=h.hj||function(){(h.hj.q=h.hj.q||[]).push(arguments)};
+              h._hjSettings={hjid:${process.env.NEXT_PUBLIC_HOTJAR_ID},hjsv:6};
+              a=o.getElementsByTagName('head')[0];
+              r=o.createElement('script');r.async=1;
+              r.src=t+h._hjSettings.hjid+j+h._hjSettings.hjsv;
+              a.appendChild(r);
+            })(window,document,'https://static.hotjar.com/c/hotjar-','.js?sv=');
+          `}
+        </Script>
       </body>
     </html>
   );

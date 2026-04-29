@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import {
   getPublicMatchById,
   getPublicMatchBookmakerCount,
@@ -25,6 +26,46 @@ import { Separator } from "@/components/ui/separator";
 import { Clock, Calendar, Shield, MapPin, User } from "lucide-react";
 import Link from "next/link";
 import { createSupabaseServer } from "@/lib/supabase-server";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const match = await getPublicMatchById(id);
+
+  if (!match) {
+    return { title: "Match Not Found — OddsIntel" };
+  }
+
+  const kickoff = new Date(match.kickoff);
+  const dateStr = kickoff.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+  const title = `${match.homeTeam} vs ${match.awayTeam} — ${match.league} | OddsIntel`;
+  const description = `${match.homeTeam} vs ${match.awayTeam} on ${dateStr}. Odds, H2H, injuries, standings and AI predictions on OddsIntel.`;
+  const url = `https://oddsintel.app/matches/${id}`;
+
+  return {
+    title,
+    description,
+    alternates: { canonical: url },
+    openGraph: {
+      title,
+      description,
+      url,
+      type: "article",
+    },
+    twitter: {
+      card: "summary",
+      title,
+      description,
+    },
+  };
+}
 
 export default async function MatchDetailPage({
   params,
