@@ -455,7 +455,7 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
     const batch = matchIds.slice(i, i + batchSize);
     const { data: oddsRows } = await supabase.rpc("get_best_match_odds", {
       p_match_ids: batch,
-      p_since: todayStart.toISOString(),
+      p_since: windowStart.toISOString(),
     });
     for (const o of (oddsRows || []) as {
       match_id: string; selection: string; best_odds: number;
@@ -478,7 +478,7 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
   const matchIdsWithOdds = new Set(Object.keys(oddsByMatch));
 
   // Fetch signal intelligence for all matches (SUX-1/2/3)
-  const signalSummary = await batchFetchSignalSummary(matchIds, todayStart);
+  const signalSummary = await batchFetchSignalSummary(matchIds, windowStart);
 
   const MOVE_THRESHOLD = 0.05; // min odds delta to show ↑↓
 
