@@ -17,9 +17,9 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "OddsIntel — AI Football Predictions & Odds Comparison",
+  title: "OddsIntel — AI Football Predictions & Value Bets",
   description:
-    "Free AI football predictions & value bets. Compare odds from 13 bookmakers, track injuries, H2H and standings. Spot your betting edge before kickoff.",
+    "Free AI football predictions, value bets and odds comparison. Track injuries, H2H records and standings across 400+ daily fixtures. Spot your betting edge before kickoff.",
   keywords: [
     "AI football predictions",
     "value bets today",
@@ -36,9 +36,9 @@ export const metadata: Metadata = {
     google: "ix-rQvuyTbEjWYRefDYn7o-yi2S_8oUB7ahHhI56W38",
   },
   openGraph: {
-    title: "OddsIntel — AI Football Predictions & Odds Comparison",
+    title: "OddsIntel — AI Football Predictions & Value Bets",
     description:
-      "Free AI football predictions & value bets. Compare odds from 13 bookmakers, track injuries, H2H and standings. Spot your betting edge before kickoff.",
+      "Free AI football predictions, value bets and odds comparison. Track injuries, H2H records and standings across 400+ daily fixtures. Spot your betting edge before kickoff.",
     url: "https://oddsintel.app",
     siteName: "OddsIntel",
     locale: "en_US",
@@ -46,9 +46,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "OddsIntel — AI Football Predictions & Odds Comparison",
+    title: "OddsIntel — AI Football Predictions & Value Bets",
     description:
-      "Free AI football predictions & value bets. Compare odds from 13 bookmakers, track injuries, H2H and standings. Spot your betting edge before kickoff.",
+      "Free AI football predictions, value bets and odds comparison. Track injuries, H2H records and standings across 400+ daily fixtures. Spot your betting edge before kickoff.",
   },
   alternates: {
     canonical: "https://oddsintel.app",
