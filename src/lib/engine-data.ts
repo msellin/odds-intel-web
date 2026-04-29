@@ -386,39 +386,11 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
 
   const now = new Date();
   const todayStart = new Date(now);
-  todayStart.setHours(0, 0, 0, 0);
+  todayStart.setUTCHours(0, 0, 0, 0);
   const todayEnd = new Date(now);
-  todayEnd.setHours(23, 59, 59, 999);
+  todayEnd.setUTCHours(23, 59, 59, 999);
 
-  // Step 1: Get today's matches that have at least one odds snapshot
-  const { data: allTodayMatches } = await supabase
-    .from("matches")
-    .select("id")
-    .gte("date", todayStart.toISOString())
-    .lte("date", todayEnd.toISOString())
-    .not("api_football_id", "is", null);
-
-  const todayIds = (allTodayMatches || []).map((r: { id: string }) => r.id);
-  if (todayIds.length === 0) return [];
-
-  // Find which of today's matches have odds (batch query)
-  const idsWithOdds = new Set<string>();
-  const batchSize = 80;
-  for (let i = 0; i < todayIds.length; i += batchSize) {
-    const batch = todayIds.slice(i, i + batchSize);
-    const { data: oddsRows } = await supabase
-      .from("odds_snapshots")
-      .select("match_id")
-      .in("match_id", batch);
-    for (const r of (oddsRows || []) as { match_id: string }[]) {
-      idsWithOdds.add(r.match_id);
-    }
-  }
-
-  const filteredIds = [...idsWithOdds];
-  if (filteredIds.length === 0) return [];
-
-  // Step 2: Fetch only matches that have odds
+  // Step 1: Fetch all of today's matches (no pre-filter by odds — show all fixtures)
   const { data: matches, error } = await supabase
     .from("matches")
     .select(
@@ -427,31 +399,37 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
        away_team:away_team_id(id, name, country),
        league:league_id(id, name, country, tier)`
     )
-    .in("id", filteredIds)
-    .order("date", { ascending: true });
+    .gte("date", todayStart.toISOString())
+    .lte("date", todayEnd.toISOString())
+    .not("api_football_id", "is", null)
+    .order("date", { ascending: true })
+    .limit(1000);
 
-  if (error || !matches) return [];
+  if (error || !matches || matches.length === 0) return [];
 
   type PublicMatchRow = Pick<MatchRow, "id" | "date" | "status" | "home_team" | "away_team" | "league">;
-
-  // Check which matches have odds (just need match_ids, not full odds)
   const matchIds = (matches as PublicMatchRow[]).map((m) => m.id);
-  const { data: oddsRows } = matchIds.length
-    ? await supabase
-        .from("odds_snapshots")
-        .select("match_id, bookmaker, market, selection, odds")
-        .in("match_id", matchIds)
-        .eq("market", "1X2")
-    : { data: [] };
 
-  // Group 1X2 odds by match → compute best H/D/A
+  // Step 2: Fetch 1X2 odds in batches with a high row limit.
+  // odds_snapshots grows across pipeline runs (every 2h × 13 bookmakers × 3 selections
+  // = ~350 rows/match/day). Default Supabase limit of 1000 rows is far too low.
   const oddsByMatch: Record<string, { home: number[]; draw: number[]; away: number[] }> = {};
-  for (const o of (oddsRows || []) as { match_id: string; selection: string; odds: number }[]) {
-    if (!oddsByMatch[o.match_id]) oddsByMatch[o.match_id] = { home: [], draw: [], away: [] };
-    const num = Number(o.odds);
-    if (o.selection === "home") oddsByMatch[o.match_id].home.push(num);
-    if (o.selection === "draw") oddsByMatch[o.match_id].draw.push(num);
-    if (o.selection === "away") oddsByMatch[o.match_id].away.push(num);
+  const batchSize = 80;
+  for (let i = 0; i < matchIds.length; i += batchSize) {
+    const batch = matchIds.slice(i, i + batchSize);
+    const { data: oddsRows } = await supabase
+      .from("odds_snapshots")
+      .select("match_id, selection, odds")
+      .in("match_id", batch)
+      .eq("market", "1X2")
+      .limit(100000);
+    for (const o of (oddsRows || []) as { match_id: string; selection: string; odds: number }[]) {
+      if (!oddsByMatch[o.match_id]) oddsByMatch[o.match_id] = { home: [], draw: [], away: [] };
+      const num = Number(o.odds);
+      if (o.selection === "home") oddsByMatch[o.match_id].home.push(num);
+      if (o.selection === "draw") oddsByMatch[o.match_id].draw.push(num);
+      if (o.selection === "away") oddsByMatch[o.match_id].away.push(num);
+    }
   }
 
   const matchIdsWithOdds = new Set(Object.keys(oddsByMatch));
