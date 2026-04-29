@@ -17,28 +17,31 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "OddsIntel — AI Football Predictions & Value Bets",
+  title: "OddsIntel — AI Football Predictions & Value Bets Today",
   description:
-    "Free AI football predictions and value bets across 1,200+ leagues. Compare odds, track injuries, H2H records and standings — all on one screen before kickoff.",
+    "Get AI-powered value bets and football predictions today. Compare bookmaker odds, track injuries, and check H2H records — free, across 1,200+ leagues.",
   keywords: [
     "AI football predictions",
     "value bets today",
+    "football predictions today",
     "odds comparison",
     "football betting tips",
     "betting tips today",
-    "football predictions today",
     "best odds today",
     "football injury news",
-    "match predictions with odds",
-    "free betting tips",
+    "football odds comparison tool",
+    "expected value betting calculator",
+    "football injury news before kickoff",
+    "machine learning football predictions",
+    "football value bets today free",
   ],
   verification: {
     google: "ix-rQvuyTbEjWYRefDYn7o-yi2S_8oUB7ahHhI56W38",
   },
   openGraph: {
-    title: "OddsIntel — AI Football Predictions & Value Bets",
+    title: "OddsIntel — AI Football Predictions & Value Bets Today",
     description:
-      "Free AI football predictions and value bets across 1,200+ leagues. Compare odds, track injuries, H2H records and standings — all on one screen before kickoff.",
+      "Get AI-powered value bets and football predictions today. Compare bookmaker odds, track injuries, and check H2H records — free, across 1,200+ leagues.",
     url: "https://oddsintel.app",
     siteName: "OddsIntel",
     locale: "en_US",
@@ -46,9 +49,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "OddsIntel — AI Football Predictions & Value Bets",
+    title: "OddsIntel — AI Football Predictions & Value Bets Today",
     description:
-      "Free AI football predictions and value bets across 1,200+ leagues. Compare odds, track injuries, H2H records and standings — all on one screen before kickoff.",
+      "Get AI-powered value bets and football predictions today. Compare bookmaker odds, track injuries, and check H2H records — free, across 1,200+ leagues.",
   },
   alternates: {
     canonical: "https://oddsintel.app",
@@ -94,7 +97,7 @@ export default function RootLayout({
               name: "OddsIntel",
               url: "https://oddsintel.app",
               description:
-                "AI-powered sports betting intelligence. Live odds from 13 bookmakers, injuries, H2H, standings, and transparent model track record.",
+                "OddsIntel uses an AI ensemble model combining Poisson regression and XGBoost to generate football predictions and value bets across 1,200+ leagues. Provides odds comparison, injury tracking, H2H records and standings in one platform.",
               sameAs: [],
             }),
           }}
