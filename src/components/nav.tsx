@@ -44,7 +44,7 @@ export function Nav() {
   return (
     <header className="sticky top-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-xl">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
-        <Link href="/" className="flex items-center gap-2">
+        <Link href={user ? "/matches" : "/"} className="flex items-center gap-2">
           <span className="font-mono text-lg font-black uppercase italic tracking-tight text-white">
             ODDS<span className="text-green-500">INTEL</span>
           </span>

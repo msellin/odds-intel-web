@@ -169,8 +169,8 @@ export default async function MatchDetailPage({
       {/* Header */}
       <div className="space-y-3">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Link href="/" className="hover:text-foreground transition-colors">
-            Home
+          <Link href="/matches" className="hover:text-foreground transition-colors">
+            Matches
           </Link>
           <span>/</span>
           <Link
