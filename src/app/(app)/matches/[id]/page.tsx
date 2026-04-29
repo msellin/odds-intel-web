@@ -279,7 +279,7 @@ export default async function MatchDetailPage({
         isAuthenticated={isAuthenticated}
       />
 
-      {/* Intelligence Summary (SUX-4/7) — teaser for free, full for pro/elite, +Elite hook for Pro */}
+      {/* Intelligence Summary (SUX-4/7/10) — free gets post-match reveal or teaser, pro/elite get full */}
       {matchSignals.length > 0 && (
         <MatchSignalSummary
           signals={matchSignals}
@@ -287,6 +287,9 @@ export default async function MatchDetailPage({
           isElite={isElite}
           homeTeam={publicMatch.homeTeam}
           awayTeam={publicMatch.awayTeam}
+          matchStatus={publicMatch.status}
+          scoreHome={publicMatch.score_home ?? null}
+          scoreAway={publicMatch.score_away ?? null}
         />
       )}
 

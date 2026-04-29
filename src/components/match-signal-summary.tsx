@@ -30,6 +30,9 @@ interface MatchSignalSummaryProps {
   isElite?: boolean; // elite only
   homeTeam: string;
   awayTeam: string;
+  matchStatus?: string; // "finished" | "scheduled" | "live" etc.
+  scoreHome?: number | null;
+  scoreAway?: number | null;
 }
 
 // Severity → colour
@@ -190,6 +193,51 @@ function buildSignalInsights(
   return insights.slice(0, 5).map(({ label, signalName }) => ({ label, signalName }));
 }
 
+/** Build a post-match retrospective insight for Free users (SUX-10) */
+function buildPostMatchInsight(
+  signals: MatchSignalRow[],
+  homeTeam: string,
+  awayTeam: string,
+  scoreHome: number,
+  scoreAway: number
+): string {
+  const byName: Record<string, number> = {};
+  for (const s of signals) byName[s.signal_name] = Number(s.signal_value);
+
+  const winner = scoreHome > scoreAway ? homeTeam : scoreAway > scoreHome ? awayTeam : null;
+  const scoreStr = `${scoreHome}–${scoreAway}`;
+
+  const olm = byName["overnight_line_move"] ?? 0;
+  const bdm = byName["bookmaker_disagreement"] ?? 0;
+  const vol = byName["odds_volatility"] ?? 0;
+  const injHome = byName["injury_count_home"] ?? 0;
+  const injAway = byName["injury_count_away"] ?? 0;
+
+  // Pick the most interesting signal detected
+  if (Math.abs(olm) > 0.04 && winner) {
+    const dir = olm > 0 ? homeTeam : awayTeam;
+    if (dir === winner) {
+      return `Sharp overnight money moved toward ${winner} before kickoff — they won ${scoreStr}.`;
+    }
+  }
+  if (bdm > 0.12) {
+    const result = winner ? `${winner} won ${scoreStr}` : `the match ended ${scoreStr}`;
+    return `Bookmakers disagreed on this match — our signals flagged the uncertainty. ${result}.`;
+  }
+  if (vol > 0.008 && winner) {
+    return `Odds were volatile before kickoff — our market signals picked up activity. ${winner} won ${scoreStr}.`;
+  }
+  if (injHome >= 3 && scoreAway > scoreHome) {
+    return `${homeTeam} had ${injHome} absences — our signals detected the disruption. ${awayTeam} won ${scoreStr}.`;
+  }
+  if (injAway >= 3 && scoreHome > scoreAway) {
+    return `${awayTeam} had ${injAway} absences — our signals detected the disruption. ${homeTeam} won ${scoreStr}.`;
+  }
+  // Generic fallback
+  if (winner) return `Our model's signals tracked this match throughout. ${winner} won ${scoreStr}.`;
+  return `Our model's signals tracked this match throughout. It ended ${scoreStr}.`;
+}
+
 /** Detect if signals diverge meaningfully from market consensus */
 function detectSignalDivergence(signals: MatchSignalRow[]): {
   hasDivergence: boolean;
@@ -225,6 +273,9 @@ export function MatchSignalSummary({
   isElite = false,
   homeTeam,
   awayTeam,
+  matchStatus,
+  scoreHome,
+  scoreAway,
 }: MatchSignalSummaryProps) {
   if (!signals.length) return null;
 
@@ -232,10 +283,41 @@ export function MatchSignalSummary({
 
   // Count how many signals exist
   const totalSignals = new Set(signals.map((s) => s.signal_name)).size;
+  const isFinished = matchStatus === "finished";
 
-  // ── Free users: show teaser heading + first insight + locked overlay ───────
+  // ── Free users: post-match reveal (SUX-10) or live teaser ─────────────────
   if (!isPro) {
     const topInsight = insights[0];
+
+    // Post-match reveal for finished matches (SUX-10)
+    if (isFinished && scoreHome != null && scoreAway != null) {
+      const insight = buildPostMatchInsight(signals, homeTeam, awayTeam, scoreHome, scoreAway);
+      return (
+        <div className="rounded-xl border border-border/50 bg-card overflow-hidden">
+          <div className="flex items-center gap-2 px-4 pt-4 pb-3 border-b border-border/30">
+            <Zap className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-semibold">Signal Reveal</h3>
+            <span className="text-[10px] font-mono text-muted-foreground bg-muted/40 rounded px-1.5 py-0.5 ml-auto">
+              Post-match
+            </span>
+          </div>
+          <div className="px-4 py-3">
+            <p className="text-sm text-foreground leading-relaxed">{insight}</p>
+          </div>
+          <div className="flex items-center gap-3 px-4 py-3 bg-muted/20 border-t border-border/30">
+            <TrendingUp className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <p className="text-xs text-muted-foreground flex-1">
+              Upgrade to Pro to see all {totalSignals} signals before kickoff
+            </p>
+            <a href="/profile" className="text-xs font-semibold text-primary hover:underline shrink-0">
+              Upgrade →
+            </a>
+          </div>
+        </div>
+      );
+    }
+
+    // Pre-match teaser
     if (!topInsight) return null;
     return (
       <div className="rounded-xl border border-border/50 bg-card overflow-hidden">
