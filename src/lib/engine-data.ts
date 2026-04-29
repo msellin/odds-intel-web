@@ -19,6 +19,12 @@ export interface LiveMatch {
     away: number;
     over25: number;
     under25: number;
+    over15: number;
+    under15: number;
+    over35: number;
+    under35: number;
+    bttsYes: number;
+    bttsNo: number;
   }[];
   bestHome: number;
   bestDraw: number;
@@ -221,6 +227,8 @@ export interface OddsMovementPoint {
   bestHome: number;
   bestDraw: number;
   bestAway: number;
+  bestOver25: number;
+  bestUnder25: number;
 }
 
 export interface LiveSnapshot {
@@ -421,7 +429,7 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
       .from("odds_snapshots")
       .select("match_id, selection, odds")
       .in("match_id", batch)
-      .eq("market", "1X2")
+      .in("market", ["1x2", "1X2"])
       .limit(100000);
     for (const o of (oddsRows || []) as { match_id: string; selection: string; odds: number }[]) {
       if (!oddsByMatch[o.match_id]) oddsByMatch[o.match_id] = { home: [], draw: [], away: [] };
@@ -488,7 +496,7 @@ export async function getPublicMatchById(matchId: string): Promise<PublicMatch |
     .from("odds_snapshots")
     .select("match_id, selection, odds")
     .eq("match_id", matchId)
-    .eq("market", "1X2");
+    .in("market", ["1x2", "1X2"]);
 
   const odds = { home: [] as number[], draw: [] as number[], away: [] as number[] };
   for (const o of (oddsRows || []) as { match_id: string; selection: string; odds: number }[]) {
@@ -534,7 +542,7 @@ export async function getPublicMatchBookmakerCount(matchId: string): Promise<num
     .from("odds_snapshots")
     .select("bookmaker")
     .eq("match_id", matchId)
-    .eq("market", "1X2");
+    .in("market", ["1x2", "1X2"]);
 
   if (!data) return 0;
   return new Set(data.map((r: { bookmaker: string }) => r.bookmaker)).size;
@@ -589,21 +597,46 @@ export async function getTodayOdds(): Promise<LiveMatch[]> {
     const matchOdds = oddsByMatch[m.id] || [];
     const operatorMap: Record<
       string,
-      { home: number; draw: number; away: number; over25: number; under25: number }
+      {
+        home: number; draw: number; away: number;
+        over25: number; under25: number;
+        over15: number; under15: number;
+        over35: number; under35: number;
+        bttsYes: number; bttsNo: number;
+      }
     > = {};
 
     for (const o of matchOdds) {
       if (!operatorMap[o.bookmaker]) {
-        operatorMap[o.bookmaker] = { home: 0, draw: 0, away: 0, over25: 0, under25: 0 };
+        operatorMap[o.bookmaker] = {
+          home: 0, draw: 0, away: 0,
+          over25: 0, under25: 0,
+          over15: 0, under15: 0,
+          over35: 0, under35: 0,
+          bttsYes: 0, bttsNo: 0,
+        };
       }
-      if (o.market === "1X2") {
+      const mkt = o.market.toLowerCase();
+      if (mkt === "1x2") {
         if (o.selection === "home") operatorMap[o.bookmaker].home = Number(o.odds);
         if (o.selection === "draw") operatorMap[o.bookmaker].draw = Number(o.odds);
         if (o.selection === "away") operatorMap[o.bookmaker].away = Number(o.odds);
       }
-      if (o.market === "OU25") {
+      if (mkt === "over_under_25" || mkt === "ou25") {
         if (o.selection === "over") operatorMap[o.bookmaker].over25 = Number(o.odds);
         if (o.selection === "under") operatorMap[o.bookmaker].under25 = Number(o.odds);
+      }
+      if (mkt === "over_under_15") {
+        if (o.selection === "over") operatorMap[o.bookmaker].over15 = Number(o.odds);
+        if (o.selection === "under") operatorMap[o.bookmaker].under15 = Number(o.odds);
+      }
+      if (mkt === "over_under_35") {
+        if (o.selection === "over") operatorMap[o.bookmaker].over35 = Number(o.odds);
+        if (o.selection === "under") operatorMap[o.bookmaker].under35 = Number(o.odds);
+      }
+      if (mkt === "btts") {
+        if (o.selection === "yes") operatorMap[o.bookmaker].bttsYes = Number(o.odds);
+        if (o.selection === "no") operatorMap[o.bookmaker].bttsNo = Number(o.odds);
       }
     }
 
@@ -1221,23 +1254,31 @@ export async function getOddsMovement(matchId: string): Promise<OddsMovementPoin
   const supabase = createSupabasePublic();
   const { data, error } = await supabase
     .from("odds_snapshots")
-    .select("timestamp, selection, odds")
+    .select("timestamp, market, selection, odds")
     .eq("match_id", matchId)
-    .eq("market", "1X2")
+    .in("market", ["1x2", "1X2", "over_under_25", "OU25"])
     .order("timestamp", { ascending: true });
   if (error || !data) return [];
 
   // Bucket by hour → best odds per bucket
-  const byHour: Record<string, { home: number[]; draw: number[]; away: number[] }> = {};
-  for (const row of data as { timestamp: string; selection: string; odds: number }[]) {
+  type HourBucket = { home: number[]; draw: number[]; away: number[]; over25: number[]; under25: number[] };
+  const byHour: Record<string, HourBucket> = {};
+  for (const row of data as { timestamp: string; market: string; selection: string; odds: number }[]) {
     const ts = new Date(row.timestamp);
     ts.setMinutes(0, 0, 0);
     const key = ts.toISOString();
-    if (!byHour[key]) byHour[key] = { home: [], draw: [], away: [] };
+    if (!byHour[key]) byHour[key] = { home: [], draw: [], away: [], over25: [], under25: [] };
     const num = Number(row.odds);
-    if (row.selection === "home") byHour[key].home.push(num);
-    if (row.selection === "draw") byHour[key].draw.push(num);
-    if (row.selection === "away") byHour[key].away.push(num);
+    const mkt = row.market.toLowerCase();
+    if (mkt === "1x2") {
+      if (row.selection === "home") byHour[key].home.push(num);
+      if (row.selection === "draw") byHour[key].draw.push(num);
+      if (row.selection === "away") byHour[key].away.push(num);
+    }
+    if (mkt === "over_under_25" || mkt === "ou25") {
+      if (row.selection === "over") byHour[key].over25.push(num);
+      if (row.selection === "under") byHour[key].under25.push(num);
+    }
   }
 
   return Object.entries(byHour)
@@ -1247,6 +1288,42 @@ export async function getOddsMovement(matchId: string): Promise<OddsMovementPoin
       bestHome: odds.home.length ? Math.max(...odds.home) : 0,
       bestDraw: odds.draw.length ? Math.max(...odds.draw) : 0,
       bestAway: odds.away.length ? Math.max(...odds.away) : 0,
+      bestOver25: odds.over25.length ? Math.max(...odds.over25) : 0,
+      bestUnder25: odds.under25.length ? Math.max(...odds.under25) : 0,
     }))
-    .filter((p) => p.bestHome > 0 || p.bestDraw > 0 || p.bestAway > 0);
+    .filter((p) => p.bestHome > 0 || p.bestDraw > 0 || p.bestAway > 0 || p.bestOver25 > 0);
+}
+
+// ─── Match signals for SUX-4 summary tab ────────────────────────────────────
+
+export interface MatchSignalRow {
+  signal_name: string;
+  signal_value: number;
+  signal_group: string;
+  captured_at: string;
+}
+
+/**
+ * Fetch all latest signal values for a single match (SUX-4).
+ * Returns the most recent value per signal_name.
+ * Uses public client — match_signals has no RLS (public read).
+ */
+export async function getMatchSignals(matchId: string): Promise<MatchSignalRow[]> {
+  const supabase = createSupabasePublic();
+  const { data, error } = await supabase
+    .from("match_signals")
+    .select("signal_name, signal_value, signal_group, captured_at")
+    .eq("match_id", matchId)
+    .order("captured_at", { ascending: false })
+    .limit(500);
+
+  if (error || !data) return [];
+
+  // Keep only the latest value per signal_name
+  const seen = new Set<string>();
+  return (data as MatchSignalRow[]).filter((row) => {
+    if (seen.has(row.signal_name)) return false;
+    seen.add(row.signal_name);
+    return true;
+  });
 }

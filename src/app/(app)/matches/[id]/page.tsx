@@ -13,11 +13,13 @@ import {
   getMatchLineups,
   getMatchPlayerStats,
   getTeamSeasonStats,
+  getMatchSignals,
 } from "@/lib/engine-data";
 import type { LiveMatch, MatchStatsData, OddsMovementPoint } from "@/lib/engine-data";
 import { MatchDetailFree } from "@/components/match-detail-free";
 import { MatchDetailLive } from "@/components/match-detail-live";
 import { MatchScoreDisplay } from "@/components/match-score-display";
+import { MatchSignalSummary } from "@/components/match-signal-summary";
 import { MatchPickButton } from "@/components/match-pick-button";
 import { MatchNotes } from "@/components/match-notes";
 import { CommunityVote } from "@/components/community-vote";
@@ -137,11 +139,13 @@ export default async function MatchDetailPage({
 
   // Fetch free-tier enrichment data in parallel (all users)
   // Injuries are fetched for all users — used only as a boolean hint in free tier
-  const [liveSnapshotsArr, h2h, standings, injuries] = await Promise.all([
+  // Signals are fetched for all users — free gets teaser (1 signal), pro/elite get full summary
+  const [liveSnapshotsArr, h2h, standings, injuries, matchSignals] = await Promise.all([
     getLiveSnapshots([id]),
     getMatchH2H(id),
     getTeamStandings(publicMatch.homeTeam, publicMatch.awayTeam),
     getMatchInjuries(id),
+    getMatchSignals(id),
   ]);
 
   // Fetch Pro-tier data only when tier is confirmed server-side — never sent to free/anon users
@@ -273,6 +277,16 @@ export default async function MatchDetailPage({
         hasStats={publicMatch.status === "finished"}
         isAuthenticated={isAuthenticated}
       />
+
+      {/* Intelligence Summary (SUX-4) — teaser for free, full for pro/elite */}
+      {matchSignals.length > 0 && (
+        <MatchSignalSummary
+          signals={matchSignals}
+          isPro={isPro}
+          homeTeam={publicMatch.homeTeam}
+          awayTeam={publicMatch.awayTeam}
+        />
+      )}
 
       {/* Match notes — free signed-in feature */}
       <MatchNotes matchId={publicMatch.id} />
