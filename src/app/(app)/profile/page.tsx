@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
-import { User, Settings, X, Plus, Loader2 } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { User, Settings, X, Plus, Loader2, Zap } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -31,12 +31,54 @@ const TIER_LABELS: Record<string, string> = {
   elite: "Elite — €14.99/mo",
 };
 
+const PRO_PRICE_ID = process.env.NEXT_PUBLIC_STRIPE_PRO_FOUNDING_PRICE_ID ?? "";
+const ELITE_PRICE_ID = process.env.NEXT_PUBLIC_STRIPE_ELITE_FOUNDING_PRICE_ID ?? "";
+
 export default function ProfilePage() {
   const { user, profile, loading, refreshProfile } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createSupabaseBrowser();
 
   const [saving, setSaving] = useState<string | null>(null); // league name being saved
+  const [upgrading, setUpgrading] = useState<string | null>(null); // "pro" | "elite" | "portal"
+  const [checkoutMsg, setCheckoutMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    const result = searchParams.get("checkout");
+    if (result === "success") {
+      setCheckoutMsg("Subscription activated! Your tier will update shortly.");
+      refreshProfile();
+    } else if (result === "cancelled") {
+      setCheckoutMsg("Checkout cancelled.");
+    }
+  }, [searchParams, refreshProfile]);
+
+  const startCheckout = useCallback(async (priceId: string, tierLabel: string) => {
+    setUpgrading(tierLabel);
+    try {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priceId }),
+      });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+    } finally {
+      setUpgrading(null);
+    }
+  }, []);
+
+  const openPortal = useCallback(async () => {
+    setUpgrading("portal");
+    try {
+      const res = await fetch("/api/stripe/portal", { method: "POST" });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+    } finally {
+      setUpgrading(null);
+    }
+  }, []);
 
   useEffect(() => {
     if (!loading && !user) router.push("/login");
@@ -83,6 +125,16 @@ export default function ProfilePage() {
 
   return (
     <div className="space-y-6">
+      {checkoutMsg && (
+        <div className={`rounded-lg border px-4 py-3 text-sm ${
+          checkoutMsg.includes("activated")
+            ? "border-green-500/30 bg-green-500/10 text-green-400"
+            : "border-border bg-muted/30 text-muted-foreground"
+        }`}>
+          {checkoutMsg}
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-3">
@@ -116,15 +168,35 @@ export default function ProfilePage() {
               </Badge>
             </div>
             {tierKey === "free" ? (
-              <span className="rounded-md border border-dashed border-border px-3 py-1.5 text-xs text-muted-foreground">
-                Pro &amp; Elite — launching soon
-              </span>
+              <div className="flex flex-col items-end gap-2">
+                <button
+                  onClick={() => startCheckout(PRO_PRICE_ID, "pro")}
+                  disabled={!!upgrading}
+                  className="flex items-center gap-1.5 rounded-md bg-green-500 px-3 py-1.5 text-xs font-bold text-black hover:bg-green-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {upgrading === "pro" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                  Upgrade to Pro — €3.99/mo
+                </button>
+                <button
+                  onClick={() => startCheckout(ELITE_PRICE_ID, "elite")}
+                  disabled={!!upgrading}
+                  className="flex items-center gap-1.5 rounded-md border border-amber-500/40 px-3 py-1.5 text-xs font-medium text-amber-400 hover:bg-amber-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {upgrading === "elite" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                  Upgrade to Elite — €9.99/mo
+                </button>
+                <p className="text-[10px] text-muted-foreground">Founding member rates — locked forever</p>
+              </div>
             ) : (
               <div className="flex flex-col items-end gap-0.5">
-                <button className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground opacity-50 cursor-not-allowed">
+                <button
+                  onClick={openPortal}
+                  disabled={!!upgrading}
+                  className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                >
+                  {upgrading === "portal" && <Loader2 className="h-3 w-3 animate-spin" />}
                   Manage Subscription
                 </button>
-                <p className="text-xs text-muted-foreground">Billing portal coming soon</p>
               </div>
             )}
           </div>

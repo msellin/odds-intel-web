@@ -77,8 +77,8 @@ const faqItems = [
     a: "Closing Line Value (CLV) measures whether the odds you took were better than the final pre-match odds. It's the most reliable long-term indicator of profitable betting — and OddsIntel Elite tracks it for every bet automatically.",
   },
   {
-    q: "When does Pro billing start?",
-    a: "Pro billing activates at launch. Sign up now to lock in founding member pricing (€3.99/mo vs the regular €4.99/mo). Your rate is locked forever as long as you stay subscribed.",
+    q: "What are the founding member rates?",
+    a: "The first 500 Pro subscribers lock in €3.99/mo forever (vs the regular €4.99/mo). The first 200 Elite subscribers lock in €9.99/mo forever. Your rate never increases as long as you stay subscribed.",
   },
 ];
 
@@ -410,19 +410,15 @@ export default function LandingPage() {
                   </li>
                 ))}
               </ul>
-              <div className="mt-6 space-y-2">
+              <div className="mt-6">
                 <Button className="w-full bg-green-500 font-bold text-black hover:bg-green-400" nativeButton={false} render={<Link href="/signup" />}>
-                  Join as Founding Member
+                  Get Pro — €3.99/mo
                 </Button>
-                <p className="text-center text-[10px] text-muted-foreground">Free now · Pro billing activates at launch</p>
               </div>
             </div>
 
             {/* Elite */}
             <div className="relative flex flex-col rounded-xl border border-amber-500/30 bg-card/20 p-7">
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-amber-500/20 border border-amber-500/40 px-4 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-amber-400">
-                Coming Soon
-              </div>
               <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Elite</div>
               <div className="mt-2 flex items-baseline gap-1">
                 <span className="text-4xl font-bold text-foreground">€14.99</span>
@@ -450,22 +446,12 @@ export default function LandingPage() {
               </ul>
               <div className="mt-6">
                 <Button className="w-full border-amber-500/30 text-amber-400/80 hover:bg-amber-500/10" variant="outline" nativeButton={false} render={<Link href="/signup" />}>
-                  Join Waitlist
+                  Get Elite — €9.99/mo
                 </Button>
               </div>
             </div>
           </div>
 
-          {/* Founding member urgency — single source of truth */}
-          <div className="mt-6 rounded-lg border border-green-500/20 bg-green-500/[0.06] px-5 py-4 text-center">
-            <p className="text-sm text-foreground">
-              <span className="font-bold text-green-400">Founding Member pricing</span> — first 500 subscribers lock in reduced rates forever.
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Pro at €3.99/mo and Elite at €9.99/mo. Prices go up after launch. Spot {" "}
-              <span className="tabular-nums font-medium text-foreground">500</span> only.
-            </p>
-          </div>
         </div>
       </section>
 

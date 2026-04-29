@@ -137,7 +137,7 @@ export function TierGate({ requiredTier, children, featureName }: TierGateProps)
           </p>
 
           <a
-            href="/#pricing"
+            href="/profile"
             style={{
               display: "block",
               backgroundColor: "#22c55e",
@@ -154,7 +154,7 @@ export function TierGate({ requiredTier, children, featureName }: TierGateProps)
               boxSizing: "border-box",
             }}
           >
-            View Plans
+            Upgrade Now
           </a>
         </div>
       </div>
