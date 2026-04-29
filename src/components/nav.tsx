@@ -48,6 +48,9 @@ export function Nav() {
           <span className="font-mono text-lg font-black uppercase italic tracking-tight text-white">
             ODDS<span className="text-green-500">INTEL</span>
           </span>
+          <span className="rounded text-[10px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-400 px-1.5 py-0.5 border border-amber-500/30">
+            Beta
+          </span>
         </Link>
 
         {/* Desktop nav */}
