@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { Target, Info, Lock, TrendingUp } from "lucide-react";
+import { BetExplainButton } from "@/components/bet-explain-button";
 import {
   Select,
   SelectContent,
@@ -428,6 +429,7 @@ function ValueBetsEliteView({ bets }: { bets: LiveBet[] }) {
                       </TableHead>
                       <TableHead className="text-xs text-right">Stake</TableHead>
                       <TableHead className="text-xs text-center">Result</TableHead>
+                      <TableHead className="text-xs"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -459,11 +461,14 @@ function ValueBetsEliteView({ bets }: { bets: LiveBet[] }) {
                         <TableCell className="text-center">
                           <ResultBadge result={bet.result} />
                         </TableCell>
+                        <TableCell>
+                          <BetExplainButton betId={bet.id} />
+                        </TableCell>
                       </TableRow>
                     ))}
                     {filtered.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={10} className="py-8 text-center text-sm text-muted-foreground">
+                        <TableCell colSpan={11} className="py-8 text-center text-sm text-muted-foreground">
                           No value bets match the selected filters.
                         </TableCell>
                       </TableRow>
@@ -522,6 +527,8 @@ function ValueBetsEliteView({ bets }: { bets: LiveBet[] }) {
                     <p className="font-mono text-xs">{bet.stake.toFixed(1)}</p>
                   </div>
                 </div>
+                {/* BET-EXPLAIN: Elite-only "Why this pick?" */}
+                <BetExplainButton betId={bet.id} />
               </Card>
             ))}
             {filtered.length === 0 && (
