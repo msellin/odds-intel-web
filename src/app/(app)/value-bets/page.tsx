@@ -1,7 +1,7 @@
-import { redirect } from "next/navigation";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { getTodayBets } from "@/lib/engine-data";
 import { ValueBetsLive } from "@/components/value-bets-live";
+import { ValueBetsGate } from "@/components/value-bets-gate";
 
 // TODO F5: proper Elite tier gating needed here before paid launch.
 // Currently requires login only. Full fix: check profile.tier === 'elite'
@@ -12,8 +12,9 @@ export default async function ValueBetsPage() {
   const supabase = await createSupabaseServer();
   const { data: { user } } = await supabase.auth.getUser();
 
+  // Show gate for logged-out users — no redirect
   if (!user) {
-    redirect("/login");
+    return <ValueBetsGate />;
   }
 
   const bets = await getTodayBets();

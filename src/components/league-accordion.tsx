@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Info } from "lucide-react";
 import type { PublicMatch, LiveSnapshot } from "@/lib/engine-data";
 import { getCountryFlag } from "@/lib/country-flags";
 import { FavoriteButton } from "@/components/favorite-button";
@@ -185,6 +185,29 @@ export function LeagueAccordion({
       {/* Match rows */}
       {expanded && (
         <div className="divide-y divide-white/[0.04]">
+          {/* C-2: Odds column header with tooltip */}
+          <div className="flex items-center px-4 py-1.5 bg-muted/10">
+            <div className="w-5 shrink-0" />
+            <div className="w-[4.5rem] shrink-0" />
+            <div className="flex-1" />
+            <div className="ml-4 flex shrink-0 items-center gap-1">
+              <div className="flex w-44 items-center justify-center gap-1">
+                <span className="w-14 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">H</span>
+                <span className="w-14 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">X</span>
+                <span className="w-14 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">A</span>
+              </div>
+              <div className="group relative ml-1 w-4">
+                <Info className="size-3 cursor-help text-muted-foreground/25 transition-colors hover:text-muted-foreground/50" />
+                <div className="pointer-events-none absolute bottom-full right-0 z-50 mb-2 w-64 rounded-lg border border-border/60 bg-popover p-3 text-xs text-muted-foreground opacity-0 shadow-xl transition-opacity group-hover:opacity-100">
+                  <p className="mb-1.5 font-semibold text-foreground">Best available odds</p>
+                  <p className="mb-2"><strong className="text-foreground/80">H / X / A</strong> — Home win, Draw, Away win (decimal odds).</p>
+                  <p className="mb-1.5">These are the <strong className="text-foreground/80">highest odds available</strong> across all bookmakers we track. Green = best value option.</p>
+                  <p className="text-muted-foreground/70">Higher odds = better return per euro staked. 2.00 means you double your stake; 1.50 means 50% profit.</p>
+                </div>
+              </div>
+            </div>
+            <div className="ml-1 w-4 shrink-0" />
+          </div>
           {matches.map((match) => (
             <MatchRow
               key={match.id}

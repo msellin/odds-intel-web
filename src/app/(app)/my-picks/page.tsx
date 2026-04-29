@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Target,
@@ -65,8 +64,7 @@ interface Stats {
 }
 
 export default function MyPicksPage() {
-  const { user, loading: authLoading } = useAuth();
-  const router = useRouter();
+  const { user, loading: authLoading, openLoginModal } = useAuth();
   const [picks, setPicks] = useState<PickDisplay[]>([]);
   const [stats, setStats] = useState<Stats>({
     total: 0,
@@ -81,9 +79,9 @@ export default function MyPicksPage() {
 
   useEffect(() => {
     if (!authLoading && !user) {
-      router.push("/login");
+      openLoginModal();
     }
-  }, [user, authLoading, router]);
+  }, [user, authLoading, openLoginModal]);
 
   useEffect(() => {
     if (!user) return;

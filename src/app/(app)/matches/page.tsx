@@ -1,10 +1,10 @@
-import Link from "next/link";
 import { Suspense } from "react";
-import { CalendarDays, SearchX } from "lucide-react";
+import { CalendarDays, SearchX, Info } from "lucide-react";
 import { getPublicMatches, getLiveSnapshots } from "@/lib/engine-data";
 import { LeagueFilter } from "@/components/league-filter";
 import { MatchesClient } from "@/components/matches-client";
 import { DailyValueTeaser } from "@/components/daily-value-teaser";
+import { SignupBanner } from "@/components/signup-banner";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import type { PublicMatch, LiveSnapshot } from "@/lib/engine-data";
 
@@ -87,7 +87,7 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
           <h1 className="text-3xl font-black tracking-tight text-foreground">
             Today&apos;s Matches
           </h1>
-          <div className="mt-1 flex items-center gap-3">
+          <div className="mt-1 flex flex-wrap items-center gap-3">
             <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
               <CalendarDays className="size-3.5" />
               {formatDate()}
@@ -101,6 +101,13 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
                 {totalWithOdds} with odds
               </span>
             )}
+            {/* C-1: date tooltip */}
+            <span className="group relative flex items-center gap-1 cursor-default">
+              <Info className="size-3.5 text-muted-foreground/30 hover:text-muted-foreground/60 transition-colors" />
+              <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-56 -translate-x-1/2 rounded-lg border border-border/60 bg-popover p-2.5 text-xs text-muted-foreground opacity-0 shadow-xl transition-opacity group-hover:opacity-100">
+                Showing today&apos;s fixtures only. Date picker and match history are coming soon.
+              </span>
+            </span>
           </div>
         </div>
 
@@ -113,24 +120,7 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
       </div>
 
       {/* Sign-up banner */}
-      {!isAuthenticated && (
-        <div className="flex items-center justify-between rounded-lg border border-green-500/20 bg-green-500/[0.08] px-4 py-3">
-          <div className="space-y-0.5">
-            <span className="text-sm font-medium text-foreground/90">
-              Create a free account to unlock:
-            </span>
-            <p className="text-xs text-foreground/60">
-              Favorite teams, personal picks tracker, match notes, daily value bet teaser & more
-            </p>
-          </div>
-          <Link
-            href="/signup"
-            className="shrink-0 rounded-md bg-green-600 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-white transition-colors hover:bg-green-700"
-          >
-            Sign Up Free
-          </Link>
-        </div>
-      )}
+      {!isAuthenticated && <SignupBanner />}
 
       {/* Daily value bet teaser */}
       <DailyValueTeaser />

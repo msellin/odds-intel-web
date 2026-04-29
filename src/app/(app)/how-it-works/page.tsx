@@ -1,34 +1,79 @@
 import Link from "next/link";
-import { Check, Info, Zap, TrendingUp, BarChart3, Star } from "lucide-react";
+import { Check, Info, Zap, TrendingUp, BarChart3, Star, Database } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 
+// ─── Tier feature lists (sourced from TIER_ACCESS_MATRIX.md + ROADMAP.md) ───
+
 const FREE_FEATURES = [
-  "Today's matches from 30+ leagues",
-  "Live odds from 13 bookmakers side-by-side",
-  "Best available odds highlighted automatically",
+  "All fixtures from 30+ leagues — daily",
+  "Live scores (auto-refresh every minute)",
+  "Best odds from 2–3 bookmakers per match",
   "Model predictions: Home / Draw / Away for every match",
-  "Prediction confidence level (statistical probability)",
-  "Full track record — every prediction, every result",
-  "Star leagues to personalise your matches view",
-  "Personal picks tracker",
+  "Prediction confidence (statistical probability, 3 levels)",
+  "Full track record — every prediction, every result, no cherry-picking",
+  "Star leagues → My Matches personalised feed",
+  "Personal picks tracker (log & track your own predictions)",
+  "Match notes — private journal per match",
+  "Community sentiment voting (what the crowd thinks)",
+  "1 free value bet teaser per day",
 ];
 
 const PRO_FEATURES = [
   "Everything in Free",
-  "Value bets — where the model beats the bookmakers",
-  "Edge % shown per bet (how much the model outprices the market)",
-  "Daily value bet teaser (preview of today's best opportunities)",
-  "Advanced match-level signal details",
+  "Full odds comparison across 13 bookmakers",
+  "Pre-match odds movement timeline",
+  "Team form, H2H, goals stats, standings",
+  "AI injury & suspension alerts per match",
+  "Confirmed lineups + formation view",
+  "Directional model signal — Home lean / Away lean / Even (no raw %)",
+  "Full match history, not just today",
+  "Post-match stats: shots, possession, xG",
 ];
 
 const ELITE_FEATURES = [
   "Everything in Pro",
-  "Additional markets: Over/Under 2.5, BTTS, handicap lines",
-  "Odds movement alerts (when a line shifts significantly)",
-  "Higher-volume value bet feed",
-  "Priority support",
+  "Exact model probability % per outcome",
+  "Edge % — how much the model beats each bookmaker",
+  "Value bets list — every match where edge > threshold today",
+  "Closing line value (CLV) tracking — the gold standard for +EV betting",
+  "Natural language explanations: why the model likes this pick",
+  "Tips from top-performing bot once ROI is validated (launching Q3)",
+  "Early access to new signal groups and league coverage",
+];
+
+const SIGNAL_GROUPS = [
+  {
+    name: "Model",
+    count: 4,
+    desc: "Poisson regression, XGBoost, API-Football predictions, calibrated ensemble",
+  },
+  {
+    name: "Market",
+    count: 8,
+    desc: "Opening implied probabilities, bookmaker disagreement, overnight line moves, odds volatility, steam moves",
+  },
+  {
+    name: "Form & Strength",
+    count: 22,
+    desc: "ELO ratings, 10-match form PPG, form slope, venue splits, season goals, standings position, H2H records, rest days",
+  },
+  {
+    name: "News & Injuries",
+    count: 6,
+    desc: "Injury counts, players out, lineup confirmation status, AI news impact score (4× daily via Gemini)",
+  },
+  {
+    name: "Context",
+    count: 10,
+    desc: "Fixture importance, motivation asymmetry, referee tendencies (cards, home bias, over 2.5 rate), league meta stats",
+  },
+  {
+    name: "Live",
+    count: 8,
+    desc: "Score, minute, shots, xG, possession, live odds, red cards, goals (updated every 5 minutes during matches)",
+  },
 ];
 
 function FeatureRow({ text }: { text: string }) {
@@ -48,7 +93,7 @@ export default function HowItWorksPage() {
       <div className="space-y-2">
         <h1 className="text-3xl font-bold tracking-tight">How OddsIntel Works</h1>
         <p className="text-muted-foreground">
-          What the model does, what each tier unlocks, and why the free tier is already useful.
+          What the model does, what each tier unlocks, and why you can trust the track record.
         </p>
       </div>
 
@@ -59,25 +104,28 @@ export default function HowItWorksPage() {
           <h2 className="text-xl font-semibold">The Prediction Model</h2>
         </div>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          OddsIntel runs a statistical ensemble model — a blend of{" "}
-          <strong className="text-foreground/80">Poisson regression</strong> and{" "}
-          <strong className="text-foreground/80">XGBoost</strong> — trained on historical match data
-          from 30+ leagues. Every day at 05:30 UTC it processes available fixtures and outputs
-          a probability for each 1×2 outcome (Home win / Draw / Away win).
+          Every day at 05:30 UTC our pipeline runs for every match with enough data. It blends three
+          sources into a single <strong className="text-foreground/80">ensemble probability</strong>:
         </p>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          The model ingests: team form (last 5–10 matches), head-to-head history, current league
-          standings, home/away performance splits, and a Dixon-Coles correction to reduce the
-          well-known bias in Poisson models against low-scoring draws.
-        </p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border border-border/40 bg-card/40 p-4">
+            <p className="mb-1 text-xs font-bold uppercase tracking-wider text-muted-foreground">Poisson</p>
+            <p className="text-xs text-muted-foreground">Models goals scored and conceded as independent Poisson processes. Dixon-Coles correction reduces bias on low-scoring draws.</p>
+          </div>
+          <div className="rounded-xl border border-border/40 bg-card/40 p-4">
+            <p className="mb-1 text-xs font-bold uppercase tracking-wider text-muted-foreground">XGBoost</p>
+            <p className="text-xs text-muted-foreground">Gradient boosting on 36+ features — ELO, form, standings, H2H, rest days, injuries. Learns non-linear patterns Poisson misses.</p>
+          </div>
+          <div className="rounded-xl border border-border/40 bg-card/40 p-4">
+            <p className="mb-1 text-xs font-bold uppercase tracking-wider text-muted-foreground">API-Football</p>
+            <p className="text-xs text-muted-foreground">Third-party predictions used as a cross-check signal and fallback for leagues where our historical data is thinner.</p>
+          </div>
+        </div>
         <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3">
           <div className="flex items-start gap-2.5">
             <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
             <p className="text-xs text-muted-foreground">
-              <strong className="text-foreground/80">What confidence % means:</strong> When the model says "Home — 62%", it means
-              the algorithm believes the home team wins with 62% probability. This is purely statistical,
-              derived from the features above — it does <em>not</em> compare against bookmaker odds.
-              That comparison is what unlocks real betting value, and it&apos;s what Pro and Elite tiers add.
+              <strong className="text-foreground/80">What confidence % means:</strong> The algorithm&apos;s raw statistical probability for the most likely outcome. It does not compare against bookmaker odds — that comparison is what Pro and Elite add. Higher confidence matches have historically higher hit rates.
             </p>
           </div>
         </div>
@@ -85,43 +133,69 @@ export default function HowItWorksPage() {
 
       <Separator className="opacity-30" />
 
-      {/* Section 2: From prediction to value bet */}
+      {/* Section 2: 58 signals */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Database className="h-5 w-5 text-primary" />
+          <h2 className="text-xl font-semibold">58 Signals Per Match</h2>
+        </div>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          The model ingests up to 58 signals per match across 6 groups. More signals = higher data grade (A–D).
+          Grade A matches (European top leagues) have the most data; Grade D matches have only basic predictions.
+        </p>
+        <div className="space-y-2">
+          {SIGNAL_GROUPS.map((g) => (
+            <div key={g.name} className="flex items-start gap-4 rounded-xl border border-border/30 bg-card/30 px-4 py-3">
+              <div className="shrink-0 text-right">
+                <span className="font-mono text-lg font-bold text-foreground">{g.count}</span>
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-foreground">{g.name}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{g.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground/70">
+          Signals are collected throughout the day. Lineups (T-1h), injury updates (4× daily), and live data
+          (every 5 min) all update the picture before and during a match.
+        </p>
+      </section>
+
+      <Separator className="opacity-30" />
+
+      {/* Section 3: From prediction to value bet */}
       <section className="space-y-4">
         <div className="flex items-center gap-2">
           <TrendingUp className="h-5 w-5 text-primary" />
           <h2 className="text-xl font-semibold">From Prediction to Value Bet</h2>
         </div>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          A raw prediction ("Home is most likely") is what every stats site already shows.
-          The interesting question is: <strong className="text-foreground/80">what are the bookmakers pricing it at?</strong>
+          A prediction tells you who is most likely to win. A value bet tells you where the bookmakers have
+          underpriced that probability. These are different things.
         </p>
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-xl border border-border/50 bg-card/40 p-4">
-            <p className="mb-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">Step 1 — Model</p>
+            <p className="mb-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">Step 1 — Free tier</p>
             <p className="font-mono text-lg font-bold text-foreground">62%</p>
             <p className="mt-1 text-xs text-muted-foreground">Model says Home wins with 62% probability</p>
           </div>
           <div className="rounded-xl border border-border/50 bg-card/40 p-4">
-            <p className="mb-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">Step 2 — Market</p>
+            <p className="mb-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">Step 2 — Pro tier</p>
             <p className="font-mono text-lg font-bold text-foreground">1.85 odds</p>
-            <p className="mt-1 text-xs text-muted-foreground">Bookmaker implies 54% probability (100/1.85)</p>
+            <p className="mt-1 text-xs text-muted-foreground">Bookmaker implies 54% probability (1/1.85). You see the full spread across 13 bookmakers.</p>
           </div>
           <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
-            <p className="mb-1.5 text-xs font-bold uppercase tracking-wider text-emerald-400/70">Step 3 — Edge</p>
-            <p className="font-mono text-lg font-bold text-emerald-400">+8%</p>
-            <p className="mt-1 text-xs text-muted-foreground">Model beats market by 8 percentage points — a value bet</p>
+            <p className="mb-1.5 text-xs font-bold uppercase tracking-wider text-emerald-400/70">Step 3 — Elite tier</p>
+            <p className="font-mono text-lg font-bold text-emerald-400">+8% edge</p>
+            <p className="mt-1 text-xs text-muted-foreground">Model beats market by 8 pp — a value bet. Kelly stake calculated automatically.</p>
           </div>
         </div>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          Free users see Steps 1 (the prediction) and the Track Record of how accurate those predictions are.
-          Pro and Elite users see Step 3 — the edge — and only for matches where the model is confident
-          enough to be actionable.
-        </p>
       </section>
 
       <Separator className="opacity-30" />
 
-      {/* Section 3: Tier comparison */}
+      {/* Section 4: Tier comparison */}
       <section className="space-y-5">
         <div className="flex items-center gap-2">
           <Star className="h-5 w-5 text-primary" />
@@ -134,6 +208,7 @@ export default function HowItWorksPage() {
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Free</CardTitle>
               <p className="text-2xl font-bold">€0<span className="text-sm font-normal text-muted-foreground">/mo</span></p>
+              <p className="text-xs text-muted-foreground">Curious about the product</p>
             </CardHeader>
             <CardContent>
               <ul className="space-y-2">
@@ -143,15 +218,16 @@ export default function HowItWorksPage() {
           </Card>
 
           {/* Pro */}
-          <Card className="border-emerald-500/30 bg-emerald-500/5">
+          <Card className="border-blue-500/30 bg-blue-500/5">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base">Pro</CardTitle>
-                <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px]">
+                <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-[10px]">
                   Launching soon
                 </Badge>
               </div>
               <p className="text-2xl font-bold">€4.99<span className="text-sm font-normal text-muted-foreground">/mo</span></p>
+              <p className="text-xs text-muted-foreground">Does own research, wants better data</p>
             </CardHeader>
             <CardContent>
               <ul className="space-y-2">
@@ -161,15 +237,16 @@ export default function HowItWorksPage() {
           </Card>
 
           {/* Elite */}
-          <Card className="border-border/50 bg-card/80">
+          <Card className="border-emerald-500/30 bg-emerald-500/5">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base">Elite</CardTitle>
-                <Badge variant="secondary" className="text-[10px]">
+                <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px]">
                   Launching soon
                 </Badge>
               </div>
               <p className="text-2xl font-bold">€14.99<span className="text-sm font-normal text-muted-foreground">/mo</span></p>
+              <p className="text-xs text-muted-foreground">Serious bettor, wants model-backed picks</p>
             </CardHeader>
             <CardContent>
               <ul className="space-y-2">
@@ -178,11 +255,15 @@ export default function HowItWorksPage() {
             </CardContent>
           </Card>
         </div>
+
+        <div className="rounded-lg border border-border/30 bg-card/30 px-4 py-3 text-xs text-muted-foreground">
+          <strong className="text-foreground/80">Founding member rates</strong> — first 500 Pro subscribers lock in €3.99/mo forever. First 200 Elite subscribers lock in €9.99/mo forever. These rates will not be offered again after the cohorts fill.
+        </div>
       </section>
 
       <Separator className="opacity-30" />
 
-      {/* Section 4: Common questions */}
+      {/* Section 5: Common questions */}
       <section className="space-y-5">
         <div className="flex items-center gap-2">
           <Zap className="h-5 w-5 text-primary" />
@@ -193,23 +274,31 @@ export default function HowItWorksPage() {
           {[
             {
               q: "Is the free tier actually useful?",
-              a: "Yes. You get the full odds comparison across 13 bookmakers, the model's daily predictions, and a complete transparent track record. Most sports bettors don't have access to this kind of odds aggregation without paying for a dedicated tool.",
+              a: "Yes. You get predictions for 30+ leagues daily, a picks tracker to build your own record, and our full transparent track record. Most bettors have never had access to this kind of data without paying for a professional tool.",
             },
             {
               q: "What's the difference between a prediction and a value bet?",
-              a: "A prediction tells you who the model thinks will win. A value bet tells you where the model disagrees with the bookmakers enough that betting is statistically profitable in the long run. You can predict correctly and still lose money if you bet at bad odds — value betting solves that.",
+              a: "A prediction says 'Home is most likely to win at 62%'. A value bet says 'Home is 62% likely but the bookmakers are only pricing it at 54%, so you have an 8% edge'. You can predict correctly and still lose money if you consistently bet at bad odds. Value betting solves that.",
             },
             {
-              q: "How reliable are the Track Record numbers?",
-              a: "Every settled prediction is logged automatically — no manual curation, no removing losses. The 'Strong (60%+)' filter shows predictions the model was most confident about; historically these have higher hit rates. You can verify everything in the table.",
+              q: "What does edge % mean?",
+              a: "Edge = model probability minus bookmaker's implied probability. +8% means our model thinks the true probability is 8 percentage points higher than what the odds imply. Over a large sample, consistently finding positive edge is what produces profitable betting.",
+            },
+            {
+              q: "How reliable are the track record numbers?",
+              a: "Every settled prediction is logged automatically when the pipeline runs — no manual curation, no removing losses. The 'Strong (60%+)' filter shows predictions the model was most confident about. You can verify every row in the table.",
             },
             {
               q: "What leagues are covered?",
-              a: "30+ leagues including Premier League, La Liga, Bundesliga, Serie A, Ligue 1, Championship, Eredivisie, Primeira Liga, Champions League and more. Coverage expands as the API data improves.",
+              a: "30+ leagues. Premier League, La Liga, Bundesliga, Serie A, Ligue 1, Championship, Eredivisie, Primeira Liga, Scottish Premiership, Champions League, and more. Grade A data (best signals) is available for European top leagues. Global leagues have Grade B–D coverage.",
             },
             {
               q: "When are predictions published?",
-              a: "The pipeline runs daily at 05:30 UTC. Predictions for the day's fixtures are available by 06:00 UTC.",
+              a: "The pipeline runs at 05:30 UTC. Predictions are available by 06:00 UTC. Injury and lineup signals update throughout the day (4× news scans, lineups at T-1h).",
+            },
+            {
+              q: "When does Elite launch?",
+              a: "Elite launches once 60+ bets have settled and we can show validated ROI. We're paper-trading now — the track record page shows model accuracy. Value bets are visible to signed-in users already as we build toward the paid launch.",
             },
           ].map(({ q, a }) => (
             <div key={q} className="rounded-xl border border-border/40 bg-card/40 px-5 py-4">
@@ -227,13 +316,13 @@ export default function HowItWorksPage() {
         <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
           <Link
             href="/signup"
-            className="rounded-md bg-emerald-600 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-700 transition-colors"
+            className="rounded-md bg-emerald-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700"
           >
             Start Free
           </Link>
           <Link
             href="/track-record"
-            className="rounded-md border border-border px-5 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            className="rounded-md border border-border px-5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
             View Track Record
           </Link>

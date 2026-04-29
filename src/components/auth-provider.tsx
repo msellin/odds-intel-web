@@ -33,6 +33,9 @@ interface AuthContextValue {
   loading: boolean;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  loginModalOpen: boolean;
+  openLoginModal: () => void;
+  closeLoginModal: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -42,13 +45,20 @@ const AuthContext = createContext<AuthContextValue>({
   loading: true,
   signOut: async () => {},
   refreshProfile: async () => {},
+  loginModalOpen: false,
+  openLoginModal: () => {},
+  closeLoginModal: () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loginModalOpen, setLoginModalOpen] = useState(false);
   const supabase = createSupabaseBrowser();
+
+  const openLoginModal = useCallback(() => setLoginModalOpen(true), []);
+  const closeLoginModal = useCallback(() => setLoginModalOpen(false), []);
 
   const fetchProfile = useCallback(
     async (userId: string) => {
@@ -118,6 +128,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         signOut,
         refreshProfile,
+        loginModalOpen,
+        openLoginModal,
+        closeLoginModal,
       }}
     >
       {children}
