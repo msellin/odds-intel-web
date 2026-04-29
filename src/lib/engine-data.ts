@@ -417,25 +417,25 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
   type PublicMatchRow = Pick<MatchRow, "id" | "date" | "status" | "home_team" | "away_team" | "league">;
   const matchIds = (matches as PublicMatchRow[]).map((m) => m.id);
 
-  // Step 2: Fetch 1X2 odds in batches with a high row limit.
-  // odds_snapshots grows across pipeline runs (every 2h × 13 bookmakers × 3 selections
-  // = ~350 rows/match/day). Default Supabase limit of 1000 rows is far too low.
-  const oddsByMatch: Record<string, { home: number[]; draw: number[]; away: number[] }> = {};
+  // Step 2: Fetch best 1X2 odds via RPC (aggregated server-side).
+  // Using odds_snapshots directly hits Supabase's 1000-row PostgREST cap —
+  // the table accumulates ~38 rows/match/run × 6 runs/day = 228 rows/match.
+  // 80 matches × 228 rows = 18,240 rows per batch, far above the cap.
+  // The RPC returns MAX(odds) GROUP BY (match_id, selection) = 3 rows/match.
+  const oddsByMatch: Record<string, { home: number; draw: number; away: number }> = {};
   const batchSize = 80;
   for (let i = 0; i < matchIds.length; i += batchSize) {
     const batch = matchIds.slice(i, i + batchSize);
-    const { data: oddsRows } = await supabase
-      .from("odds_snapshots")
-      .select("match_id, selection, odds")
-      .in("match_id", batch)
-      .in("market", ["1x2", "1X2"])
-      .limit(100000);
-    for (const o of (oddsRows || []) as { match_id: string; selection: string; odds: number }[]) {
-      if (!oddsByMatch[o.match_id]) oddsByMatch[o.match_id] = { home: [], draw: [], away: [] };
-      const num = Number(o.odds);
-      if (o.selection === "home") oddsByMatch[o.match_id].home.push(num);
-      if (o.selection === "draw") oddsByMatch[o.match_id].draw.push(num);
-      if (o.selection === "away") oddsByMatch[o.match_id].away.push(num);
+    const { data: oddsRows } = await supabase.rpc("get_best_match_odds", {
+      p_match_ids: batch,
+      p_since: todayStart.toISOString(),
+    });
+    for (const o of (oddsRows || []) as { match_id: string; selection: string; best_odds: number }[]) {
+      if (!oddsByMatch[o.match_id]) oddsByMatch[o.match_id] = { home: 0, draw: 0, away: 0 };
+      const num = Number(o.best_odds);
+      if (o.selection === "home") oddsByMatch[o.match_id].home = num;
+      if (o.selection === "draw") oddsByMatch[o.match_id].draw = num;
+      if (o.selection === "away") oddsByMatch[o.match_id].away = num;
     }
   }
 
@@ -461,9 +461,9 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
       tier: league?.tier || 1,
       status: m.status,
       hasOdds: matchIdsWithOdds.has(m.id),
-      bestHome: odds ? Math.max(0, ...odds.home) : 0,
-      bestDraw: odds ? Math.max(0, ...odds.draw) : 0,
-      bestAway: odds ? Math.max(0, ...odds.away) : 0,
+      bestHome: odds?.home ?? 0,
+      bestDraw: odds?.draw ?? 0,
+      bestAway: odds?.away ?? 0,
       signalCount: sig?.signalCount ?? 0,
       dataGrade: sig?.dataGrade ?? null,
       pulse: sig?.pulse ?? "routine",
