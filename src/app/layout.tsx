@@ -19,7 +19,7 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "OddsIntel — AI Football Predictions & Value Bets",
   description:
-    "Free AI football predictions, value bets and odds comparison. Track injuries, H2H records and standings across 400+ daily fixtures. Spot your betting edge before kickoff.",
+    "Free AI football predictions and value bets across 1,200+ leagues. Compare odds, track injuries, H2H records and standings — all on one screen before kickoff.",
   keywords: [
     "AI football predictions",
     "value bets today",
@@ -38,7 +38,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "OddsIntel — AI Football Predictions & Value Bets",
     description:
-      "Free AI football predictions, value bets and odds comparison. Track injuries, H2H records and standings across 400+ daily fixtures. Spot your betting edge before kickoff.",
+      "Free AI football predictions and value bets across 1,200+ leagues. Compare odds, track injuries, H2H records and standings — all on one screen before kickoff.",
     url: "https://oddsintel.app",
     siteName: "OddsIntel",
     locale: "en_US",
@@ -48,7 +48,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "OddsIntel — AI Football Predictions & Value Bets",
     description:
-      "Free AI football predictions, value bets and odds comparison. Track injuries, H2H records and standings across 400+ daily fixtures. Spot your betting edge before kickoff.",
+      "Free AI football predictions and value bets across 1,200+ leagues. Compare odds, track injuries, H2H records and standings — all on one screen before kickoff.",
   },
   alternates: {
     canonical: "https://oddsintel.app",
