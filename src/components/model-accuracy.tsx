@@ -18,9 +18,11 @@ import { LayeredSimulation } from "@/components/layered-simulation";
 const INITIAL_SHOW = 50;
 
 const CONFIDENCE_LEVELS = [
-  { value: "all", label: "All picks", min: 0 },
-  { value: "medium", label: "Confident (50%+)", min: 0.5 },
-  { value: "high", label: "Strong (60%+)", min: 0.6 },
+  { value: "all",    label: "All picks",          min: 0    },
+  { value: "40",     label: "Likely (40%+)",       min: 0.40 },
+  { value: "medium", label: "Confident (50%+)",    min: 0.50 },
+  { value: "high",   label: "Strong (60%+)",       min: 0.60 },
+  { value: "vhigh",  label: "Very strong (70%+)",  min: 0.70 },
 ];
 
 interface Props {
@@ -282,6 +284,9 @@ export function ModelAccuracy({ data }: Props) {
             </div>
           ) : (
             <>
+              {/* Layered simulation — shown before the table so the tier story lands first */}
+              <LayeredSimulation rows={filtered} />
+
               {/* Table */}
               <Card className="overflow-hidden border-border/50 bg-card/80">
                 <div className="overflow-x-auto">
@@ -421,8 +426,6 @@ export function ModelAccuracy({ data }: Props) {
                 </Link>
               </div>
 
-              {/* Layered simulation — uses the same filtered rows so numbers always match */}
-              <LayeredSimulation rows={filtered} />
             </>
           )}
         </>
