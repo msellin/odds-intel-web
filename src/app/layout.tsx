@@ -17,16 +17,28 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "OddsIntel — Sports Betting Intelligence",
+  title: "OddsIntel — AI Football Predictions & Odds Comparison",
   description:
-    "All your pre-match intelligence. One screen. AI-powered value detection, real-time odds, injuries, lineups, and transparent track record.",
+    "Free AI football predictions & value bets. Compare odds from 13 bookmakers, track injuries, H2H and standings. Spot your betting edge before kickoff.",
+  keywords: [
+    "AI football predictions",
+    "value bets today",
+    "odds comparison",
+    "football betting tips",
+    "betting tips today",
+    "football predictions today",
+    "best odds today",
+    "football injury news",
+    "match predictions with odds",
+    "free betting tips",
+  ],
   verification: {
     google: "ix-rQvuyTbEjWYRefDYn7o-yi2S_8oUB7ahHhI56W38",
   },
   openGraph: {
-    title: "OddsIntel — Sports Betting Intelligence",
+    title: "OddsIntel — AI Football Predictions & Odds Comparison",
     description:
-      "467 daily fixtures. 13 bookmakers. AI injury alerts. H2H, form, standings — all on one screen.",
+      "Free AI football predictions & value bets. Compare odds from 13 bookmakers, track injuries, H2H and standings. Spot your betting edge before kickoff.",
     url: "https://oddsintel.app",
     siteName: "OddsIntel",
     locale: "en_US",
@@ -34,9 +46,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "OddsIntel — Sports Betting Intelligence",
+    title: "OddsIntel — AI Football Predictions & Odds Comparison",
     description:
-      "467 daily fixtures. 13 bookmakers. AI injury alerts. H2H, form, standings — all on one screen.",
+      "Free AI football predictions & value bets. Compare odds from 13 bookmakers, track injuries, H2H and standings. Spot your betting edge before kickoff.",
   },
   alternates: {
     canonical: "https://oddsintel.app",
