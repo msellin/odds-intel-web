@@ -23,6 +23,7 @@ import { MatchScoreDisplay } from "@/components/match-score-display";
 import { MatchSignalSummary } from "@/components/match-signal-summary";
 import { SignalAccordion } from "@/components/signal-accordion";
 import { LiveOddsChart } from "@/components/live-odds-chart";
+import { SignalDelta } from "@/components/signal-delta";
 import { MatchPickButton } from "@/components/match-pick-button";
 import { MatchNotes } from "@/components/match-notes";
 import { CommunityVote } from "@/components/community-vote";
@@ -282,6 +283,16 @@ export default async function MatchDetailPage({
         hasStats={publicMatch.status === "finished"}
         isAuthenticated={isAuthenticated}
       />
+
+      {/* Signal Delta (SUX-9) — "what changed since last visit" — Pro only, client-side localStorage */}
+      {isPro && matchSignals.length > 0 && (
+        <SignalDelta
+          matchId={publicMatch.id}
+          signals={matchSignals}
+          homeTeam={publicMatch.homeTeam}
+          awayTeam={publicMatch.awayTeam}
+        />
+      )}
 
       {/* Intelligence Summary (SUX-4/7/10) — free gets post-match reveal or teaser, pro/elite get full */}
       {matchSignals.length > 0 && (
