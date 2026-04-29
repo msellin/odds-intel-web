@@ -10,10 +10,9 @@ import { FavoriteButton } from "@/components/favorite-button";
 
 function formatKickoff(iso: string): string {
   const d = new Date(iso);
-  return d.toLocaleTimeString("en-GB", {
+  return d.toLocaleTimeString(undefined, {
     hour: "2-digit",
     minute: "2-digit",
-    timeZone: "Europe/Tallinn",
   });
 }
 
@@ -189,15 +188,15 @@ function MatchRow({
             <TeamLogo logo={match.logoHome} name={match.homeTeam} />
           </div>
           {isLive ? (
-            <span className="shrink-0 font-mono text-sm font-bold tabular-nums text-foreground">
+            <span className="w-10 shrink-0 text-center font-mono text-sm font-bold tabular-nums text-foreground">
               {liveSnapshot!.score_home}&thinsp;–&thinsp;{liveSnapshot!.score_away}
             </span>
           ) : isFinished && match.score_home != null ? (
-            <span className="shrink-0 font-mono text-sm font-bold tabular-nums text-foreground">
+            <span className="w-10 shrink-0 text-center font-mono text-sm font-bold tabular-nums text-foreground">
               {match.score_home}&thinsp;–&thinsp;{match.score_away}
             </span>
           ) : (
-            <span className="shrink-0 text-[10px] font-bold text-muted-foreground/60">
+            <span className="w-10 shrink-0 text-center text-[10px] font-bold text-muted-foreground/60">
               VS
             </span>
           )}

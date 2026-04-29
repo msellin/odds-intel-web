@@ -7,7 +7,7 @@ import { Separator } from "@/components/ui/separator";
 // ─── Tier feature lists (sourced from TIER_ACCESS_MATRIX.md + ROADMAP.md) ───
 
 const FREE_FEATURES = [
-  "All fixtures from 30+ leagues — daily",
+  "All fixtures from 280+ leagues — daily",
   "Live scores (auto-refresh every minute)",
   "Best odds from 2–3 bookmakers per match",
   "Model predictions: Home / Draw / Away for every match",
@@ -146,7 +146,7 @@ export default function HowItWorksPage() {
         <div className="space-y-2">
           {SIGNAL_GROUPS.map((g) => (
             <div key={g.name} className="flex items-start gap-4 rounded-xl border border-border/30 bg-card/30 px-4 py-3">
-              <div className="shrink-0 text-right">
+              <div className="w-8 shrink-0 text-right">
                 <span className="font-mono text-lg font-bold text-foreground">{g.count}</span>
               </div>
               <div>
@@ -274,7 +274,7 @@ export default function HowItWorksPage() {
           {[
             {
               q: "Is the free tier actually useful?",
-              a: "Yes. You get predictions for 30+ leagues daily, a picks tracker to build your own record, and our full transparent track record. Most bettors have never had access to this kind of data without paying for a professional tool.",
+              a: "Yes. You get predictions for 280+ leagues daily, a picks tracker to build your own record, and our full transparent track record. Most bettors have never had access to this kind of data without paying for a professional tool.",
             },
             {
               q: "What's the difference between a prediction and a value bet?",
@@ -290,7 +290,7 @@ export default function HowItWorksPage() {
             },
             {
               q: "What leagues are covered?",
-              a: "30+ leagues. Premier League, La Liga, Bundesliga, Serie A, Ligue 1, Championship, Eredivisie, Primeira Liga, Scottish Premiership, Champions League, and more. Grade A data (best signals) is available for European top leagues. Global leagues have Grade B–D coverage.",
+              a: "280+ leagues worldwide. Premier League, La Liga, Bundesliga, Serie A, Ligue 1, Championship, Eredivisie, Primeira Liga, Scottish Premiership, Champions League, and many more. Grade A data (best signals) is available for European top leagues. Leagues with less history have Grade B–D coverage.",
             },
             {
               q: "When are predictions published?",

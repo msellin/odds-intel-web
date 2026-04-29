@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Star } from "lucide-react";
+import { Star, Search, X } from "lucide-react";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
 import { useAuth } from "@/components/auth-provider";
 import type { PublicMatch, LiveSnapshot } from "@/lib/engine-data";
@@ -19,7 +19,8 @@ type FilterTab = "all" | "odds" | "favorites";
 export function MatchesClient({ sortedGroups, initialSnapshots, isPro }: Props) {
   const [snapshots, setSnapshots] = useState<Record<string, LiveSnapshot>>(initialSnapshots);
   const [statusTab, setStatusTab] = useState<StatusTab>("all");
-  const [filterTab, setFilterTab] = useState<FilterTab>("all");
+  const [filterTab, setFilterTab] = useState<FilterTab>("odds");
+  const [leagueSearch, setLeagueSearch] = useState("");
   const { user, profile } = useAuth();
 
   // Stable list of live match IDs
@@ -62,16 +63,23 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro }: Props) 
 
   const favoriteLeagues = profile?.preferred_leagues ?? [];
 
-  // Status counts
+  // Status counts (from all groups, unaffected by search)
   const allMatches = useMemo(() => sortedGroups.flatMap(([, ms]) => ms), [sortedGroups]);
   const liveCount = useMemo(() => allMatches.filter((m) => m.status === "live").length, [allMatches]);
   const finishedCount = useMemo(() => allMatches.filter((m) => m.status === "finished").length, [allMatches]);
   const upcomingCount = useMemo(() => allMatches.filter((m) => m.status !== "live" && m.status !== "finished").length, [allMatches]);
 
-  // Filter by status tab first
+  // Client-side league search filter
+  const searchFiltered = useMemo(() => {
+    if (!leagueSearch.trim()) return sortedGroups;
+    const lower = leagueSearch.toLowerCase();
+    return sortedGroups.filter(([league]) => league.toLowerCase().includes(lower));
+  }, [sortedGroups, leagueSearch]);
+
+  // Filter by status tab
   const statusFiltered = useMemo(() => {
-    if (statusTab === "all") return sortedGroups;
-    return sortedGroups
+    if (statusTab === "all") return searchFiltered;
+    return searchFiltered
       .map(([league, matches]) => {
         const filtered = matches.filter((m) => {
           if (statusTab === "live") return m.status === "live";
@@ -82,7 +90,7 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro }: Props) 
         return [league, filtered] as [string, PublicMatch[]];
       })
       .filter(([, ms]) => ms.length > 0);
-  }, [sortedGroups, statusTab]);
+  }, [searchFiltered, statusTab]);
 
   // Then filter by odds/favorites
   const filteredGroups = useMemo(() => {
@@ -117,68 +125,91 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro }: Props) 
 
   return (
     <div className="space-y-3">
-      {/* ML-5: Status tabs — primary navigation */}
-      <div className="flex rounded-lg border border-white/[0.06] bg-muted/20 p-1 w-fit">
-        <button
-          onClick={() => setStatusTab("all")}
-          className={`rounded-md px-4 py-1.5 text-xs font-bold transition-all ${
-            statusTab === "all"
-              ? "bg-muted text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          All
-        </button>
-        <button
-          onClick={() => setStatusTab("live")}
-          className={`flex items-center gap-1.5 rounded-md px-4 py-1.5 text-xs font-bold transition-all ${
-            statusTab === "live"
-              ? "bg-muted text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          {liveCount > 0 && (
-            <span className="size-1.5 animate-pulse rounded-full bg-green-400" />
+      {/* Top row: status tabs + league search */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        {/* ML-5: Status tabs — primary navigation */}
+        <div className="flex rounded-lg border border-white/[0.06] bg-muted/20 p-1 w-fit">
+          <button
+            onClick={() => setStatusTab("all")}
+            className={`rounded-md px-4 py-1.5 text-xs font-bold transition-all ${
+              statusTab === "all"
+                ? "bg-muted text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            All
+          </button>
+          <button
+            onClick={() => setStatusTab("live")}
+            className={`flex items-center gap-1.5 rounded-md px-4 py-1.5 text-xs font-bold transition-all ${
+              statusTab === "live"
+                ? "bg-muted text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {liveCount > 0 && (
+              <span className="size-1.5 animate-pulse rounded-full bg-green-400" />
+            )}
+            Live
+            {liveCount > 0 && (
+              <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                statusTab === "live" ? "bg-green-500/20 text-green-400" : "bg-green-500/10 text-green-500/70"
+              }`}>
+                {liveCount}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setStatusTab("upcoming")}
+            className={`rounded-md px-4 py-1.5 text-xs font-bold transition-all ${
+              statusTab === "upcoming"
+                ? "bg-muted text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Upcoming
+            {upcomingCount > 0 && statusTab !== "upcoming" && (
+              <span className="ml-1.5 rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground/60">
+                {upcomingCount}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setStatusTab("finished")}
+            className={`rounded-md px-4 py-1.5 text-xs font-bold transition-all ${
+              statusTab === "finished"
+                ? "bg-muted text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Finished
+            {finishedCount > 0 && statusTab !== "finished" && (
+              <span className="ml-1.5 rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground/60">
+                {finishedCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Client-side league search */}
+        <div className="relative w-full sm:w-56">
+          <Search className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/50" />
+          <input
+            type="text"
+            value={leagueSearch}
+            onChange={(e) => setLeagueSearch(e.target.value)}
+            placeholder="Filter by league..."
+            className="w-full rounded-lg border border-white/[0.06] bg-muted/20 py-1.5 pl-9 pr-8 text-xs text-foreground placeholder:text-muted-foreground/50 focus:border-green-500/40 focus:outline-none transition-colors"
+          />
+          {leagueSearch && (
+            <button
+              onClick={() => setLeagueSearch("")}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+            >
+              <X className="size-3.5" />
+            </button>
           )}
-          Live
-          {liveCount > 0 && (
-            <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-              statusTab === "live" ? "bg-green-500/20 text-green-400" : "bg-green-500/10 text-green-500/70"
-            }`}>
-              {liveCount}
-            </span>
-          )}
-        </button>
-        <button
-          onClick={() => setStatusTab("upcoming")}
-          className={`rounded-md px-4 py-1.5 text-xs font-bold transition-all ${
-            statusTab === "upcoming"
-              ? "bg-muted text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Upcoming
-          {upcomingCount > 0 && statusTab !== "upcoming" && (
-            <span className="ml-1.5 rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground/60">
-              {upcomingCount}
-            </span>
-          )}
-        </button>
-        <button
-          onClick={() => setStatusTab("finished")}
-          className={`rounded-md px-4 py-1.5 text-xs font-bold transition-all ${
-            statusTab === "finished"
-              ? "bg-muted text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Finished
-          {finishedCount > 0 && statusTab !== "finished" && (
-            <span className="ml-1.5 rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground/60">
-              {finishedCount}
-            </span>
-          )}
-        </button>
+        </div>
       </div>
 
       {/* Secondary filter row — odds / my leagues */}
@@ -237,10 +268,22 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro }: Props) 
         </div>
       )}
 
-      {statusTab !== "all" && filteredGroups.length === 0 && filterTab === "all" && (
+      {statusTab !== "all" && filteredGroups.length === 0 && filterTab !== "favorites" && (
         <div className="rounded-xl border border-white/[0.06] bg-card/40 py-8 text-center">
           <p className="text-sm text-muted-foreground">
-            {statusTab === "live" ? "No live matches right now." : statusTab === "finished" ? "No finished matches yet today." : "No upcoming matches."}
+            {statusTab === "live"
+              ? "No live matches right now."
+              : statusTab === "finished"
+              ? "No finished matches yet today."
+              : "No upcoming matches."}
+          </p>
+        </div>
+      )}
+
+      {leagueSearch && filteredGroups.length === 0 && (
+        <div className="rounded-xl border border-white/[0.06] bg-card/40 py-8 text-center">
+          <p className="text-sm text-muted-foreground">
+            No leagues matching &ldquo;{leagueSearch}&rdquo;.
           </p>
         </div>
       )}
