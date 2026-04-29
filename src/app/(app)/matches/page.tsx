@@ -32,6 +32,19 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
   } = await supabase.auth.getUser();
   const isAuthenticated = !!user;
 
+  let isPro = false;
+  if (user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("tier, is_superadmin")
+      .eq("id", user.id)
+      .single();
+    if (profile) {
+      const isElite = profile.is_superadmin || profile.tier === "elite";
+      isPro = isElite || profile.tier === "pro";
+    }
+  }
+
   const leagueNames = [...new Set(allMatches.map((m) => m.league))];
   const allLeagues = leagueNames.map((name) => ({ name, tier: 1 }));
 
@@ -147,6 +160,7 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
       <MatchesClient
         sortedGroups={sortedGroups}
         initialSnapshots={initialSnapshots}
+        isPro={isPro}
       />
     </div>
   );

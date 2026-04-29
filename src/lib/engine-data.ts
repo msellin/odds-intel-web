@@ -61,8 +61,9 @@ interface MatchRow {
   score_away: number | null;
   venue_name?: string | null;
   referee?: string | null;
-  home_team: { id: string; name: string; country: string }[] | { id: string; name: string; country: string } | null;
-  away_team: { id: string; name: string; country: string }[] | { id: string; name: string; country: string } | null;
+  af_prediction?: Record<string, unknown> | null;
+  home_team: { id: string; name: string; country: string; logo_url?: string | null }[] | { id: string; name: string; country: string; logo_url?: string | null } | null;
+  away_team: { id: string; name: string; country: string; logo_url?: string | null }[] | { id: string; name: string; country: string; logo_url?: string | null } | null;
   league: { id: string; name: string; country: string; tier: number }[] | { id: string; name: string; country: string; tier: number } | null;
 }
 
@@ -95,6 +96,18 @@ export interface PublicMatch {
   bestHome: number;
   bestDraw: number;
   bestAway: number;
+  // ML-1: Team logos (null until fixture pipeline backfills logo_url)
+  logoHome: string | null;
+  logoAway: string | null;
+  // ML-6: Predicted score from af_prediction JSONB (null if no AF prediction)
+  predictedHome: number | null;
+  predictedAway: number | null;
+  // ML-7: Odds movement vs ~24h ago (null if no prev snapshot)
+  moveHome: "up" | "down" | null;
+  moveDraw: "up" | "down" | null;
+  moveAway: "up" | "down" | null;
+  // ML-8: Bookmaker count
+  bookmakerCount: number;
   // Signal intelligence (SUX-1/2/3) — populated by getPublicMatches(), omitted on detail
   signalCount: number;
   dataGrade: "A" | "B" | "D" | null;
@@ -402,9 +415,9 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
   const { data: matches, error } = await supabase
     .from("matches")
     .select(
-      `id, date, status,
-       home_team:home_team_id(id, name, country),
-       away_team:away_team_id(id, name, country),
+      `id, date, status, af_prediction,
+       home_team:home_team_id(id, name, country, logo_url),
+       away_team:away_team_id(id, name, country, logo_url),
        league:league_id(id, name, country, tier)`
     )
     .gte("date", todayStart.toISOString())
@@ -414,7 +427,7 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
 
   if (error || !matches || matches.length === 0) return [];
 
-  type PublicMatchRow = Pick<MatchRow, "id" | "date" | "status" | "home_team" | "away_team" | "league">;
+  type PublicMatchRow = Pick<MatchRow, "id" | "date" | "status" | "af_prediction" | "home_team" | "away_team" | "league">;
   const matchIds = (matches as PublicMatchRow[]).map((m) => m.id);
 
   // Step 2: Fetch best 1X2 odds via RPC (aggregated server-side).
@@ -422,7 +435,12 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
   // the table accumulates ~38 rows/match/run × 6 runs/day = 228 rows/match.
   // 80 matches × 228 rows = 18,240 rows per batch, far above the cap.
   // The RPC returns MAX(odds) GROUP BY (match_id, selection) = 3 rows/match.
-  const oddsByMatch: Record<string, { home: number; draw: number; away: number }> = {};
+  // Also returns bookmaker_count (ML-8) and prev_best_odds for movement arrows (ML-7).
+  const oddsByMatch: Record<string, {
+    home: number; draw: number; away: number;
+    bookmakerCount: number;
+    prevHome: number | null; prevDraw: number | null; prevAway: number | null;
+  }> = {};
   const batchSize = 80;
   for (let i = 0; i < matchIds.length; i += batchSize) {
     const batch = matchIds.slice(i, i + batchSize);
@@ -430,12 +448,21 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
       p_match_ids: batch,
       p_since: todayStart.toISOString(),
     });
-    for (const o of (oddsRows || []) as { match_id: string; selection: string; best_odds: number }[]) {
-      if (!oddsByMatch[o.match_id]) oddsByMatch[o.match_id] = { home: 0, draw: 0, away: 0 };
+    for (const o of (oddsRows || []) as {
+      match_id: string; selection: string; best_odds: number;
+      bookmaker_count: number; prev_best_odds: number | null;
+    }[]) {
+      if (!oddsByMatch[o.match_id]) {
+        oddsByMatch[o.match_id] = { home: 0, draw: 0, away: 0, bookmakerCount: 0, prevHome: null, prevDraw: null, prevAway: null };
+      }
       const num = Number(o.best_odds);
-      if (o.selection === "home") oddsByMatch[o.match_id].home = num;
-      if (o.selection === "draw") oddsByMatch[o.match_id].draw = num;
-      if (o.selection === "away") oddsByMatch[o.match_id].away = num;
+      const prev = o.prev_best_odds != null ? Number(o.prev_best_odds) : null;
+      const bk = o.bookmaker_count ?? 0;
+      if (o.selection === "home") { oddsByMatch[o.match_id].home = num; oddsByMatch[o.match_id].prevHome = prev; }
+      if (o.selection === "draw") { oddsByMatch[o.match_id].draw = num; oddsByMatch[o.match_id].prevDraw = prev; }
+      if (o.selection === "away") { oddsByMatch[o.match_id].away = num; oddsByMatch[o.match_id].prevAway = prev; }
+      // Take max bookmaker_count across selections (should be same, but take max to be safe)
+      if (bk > oddsByMatch[o.match_id].bookmakerCount) oddsByMatch[o.match_id].bookmakerCount = bk;
     }
   }
 
@@ -444,12 +471,27 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
   // Fetch signal intelligence for all matches (SUX-1/2/3)
   const signalSummary = await batchFetchSignalSummary(matchIds, todayStart);
 
+  const MOVE_THRESHOLD = 0.05; // min odds delta to show ↑↓
+
   return (matches as PublicMatchRow[]).map((m) => {
     const homeTeam = Array.isArray(m.home_team) ? m.home_team[0] : m.home_team;
     const awayTeam = Array.isArray(m.away_team) ? m.away_team[0] : m.away_team;
     const league = Array.isArray(m.league) ? m.league[0] : m.league;
     const odds = oddsByMatch[m.id];
     const sig = signalSummary[m.id];
+
+    // ML-6: Parse predicted score from AF prediction JSONB
+    const afGoals = (m.af_prediction as Record<string, Record<string, string>> | null)?.goals;
+    const predictedHome = afGoals?.home != null ? Math.round(Number(afGoals.home)) : null;
+    const predictedAway = afGoals?.away != null ? Math.round(Number(afGoals.away)) : null;
+
+    // ML-7: Odds movement direction (requires prev snapshot >20h ago)
+    const moveDir = (curr: number, prev: number | null): "up" | "down" | null => {
+      if (!curr || prev == null || !prev) return null;
+      if (curr - prev >= MOVE_THRESHOLD) return "up";
+      if (prev - curr >= MOVE_THRESHOLD) return "down";
+      return null;
+    };
 
     return {
       id: m.id,
@@ -464,6 +506,19 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
       bestHome: odds?.home ?? 0,
       bestDraw: odds?.draw ?? 0,
       bestAway: odds?.away ?? 0,
+      // ML-1: Team logos
+      logoHome: homeTeam?.logo_url ?? null,
+      logoAway: awayTeam?.logo_url ?? null,
+      // ML-6: Predicted score
+      predictedHome: predictedHome !== null && !isNaN(predictedHome) ? predictedHome : null,
+      predictedAway: predictedAway !== null && !isNaN(predictedAway) ? predictedAway : null,
+      // ML-7: Movement arrows
+      moveHome: moveDir(odds?.home ?? 0, odds?.prevHome ?? null),
+      moveDraw: moveDir(odds?.draw ?? 0, odds?.prevDraw ?? null),
+      moveAway: moveDir(odds?.away ?? 0, odds?.prevAway ?? null),
+      // ML-8: Bookmaker count
+      bookmakerCount: odds?.bookmakerCount ?? 0,
+      // Signals
       signalCount: sig?.signalCount ?? 0,
       dataGrade: sig?.dataGrade ?? null,
       pulse: sig?.pulse ?? "routine",
@@ -522,6 +577,14 @@ export async function getPublicMatchById(matchId: string): Promise<PublicMatch |
     bestHome: odds.home.length ? Math.max(0, ...odds.home) : 0,
     bestDraw: odds.draw.length ? Math.max(0, ...odds.draw) : 0,
     bestAway: odds.away.length ? Math.max(0, ...odds.away) : 0,
+    logoHome: null,
+    logoAway: null,
+    predictedHome: null,
+    predictedAway: null,
+    moveHome: null,
+    moveDraw: null,
+    moveAway: null,
+    bookmakerCount: 0,
     // Signal fields not fetched on detail page (handled by match detail components directly)
     signalCount: 0,
     dataGrade: null,

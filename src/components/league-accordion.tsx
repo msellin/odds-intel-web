@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronRight, Info } from "lucide-react";
+import Image from "next/image";
+import { ChevronDown, ChevronRight, Info, TrendingUp, TrendingDown } from "lucide-react";
 import type { PublicMatch, LiveSnapshot } from "@/lib/engine-data";
 import { getCountryFlag } from "@/lib/country-flags";
 import { FavoriteButton } from "@/components/favorite-button";
@@ -19,9 +20,11 @@ function formatKickoff(iso: string): string {
 function OddsCell({
   value,
   isBest,
+  move,
 }: {
   value: number;
   isBest: boolean;
+  move?: "up" | "down" | null;
 }) {
   if (!value) {
     return (
@@ -32,13 +35,48 @@ function OddsCell({
   }
   return (
     <div
-      className={`w-14 rounded py-1 text-center font-mono text-sm ${
+      className={`relative w-14 rounded py-1 text-center font-mono text-sm ${
         isBest
           ? "bg-green-500/10 text-green-400"
           : "text-muted-foreground"
       }`}
     >
       {value.toFixed(2)}
+      {move === "up" && (
+        <TrendingUp className="absolute -top-1 -right-1 size-2.5 text-green-400" />
+      )}
+      {move === "down" && (
+        <TrendingDown className="absolute -top-1 -right-1 size-2.5 text-red-400" />
+      )}
+    </div>
+  );
+}
+
+// ML-1: Team logo — small circle with initials fallback
+function TeamLogo({ logo, name }: { logo: string | null; name: string }) {
+  const [failed, setFailed] = useState(false);
+  const initial = name.charAt(0).toUpperCase();
+
+  if (logo && !failed) {
+    return (
+      <div className="relative size-5 shrink-0 overflow-hidden rounded-full bg-white/[0.06]">
+        <Image
+          src={logo}
+          alt={name}
+          fill
+          sizes="20px"
+          className="object-contain p-0.5"
+          loading="lazy"
+          unoptimized
+          onError={() => setFailed(true)}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="size-5 shrink-0 rounded-full bg-white/[0.08] flex items-center justify-center">
+      <span className="text-[8px] font-bold text-muted-foreground">{initial}</span>
     </div>
   );
 }
@@ -49,16 +87,25 @@ const GRADE_STYLES = {
   D: "bg-white/[0.06] text-muted-foreground/50",
 } as const;
 
-function MatchRow({ match, liveSnapshot }: { match: PublicMatch; liveSnapshot?: LiveSnapshot }) {
+function MatchRow({
+  match,
+  liveSnapshot,
+  isPro,
+}: {
+  match: PublicMatch;
+  liveSnapshot?: LiveSnapshot;
+  isPro: boolean;
+}) {
   const hasOdds = match.hasOdds && (match.bestHome > 0 || match.bestDraw > 0 || match.bestAway > 0);
 
-  // Determine which odds is best (highest = best value for punter)
   const bestIsHome = hasOdds && match.bestHome >= match.bestDraw && match.bestHome >= match.bestAway;
   const bestIsDraw = hasOdds && match.bestDraw > match.bestHome && match.bestDraw >= match.bestAway;
   const bestIsAway = hasOdds && !bestIsHome && !bestIsDraw;
 
   const isLive = match.status === "live" && !!liveSnapshot;
+  const isFinished = match.status === "finished";
   const hasTeasers = (match.teasers?.length ?? 0) > 0;
+  const hasPrediction = match.predictedHome !== null && match.predictedAway !== null;
 
   return (
     <Link
@@ -92,7 +139,7 @@ function MatchRow({ match, liveSnapshot }: { match: PublicMatch; liveSnapshot?: 
           )}
         </div>
 
-        {/* Kickoff time or live score */}
+        {/* ML-2: Kickoff time / LIVE+minute / FT */}
         <div className="w-[4.5rem] shrink-0">
           {isLive ? (
             <div className="flex flex-col items-start gap-0.5">
@@ -104,6 +151,10 @@ function MatchRow({ match, liveSnapshot }: { match: PublicMatch; liveSnapshot?: 
                 {liveSnapshot!.minute}&apos;
               </span>
             </div>
+          ) : isFinished ? (
+            <span className="inline-block rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] font-bold text-muted-foreground">
+              FT
+            </span>
           ) : (
             <span className="font-mono text-xs text-muted-foreground">
               {formatKickoff(match.kickoff)}
@@ -111,36 +162,65 @@ function MatchRow({ match, liveSnapshot }: { match: PublicMatch; liveSnapshot?: 
           )}
         </div>
 
-        {/* Teams — with live score inline when live */}
+        {/* ML-1: Teams with logos */}
         <div className="flex flex-1 items-center justify-center gap-2 overflow-hidden px-2 text-sm">
-          <div className="flex flex-1 items-center justify-end gap-1">
+          <div className="flex flex-1 items-center justify-end gap-1.5">
             <span className="truncate font-medium text-foreground">
               {match.homeTeam}
             </span>
+            <TeamLogo logo={match.logoHome} name={match.homeTeam} />
           </div>
           {isLive ? (
             <span className="shrink-0 font-mono text-sm font-bold tabular-nums text-foreground">
               {liveSnapshot!.score_home}&thinsp;–&thinsp;{liveSnapshot!.score_away}
+            </span>
+          ) : isFinished && match.score_home != null ? (
+            <span className="shrink-0 font-mono text-sm font-bold tabular-nums text-foreground">
+              {match.score_home}&thinsp;–&thinsp;{match.score_away}
             </span>
           ) : (
             <span className="shrink-0 text-[10px] font-bold text-muted-foreground/60">
               VS
             </span>
           )}
-          <div className="flex flex-1 items-center gap-1">
+          <div className="flex flex-1 items-center gap-1.5">
+            <TeamLogo logo={match.logoAway} name={match.awayTeam} />
             <span className="truncate font-medium text-foreground">
               {match.awayTeam}
             </span>
           </div>
         </div>
 
-        {/* Odds */}
-        <div className="ml-4 flex shrink-0 items-center gap-1">
+        {/* ML-6: Predicted score (all users) */}
+        <div className="w-14 shrink-0 text-center">
+          {hasPrediction ? (
+            <span
+              className="font-mono text-xs font-bold tabular-nums text-violet-400/80"
+              title="AI predicted score"
+            >
+              {match.predictedHome}–{match.predictedAway}
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground/20">—</span>
+          )}
+        </div>
+
+        {/* Odds — ML-7 arrows (Pro only) + ML-8 bookmaker badge */}
+        <div className="ml-2 flex shrink-0 items-center gap-1">
           {hasOdds ? (
             <>
-              <OddsCell value={match.bestHome} isBest={bestIsHome} />
-              <OddsCell value={match.bestDraw} isBest={bestIsDraw} />
-              <OddsCell value={match.bestAway} isBest={bestIsAway} />
+              <OddsCell value={match.bestHome} isBest={bestIsHome} move={isPro ? match.moveHome : null} />
+              <OddsCell value={match.bestDraw} isBest={bestIsDraw} move={isPro ? match.moveDraw : null} />
+              <OddsCell value={match.bestAway} isBest={bestIsAway} move={isPro ? match.moveAway : null} />
+              {/* ML-8: Bookmaker count badge */}
+              {match.bookmakerCount > 1 && (
+                <span
+                  className="ml-1 text-[9px] font-bold text-muted-foreground/30 tabular-nums"
+                  title={`${match.bookmakerCount} bookmakers`}
+                >
+                  {match.bookmakerCount}
+                </span>
+              )}
             </>
           ) : (
             <div className="w-44 text-center font-mono text-sm text-muted-foreground/40">
@@ -154,7 +234,7 @@ function MatchRow({ match, liveSnapshot }: { match: PublicMatch; liveSnapshot?: 
         </div>
       </div>
 
-      {/* SUX-3: Free-tier signal teasers — only on notable matches */}
+      {/* SUX-3: Free-tier signal teasers */}
       {hasTeasers && (
         <div className="flex gap-3 pl-8 mt-0.5">
           {match.teasers.map((teaser, i) => (
@@ -173,6 +253,7 @@ interface LeagueAccordionProps {
   matches: PublicMatch[];
   defaultExpanded: boolean;
   liveSnapshots?: Record<string, LiveSnapshot>;
+  isPro: boolean;
 }
 
 export function LeagueAccordion({
@@ -180,15 +261,16 @@ export function LeagueAccordion({
   matches,
   defaultExpanded,
   liveSnapshots,
+  isPro,
 }: LeagueAccordionProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const hasOdds = matches.some((m) => m.hasOdds);
   const oddsCount = matches.filter((m) => m.hasOdds).length;
+  const hasPredictions = matches.some((m) => m.predictedHome !== null);
 
   return (
     <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-card/40">
       {/* League header */}
-      {/* League header – uses a div+onClick instead of <button> to avoid nesting buttons (FavoriteButton) */}
       <div
         role="button"
         tabIndex={0}
@@ -222,12 +304,20 @@ export function LeagueAccordion({
       {/* Match rows */}
       {expanded && (
         <div className="divide-y divide-white/[0.04]">
-          {/* C-2: Odds column header with tooltip */}
+          {/* Column header */}
           <div className="flex items-center px-4 py-1.5 bg-muted/10">
             <div className="w-5 shrink-0" />
             <div className="w-[4.5rem] shrink-0" />
             <div className="flex-1" />
-            <div className="ml-4 flex shrink-0 items-center gap-1">
+            {/* ML-6: Prediction column header */}
+            <div className="w-14 shrink-0 text-center">
+              {hasPredictions && (
+                <span className="text-[10px] font-bold uppercase tracking-widest text-violet-400/40">
+                  AI
+                </span>
+              )}
+            </div>
+            <div className="ml-2 flex shrink-0 items-center gap-1">
               <div className="flex w-44 items-center justify-center gap-1">
                 <span className="w-14 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">H</span>
                 <span className="w-14 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">X</span>
@@ -250,6 +340,7 @@ export function LeagueAccordion({
               key={match.id}
               match={match}
               liveSnapshot={liveSnapshots?.[match.id]}
+              isPro={isPro}
             />
           ))}
         </div>

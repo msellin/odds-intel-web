@@ -10,11 +10,16 @@ import { LeagueAccordion } from "./league-accordion";
 interface Props {
   sortedGroups: [string, PublicMatch[]][];
   initialSnapshots: Record<string, LiveSnapshot>;
+  isPro: boolean;
 }
 
-export function MatchesClient({ sortedGroups, initialSnapshots }: Props) {
+type StatusTab = "all" | "live" | "upcoming" | "finished";
+type FilterTab = "all" | "odds" | "favorites";
+
+export function MatchesClient({ sortedGroups, initialSnapshots, isPro }: Props) {
   const [snapshots, setSnapshots] = useState<Record<string, LiveSnapshot>>(initialSnapshots);
-  const [activeTab, setActiveTab] = useState<"all" | "favorites" | "odds">("all");
+  const [statusTab, setStatusTab] = useState<StatusTab>("all");
+  const [filterTab, setFilterTab] = useState<FilterTab>("all");
   const { user, profile } = useAuth();
 
   // Stable list of live match IDs
@@ -57,23 +62,48 @@ export function MatchesClient({ sortedGroups, initialSnapshots }: Props) {
 
   const favoriteLeagues = profile?.preferred_leagues ?? [];
 
+  // Status counts
+  const allMatches = useMemo(() => sortedGroups.flatMap(([, ms]) => ms), [sortedGroups]);
+  const liveCount = useMemo(() => allMatches.filter((m) => m.status === "live").length, [allMatches]);
+  const finishedCount = useMemo(() => allMatches.filter((m) => m.status === "finished").length, [allMatches]);
+  const upcomingCount = useMemo(() => allMatches.filter((m) => m.status !== "live" && m.status !== "finished").length, [allMatches]);
+
+  // Filter by status tab first
+  const statusFiltered = useMemo(() => {
+    if (statusTab === "all") return sortedGroups;
+    return sortedGroups
+      .map(([league, matches]) => {
+        const filtered = matches.filter((m) => {
+          if (statusTab === "live") return m.status === "live";
+          if (statusTab === "finished") return m.status === "finished";
+          if (statusTab === "upcoming") return m.status !== "live" && m.status !== "finished";
+          return true;
+        });
+        return [league, filtered] as [string, PublicMatch[]];
+      })
+      .filter(([, ms]) => ms.length > 0);
+  }, [sortedGroups, statusTab]);
+
+  // Then filter by odds/favorites
   const filteredGroups = useMemo(() => {
-    if (activeTab === "odds") {
-      // Only show leagues + matches that have odds
-      return sortedGroups
+    if (filterTab === "odds") {
+      return statusFiltered
         .map(([league, matches]) => [league, matches.filter((m) => m.hasOdds)] as [string, typeof matches])
         .filter(([, matches]) => matches.length > 0);
     }
-
-    if (activeTab === "favorites") {
+    if (filterTab === "favorites") {
       if (favoriteLeagues.length === 0) return [];
-      return sortedGroups.filter(([league]) =>
+      return statusFiltered.filter(([league]) =>
         favoriteLeagues.some((fl) => league.toLowerCase().includes(fl.toLowerCase()))
       );
     }
+    return statusFiltered;
+  }, [statusFiltered, filterTab, favoriteLeagues]);
 
-    return sortedGroups;
-  }, [sortedGroups, activeTab, favoriteLeagues]);
+  const oddsMatchCount = useMemo(
+    () => allMatches.filter((m) => m.hasOdds).length,
+    [allMatches]
+  );
 
   const favoriteMatchCount = useMemo(() => {
     if (favoriteLeagues.length === 0) return 0;
@@ -85,57 +115,107 @@ export function MatchesClient({ sortedGroups, initialSnapshots }: Props) {
     }, 0);
   }, [sortedGroups, favoriteLeagues]);
 
-  const oddsMatchCount = useMemo(
-    () => sortedGroups.reduce((n, [, matches]) => n + matches.filter((m) => m.hasOdds).length, 0),
-    [sortedGroups]
-  );
-
   return (
     <div className="space-y-3">
-      {/* Tabs: All / With Odds / My Matches */}
+      {/* ML-5: Status tabs — primary navigation */}
       <div className="flex rounded-lg border border-white/[0.06] bg-muted/20 p-1 w-fit">
         <button
-          onClick={() => setActiveTab("all")}
+          onClick={() => setStatusTab("all")}
           className={`rounded-md px-4 py-1.5 text-xs font-bold transition-all ${
-            activeTab === "all"
+            statusTab === "all"
               ? "bg-muted text-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          All matches
+          All
         </button>
         <button
-          onClick={() => setActiveTab("odds")}
+          onClick={() => setStatusTab("live")}
           className={`flex items-center gap-1.5 rounded-md px-4 py-1.5 text-xs font-bold transition-all ${
-            activeTab === "odds"
+            statusTab === "live"
               ? "bg-muted text-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          {liveCount > 0 && (
+            <span className="size-1.5 animate-pulse rounded-full bg-green-400" />
+          )}
+          Live
+          {liveCount > 0 && (
+            <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+              statusTab === "live" ? "bg-green-500/20 text-green-400" : "bg-green-500/10 text-green-500/70"
+            }`}>
+              {liveCount}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setStatusTab("upcoming")}
+          className={`rounded-md px-4 py-1.5 text-xs font-bold transition-all ${
+            statusTab === "upcoming"
+              ? "bg-muted text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Upcoming
+          {upcomingCount > 0 && statusTab !== "upcoming" && (
+            <span className="ml-1.5 rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground/60">
+              {upcomingCount}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setStatusTab("finished")}
+          className={`rounded-md px-4 py-1.5 text-xs font-bold transition-all ${
+            statusTab === "finished"
+              ? "bg-muted text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Finished
+          {finishedCount > 0 && statusTab !== "finished" && (
+            <span className="ml-1.5 rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground/60">
+              {finishedCount}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Secondary filter row — odds / my leagues */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setFilterTab(filterTab === "odds" ? "all" : "odds")}
+          className={`flex items-center gap-1.5 rounded-md border px-3 py-1 text-xs font-bold transition-all ${
+            filterTab === "odds"
+              ? "border-green-500/30 bg-green-500/10 text-green-400"
+              : "border-white/[0.06] bg-muted/20 text-muted-foreground hover:text-foreground"
           }`}
         >
           With odds
           {oddsMatchCount > 0 && (
             <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-              activeTab === "odds"
-                ? "bg-green-500/20 text-green-400"
-                : "bg-green-500/10 text-green-500/70"
+              filterTab === "odds" ? "bg-green-500/20 text-green-400" : "bg-white/[0.06] text-muted-foreground/60"
             }`}>
               {oddsMatchCount}
             </span>
           )}
         </button>
+
         {user && (
           <button
-            onClick={() => setActiveTab("favorites")}
-            className={`flex items-center gap-1.5 rounded-md px-4 py-1.5 text-xs font-bold transition-all ${
-              activeTab === "favorites"
-                ? "bg-muted text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
+            onClick={() => setFilterTab(filterTab === "favorites" ? "all" : "favorites")}
+            className={`flex items-center gap-1.5 rounded-md border px-3 py-1 text-xs font-bold transition-all ${
+              filterTab === "favorites"
+                ? "border-amber-400/30 bg-amber-400/10 text-amber-400"
+                : "border-white/[0.06] bg-muted/20 text-muted-foreground hover:text-foreground"
             }`}
           >
             <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
-            My Matches
+            My Leagues
             {favoriteMatchCount > 0 && (
-              <span className="rounded-full bg-amber-400/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-400">
+              <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                filterTab === "favorites" ? "bg-amber-400/20 text-amber-400" : "bg-white/[0.06] text-muted-foreground/60"
+              }`}>
                 {favoriteMatchCount}
               </span>
             )}
@@ -143,7 +223,7 @@ export function MatchesClient({ sortedGroups, initialSnapshots }: Props) {
         )}
       </div>
 
-      {activeTab === "favorites" && filteredGroups.length === 0 && (
+      {filterTab === "favorites" && filteredGroups.length === 0 && (
         <div className="rounded-xl border border-white/[0.06] bg-card/40 py-10 text-center">
           <Star className="mx-auto h-8 w-8 text-muted-foreground/30 mb-3" />
           <p className="text-sm font-medium text-foreground">No favourite leagues today</p>
@@ -157,13 +237,22 @@ export function MatchesClient({ sortedGroups, initialSnapshots }: Props) {
         </div>
       )}
 
+      {statusTab !== "all" && filteredGroups.length === 0 && filterTab === "all" && (
+        <div className="rounded-xl border border-white/[0.06] bg-card/40 py-8 text-center">
+          <p className="text-sm text-muted-foreground">
+            {statusTab === "live" ? "No live matches right now." : statusTab === "finished" ? "No finished matches yet today." : "No upcoming matches."}
+          </p>
+        </div>
+      )}
+
       {filteredGroups.map(([league, matches]) => (
         <LeagueAccordion
           key={league}
           league={league}
           matches={matches}
-          defaultExpanded={matches.some((m) => m.hasOdds)}
+          defaultExpanded={matches.some((m) => m.hasOdds) || statusTab === "live"}
           liveSnapshots={snapshots}
+          isPro={isPro}
         />
       ))}
     </div>
