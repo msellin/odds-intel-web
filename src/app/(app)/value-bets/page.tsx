@@ -19,8 +19,8 @@ export default async function ValueBetsPage() {
     .eq("id", user.id)
     .single();
 
-  const isElite = profile?.is_superadmin || profile?.tier === "elite";
-  const isPro = !isElite && profile?.tier === "pro";
+  const isElite = profile?.is_superadmin === true || profile?.tier === "elite";
+  const isPro = isElite || profile?.tier === "pro";
   const userTier: "free" | "pro" | "elite" = isElite ? "elite" : isPro ? "pro" : "free";
 
   const bets = await getTodayBets();

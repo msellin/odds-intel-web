@@ -40,7 +40,7 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
       .eq("id", user.id)
       .single();
     if (profile) {
-      const isElite = profile.is_superadmin || profile.tier === "elite";
+      const isElite = profile.is_superadmin === true || profile.tier === "elite";
       isPro = isElite || profile.tier === "pro";
     }
   }

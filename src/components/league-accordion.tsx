@@ -81,6 +81,23 @@ function TeamLogo({ logo, name }: { logo: string | null; name: string }) {
   );
 }
 
+// ML-3: Form dots — last 5 results as coloured dots
+function FormStrip({ form }: { form: string }) {
+  return (
+    <div className="flex items-center gap-0.5">
+      {form.split("").map((char, i) => (
+        <span
+          key={i}
+          className={`inline-block size-1.5 rounded-full ${
+            char === "W" ? "bg-green-500" : char === "D" ? "bg-amber-500" : "bg-red-500/70"
+          }`}
+          title={char === "W" ? "Win" : char === "D" ? "Draw" : "Loss"}
+        />
+      ))}
+    </div>
+  );
+}
+
 const GRADE_STYLES = {
   A: "bg-green-500/20 text-green-400",
   B: "bg-amber-500/20 text-amber-500",
@@ -106,11 +123,12 @@ function MatchRow({
   const isFinished = match.status === "finished";
   const hasTeasers = (match.teasers?.length ?? 0) > 0;
   const hasPrediction = match.predictedHome !== null && match.predictedAway !== null;
+  const hasForm = match.formHome != null && match.formAway != null;
 
   return (
     <Link
       href={`/matches/${match.id}`}
-      className={`group flex flex-col px-4 transition-colors hover:bg-white/[0.03] ${hasTeasers ? "py-1.5" : "h-10 justify-center"}`}
+      className={`group flex flex-col px-4 transition-colors hover:bg-white/[0.03] ${(hasTeasers || hasForm) ? "py-1.5" : "h-10 justify-center"}`}
     >
       {/* Main row */}
       <div className="flex items-center gap-0">
@@ -242,6 +260,20 @@ function MatchRow({
               {teaser}
             </span>
           ))}
+        </div>
+      )}
+
+      {/* ML-3: Form strips — shown when both teams have form data */}
+      {hasForm && (
+        <div className="flex items-center gap-2 pl-8 mt-0.5">
+          <div className="flex flex-1 items-center justify-end gap-1.5">
+            <span className="text-[9px] text-muted-foreground/40 uppercase tracking-wide">form</span>
+            <FormStrip form={match.formHome!} />
+          </div>
+          <div className="w-[2.5rem] shrink-0" />
+          <div className="flex flex-1 items-center gap-1.5">
+            <FormStrip form={match.formAway!} />
+          </div>
         </div>
       )}
     </Link>

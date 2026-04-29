@@ -59,6 +59,8 @@ interface MatchRow {
   status: string;
   score_home: number | null;
   score_away: number | null;
+  form_home?: string | null;
+  form_away?: string | null;
   venue_name?: string | null;
   referee?: string | null;
   af_prediction?: Record<string, unknown> | null;
@@ -99,6 +101,9 @@ export interface PublicMatch {
   // ML-1: Team logos (null until fixture pipeline backfills logo_url)
   logoHome: string | null;
   logoAway: string | null;
+  // ML-3: Last-5 form strings e.g. "WWDLW" — null until enrichment runs
+  formHome: string | null;
+  formAway: string | null;
   // ML-6: Predicted score from af_prediction JSONB (null if no AF prediction)
   predictedHome: number | null;
   predictedAway: number | null;
@@ -415,7 +420,7 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
   const { data: matches, error } = await supabase
     .from("matches")
     .select(
-      `id, date, status, af_prediction,
+      `id, date, status, score_home, score_away, form_home, form_away, af_prediction,
        home_team:home_team_id(id, name, country, logo_url),
        away_team:away_team_id(id, name, country, logo_url),
        league:league_id(id, name, country, tier)`
@@ -427,7 +432,7 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
 
   if (error || !matches || matches.length === 0) return [];
 
-  type PublicMatchRow = Pick<MatchRow, "id" | "date" | "status" | "af_prediction" | "home_team" | "away_team" | "league">;
+  type PublicMatchRow = Pick<MatchRow, "id" | "date" | "status" | "score_home" | "score_away" | "form_home" | "form_away" | "af_prediction" | "home_team" | "away_team" | "league">;
   const matchIds = (matches as PublicMatchRow[]).map((m) => m.id);
 
   // Step 2: Fetch best 1X2 odds via RPC (aggregated server-side).
@@ -509,6 +514,9 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
       // ML-1: Team logos
       logoHome: homeTeam?.logo_url ?? null,
       logoAway: awayTeam?.logo_url ?? null,
+      // ML-3: Form strips
+      formHome: m.form_home ?? null,
+      formAway: m.form_away ?? null,
       // ML-6: Predicted score
       predictedHome: predictedHome !== null && !isNaN(predictedHome) ? predictedHome : null,
       predictedAway: predictedAway !== null && !isNaN(predictedAway) ? predictedAway : null,
@@ -523,6 +531,9 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
       dataGrade: sig?.dataGrade ?? null,
       pulse: sig?.pulse ?? "routine",
       teasers: sig?.teasers ?? [],
+      // Scores (for finished match display in list view)
+      score_home: m.score_home ?? null,
+      score_away: m.score_away ?? null,
     };
   });
 }
@@ -579,6 +590,8 @@ export async function getPublicMatchById(matchId: string): Promise<PublicMatch |
     bestAway: odds.away.length ? Math.max(0, ...odds.away) : 0,
     logoHome: null,
     logoAway: null,
+    formHome: null,
+    formAway: null,
     predictedHome: null,
     predictedAway: null,
     moveHome: null,
@@ -1445,4 +1458,85 @@ export async function getMatchSignals(matchId: string): Promise<MatchSignalRow[]
     seen.add(row.signal_name);
     return true;
   });
+}
+
+/**
+ * Fetch full signal capture history for SUX-8 (Signal Timeline).
+ * Returns ALL captures (not deduplicated), ordered ascending by captured_at.
+ * Used to build a chronological timeline of signal events.
+ * Pro/Elite only — called only when isPro is confirmed server-side.
+ */
+export async function getMatchSignalHistory(matchId: string): Promise<MatchSignalRow[]> {
+  const supabase = createSupabasePublic();
+  const { data, error } = await supabase
+    .from("match_signals")
+    .select("signal_name, signal_value, signal_group, captured_at")
+    .eq("match_id", matchId)
+    .order("captured_at", { ascending: true })
+    .limit(1000);
+
+  if (error || !data) return [];
+  return data as MatchSignalRow[];
+}
+
+/**
+ * Fetch CLV data for a match (SUX-12).
+ * Returns pseudo_clv columns and any settled simulated bets for this match.
+ * Elite only — called only when isElite is confirmed server-side.
+ */
+export interface MatchCLVData {
+  pseudoClvHome: number | null;
+  pseudoClvDraw: number | null;
+  pseudoClvAway: number | null;
+  settledBets: Array<{
+    id: string;
+    selection: string;
+    oddsAtPick: number;
+    closingOdds: number | null;
+    clv: number | null;
+    result: string;
+    pnl: number;
+    botName: string;
+  }>;
+}
+
+export async function getMatchCLVData(matchId: string): Promise<MatchCLVData> {
+  const supabase = await createSupabaseServer();
+
+  const [matchResult, betsResult] = await Promise.all([
+    supabase
+      .from("matches")
+      .select("pseudo_clv_home, pseudo_clv_draw, pseudo_clv_away")
+      .eq("id", matchId)
+      .single(),
+    supabase
+      .from("simulated_bets")
+      .select(`id, selection, odds_at_pick, closing_odds, clv, result, pnl, bot:bot_id(name)`)
+      .eq("match_id", matchId)
+      .neq("result", "pending")
+      .order("pick_time", { ascending: false }),
+  ]);
+
+  const matchData = matchResult.data;
+  const bets = (betsResult.data || []) as Array<{
+    id: string; selection: string; odds_at_pick: number; closing_odds: number | null;
+    clv: number | null; result: string; pnl: number;
+    bot: { name: string } | { name: string }[] | null;
+  }>;
+
+  return {
+    pseudoClvHome: matchData?.pseudo_clv_home ?? null,
+    pseudoClvDraw: matchData?.pseudo_clv_draw ?? null,
+    pseudoClvAway: matchData?.pseudo_clv_away ?? null,
+    settledBets: bets.map((b) => ({
+      id: b.id,
+      selection: b.selection,
+      oddsAtPick: Number(b.odds_at_pick),
+      closingOdds: b.closing_odds != null ? Number(b.closing_odds) : null,
+      clv: b.clv != null ? Number(b.clv) : null,
+      result: b.result,
+      pnl: Number(b.pnl || 0),
+      botName: (Array.isArray(b.bot) ? b.bot[0] : b.bot)?.name || "unknown",
+    })),
+  };
 }

@@ -14,8 +14,10 @@ import {
   getMatchPlayerStats,
   getTeamSeasonStats,
   getMatchSignals,
+  getMatchSignalHistory,
+  getMatchCLVData,
 } from "@/lib/engine-data";
-import type { LiveMatch, MatchStatsData, OddsMovementPoint } from "@/lib/engine-data";
+import type { LiveMatch, MatchStatsData, OddsMovementPoint, MatchSignalRow } from "@/lib/engine-data";
 import { getLiveMatchOdds } from "@/lib/engine-data";
 import { MatchDetailFree } from "@/components/match-detail-free";
 import { MatchDetailLive } from "@/components/match-detail-live";
@@ -27,6 +29,9 @@ import { SignalDelta } from "@/components/signal-delta";
 import { MatchPickButton } from "@/components/match-pick-button";
 import { MatchNotes } from "@/components/match-notes";
 import { CommunityVote } from "@/components/community-vote";
+import { SignalTimeline } from "@/components/signal-timeline";
+import { WhyThisPick } from "@/components/why-this-pick";
+import { CLVTracker } from "@/components/clv-tracker";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Clock, Calendar, Shield, MapPin, User } from "lucide-react";
@@ -154,7 +159,7 @@ export default async function MatchDetailPage({
   ]);
 
   // Fetch Pro-tier data only when tier is confirmed server-side — never sent to free/anon users
-  const [oddsMovement, matchEvents, lineups, playerStats, seasonStats, liveOdds] = isPro
+  const [oddsMovement, matchEvents, lineups, playerStats, seasonStats, liveOdds, signalHistory] = isPro
     ? await Promise.all([
         getOddsMovement(id) as Promise<OddsMovementPoint[]>,
         getMatchEvents(id),
@@ -165,8 +170,12 @@ export default async function MatchDetailPage({
           standings.away?.teamApiId ?? null
         ),
         getLiveMatchOdds(id),
+        getMatchSignalHistory(id),
       ])
-    : [[], [], null, [], { home: null, away: null }, []];
+    : [[], [], null, [], { home: null, away: null }, [], []];
+
+  // Fetch Elite-tier data
+  const clvData = isElite ? await getMatchCLVData(id) : null;
 
   const initialSnapshot = liveSnapshotsArr[0] ?? null;
 
@@ -331,6 +340,34 @@ export default async function MatchDetailPage({
           isLive={publicMatch.status === "live"}
           homeTeam={publicMatch.homeTeam}
           awayTeam={publicMatch.awayTeam}
+        />
+      )}
+
+      {/* SUX-8: Signal Timeline — Pro only */}
+      {isPro && (signalHistory as MatchSignalRow[]).length > 0 && (
+        <SignalTimeline
+          signals={signalHistory as MatchSignalRow[]}
+          homeTeam={publicMatch.homeTeam}
+          awayTeam={publicMatch.awayTeam}
+        />
+      )}
+
+      {/* SUX-11: Why This Pick — Elite only */}
+      {isElite && matchSignals.length > 0 && (
+        <WhyThisPick
+          signals={matchSignals}
+          homeTeam={publicMatch.homeTeam}
+          awayTeam={publicMatch.awayTeam}
+        />
+      )}
+
+      {/* SUX-12: CLV Tracker — Elite only */}
+      {isElite && clvData && (
+        <CLVTracker
+          clvData={clvData}
+          homeTeam={publicMatch.homeTeam}
+          awayTeam={publicMatch.awayTeam}
+          matchStatus={publicMatch.status}
         />
       )}
 
