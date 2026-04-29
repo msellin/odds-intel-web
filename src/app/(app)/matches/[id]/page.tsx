@@ -20,6 +20,7 @@ import { MatchDetailFree } from "@/components/match-detail-free";
 import { MatchDetailLive } from "@/components/match-detail-live";
 import { MatchScoreDisplay } from "@/components/match-score-display";
 import { MatchSignalSummary } from "@/components/match-signal-summary";
+import { SignalAccordion } from "@/components/signal-accordion";
 import { MatchPickButton } from "@/components/match-pick-button";
 import { MatchNotes } from "@/components/match-notes";
 import { CommunityVote } from "@/components/community-vote";
@@ -290,6 +291,17 @@ export default async function MatchDetailPage({
           matchStatus={publicMatch.status}
           scoreHome={publicMatch.score_home ?? null}
           scoreAway={publicMatch.score_away ?? null}
+        />
+      )}
+
+      {/* Signal group accordion (SUX-5) — Pro gets full breakdown, Free gets locked preview */}
+      {matchSignals.length > 0 && (
+        <SignalAccordion
+          signals={matchSignals}
+          isPro={isPro}
+          isElite={isElite}
+          homeTeam={publicMatch.homeTeam}
+          awayTeam={publicMatch.awayTeam}
         />
       )}
 
