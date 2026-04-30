@@ -96,9 +96,11 @@ export default function LandingPage() {
     <div className="min-h-dvh bg-background text-foreground">
       {/* ───────── Nav ───────── */}
       <nav className="sticky top-0 z-50 border-b border-white/[0.06] bg-background/90 backdrop-blur-lg">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
-          <Link href="/" className="flex items-center gap-2 font-mono text-xl font-black uppercase italic tracking-tight text-white">
-            ODDS<span className="text-green-500">INTEL</span>
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6">
+          <Link href="/" className="flex items-center gap-2">
+            <span className="font-mono text-xl font-black uppercase italic tracking-tight text-white whitespace-nowrap">
+              ODDS<span className="text-green-500 ml-[0.15em]">INTEL</span>
+            </span>
             <span className="rounded text-[10px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-400 px-1.5 py-0.5 border border-amber-500/30">Beta</span>
           </Link>
           <div className="flex items-center gap-4">
@@ -442,8 +444,8 @@ export default function LandingPage() {
       {/* ───────── Footer ───────── */}
       <footer className="py-10">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 sm:flex-row sm:px-6">
-          <div className="font-mono text-base font-black uppercase italic tracking-tight text-white">
-            ODDS<span className="text-green-500">INTEL</span>
+          <div className="font-mono text-base font-black uppercase italic tracking-tight text-white whitespace-nowrap">
+            ODDS<span className="text-green-500 ml-[0.15em]">INTEL</span>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-6 text-xs text-muted-foreground">
             <span>&copy; {new Date().getFullYear()} OddsIntel</span>
