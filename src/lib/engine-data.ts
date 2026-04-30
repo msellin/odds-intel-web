@@ -66,7 +66,7 @@ interface MatchRow {
   af_prediction?: Record<string, unknown> | null;
   home_team: { id: string; name: string; country: string; logo_url?: string | null }[] | { id: string; name: string; country: string; logo_url?: string | null } | null;
   away_team: { id: string; name: string; country: string; logo_url?: string | null }[] | { id: string; name: string; country: string; logo_url?: string | null } | null;
-  league: { id: string; name: string; country: string; tier: number }[] | { id: string; name: string; country: string; tier: number } | null;
+  league: { id: string; name: string; country: string; tier: number; priority?: number | null }[] | { id: string; name: string; country: string; tier: number; priority?: number | null } | null;
 }
 
 interface OddsRow {
@@ -118,6 +118,8 @@ export interface PublicMatch {
   dataGrade: "A" | "B" | "D" | null;
   pulse: "routine" | "interesting" | "high-alert";
   teasers: string[];
+  // League priority for sorting (lower = more important, null = alphabetical)
+  leaguePriority: number | null;
   // populated only on match detail (getPublicMatchById)
   score_home?: number | null;
   score_away?: number | null;
@@ -430,7 +432,7 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
       `id, date, status, score_home, score_away, form_home, form_away, af_prediction,
        home_team:home_team_id(id, name, country, logo_url),
        away_team:away_team_id(id, name, country, logo_url),
-       league:league_id!inner(id, name, country, tier)`
+       league:league_id!inner(id, name, country, tier, priority)`
     )
     .eq("league.show_on_frontend", true)
     .gte("date", windowStart.toISOString())
@@ -539,6 +541,7 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
       dataGrade: sig?.dataGrade ?? null,
       pulse: sig?.pulse ?? "routine",
       teasers: sig?.teasers ?? [],
+      leaguePriority: league?.priority ?? null,
       // Scores (for finished match display in list view)
       score_home: m.score_home ?? null,
       score_away: m.score_away ?? null,
@@ -555,7 +558,7 @@ export async function getPublicMatchById(matchId: string): Promise<PublicMatch |
       `id, date, status, score_home, score_away, venue_name, referee, lineups_home,
        home_team:home_team_id(id, name, country),
        away_team:away_team_id(id, name, country),
-       league:league_id(id, name, country, tier)`
+       league:league_id(id, name, country, tier, priority)`
     )
     .eq("id", matchId)
     .single();
@@ -611,6 +614,7 @@ export async function getPublicMatchById(matchId: string): Promise<PublicMatch |
     dataGrade: null,
     pulse: "routine" as const,
     teasers: [],
+    leaguePriority: league?.priority ?? null,
     score_home: m.score_home,
     score_away: m.score_away,
     venue_name: m.venue_name,

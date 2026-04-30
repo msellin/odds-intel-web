@@ -53,13 +53,23 @@ export default async function MatchesPage() {
     });
   }
 
-  // Sort league groups: leagues with odds first, then by match count
+  // Sort league groups: priority leagues first (lower number = higher), then alphabetical.
+  // Like FlashScore: featured/important leagues on top, rest in alphabetical order.
   const sortedGroups = Array.from(grouped.entries()).sort(
-    ([, aMatches], [, bMatches]) => {
+    ([aLeague, aMatches], [bLeague, bMatches]) => {
+      const aPrio = aMatches[0]?.leaguePriority;
+      const bPrio = bMatches[0]?.leaguePriority;
+      // Priority leagues always come before non-priority
+      if (aPrio != null && bPrio == null) return -1;
+      if (aPrio == null && bPrio != null) return 1;
+      // Both have priority: sort by priority number (lower first)
+      if (aPrio != null && bPrio != null && aPrio !== bPrio) return aPrio - bPrio;
+      // Same priority or both null: leagues with odds before leagues without
       const aHasOdds = aMatches.some((m) => m.hasOdds);
       const bHasOdds = bMatches.some((m) => m.hasOdds);
       if (aHasOdds !== bHasOdds) return aHasOdds ? -1 : 1;
-      return bMatches.length - aMatches.length;
+      // Finally: alphabetical by league name
+      return aLeague.localeCompare(bLeague);
     }
   );
 
