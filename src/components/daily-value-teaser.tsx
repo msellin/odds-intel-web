@@ -246,7 +246,7 @@ export function DailyValueTeaser() {
               Tap to reveal today&apos;s top value pick
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              1 free unlock per day — {totalBets} picks available with Elite
+              1 free unlock per day — all {totalBets} picks available on Pro
             </p>
           </button>
         )}
