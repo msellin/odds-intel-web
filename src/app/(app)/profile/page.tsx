@@ -11,19 +11,42 @@ import { useAuth } from "@/components/auth-provider";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
 
 const POPULAR_LEAGUES = [
-  "Premier League",
-  "La Liga",
-  "Bundesliga",
-  "Serie A",
-  "Ligue 1",
-  "Championship",
-  "2. Bundesliga",
-  "Serie B",
-  "Eredivisie",
-  "Primeira Liga",
-  "Scottish Premiership",
-  "Champions League",
+  "England / Premier League",
+  "Spain / La Liga",
+  "Germany / Bundesliga",
+  "Italy / Serie A",
+  "France / Ligue 1",
+  "England / Championship",
+  "Germany / 2. Bundesliga",
+  "Italy / Serie B",
+  "Netherlands / Eredivisie",
+  "Portugal / Primeira Liga",
+  "Scotland / Premiership",
+  "World / UEFA Champions League",
 ];
+
+/** Maps bare league names (old format) to full "Country / League Name" keys */
+const BARE_NAME_MIGRATION: Record<string, string> = {
+  "premier league": "England / Premier League",
+  "la liga": "Spain / La Liga",
+  "bundesliga": "Germany / Bundesliga",
+  "serie a": "Italy / Serie A",
+  "ligue 1": "France / Ligue 1",
+  "championship": "England / Championship",
+  "2. bundesliga": "Germany / 2. Bundesliga",
+  "serie b": "Italy / Serie B",
+  "eredivisie": "Netherlands / Eredivisie",
+  "primeira liga": "Portugal / Primeira Liga",
+  "scottish premiership": "Scotland / Premiership",
+  "champions league": "World / UEFA Champions League",
+  "league two": "England / League Two",
+  "regionalliga - west": "Germany / Regionalliga - West",
+};
+
+/** Returns true if the value looks like a full "Country / League" key */
+function isFullLeagueKey(value: string): boolean {
+  return value.includes(" / ");
+}
 
 const TIER_LABELS: Record<string, string> = {
   free: "Free",
@@ -72,6 +95,31 @@ export default function ProfilePage() {
   }, [user, loading, router]);
 
   const starredLeagues: string[] = profile?.preferred_leagues ?? [];
+
+  // Auto-migrate bare names to full "Country / League" keys
+  useEffect(() => {
+    if (!user || !profile?.preferred_leagues?.length) return;
+    const current = profile.preferred_leagues;
+    const needsMigration = current.some((l) => !isFullLeagueKey(l));
+    if (!needsMigration) return;
+
+    const migrated = current.map((l) => {
+      if (isFullLeagueKey(l)) return l;
+      return BARE_NAME_MIGRATION[l.toLowerCase()] ?? l;
+    });
+
+    // Only update if something actually changed
+    if (JSON.stringify(migrated) === JSON.stringify(current)) return;
+
+    const doMigrate = async () => {
+      await supabase
+        .from("profiles")
+        .update({ preferred_leagues: migrated })
+        .eq("id", user.id);
+      await refreshProfile();
+    };
+    doMigrate();
+  }, [user, profile?.preferred_leagues, supabase, refreshProfile]);
 
   const toggleLeague = useCallback(async (league: string) => {
     if (!user || saving) return;

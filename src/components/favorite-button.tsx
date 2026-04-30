@@ -16,8 +16,8 @@ export function FavoriteButton({ value, className }: FavoriteButtonProps) {
 
   if (!user || !profile) return null;
 
-  const isFavorited = (profile.preferred_leagues ?? []).some((l) =>
-    value.toLowerCase().includes(l.toLowerCase())
+  const isFavorited = (profile.preferred_leagues ?? []).some(
+    (l) => l.toLowerCase() === value.toLowerCase()
   );
 
   const handleToggle = async (e: React.MouseEvent) => {
@@ -25,14 +25,11 @@ export function FavoriteButton({ value, className }: FavoriteButtonProps) {
     e.stopPropagation();
 
     const supabase = createSupabaseBrowser();
-    // Extract just the league name from "Country / League Name"
-    const leagueName = value.includes(" / ")
-      ? value.split(" / ").slice(1).join(" / ")
-      : value;
     const current = profile.preferred_leagues ?? [];
+    // Store the full "Country / League Name" key — no stripping
     const updated = isFavorited
-      ? current.filter((l) => !value.toLowerCase().includes(l.toLowerCase()))
-      : [...current, leagueName];
+      ? current.filter((l) => l.toLowerCase() !== value.toLowerCase())
+      : [...current, value];
 
     await supabase
       .from("profiles")

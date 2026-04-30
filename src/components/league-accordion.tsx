@@ -7,6 +7,7 @@ import { ChevronDown, ChevronRight, Info, TrendingUp, TrendingDown } from "lucid
 import type { PublicMatch, LiveSnapshot } from "@/lib/engine-data";
 import { getCountryFlag } from "@/lib/country-flags";
 import { FavoriteButton } from "@/components/favorite-button";
+import { MatchFavoriteButton } from "@/components/match-favorite-button";
 
 function formatKickoff(iso: string): string {
   const d = new Date(iso);
@@ -107,10 +108,14 @@ function MatchRow({
   match,
   liveSnapshot,
   isPro,
+  favoriteMatchIds,
+  onMatchFavoriteToggle,
 }: {
   match: PublicMatch;
   liveSnapshot?: LiveSnapshot;
   isPro: boolean;
+  favoriteMatchIds?: Set<string>;
+  onMatchFavoriteToggle?: (matchId: string, isFavorited: boolean) => void;
 }) {
   const hasOdds = match.hasOdds && (match.bestHome > 0 || match.bestDraw > 0 || match.bestAway > 0);
 
@@ -131,6 +136,16 @@ function MatchRow({
     >
       {/* Main row */}
       <div className="flex items-center gap-0">
+        {/* Per-match star */}
+        {favoriteMatchIds && onMatchFavoriteToggle && (
+          <div className="w-5 shrink-0 flex items-center">
+            <MatchFavoriteButton
+              matchId={match.id}
+              favoriteMatchIds={favoriteMatchIds}
+              onToggle={onMatchFavoriteToggle}
+            />
+          </div>
+        )}
         {/* SUX-1: Grade badge + SUX-2: Pulse indicator */}
         <div className="w-8 shrink-0 flex items-center gap-0.5">
           {match.dataGrade ? (
@@ -285,6 +300,8 @@ interface LeagueAccordionProps {
   defaultExpanded: boolean;
   liveSnapshots?: Record<string, LiveSnapshot>;
   isPro: boolean;
+  favoriteMatchIds?: Set<string>;
+  onMatchFavoriteToggle?: (matchId: string, isFavorited: boolean) => void;
 }
 
 export function LeagueAccordion({
@@ -293,6 +310,8 @@ export function LeagueAccordion({
   defaultExpanded,
   liveSnapshots,
   isPro,
+  favoriteMatchIds,
+  onMatchFavoriteToggle,
 }: LeagueAccordionProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const hasOdds = matches.some((m) => m.hasOdds);
@@ -337,7 +356,8 @@ export function LeagueAccordion({
         <div className="divide-y divide-white/[0.04]">
           {/* Column header */}
           <div className="flex items-center px-4 py-1.5 bg-muted/10">
-            <div className="w-5 shrink-0" />
+            {favoriteMatchIds && onMatchFavoriteToggle && <div className="w-5 shrink-0" />}
+            <div className="w-8 shrink-0" />
             <div className="w-[4.5rem] shrink-0" />
             <div className="flex-1" />
             {/* ML-6: Prediction column header */}
@@ -372,6 +392,8 @@ export function LeagueAccordion({
               match={match}
               liveSnapshot={liveSnapshots?.[match.id]}
               isPro={isPro}
+              favoriteMatchIds={favoriteMatchIds}
+              onMatchFavoriteToggle={onMatchFavoriteToggle}
             />
           ))}
         </div>
