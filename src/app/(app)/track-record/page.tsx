@@ -73,7 +73,7 @@ export default async function TrackRecordPage() {
       <SystemStatusCard status={systemStatus} />
 
       {/* Section 4: Statistical significance progress bar (everyone) */}
-      <SignificanceProgress settled={accuracy.stats.total + trackStats.settledBets} />
+      <SignificanceProgress settled={trackStats.settledBets} />
 
       {/* Section 5: Early results — contextualized, collapsible (everyone) */}
       <EarlyResults accuracy={accuracy} trackStats={trackStats} />

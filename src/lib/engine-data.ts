@@ -1772,9 +1772,13 @@ export async function getTrackRecordStats(): Promise<TrackRecordStats> {
 
 export interface SystemStatus {
   lastOddsScan: string | null;   // ISO timestamp
+  lastPredictionRun: string | null; // ISO timestamp
   matchesToday: number;
+  liveMatchesNow: number;
   valueOpportunitiesToday: number;
+  oddsUpdatesToday: number;
   activeBots: number;
+  leaguesTracked: number;
 }
 
 export async function getSystemStatus(): Promise<SystemStatus> {
@@ -1785,12 +1789,22 @@ export async function getSystemStatus(): Promise<SystemStatus> {
   todayStart.setUTCHours(0, 0, 0, 0);
   const todayStr = todayStart.toISOString();
 
-  const [lastOddsResult, matchCountResult, valueBetsResult, botsResult] = await Promise.all([
+  const [
+    lastOddsResult, lastPredResult, matchCountResult,
+    liveResult, valueBetsResult, oddsCountResult,
+    botsResult, leaguesResult
+  ] = await Promise.all([
     // Last odds scan
     supabase
       .from("odds_snapshots")
       .select("timestamp")
       .order("timestamp", { ascending: false })
+      .limit(1),
+    // Last prediction run
+    supabase
+      .from("predictions")
+      .select("created_at")
+      .order("created_at", { ascending: false })
       .limit(1),
     // Today's matches
     supabase
@@ -1798,24 +1812,46 @@ export async function getSystemStatus(): Promise<SystemStatus> {
       .select("id", { count: "exact", head: true })
       .gte("date", todayStr)
       .lte("date", now.toISOString()),
+    // Live matches right now
+    supabase
+      .from("matches")
+      .select("id", { count: "exact", head: true })
+      .in("status", ["live", "1H", "2H", "HT"]),
     // Today's value bets placed
     supabase
       .from("simulated_bets")
       .select("id", { count: "exact", head: true })
       .gte("pick_time", todayStr),
+    // Odds updates today
+    supabase
+      .from("odds_snapshots")
+      .select("id", { count: "exact", head: true })
+      .gte("timestamp", todayStr),
     // Active bots
     supabase
       .from("bots")
       .select("id", { count: "exact", head: true })
       .eq("is_active", true),
+    // Distinct leagues tracked (from active matches)
+    supabase
+      .from("matches")
+      .select("league_id")
+      .gte("date", todayStr)
+      .limit(500),
   ]);
 
   const lastTs = (lastOddsResult.data as { timestamp: string }[] | null)?.[0]?.timestamp ?? null;
+  const lastPredTs = (lastPredResult.data as { created_at: string }[] | null)?.[0]?.created_at ?? null;
+  const leagueIds = new Set((leaguesResult.data ?? []).map((r: { league_id: string }) => r.league_id));
 
   return {
     lastOddsScan: lastTs,
+    lastPredictionRun: lastPredTs,
     matchesToday: matchCountResult.count ?? 0,
+    liveMatchesNow: liveResult.count ?? 0,
     valueOpportunitiesToday: valueBetsResult.count ?? 0,
+    oddsUpdatesToday: oddsCountResult.count ?? 0,
     activeBots: botsResult.count ?? 0,
+    leaguesTracked: leagueIds.size,
   };
 }
