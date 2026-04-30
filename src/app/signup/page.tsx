@@ -17,7 +17,7 @@ import { GoogleSignIn, DiscordSignIn, AuthDivider } from "@/components/google-si
 
 const FREE_FEATURES = [
   "All today's fixtures + live scores",
-  "Best odds (H/D/A) from 2 bookmakers",
+  "Best odds (H/D/A) across all bookmakers",
   "H2H record, standings & team form",
   "Favorite teams & personalized \"My Matches\" feed",
   "Prediction tracker — log picks & track your hit rate",

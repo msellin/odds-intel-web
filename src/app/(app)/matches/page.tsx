@@ -98,7 +98,7 @@ export default async function MatchesPage() {
           <span className="group relative flex items-center gap-1 cursor-default">
             <Info className="size-3.5 text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors" />
             <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-60 -translate-x-1/2 rounded-lg border border-border/60 bg-popover p-2.5 text-xs text-muted-foreground opacity-0 shadow-xl transition-opacity group-hover:opacity-100">
-              Includes today&apos;s fixtures plus yesterday&apos;s finished matches. Use the <strong className="text-foreground/80">Finished</strong> tab to filter. Date picker coming soon.
+              Includes today&apos;s fixtures plus yesterday&apos;s finished matches. Use the <strong className="text-foreground/80">Finished</strong> tab to filter.
             </span>
           </span>
         </div>

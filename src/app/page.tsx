@@ -110,7 +110,7 @@ export default function LandingPage() {
             <Link href="/login" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
               Log In
             </Link>
-            <Button size="sm" className="bg-green-600 text-white hover:bg-green-700" nativeButton={false} render={<Link href="/signup" />}>
+            <Button size="sm" className="bg-green-700 text-white hover:bg-green-800" nativeButton={false} render={<Link href="/signup" />}>
               Sign Up Free
             </Button>
           </div>
@@ -137,7 +137,7 @@ export default function LandingPage() {
           <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
             <Button
               size="lg"
-              className="h-12 bg-green-600 px-8 text-base font-bold text-white hover:bg-green-700"
+              className="h-12 bg-green-700 px-8 text-base font-bold text-white hover:bg-green-800"
               nativeButton={false} render={<Link href="/signup" />}
             >
               Start Free
@@ -159,7 +159,7 @@ export default function LandingPage() {
               <div className="h-2.5 w-2.5 rounded-full bg-red-500/40" />
               <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/40" />
               <div className="h-2.5 w-2.5 rounded-full bg-green-500/40" />
-              <span className="ml-3 font-mono text-[10px] text-muted-foreground/40">oddsintel.com/matches</span>
+              <span className="ml-3 font-mono text-[10px] text-muted-foreground/60">oddsintel.app/matches</span>
             </div>
             {/* Match header */}
             <div className="p-5">
@@ -206,7 +206,7 @@ export default function LandingPage() {
               </div>
             </div>
           </div>
-          <p className="mt-2 text-center text-[10px] text-muted-foreground/40">Sample data — illustrative</p>
+          <p className="mt-2 text-center text-[10px] text-muted-foreground/60">Sample data — illustrative</p>
         </div>
       </section>
 
@@ -285,7 +285,7 @@ export default function LandingPage() {
               ))}
             </div>
             <div className="border-t border-white/[0.06] bg-muted/10 px-4 py-2 text-right">
-              <span className="text-[10px] text-muted-foreground/40">Sample data — illustrative only</span>
+              <span className="text-[10px] text-muted-foreground/60">Sample data — illustrative only</span>
             </div>
           </div>
         </div>
@@ -304,7 +304,7 @@ export default function LandingPage() {
             {[
               { stat: "280+", label: "leagues tracked worldwide" },
               { stat: "13",   label: "bookmakers compared" },
-              { stat: "9",    label: "AI strategies running live" },
+              { stat: "16",   label: "AI strategies running live" },
               { stat: "100+",  label: "European leagues covered" },
             ].map((item) => (
               <div key={item.label} className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-5 py-6 text-center">

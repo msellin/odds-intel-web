@@ -1,6 +1,5 @@
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
 import type { UserProfile } from "@/components/auth-provider";
-import type { Match, MatchDetail, ValueBet, HistoricalBet, TrackRecordStats } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Supabase browser client (used by all queries below)
@@ -92,42 +91,3 @@ export async function updateUserNotificationSettings(
   return { success: true };
 }
 
-// ---------------------------------------------------------------------------
-// Match queries (STUBS — will return real data once Python backend populates DB)
-// ---------------------------------------------------------------------------
-
-export async function getTodayMatches(): Promise<Match[]> {
-  // TODO: Query `matches` table filtered by today's date
-  // SELECT * FROM matches WHERE date = CURRENT_DATE ORDER BY kickoff ASC
-  return [];
-}
-
-export async function getMatchDetail(matchId: string): Promise<MatchDetail | null> {
-  // TODO: Join matches, odds_snapshots, odds_movements, injuries, lineups,
-  // weather, referees, and predictions tables for the given matchId
-  console.log("getMatchDetail stub called for:", matchId);
-  return null;
-}
-
-export async function getValueBets(): Promise<ValueBet[]> {
-  // TODO: Query `value_bets` view/table for active value bets
-  // SELECT * FROM value_bets WHERE kickoff > NOW() ORDER BY edge_percent DESC
-  return [];
-}
-
-export interface TrackRecordFilters {
-  startDate?: string;
-  endDate?: string;
-  league?: string;
-  market?: string;
-  strategy?: string;
-}
-
-export async function getTrackRecord(
-  filters?: TrackRecordFilters
-): Promise<{ bets: HistoricalBet[]; stats: TrackRecordStats | null }> {
-  // TODO: Query `historical_bets` table with optional filters
-  // Also compute aggregate stats (hit rate, ROI, CLV, etc.)
-  console.log("getTrackRecord stub called with filters:", filters);
-  return { bets: [], stats: null };
-}

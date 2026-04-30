@@ -19,7 +19,7 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "OddsIntel — AI Football Predictions & Value Bets Today",
   description:
-    "Get AI-powered value bets and football predictions today. Compare bookmaker odds, track injuries, and check H2H records — free, across 1,200+ leagues.",
+    "Get AI-powered value bets and football predictions today. Compare bookmaker odds, track injuries, and check H2H records — free, across 280+ leagues.",
   keywords: [
     "AI football predictions",
     "value bets today",
@@ -41,7 +41,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "OddsIntel — AI Football Predictions & Value Bets Today",
     description:
-      "Get AI-powered value bets and football predictions today. Compare bookmaker odds, track injuries, and check H2H records — free, across 1,200+ leagues.",
+      "Get AI-powered value bets and football predictions today. Compare bookmaker odds, track injuries, and check H2H records — free, across 280+ leagues.",
     url: "https://oddsintel.app",
     siteName: "OddsIntel",
     locale: "en_US",
@@ -51,7 +51,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "OddsIntel — AI Football Predictions & Value Bets Today",
     description:
-      "Get AI-powered value bets and football predictions today. Compare bookmaker odds, track injuries, and check H2H records — free, across 1,200+ leagues.",
+      "Get AI-powered value bets and football predictions today. Compare bookmaker odds, track injuries, and check H2H records — free, across 280+ leagues.",
   },
   alternates: {
     canonical: "https://oddsintel.app",
@@ -97,8 +97,7 @@ export default function RootLayout({
               name: "OddsIntel",
               url: "https://oddsintel.app",
               description:
-                "OddsIntel uses an AI ensemble model combining Poisson regression and XGBoost to generate football predictions and value bets across 1,200+ leagues. Provides odds comparison, injury tracking, H2H records and standings in one platform.",
-              sameAs: [],
+                "OddsIntel uses an AI ensemble model combining Poisson regression and XGBoost to generate football predictions and value bets across 280+ leagues. Provides odds comparison, injury tracking, H2H records and standings in one platform.",
             }),
           }}
         />
@@ -109,7 +108,7 @@ export default function RootLayout({
           {`
             (function(h,o,t,j,a,r){
               h.hj=h.hj||function(){(h.hj.q=h.hj.q||[]).push(arguments)};
-              h._hjSettings={hjid:${process.env.NEXT_PUBLIC_HOTJAR_ID},hjsv:6};
+              h._hjSettings={hjid:${process.env.NEXT_PUBLIC_HOTJAR_ID || 0},hjsv:6};
               a=o.getElementsByTagName('head')[0];
               r=o.createElement('script');r.async=1;
               r.src=t+h._hjSettings.hjid+j+h._hjSettings.hjsv;
