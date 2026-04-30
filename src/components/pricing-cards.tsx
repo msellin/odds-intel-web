@@ -110,9 +110,12 @@ export function PricingCards() {
             ))}
           </ul>
           <div className="mt-6">
-            <Button className="w-full bg-green-500 font-bold text-black hover:bg-green-400" nativeButton={false} render={<Link href="/signup" />}>
-              {annual ? "Get Pro — €39.99/yr" : "Get Pro — €3.99/mo"}
+            <Button className="w-full bg-green-500/40 font-bold text-black/60 cursor-not-allowed" disabled>
+              Coming Soon
             </Button>
+            <p className="mt-2 text-center text-[10px] text-muted-foreground">
+              Founding member rates locked for early subscribers
+            </p>
           </div>
         </div>
 
@@ -157,9 +160,12 @@ export function PricingCards() {
             ))}
           </ul>
           <div className="mt-6">
-            <Button className="w-full border-amber-500/30 text-amber-400/80 hover:bg-amber-500/10" variant="outline" nativeButton={false} render={<Link href="/signup" />}>
-              {annual ? "Get Elite — €119.99/yr" : "Get Elite — €9.99/mo"}
+            <Button className="w-full border-amber-500/30 text-amber-400/50 cursor-not-allowed opacity-60" variant="outline" disabled>
+              Coming Soon
             </Button>
+            <p className="mt-2 text-center text-[10px] text-muted-foreground">
+              Pro features ship first — Elite launching soon
+            </p>
           </div>
         </div>
       </div>

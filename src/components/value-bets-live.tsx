@@ -245,9 +245,9 @@ function ValueBetsProView({ bets }: { bets: LiveBet[] }) {
           <span className="text-amber-400 font-medium">Pro shows direction only.</span>
           {" "}Upgrade to Elite for exact edge %, model probability, odds and Kelly stake sizing.
         </p>
-        <a href="/profile" className="ml-auto shrink-0 rounded-md bg-amber-500/10 border border-amber-500/30 px-3 py-1.5 text-xs font-semibold text-amber-400 hover:bg-amber-500/20 transition-colors whitespace-nowrap">
-          Upgrade
-        </a>
+        <span className="ml-auto shrink-0 rounded-md border border-amber-500/20 px-3 py-1.5 text-xs font-medium text-amber-400/50 cursor-default">
+          Coming Soon
+        </span>
       </div>
 
       {/* Directional cards */}

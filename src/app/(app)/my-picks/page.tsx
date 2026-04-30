@@ -270,12 +270,9 @@ export default function MyPicksPage() {
           <span className="text-muted-foreground">
             {" "}— see how our AI model compares.{" "}
           </span>
-          <Link
-            href="/profile"
-            className="text-emerald-400 hover:text-emerald-300 font-medium"
-          >
-            Upgrade to Elite
-          </Link>
+          <span className="text-emerald-400/50 font-medium">
+            Elite coming soon
+          </span>
         </div>
       )}
 

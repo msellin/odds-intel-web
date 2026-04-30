@@ -107,7 +107,7 @@ export function TierGate({ requiredTier, children, featureName }: TierGateProps)
               textTransform: "capitalize",
             }}
           >
-            Upgrade to {TIER_LABELS[requiredTier]}
+            {TIER_LABELS[requiredTier]} — Coming Soon
           </h3>
 
           <p
@@ -118,11 +118,11 @@ export function TierGate({ requiredTier, children, featureName }: TierGateProps)
               lineHeight: 1.5,
             }}
           >
-            {featureName} is available on the{" "}
+            {featureName} will be available on the{" "}
             <span style={{ color: "#d1d5db" }}>
               {TIER_LABELS[requiredTier]}
             </span>{" "}
-            plan and above.
+            plan.
           </p>
 
           <p
@@ -136,26 +136,23 @@ export function TierGate({ requiredTier, children, featureName }: TierGateProps)
             {TIER_PRICES[requiredTier]}
           </p>
 
-          <a
-            href="/profile"
+          <span
             style={{
               display: "block",
-              backgroundColor: "#22c55e",
-              color: "#000000",
-              border: "none",
+              backgroundColor: "rgba(34, 197, 94, 0.15)",
+              color: "rgba(34, 197, 94, 0.5)",
+              border: "1px solid rgba(34, 197, 94, 0.2)",
               borderRadius: "8px",
               padding: "12px 32px",
               fontSize: "15px",
               fontWeight: 600,
-              cursor: "pointer",
               width: "100%",
-              textDecoration: "none",
               textAlign: "center",
               boxSizing: "border-box",
             }}
           >
-            Upgrade Now
-          </a>
+            Coming Soon
+          </span>
         </div>
       </div>
     </div>

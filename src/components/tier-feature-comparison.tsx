@@ -1,5 +1,4 @@
 import { Check, X } from "lucide-react";
-import Link from "next/link";
 
 interface Props {
   currentTier: "free" | "pro" | "elite";
@@ -96,20 +95,14 @@ export function TierFeatureComparison({ currentTier }: Props) {
       {/* CTAs */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-center pt-1">
         {!isPro && (
-          <Link
-            href="/profile"
-            className="rounded-md bg-blue-600 px-5 py-2 text-xs font-medium text-white hover:bg-blue-700 transition-colors text-center"
-          >
-            Upgrade to Pro
-          </Link>
+          <span className="rounded-md border border-blue-500/20 px-5 py-2 text-xs font-medium text-blue-400/50 text-center cursor-default">
+            Pro — Coming Soon
+          </span>
         )}
         {!isElite && (
-          <Link
-            href="/profile"
-            className="rounded-md bg-emerald-600 px-5 py-2 text-xs font-medium text-white hover:bg-emerald-700 transition-colors text-center"
-          >
-            {isPro ? "Upgrade to Elite" : "Go Elite"}
-          </Link>
+          <span className="rounded-md border border-emerald-500/20 px-5 py-2 text-xs font-medium text-emerald-400/50 text-center cursor-default">
+            Elite — Coming Soon
+          </span>
         )}
       </div>
     </div>
