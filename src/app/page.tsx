@@ -291,20 +291,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ───────── Mid-page CTA ───────── */}
-      <section className="pb-14">
-        <div className="mx-auto max-w-xl px-4 text-center sm:px-6">
-          <p className="text-sm text-muted-foreground">Free forever. No credit card. Set up in 30 seconds.</p>
-          <div className="mt-4">
-            <Button size="lg" className="h-12 bg-green-600 px-8 text-base font-bold text-white hover:bg-green-700" nativeButton={false} render={<Link href="/signup" />}>
-              Start Free
-            </Button>
-          </div>
-        </div>
-      </section>
-
-      <Separator />
-
       {/* ───────── Trust / Stats ───────── */}
       <section className="bg-card/20 py-14">
         <div className="mx-auto max-w-5xl px-4 sm:px-6">
@@ -412,11 +398,6 @@ export default function LandingPage() {
             </table>
           </div>
 
-          <div className="mt-6 text-center">
-            <Button size="lg" className="h-12 bg-green-600 px-8 text-base font-bold text-white hover:bg-green-700" nativeButton={false} render={<Link href="/signup" />}>
-              Start Free — No Card Needed
-            </Button>
-          </div>
         </div>
       </section>
 
