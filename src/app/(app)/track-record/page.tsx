@@ -6,11 +6,35 @@ import { SignificanceProgress } from "@/components/significance-progress";
 import { SystemStatusCard } from "@/components/system-status";
 import { EarlyResults } from "@/components/early-results";
 import { TodayPicksPreview } from "@/components/today-picks-preview";
+import { PredictionHistory } from "@/components/prediction-history";
+import { TierFeatureComparison } from "@/components/tier-feature-comparison";
 import { TrackRecordLive } from "@/components/track-record-live";
 
 export default async function TrackRecordPage() {
   const supabase = await createSupabaseServer();
   const { data: { user } } = await supabase.auth.getUser();
+
+  // Determine user tier
+  let tier: "free" | "pro" | "elite" = "free";
+  let isSuperadmin = false;
+  if (user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("tier, is_superadmin")
+      .eq("id", user.id)
+      .single();
+    if (profile?.is_superadmin) {
+      isSuperadmin = true;
+      tier = "elite"; // superadmins see everything
+    } else if (profile?.tier === "elite") {
+      tier = "elite";
+    } else if (profile?.tier === "pro") {
+      tier = "pro";
+    }
+  }
+
+  const isPro = tier === "pro" || tier === "elite";
+  const isElite = tier === "elite";
 
   // Public data — no login required
   const [accuracy, todayPicks, trackStats, systemStatus] = await Promise.all([
@@ -21,16 +45,6 @@ export default async function TrackRecordPage() {
   ]);
 
   // Bot P&L — only fetch and render for superadmins
-  let isSuperadmin = false;
-  if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("is_superadmin")
-      .eq("id", user.id)
-      .single();
-    isSuperadmin = profile?.is_superadmin === true;
-  }
-
   const bets = isSuperadmin ? await getAllBets() : [];
 
   const totalBets = bets.length;
@@ -64,12 +78,18 @@ export default async function TrackRecordPage() {
       {/* Section 5: Early results — contextualized, collapsible (everyone) */}
       <EarlyResults accuracy={accuracy} trackStats={trackStats} />
 
-      {/* Section 6: Today's value opportunities (everyone, tiered in PR2) */}
+      {/* Section 6: Today's value opportunities — tiered */}
       {todayPicks.length > 0 && (
-        <TodayPicksPreview picks={todayPicks} />
+        <TodayPicksPreview picks={todayPicks} isPro={isPro} isElite={isElite} />
       )}
 
-      {/* Section 7: Bot paper trading — superadmin only */}
+      {/* Section 7: Feature comparison — shows what each tier unlocks (everyone) */}
+      <TierFeatureComparison currentTier={tier} />
+
+      {/* Section 8: Prediction history — tiered (free: limited, Pro: full + CLV) */}
+      <PredictionHistory rows={accuracy.rows} isPro={isPro} isElite={isElite} />
+
+      {/* Section 9: Bot paper trading — superadmin only */}
       {isSuperadmin && <TrackRecordLive bets={sortedBets} stats={botStats} />}
     </div>
   );
