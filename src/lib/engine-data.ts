@@ -1656,3 +1656,129 @@ export async function getMatchCLVData(matchId: string): Promise<MatchCLVData> {
     })),
   };
 }
+
+// ─── Track Record stats (CLV + edge metrics) ──────────────────────────────
+
+export interface TrackRecordStats {
+  avgClv: number | null;         // average CLV across settled bets
+  posClvPct: number;             // % of bets with positive CLV
+  totalValueBets: number;        // bets with edge > 0
+  avgEdge: number;               // average edge %
+  settledBets: number;           // total settled
+  leaguesCovered: number;        // distinct leagues with bets
+  bookmakersCovered: number;     // distinct bookmakers in odds
+}
+
+export async function getTrackRecordStats(): Promise<TrackRecordStats> {
+  const supabase = createSupabasePublic();
+
+  // Settled bets with CLV
+  const { data: bets } = await supabase
+    .from("simulated_bets")
+    .select("clv, edge_percent, match:match_id(league:league_id(name))")
+    .neq("result", "pending")
+    .limit(1000);
+
+  const settled = (bets || []) as Array<{
+    clv: number | null;
+    edge_percent: number | null;
+    match: { league: { name: string } | { name: string }[] | null } | { league: { name: string } | { name: string }[] | null }[] | null;
+  }>;
+
+  const withClv = settled.filter((b) => b.clv != null);
+  const avgClv = withClv.length > 0
+    ? withClv.reduce((sum, b) => sum + Number(b.clv), 0) / withClv.length
+    : null;
+  const posClvPct = withClv.length > 0
+    ? (withClv.filter((b) => Number(b.clv) > 0).length / withClv.length) * 100
+    : 0;
+
+  const withEdge = settled.filter((b) => b.edge_percent != null);
+  const avgEdge = withEdge.length > 0
+    ? withEdge.reduce((sum, b) => sum + Number(b.edge_percent), 0) / withEdge.length
+    : 0;
+  const totalValueBets = withEdge.filter((b) => Number(b.edge_percent) > 0).length;
+
+  // Distinct leagues
+  const leagues = new Set<string>();
+  for (const b of settled) {
+    const m = Array.isArray(b.match) ? b.match[0] : b.match;
+    const l = m?.league;
+    const league = Array.isArray(l) ? l[0] : l;
+    if (league?.name) leagues.add(league.name);
+  }
+
+  // Distinct bookmakers (from recent odds)
+  const { count: bmCount } = await supabase
+    .from("odds_snapshots")
+    .select("bookmaker", { count: "exact", head: true });
+
+  // Actually get distinct bookmakers
+  const { data: bmData } = await supabase
+    .from("odds_snapshots")
+    .select("bookmaker")
+    .limit(5000);
+  const bookmakers = new Set((bmData || []).map((r: { bookmaker: string }) => r.bookmaker));
+
+  return {
+    avgClv,
+    posClvPct,
+    totalValueBets,
+    avgEdge,
+    settledBets: settled.length,
+    leaguesCovered: leagues.size,
+    bookmakersCovered: bookmakers.size,
+  };
+}
+
+// ─── System status (live activity indicators) ──────────────────────────────
+
+export interface SystemStatus {
+  lastOddsScan: string | null;   // ISO timestamp
+  matchesToday: number;
+  valueOpportunitiesToday: number;
+  activeBots: number;
+}
+
+export async function getSystemStatus(): Promise<SystemStatus> {
+  const supabase = createSupabasePublic();
+
+  const now = new Date();
+  const todayStart = new Date(now);
+  todayStart.setUTCHours(0, 0, 0, 0);
+  const todayStr = todayStart.toISOString();
+
+  const [lastOddsResult, matchCountResult, valueBetsResult, botsResult] = await Promise.all([
+    // Last odds scan
+    supabase
+      .from("odds_snapshots")
+      .select("timestamp")
+      .order("timestamp", { ascending: false })
+      .limit(1),
+    // Today's matches
+    supabase
+      .from("matches")
+      .select("id", { count: "exact", head: true })
+      .gte("date", todayStr)
+      .lte("date", now.toISOString()),
+    // Today's value bets placed
+    supabase
+      .from("simulated_bets")
+      .select("id", { count: "exact", head: true })
+      .gte("pick_time", todayStr),
+    // Active bots
+    supabase
+      .from("bots")
+      .select("id", { count: "exact", head: true })
+      .eq("is_active", true),
+  ]);
+
+  const lastTs = (lastOddsResult.data as { timestamp: string }[] | null)?.[0]?.timestamp ?? null;
+
+  return {
+    lastOddsScan: lastTs,
+    matchesToday: matchCountResult.count ?? 0,
+    valueOpportunitiesToday: valueBetsResult.count ?? 0,
+    activeBots: botsResult.count ?? 0,
+  };
+}
