@@ -488,7 +488,7 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
 
   const MOVE_THRESHOLD = 0.05; // min odds delta to show ↑↓
 
-  return (matches as PublicMatchRow[]).map((m) => {
+  const allResults = (matches as PublicMatchRow[]).map((m) => {
     const homeTeam = Array.isArray(m.home_team) ? m.home_team[0] : m.home_team;
     const awayTeam = Array.isArray(m.away_team) ? m.away_team[0] : m.away_team;
     const league = Array.isArray(m.league) ? m.league[0] : m.league;
@@ -547,6 +547,33 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
       score_away: m.score_away ?? null,
     };
   });
+
+  // Deduplicate matches from different sources (e.g. API-Football vs Kambi)
+  // that create separate team/match records for the same real-world fixture.
+  // Key by normalized team names + date; keep the record with better data.
+  const normalize = (s: string) =>
+    s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+  const seen = new Map<string, number>();
+  const deduped: PublicMatch[] = [];
+
+  for (const match of allResults) {
+    const key = `${normalize(match.homeTeam)}|${normalize(match.awayTeam)}|${match.kickoff.slice(0, 10)}`;
+    const existing = seen.get(key);
+    if (existing == null) {
+      seen.set(key, deduped.length);
+      deduped.push(match);
+    } else {
+      // Keep whichever has better data: live/finished > scheduled, hasOdds > no odds
+      const prev = deduped[existing];
+      const statusRank = (s: string) => s === "live" ? 2 : s === "finished" ? 1 : 0;
+      const score = (m: PublicMatch) => statusRank(m.status) * 10 + (m.hasOdds ? 5 : 0) + m.signalCount;
+      if (score(match) > score(prev)) {
+        deduped[existing] = match;
+      }
+    }
+  }
+
+  return deduped;
 }
 
 export async function getPublicMatchById(matchId: string): Promise<PublicMatch | null> {

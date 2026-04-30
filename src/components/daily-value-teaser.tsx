@@ -104,51 +104,31 @@ export function DailyValueTeaser() {
 
   if (loading || !teaser) return null;
 
-  // Anonymous — show top pick publicly as teaser
+  // Anonymous — compact inline teaser
   if (!user) {
     return (
-      <div className="relative overflow-hidden rounded-xl border border-amber-500/20 bg-amber-500/[0.04] p-5">
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Zap className="h-4 w-4 text-amber-400" />
-              <span className="text-xs font-bold uppercase tracking-wider text-amber-400">
-                Today&apos;s AI Pick
+      <div className="relative overflow-hidden rounded-xl border border-amber-500/20 bg-amber-500/[0.04] px-4 py-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          {/* Left: pick info */}
+          <div className="flex items-center gap-3 min-w-0">
+            <Zap className="h-4 w-4 shrink-0 text-amber-400" />
+            <div className="flex items-center gap-2 min-w-0 text-sm">
+              <span className="font-medium text-foreground truncate">
+                {teaser.match}
               </span>
-            </div>
-            {totalBets > 1 && (
-              <span className="text-[11px] text-muted-foreground">
-                +{totalBets - 1} more with free account
+              <span className="hidden sm:inline text-muted-foreground">·</span>
+              <span className="hidden sm:inline text-xs text-muted-foreground truncate">
+                {teaser.selection}
               </span>
-            )}
-          </div>
-
-          <div className="rounded-lg border border-amber-500/20 bg-black/20 p-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="space-y-1 min-w-0">
-                <p className="text-sm font-medium text-foreground truncate">
-                  {teaser.match}
-                </p>
-                <p className="text-xs text-muted-foreground">{teaser.league}</p>
-              </div>
-              <div className="text-right shrink-0">
-                <p className="font-mono text-lg font-bold text-amber-400">
-                  +{teaser.edge.toFixed(1)}%
-                </p>
-                <p className="text-[10px] text-muted-foreground">edge</p>
-              </div>
-            </div>
-            <div className="mt-3 flex items-center gap-3 text-sm">
-              <span className="rounded border border-white/10 bg-white/5 px-2 py-0.5 text-xs">
-                {teaser.market}
-              </span>
-              <span className="font-medium text-foreground">{teaser.selection}</span>
-              <span className="font-mono text-muted-foreground">
+              <span className="hidden sm:inline font-mono text-xs text-muted-foreground">
                 @ {teaser.odds.toFixed(2)}
+              </span>
+              <span className="font-mono font-bold text-amber-400">
+                +{teaser.edge.toFixed(1)}%
               </span>
               <span
                 className={cn(
-                  "ml-auto rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                  "rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
                   teaser.result === "won"
                     ? "bg-emerald-500/20 text-emerald-400"
                     : teaser.result === "lost"
@@ -161,12 +141,13 @@ export function DailyValueTeaser() {
             </div>
           </div>
 
+          {/* Right: CTA */}
           <Link
             href="/signup"
-            className="flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-bold text-black transition-colors hover:bg-amber-400"
+            className="flex items-center justify-center gap-1.5 shrink-0 rounded-md bg-amber-500 px-3 py-1.5 text-xs font-bold text-black transition-colors hover:bg-amber-400"
           >
-            Sign up free for 1 more pick daily
-            <ArrowRight className="h-4 w-4" />
+            Sign up free{totalBets > 1 ? ` · ${totalBets} picks` : ""}
+            <ArrowRight className="h-3 w-3" />
           </Link>
         </div>
       </div>
