@@ -19,7 +19,7 @@ export function SignupBanner() {
         onClick={openLoginModal}
         className="shrink-0 rounded-md bg-green-600 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-white transition-colors hover:bg-green-700"
       >
-        Sign Up Free
+        Sign Up
       </button>
     </div>
   );

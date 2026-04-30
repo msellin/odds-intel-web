@@ -23,7 +23,7 @@ const links = [
   { href: "/my-picks", label: "My Picks", icon: Crosshair, authOnly: true },
   { href: "/value-bets", label: "Value Bets", icon: Target, authOnly: false },
   { href: "/track-record", label: "Track Record", icon: BarChart3, authOnly: false },
-  { href: "/how-it-works", label: "How it works", icon: Info, authOnly: false, guestOnly: true },
+  { href: "/how-it-works", label: "How it works", icon: Info, authOnly: false },
 ];
 
 export function Nav() {

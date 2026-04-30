@@ -271,7 +271,7 @@ export default function MyPicksPage() {
             {" "}— see how our AI model compares.{" "}
           </span>
           <Link
-            href="/signup"
+            href="/profile"
             className="text-emerald-400 hover:text-emerald-300 font-medium"
           >
             Upgrade to Elite

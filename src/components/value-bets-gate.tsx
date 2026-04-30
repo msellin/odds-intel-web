@@ -34,7 +34,7 @@ export function ValueBetsGate() {
         </div>
         <h1 className="text-2xl font-bold tracking-tight">Value Bets</h1>
         <p className="text-muted-foreground">
-          Where the model beats the bookmakers. Available to signed-in users.
+          Where the model beats the bookmakers. Available on Pro and Elite.
         </p>
       </div>
 
@@ -92,7 +92,7 @@ export function ValueBetsGate() {
           onClick={openLoginModal}
           className="rounded-md bg-emerald-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
         >
-          Sign In Free
+          Sign In
         </button>
         <Link
           href="/how-it-works"
