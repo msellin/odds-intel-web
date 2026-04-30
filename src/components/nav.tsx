@@ -55,7 +55,7 @@ export function Nav() {
 
         {/* Desktop nav */}
         <nav className="hidden items-center gap-1 md:flex">
-          {links.filter((link) => (!link.authOnly || user) && (!link.guestOnly || !user)).map((link) => {
+          {links.filter((link) => !link.authOnly || user).map((link) => {
             const Icon = link.icon;
             const active =
               pathname === link.href || pathname.startsWith(link.href + "/");
@@ -133,7 +133,7 @@ export function Nav() {
       {/* Mobile nav */}
       {open && (
         <nav className="border-t border-border/50 bg-background px-4 pb-4 pt-2 md:hidden">
-          {links.filter((link) => (!link.authOnly || user) && (!link.guestOnly || !user)).map((link) => {
+          {links.filter((link) => !link.authOnly || user).map((link) => {
             const Icon = link.icon;
             const active =
               pathname === link.href || pathname.startsWith(link.href + "/");
