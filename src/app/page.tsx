@@ -159,7 +159,7 @@ export default function LandingPage() {
               <div className="h-2.5 w-2.5 rounded-full bg-red-500/40" />
               <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/40" />
               <div className="h-2.5 w-2.5 rounded-full bg-green-500/40" />
-              <span className="ml-3 font-mono text-[10px] text-muted-foreground/60">oddsintel.app/matches</span>
+              <span className="ml-3 font-mono text-[10px] text-muted-foreground/80">oddsintel.app/matches</span>
             </div>
             {/* Match header */}
             <div className="p-5">
@@ -206,7 +206,7 @@ export default function LandingPage() {
               </div>
             </div>
           </div>
-          <p className="mt-2 text-center text-[10px] text-muted-foreground/60">Sample data — illustrative</p>
+          <p className="mt-2 text-center text-[10px] text-muted-foreground/80">Sample data — illustrative</p>
         </div>
       </section>
 
@@ -285,7 +285,7 @@ export default function LandingPage() {
               ))}
             </div>
             <div className="border-t border-white/[0.06] bg-muted/10 px-4 py-2 text-right">
-              <span className="text-[10px] text-muted-foreground/60">Sample data — illustrative only</span>
+              <span className="text-[10px] text-muted-foreground/80">Sample data — illustrative only</span>
             </div>
           </div>
         </div>
@@ -379,7 +379,7 @@ export default function LandingPage() {
                   if (row.type === "category") {
                     return (
                       <tr key={i} className="bg-white/[0.02]">
-                        <td colSpan={4} className="py-2 pl-4 pr-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
+                        <td colSpan={4} className="py-2 pl-4 pr-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/80">
                           {row.label}
                         </td>
                       </tr>
