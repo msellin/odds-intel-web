@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { Check, Info, Zap, TrendingUp, BarChart3, Star, Database } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 
@@ -9,7 +8,7 @@ import { Separator } from "@/components/ui/separator";
 const FREE_FEATURES = [
   "All fixtures from 280+ leagues — daily",
   "Live scores (auto-refresh every minute)",
-  "Best odds from 2–3 bookmakers per match",
+  "Best available odds per match (single best across bookmakers)",
   "Model predictions: Home / Draw / Away for every match",
   "Prediction confidence (statistical probability, 3 levels)",
   "Full track record — every prediction, every result, no cherry-picking",
@@ -220,12 +219,7 @@ export default function HowItWorksPage() {
           {/* Pro */}
           <Card className="border-blue-500/30 bg-blue-500/5">
             <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Pro</CardTitle>
-                <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-[10px]">
-                  Launching soon
-                </Badge>
-              </div>
+              <CardTitle className="text-base">Pro</CardTitle>
               <p className="text-2xl font-bold">€4.99<span className="text-sm font-normal text-muted-foreground">/mo</span></p>
               <p className="text-xs text-muted-foreground">Does own research, wants better data</p>
             </CardHeader>
@@ -239,12 +233,7 @@ export default function HowItWorksPage() {
           {/* Elite */}
           <Card className="border-emerald-500/30 bg-emerald-500/5">
             <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Elite</CardTitle>
-                <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px]">
-                  Launching soon
-                </Badge>
-              </div>
+              <CardTitle className="text-base">Elite</CardTitle>
               <p className="text-2xl font-bold">€14.99<span className="text-sm font-normal text-muted-foreground">/mo</span></p>
               <p className="text-xs text-muted-foreground">Serious bettor, wants model-backed picks</p>
             </CardHeader>
