@@ -10,6 +10,10 @@ import {
   Users,
   Activity,
   Zap,
+  Star,
+  Crosshair,
+  StickyNote,
+  Vote,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +28,11 @@ const FREE_FEATURES = [
   { icon: Activity, label: "Live scores during matches" },
   { icon: Users, label: "H2H records & recent meetings" },
   { icon: BarChart2, label: "League standings + team form" },
+  { icon: Star, label: "Favourite leagues to personalise your feed" },
+  { icon: Crosshair, label: "Personal picks tracker with hit rate" },
+  { icon: StickyNote, label: "Private match notes" },
+  { icon: Vote, label: "Community voting on matches" },
+  { icon: Zap, label: "1 AI value pick revealed daily" },
 ];
 
 const PRO_FEATURES = [
@@ -88,9 +97,6 @@ export default async function WelcomePage() {
           <CardTitle className="flex items-center gap-2 text-base">
             <Zap className="h-4 w-4 text-amber-400" />
             Unlock Pro features
-            <span className="ml-auto text-xs font-normal text-muted-foreground">
-              Coming soon
-            </span>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
@@ -101,9 +107,11 @@ export default async function WelcomePage() {
             </div>
           ))}
           <div className="pt-3">
-            <Button variant="outline" className="w-full" disabled>
-              Pro — €4.99/mo (coming soon)
-            </Button>
+            <Link href="/profile">
+              <Button variant="outline" className="w-full">
+                Upgrade to Pro — €3.99/mo
+              </Button>
+            </Link>
           </div>
         </CardContent>
       </Card>
