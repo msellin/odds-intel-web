@@ -7,7 +7,6 @@ import { SystemStatusCard } from "@/components/system-status";
 import { EarlyResults } from "@/components/early-results";
 import { TodayPicksPreview } from "@/components/today-picks-preview";
 import { PredictionHistory } from "@/components/prediction-history";
-import { TierFeatureComparison } from "@/components/tier-feature-comparison";
 import { TrackRecordFooterCta } from "@/components/track-record-footer-cta";
 import { TrackRecordLive } from "@/components/track-record-live";
 
@@ -84,10 +83,7 @@ export default async function TrackRecordPage() {
         <TodayPicksPreview picks={todayPicks} isPro={isPro} isElite={isElite} />
       )}
 
-      {/* Section 7: Feature comparison — shows what each tier unlocks (everyone) */}
-      <TierFeatureComparison currentTier={tier} />
-
-      {/* Section 8: Prediction history — tiered (free: limited, Pro: full + CLV) */}
+      {/* Section 7: Prediction history — tiered (free: limited, Pro: full + CLV) */}
       <PredictionHistory rows={accuracy.rows} isPro={isPro} isElite={isElite} />
 
       {/* Section 9: Footer CTA — conversion close (everyone except Elite) */}

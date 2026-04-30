@@ -25,26 +25,18 @@ export function TrackRecordFooterCta({ isPro, isElite }: Props) {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         {!isPro && (
           <Link
-            href="/how-it-works"
+            href="/profile"
             className="rounded-md bg-blue-600 px-5 py-2 text-xs font-medium text-white hover:bg-blue-700 transition-colors text-center"
           >
-            Start with Pro
+            Upgrade to Pro
           </Link>
         )}
         {!isElite && (
           <Link
-            href="/how-it-works"
+            href="/profile"
             className="rounded-md bg-emerald-600 px-5 py-2 text-xs font-medium text-white hover:bg-emerald-700 transition-colors text-center"
           >
             {isPro ? "Upgrade to Elite" : "Go Elite"}
-          </Link>
-        )}
-        {!isPro && (
-          <Link
-            href="/signup"
-            className="text-xs text-muted-foreground underline-offset-2 hover:underline hover:text-foreground transition-colors text-center"
-          >
-            Or start free — no credit card required
           </Link>
         )}
       </div>

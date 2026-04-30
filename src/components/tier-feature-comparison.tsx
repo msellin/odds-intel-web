@@ -97,7 +97,7 @@ export function TierFeatureComparison({ currentTier }: Props) {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-center pt-1">
         {!isPro && (
           <Link
-            href="/how-it-works"
+            href="/profile"
             className="rounded-md bg-blue-600 px-5 py-2 text-xs font-medium text-white hover:bg-blue-700 transition-colors text-center"
           >
             Upgrade to Pro
@@ -105,7 +105,7 @@ export function TierFeatureComparison({ currentTier }: Props) {
         )}
         {!isElite && (
           <Link
-            href="/how-it-works"
+            href="/profile"
             className="rounded-md bg-emerald-600 px-5 py-2 text-xs font-medium text-white hover:bg-emerald-700 transition-colors text-center"
           >
             {isPro ? "Upgrade to Elite" : "Go Elite"}
