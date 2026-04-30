@@ -420,15 +420,19 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
   const todayEnd = new Date(now);
   todayEnd.setUTCHours(23, 59, 59, 999);
 
-  // Step 1: Fetch yesterday + today's matches (no pre-filter by odds — show all fixtures)
+  // Step 1: Fetch yesterday + today's matches from featured leagues only.
+  // The !inner join excludes matches whose league has show_on_frontend = false
+  // (or whose league_id doesn't exist in the leagues table at all).
+  // Engine pipelines still analyze ALL leagues; this only filters the UI.
   const { data: matches, error } = await supabase
     .from("matches")
     .select(
       `id, date, status, score_home, score_away, form_home, form_away, af_prediction,
        home_team:home_team_id(id, name, country, logo_url),
        away_team:away_team_id(id, name, country, logo_url),
-       league:league_id(id, name, country, tier)`
+       league:league_id!inner(id, name, country, tier)`
     )
+    .eq("league.show_on_frontend", true)
     .gte("date", windowStart.toISOString())
     .lte("date", todayEnd.toISOString())
     .order("date", { ascending: true })
@@ -1672,14 +1676,26 @@ export interface TrackRecordStats {
 export async function getTrackRecordStats(): Promise<TrackRecordStats> {
   const supabase = createSupabasePublic();
 
-  // Settled bets with CLV
-  const { data: bets } = await supabase
-    .from("simulated_bets")
-    .select("clv, edge_percent, match:match_id(league:league_id(name))")
-    .neq("result", "pending")
-    .limit(1000);
+  // Run both queries in parallel (previously sequential)
+  const recentWindow = new Date();
+  recentWindow.setUTCDate(recentWindow.getUTCDate() - 1);
 
-  const settled = (bets || []) as Array<{
+  const [betsResult, bmResult] = await Promise.all([
+    // Settled bets with CLV
+    supabase
+      .from("simulated_bets")
+      .select("clv, edge_percent, match:match_id(league:league_id(name))")
+      .neq("result", "pending")
+      .limit(1000),
+    // Distinct bookmakers — small recent window instead of 5000-row scan
+    supabase
+      .from("odds_snapshots")
+      .select("bookmaker")
+      .gte("timestamp", recentWindow.toISOString())
+      .limit(500),
+  ]);
+
+  const settled = (betsResult.data || []) as Array<{
     clv: number | null;
     edge_percent: number | null;
     match: { league: { name: string } | { name: string }[] | null } | { league: { name: string } | { name: string }[] | null }[] | null;
@@ -1708,17 +1724,7 @@ export async function getTrackRecordStats(): Promise<TrackRecordStats> {
     if (league?.name) leagues.add(league.name);
   }
 
-  // Distinct bookmakers (from recent odds)
-  const { count: bmCount } = await supabase
-    .from("odds_snapshots")
-    .select("bookmaker", { count: "exact", head: true });
-
-  // Actually get distinct bookmakers
-  const { data: bmData } = await supabase
-    .from("odds_snapshots")
-    .select("bookmaker")
-    .limit(5000);
-  const bookmakers = new Set((bmData || []).map((r: { bookmaker: string }) => r.bookmaker));
+  const bookmakers = new Set((bmResult.data || []).map((r: { bookmaker: string }) => r.bookmaker));
 
   return {
     avgClv,

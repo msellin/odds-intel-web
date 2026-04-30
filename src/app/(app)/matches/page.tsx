@@ -16,26 +16,26 @@ function formatDate(): string {
 }
 
 export default async function MatchesPage() {
-  const allMatches = await getPublicMatches();
+  // Run matches fetch and auth check in parallel (previously sequential)
+  const [allMatches, authResult] = await Promise.all([
+    getPublicMatches(),
+    (async () => {
+      const supabase = await createSupabaseServer();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return { isAuthenticated: false, isPro: false };
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("tier, is_superadmin")
+        .eq("id", user.id)
+        .single();
+      const isElite = profile?.is_superadmin === true || profile?.tier === "elite";
+      return { isAuthenticated: true, isPro: isElite || profile?.tier === "pro" };
+    })(),
+  ]);
 
-  const supabase = await createSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const isAuthenticated = !!user;
-
-  let isPro = false;
-  if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("tier, is_superadmin")
-      .eq("id", user.id)
-      .single();
-    if (profile) {
-      const isElite = profile.is_superadmin === true || profile.tier === "elite";
-      isPro = isElite || profile.tier === "pro";
-    }
-  }
+  const { isAuthenticated, isPro } = authResult;
 
   // Group by league
   const grouped = new Map<string, PublicMatch[]>();
