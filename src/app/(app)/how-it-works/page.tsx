@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Check, Info, Zap, TrendingUp, BarChart3, Star, Database } from "lucide-react";
+import { Check, Info, Zap, TrendingUp, BarChart3, Star, Database, HelpCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 
@@ -252,7 +252,150 @@ export default function HowItWorksPage() {
 
       <Separator className="opacity-30" />
 
-      {/* Section 5: Common questions */}
+      {/* Section 5: Symbols & Icons guide */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-2">
+          <HelpCircle className="h-5 w-5 text-primary" />
+          <h2 className="text-xl font-semibold">Symbols &amp; Icons Guide</h2>
+        </div>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          Here&apos;s what every symbol on the matches page means at a glance.
+        </p>
+
+        <div className="space-y-2">
+          {/* Data Grade */}
+          <div className="rounded-xl border border-border/30 bg-card/30 px-4 py-3">
+            <p className="mb-2 text-sm font-semibold text-foreground">Data Grade</p>
+            <div className="flex flex-wrap items-start gap-4">
+              <div className="flex items-center gap-2">
+                <span className="inline-block rounded bg-green-500/20 px-1.5 text-[10px] font-bold leading-5 text-green-400">A</span>
+                <span className="text-xs text-muted-foreground">Full XGBoost + Poisson ensemble. Best coverage — European top leagues with rich historical data.</span>
+              </div>
+            </div>
+            <div className="mt-2 flex flex-wrap items-start gap-4">
+              <div className="flex items-center gap-2">
+                <span className="inline-block rounded bg-amber-500/20 px-1.5 text-[10px] font-bold leading-5 text-amber-500">B</span>
+                <span className="text-xs text-muted-foreground">Poisson model only. Good predictions but fewer features available for this match.</span>
+              </div>
+            </div>
+            <div className="mt-2 flex flex-wrap items-start gap-4">
+              <div className="flex items-center gap-2">
+                <span className="inline-block rounded bg-white/[0.06] px-1.5 text-[10px] font-bold leading-5 text-muted-foreground/50">D</span>
+                <span className="text-xs text-muted-foreground">API-Football prediction only. Basic coverage for lesser-known leagues.</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Match Pulse */}
+          <div className="rounded-xl border border-border/30 bg-card/30 px-4 py-3">
+            <p className="mb-2 text-sm font-semibold text-foreground">Match Pulse</p>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-orange-400">⚡</span>
+              <span className="text-xs text-muted-foreground"><strong className="text-foreground/80">High Alert</strong> — sharp line movement, bookmaker disagreement, or significant market activity detected. Worth a closer look.</span>
+            </div>
+            <div className="mt-2 flex items-center gap-2">
+              <span className="inline-block size-2 rounded-full bg-amber-500/60" />
+              <span className="text-xs text-muted-foreground"><strong className="text-foreground/80">Interesting</strong> — moderate signals detected (mild odds shift or some bookmaker divergence).</span>
+            </div>
+            <p className="mt-2 text-[11px] text-muted-foreground/60">
+              Most matches (~80%) are &quot;Routine&quot; — no special indicator shown. The pulse only flags the ~15-20% of matches with unusual activity.
+            </p>
+          </div>
+
+          {/* Fire icon on league header */}
+          <div className="rounded-xl border border-border/30 bg-card/30 px-4 py-3">
+            <p className="mb-2 text-sm font-semibold text-foreground">League Header</p>
+            <div className="flex items-center gap-2">
+              <span className="text-sm">🔥</span>
+              <span className="text-xs text-muted-foreground"><strong className="text-foreground/80">Odds available</strong> — at least one match in this league has bookmaker odds data from our 13-bookmaker feed.</span>
+            </div>
+          </div>
+
+          {/* Predicted Score */}
+          <div className="rounded-xl border border-border/30 bg-card/30 px-4 py-3">
+            <p className="mb-2 text-sm font-semibold text-foreground">Predicted Score</p>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-xs font-bold text-violet-400/80">2–1</span>
+              <span className="text-xs text-muted-foreground">AI predicted most likely scoreline. Rounded from the model&apos;s expected goals output. Available for ~40% of matches.</span>
+            </div>
+          </div>
+
+          {/* Odds + Movement */}
+          <div className="rounded-xl border border-border/30 bg-card/30 px-4 py-3">
+            <p className="mb-2 text-sm font-semibold text-foreground">Odds &amp; Movement</p>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-xs font-bold text-emerald-400">2.45</span>
+              <span className="text-xs text-muted-foreground"><strong className="text-foreground/80">Green highlight</strong> — best available odds across bookmakers for this selection (Home / Draw / Away).</span>
+            </div>
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-[10px] text-green-400">▲</span>
+              <span className="text-xs text-muted-foreground"><strong className="text-foreground/80">Odds rising</strong> — odds have increased vs ~24h ago (less likely according to the market). <span className="italic text-muted-foreground/50">Pro only.</span></span>
+            </div>
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-[10px] text-red-400">▼</span>
+              <span className="text-xs text-muted-foreground"><strong className="text-foreground/80">Odds dropping</strong> — odds have decreased vs ~24h ago (more likely according to the market). <span className="italic text-muted-foreground/50">Pro only.</span></span>
+            </div>
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-[9px] font-bold text-muted-foreground/40 tabular-nums">13</span>
+              <span className="text-xs text-muted-foreground"><strong className="text-foreground/80">Bookmaker count</strong> — number of bookmakers with odds for this match. More bookmakers = more liquid market.</span>
+            </div>
+          </div>
+
+          {/* Form Strip */}
+          <div className="rounded-xl border border-border/30 bg-card/30 px-4 py-3">
+            <p className="mb-2 text-sm font-semibold text-foreground">Form Strip</p>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-0.5">
+                <span className="inline-block size-2 rounded-full bg-green-500" />
+                <span className="inline-block size-2 rounded-full bg-green-500" />
+                <span className="inline-block size-2 rounded-full bg-amber-500" />
+                <span className="inline-block size-2 rounded-full bg-red-500/70" />
+                <span className="inline-block size-2 rounded-full bg-green-500" />
+              </div>
+              <span className="text-xs text-muted-foreground">Last 5 results. <span className="text-green-400">Green</span> = Win, <span className="text-amber-400">Amber</span> = Draw, <span className="text-red-400/70">Red</span> = Loss. Read left-to-right (oldest to most recent).</span>
+            </div>
+          </div>
+
+          {/* Signal Teasers */}
+          <div className="rounded-xl border border-border/30 bg-card/30 px-4 py-3">
+            <p className="mb-2 text-sm font-semibold text-foreground">Signal Teasers</p>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] italic text-muted-foreground/60">&quot;High bookmaker disagreement&quot;</span>
+              <span className="text-xs text-muted-foreground">— Plain-English summaries of notable signals. Shown on ~30-40% of matches where something stands out.</span>
+            </div>
+          </div>
+
+          {/* Match Status */}
+          <div className="rounded-xl border border-border/30 bg-card/30 px-4 py-3">
+            <p className="mb-2 text-sm font-semibold text-foreground">Match Status</p>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1 rounded bg-green-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-green-400 leading-none">
+                  <span className="size-1.5 rounded-full bg-green-400" />
+                  LIVE
+                </span>
+                <span className="text-xs text-muted-foreground">Match is currently in play. Minute shown below. Scores update every 60 seconds.</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-muted-foreground/40">FT</span>
+                <span className="text-xs text-muted-foreground">Full time — match is finished.</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-muted-foreground/40">HT</span>
+                <span className="text-xs text-muted-foreground">Half time — match is at the break.</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-xs text-muted-foreground">22:00</span>
+                <span className="text-xs text-muted-foreground">Scheduled kickoff time (your local timezone).</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <Separator className="opacity-30" />
+
+      {/* Section 6: Common questions */}
       <section className="space-y-5">
         <div className="flex items-center gap-2">
           <Zap className="h-5 w-5 text-primary" />
