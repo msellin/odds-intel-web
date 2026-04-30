@@ -73,8 +73,6 @@ export default async function MatchesPage() {
     }
   );
 
-  const totalWithOdds = allMatches.filter((m) => m.hasOdds).length;
-
   // Fetch initial live snapshots for live matches
   const liveMatchIds = allMatches.filter((m) => m.status === "live").map((m) => m.id);
   const liveSnapshotsArr = await getLiveSnapshots(liveMatchIds);
@@ -99,11 +97,6 @@ export default async function MatchesPage() {
           <span className="text-sm text-muted-foreground">
             {allMatches.length} fixtures
           </span>
-          {totalWithOdds > 0 && (
-            <span className="rounded border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-green-400">
-              {totalWithOdds} with odds
-            </span>
-          )}
           {/* Tooltip explaining data window */}
           <span className="group relative flex items-center gap-1 cursor-default">
             <Info className="size-3.5 text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors" />

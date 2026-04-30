@@ -2,12 +2,10 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Star, Search, X } from "lucide-react";
-import Link from "next/link";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
 import { useAuth } from "@/components/auth-provider";
 import type { PublicMatch, LiveSnapshot } from "@/lib/engine-data";
 import { LeagueAccordion } from "./league-accordion";
-import { MatchFavoriteButton } from "./match-favorite-button";
 
 interface Props {
   sortedGroups: [string, PublicMatch[]][];
@@ -16,12 +14,12 @@ interface Props {
 }
 
 type StatusTab = "all" | "live" | "upcoming" | "finished";
-type FilterTab = "all" | "odds" | "favorites";
+type FilterTab = "all" | "favorites";
 
 export function MatchesClient({ sortedGroups, initialSnapshots, isPro }: Props) {
   const [snapshots, setSnapshots] = useState<Record<string, LiveSnapshot>>(initialSnapshots);
   const [statusTab, setStatusTab] = useState<StatusTab>("all");
-  const [filterTab, setFilterTab] = useState<FilterTab>("odds");
+  const [filterTab, setFilterTab] = useState<FilterTab>("all");
   const [leagueSearch, setLeagueSearch] = useState("");
   const [favoriteMatchIds, setFavoriteMatchIds] = useState<Set<string>>(new Set());
   const { user, profile } = useAuth();
@@ -96,12 +94,6 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro }: Props) 
   const finishedCount = useMemo(() => allMatches.filter((m) => m.status === "finished").length, [allMatches]);
   const upcomingCount = useMemo(() => allMatches.filter((m) => m.status !== "live" && m.status !== "finished").length, [allMatches]);
 
-  // Followed matches (from match-level favorites)
-  const followedMatches = useMemo(() => {
-    if (favoriteMatchIds.size === 0) return [];
-    return allMatches.filter((m) => favoriteMatchIds.has(m.id));
-  }, [allMatches, favoriteMatchIds]);
-
   // Client-side league search filter
   const searchFiltered = useMemo(() => {
     if (!leagueSearch.trim()) return sortedGroups;
@@ -153,34 +145,35 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro }: Props) 
     return [...priority, ...favorites, ...rest];
   }, [statusFiltered, favoriteLeagues, isFavoriteLeague]);
 
-  // Then filter by odds/favorites
+  // Then filter by favorites (my leagues + followed matches)
   const filteredGroups = useMemo(() => {
-    if (filterTab === "odds") {
-      return reorderedGroups
-        .map(([league, matches]) => [league, matches.filter((m) => m.hasOdds)] as [string, typeof matches])
-        .filter(([, matches]) => matches.length > 0);
-    }
     if (filterTab === "favorites") {
-      if (favoriteLeagues.length === 0) return [];
-      return reorderedGroups.filter(([league]) => isFavoriteLeague(league));
+      if (favoriteLeagues.length === 0 && favoriteMatchIds.size === 0) return [];
+      return reorderedGroups
+        .map(([league, matches]) => {
+          if (isFavoriteLeague(league)) return [league, matches] as [string, typeof matches];
+          // Include matches that are individually followed even if league isn't favorited
+          const followed = matches.filter((m) => favoriteMatchIds.has(m.id));
+          if (followed.length > 0) return [league, followed] as [string, typeof followed];
+          return null;
+        })
+        .filter((g): g is [string, PublicMatch[]] => g !== null);
     }
     return reorderedGroups;
-  }, [reorderedGroups, filterTab, favoriteLeagues, isFavoriteLeague]);
-
-  const oddsMatchCount = useMemo(
-    () => allMatches.filter((m) => m.hasOdds).length,
-    [allMatches]
-  );
+  }, [reorderedGroups, filterTab, favoriteLeagues, favoriteMatchIds, isFavoriteLeague]);
 
   const favoriteMatchCount = useMemo(() => {
-    if (favoriteLeagues.length === 0) return 0;
-    return sortedGroups.reduce((count, [league, matches]) => {
-      const leagueMatch = favoriteLeagues.some(
-        (fl) => league.toLowerCase() === fl.toLowerCase()
-      );
-      return leagueMatch ? count + matches.length : count;
-    }, 0);
-  }, [sortedGroups, favoriteLeagues]);
+    const counted = new Set<string>();
+    // Count matches from favorite leagues
+    for (const [league, matches] of sortedGroups) {
+      if (favoriteLeagues.some((fl) => league.toLowerCase() === fl.toLowerCase())) {
+        for (const m of matches) counted.add(m.id);
+      }
+    }
+    // Count individually followed matches
+    for (const id of favoriteMatchIds) counted.add(id);
+    return counted.size;
+  }, [sortedGroups, favoriteLeagues, favoriteMatchIds]);
 
   return (
     <div className="space-y-3">
@@ -271,27 +264,9 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro }: Props) 
         </div>
       </div>
 
-      {/* Secondary filter row — odds / my leagues */}
-      <div className="flex items-center gap-2">
-        <button
-          onClick={() => setFilterTab(filterTab === "odds" ? "all" : "odds")}
-          className={`flex items-center gap-1.5 rounded-md border px-3 py-1 text-xs font-bold transition-all ${
-            filterTab === "odds"
-              ? "border-green-500/30 bg-green-500/10 text-green-400"
-              : "border-white/[0.06] bg-muted/20 text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          With odds
-          {oddsMatchCount > 0 && (
-            <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-              filterTab === "odds" ? "bg-green-500/20 text-green-400" : "bg-white/[0.06] text-muted-foreground/60"
-            }`}>
-              {oddsMatchCount}
-            </span>
-          )}
-        </button>
-
-        {user && (
+      {/* Secondary filter — my games (favorite leagues + followed matches) */}
+      {user && (
+        <div className="flex items-center gap-2">
           <button
             onClick={() => setFilterTab(filterTab === "favorites" ? "all" : "favorites")}
             className={`flex items-center gap-1.5 rounded-md border px-3 py-1 text-xs font-bold transition-all ${
@@ -301,7 +276,7 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro }: Props) 
             }`}
           >
             <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
-            My Leagues
+            My Games
             {favoriteMatchCount > 0 && (
               <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
                 filterTab === "favorites" ? "bg-amber-400/20 text-amber-400" : "bg-white/[0.06] text-muted-foreground/60"
@@ -310,80 +285,16 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro }: Props) 
               </span>
             )}
           </button>
-        )}
-      </div>
-
-      {/* Followed Games section — shows match-level favorites at the top */}
-      {followedMatches.length > 0 && (
-        <div className="overflow-hidden rounded-xl border border-amber-400/20 bg-card/40">
-          <div className="flex h-10 items-center gap-2 bg-amber-400/5 px-4">
-            <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
-            <span className="text-xs font-black tracking-widest text-amber-400/80 uppercase">
-              Followed Games
-            </span>
-            <span className="rounded bg-amber-400/10 px-1.5 py-0.5 text-[10px] font-bold text-amber-400/70">
-              {followedMatches.length}
-            </span>
-          </div>
-          <div className="divide-y divide-white/[0.04]">
-            {followedMatches.map((match) => {
-              const snapshot = snapshots[match.id];
-              const isLive = match.status === "live" && !!snapshot;
-              const isFinished = match.status === "finished";
-              return (
-                <div key={match.id} className="flex items-center gap-2 px-4 h-10 hover:bg-white/[0.03] transition-colors">
-                  <MatchFavoriteButton
-                    matchId={match.id}
-                    favoriteMatchIds={favoriteMatchIds}
-                    onToggle={handleMatchFavoriteToggle}
-                  />
-                  <Link
-                    href={`/matches/${match.id}`}
-                    className="flex flex-1 items-center gap-2 text-sm min-w-0"
-                  >
-                    <span className="text-[10px] text-muted-foreground/50 w-16 shrink-0">
-                      {isLive ? (
-                        <span className="text-green-400 font-bold">{snapshot!.minute}&apos;</span>
-                      ) : isFinished ? (
-                        <span className="text-muted-foreground font-bold">FT</span>
-                      ) : (
-                        new Date(match.kickoff).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
-                      )}
-                    </span>
-                    <span className="truncate text-xs font-medium text-foreground">
-                      {match.homeTeam}
-                    </span>
-                    {isLive ? (
-                      <span className="font-mono text-xs font-bold tabular-nums text-foreground shrink-0">
-                        {snapshot!.score_home}–{snapshot!.score_away}
-                      </span>
-                    ) : isFinished && match.score_home != null ? (
-                      <span className="font-mono text-xs font-bold tabular-nums text-foreground shrink-0">
-                        {match.score_home}–{match.score_away}
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-muted-foreground/50 shrink-0">vs</span>
-                    )}
-                    <span className="truncate text-xs font-medium text-foreground">
-                      {match.awayTeam}
-                    </span>
-                    <span className="ml-auto text-[10px] text-muted-foreground/40 shrink-0 hidden sm:block">
-                      {match.league}
-                    </span>
-                  </Link>
-                </div>
-              );
-            })}
-          </div>
         </div>
       )}
+
 
       {filterTab === "favorites" && filteredGroups.length === 0 && (
         <div className="rounded-xl border border-white/[0.06] bg-card/40 py-10 text-center">
           <Star className="mx-auto h-8 w-8 text-muted-foreground/30 mb-3" />
-          <p className="text-sm font-medium text-foreground">No favourite leagues today</p>
+          <p className="text-sm font-medium text-foreground">No saved games today</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Tap the star next to any league name to add it here, or manage your{" "}
+            Star a league or follow individual matches to see them here, or manage your{" "}
             <a href="/profile" className="text-primary underline-offset-2 hover:underline">
               favourite leagues in your profile
             </a>
