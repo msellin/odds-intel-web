@@ -933,6 +933,7 @@ export interface TodayPick {
 export async function getTodayPicks(): Promise<TodayPick[]> {
   const supabase = await createSupabaseServer();
   const today = new Date().toISOString().split("T")[0];
+  const todayEnd = `${today}T23:59:59.999Z`;
 
   // Fetch today's not-yet-finished matches that have ensemble predictions
   const { data: matches } = await supabase
@@ -944,8 +945,8 @@ export async function getTodayPicks(): Promise<TodayPick[]> {
       league:league_id(name, country)
     `)
     .gte("date", today)
-    .lte("date", today)
-    .in("status", ["scheduled", "not_started", "1h", "2h", "ht", "live"])
+    .lte("date", todayEnd)
+    .in("status", ["scheduled", "1h", "2h", "ht", "live"])
     .limit(30);
 
   if (!matches || matches.length === 0) return [];
