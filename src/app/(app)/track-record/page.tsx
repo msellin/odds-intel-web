@@ -1,11 +1,10 @@
 import { createSupabaseServer } from "@/lib/supabase-server";
-import { getAllBets, getModelAccuracy, getTodayPicks, getTrackRecordStats, getSystemStatus } from "@/lib/engine-data";
+import { getAllBets, getModelAccuracy, getTrackRecordStats, getSystemStatus } from "@/lib/engine-data";
 import { TrackRecordHero } from "@/components/track-record-hero";
 import { ClvEducation } from "@/components/clv-education";
 import { SignificanceProgress } from "@/components/significance-progress";
 import { SystemStatusCard } from "@/components/system-status";
 import { EarlyResults } from "@/components/early-results";
-import { TodayPicksPreview } from "@/components/today-picks-preview";
 import { PredictionHistory } from "@/components/prediction-history";
 import { TrackRecordFooterCta } from "@/components/track-record-footer-cta";
 import { TrackRecordLive } from "@/components/track-record-live";
@@ -37,9 +36,8 @@ export default async function TrackRecordPage() {
   const isElite = tier === "elite";
 
   // Public data — no login required
-  const [accuracy, todayPicks, trackStats, systemStatus] = await Promise.all([
+  const [accuracy, trackStats, systemStatus] = await Promise.all([
     getModelAccuracy(),
-    getTodayPicks(),
     getTrackRecordStats(),
     getSystemStatus(),
   ]);
@@ -78,12 +76,7 @@ export default async function TrackRecordPage() {
       {/* Section 5: Early results — contextualized, collapsible (everyone) */}
       <EarlyResults accuracy={accuracy} trackStats={trackStats} />
 
-      {/* Section 6: Today's value opportunities — tiered */}
-      {todayPicks.length > 0 && (
-        <TodayPicksPreview picks={todayPicks} isPro={isPro} isElite={isElite} />
-      )}
-
-      {/* Section 7: Prediction history — tiered (free: limited, Pro: full + CLV) */}
+      {/* Section 6: Prediction history — tiered (free: limited, Pro: full + CLV) */}
       <PredictionHistory rows={accuracy.rows} isPro={isPro} isElite={isElite} />
 
       {/* Section 9: Footer CTA — conversion close (everyone except Elite) */}

@@ -15,9 +15,9 @@ export function TrackRecordHero({ stats }: Props) {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Betting Intelligence</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Track Record</h1>
         <p className="text-sm text-muted-foreground">
-          How our signals perform in real markets — CLV, value detection, and coverage.
+          Running since April 27, 2026 · Every pick logged · No cherry-picking.
         </p>
       </div>
 
@@ -49,7 +49,7 @@ export function TrackRecordHero({ stats }: Props) {
           <CardHeader className="pb-1 pt-3 px-4">
             <CardTitle className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
               <Search className="h-3 w-3" />
-              Value Bets Identified
+              Value Opportunities Identified
             </CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-3 pt-0">

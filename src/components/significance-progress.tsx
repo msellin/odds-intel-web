@@ -13,7 +13,7 @@ export function SignificanceProgress({ settled, target = 500 }: Props) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <BarChart3 className="h-4 w-4 text-blue-400" />
-          <h2 className="text-sm font-semibold text-foreground">Building a Track Record</h2>
+          <h2 className="text-sm font-semibold text-foreground">Statistical Significance</h2>
         </div>
         <span className="font-mono text-xs text-muted-foreground">
           {settled} / {target}
@@ -29,10 +29,10 @@ export function SignificanceProgress({ settled, target = 500 }: Props) {
       </div>
 
       <p className="text-xs text-muted-foreground leading-relaxed">
-        Professional bettors track <strong className="text-foreground/80">500+ bets</strong> before
-        judging a system&apos;s profitability. We launched recently and are building toward statistical
-        significance. What we <em>can</em> show now: CLV (whether our model spots value before the
-        market corrects) and system activity — both meaningful even at small sample sizes.
+        500 settled bets is the threshold where results stop being noise and start being signal.
+        We&apos;re not there yet — and we&apos;re saying so upfront. What the early data{" "}
+        <em>does</em> show: CLV (whether the market agrees with our model before kickoff) is
+        positive, which is the most reliable early indicator of real edge.
       </p>
     </div>
   );

@@ -46,7 +46,7 @@ export function ClvEducation() {
           href="/value-bets"
           className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700 transition-colors"
         >
-          See today&apos;s value bets
+          See today&apos;s value opportunities
         </Link>
         <Link
           href="/how-it-works"
