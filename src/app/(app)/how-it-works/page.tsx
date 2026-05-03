@@ -459,6 +459,12 @@ export default function HowItWorksPage() {
             View Track Record
           </Link>
         </div>
+        <p className="mt-5 text-xs text-muted-foreground/60">
+          Want the full technical detail?{" "}
+          <Link href="/methodology" className="underline underline-offset-2 hover:text-muted-foreground transition-colors">
+            Read the model methodology →
+          </Link>
+        </p>
       </div>
 
     </div>

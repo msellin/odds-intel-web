@@ -1856,3 +1856,60 @@ export async function getSystemStatus(): Promise<SystemStatus> {
     leaguesTracked: leagueIds.size,
   };
 }
+
+// ─── ENG-6: Bot consensus ───────────────────────────────────────────────────
+
+export interface BotConsensusItem {
+  market: string;
+  selection: string;
+  count: number;
+  avgEdge: number;
+  avgProb: number;
+}
+
+export interface BotConsensusData {
+  totalBets: number;
+  topItem: BotConsensusItem | null;
+  markets: BotConsensusItem[];
+}
+
+export async function getBotConsensus(matchId: string): Promise<BotConsensusData | null> {
+  const supabase = await createSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("simulated_bets")
+    .select("market, selection, edge_percent, model_probability")
+    .eq("match_id", matchId)
+    .eq("result", "pending");
+
+  if (error || !data || data.length === 0) return null;
+
+  // Group by market+selection
+  const grouped: Record<string, { count: number; totalEdge: number; totalProb: number }> = {};
+  for (const row of data) {
+    const key = `${row.market}||${row.selection}`;
+    if (!grouped[key]) grouped[key] = { count: 0, totalEdge: 0, totalProb: 0 };
+    grouped[key].count++;
+    grouped[key].totalEdge += row.edge_percent ?? 0;
+    grouped[key].totalProb += row.model_probability ?? 0;
+  }
+
+  const markets: BotConsensusItem[] = Object.entries(grouped)
+    .map(([key, g]) => {
+      const [market, selection] = key.split("||");
+      return {
+        market,
+        selection,
+        count: g.count,
+        avgEdge: Math.round((g.totalEdge / g.count) * 10) / 10,
+        avgProb: Math.round((g.totalProb / g.count) * 1000) / 10,
+      };
+    })
+    .sort((a, b) => b.count - a.count || b.avgEdge - a.avgEdge);
+
+  return {
+    totalBets: data.length,
+    topItem: markets[0] ?? null,
+    markets,
+  };
+}

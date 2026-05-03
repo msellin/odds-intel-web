@@ -16,6 +16,7 @@ import {
   getMatchSignals,
   getMatchSignalHistory,
   getMatchCLVData,
+  getBotConsensus,
 } from "@/lib/engine-data";
 import type { LiveMatch, MatchStatsData, OddsMovementPoint, MatchSignalRow } from "@/lib/engine-data";
 import { getLiveMatchOdds } from "@/lib/engine-data";
@@ -29,6 +30,7 @@ import { SignalDelta } from "@/components/signal-delta";
 import { MatchPickButton } from "@/components/match-pick-button";
 import { MatchNotes } from "@/components/match-notes";
 import { CommunityVote } from "@/components/community-vote";
+import { BotConsensus } from "@/components/bot-consensus";
 import { SignalTimeline } from "@/components/signal-timeline";
 import { WhyThisPick } from "@/components/why-this-pick";
 import { CLVTracker } from "@/components/clv-tracker";
@@ -184,6 +186,8 @@ export default async function MatchDetailPage({
     ? await getPublicMatchBookmakerCount(id)
     : 0;
 
+  const botConsensus = await getBotConsensus(id);
+
   const kickoffDate = new Date(publicMatch.kickoff);
   const dateStr = kickoffDate.toLocaleDateString("en-GB", {
     weekday: "short",
@@ -323,6 +327,14 @@ export default async function MatchDetailPage({
         matchStatus={publicMatch.status}
         isAuthenticated={isAuthenticated}
       />
+
+      {/* ENG-6: Bot consensus — free sees count+lock, pro sees full breakdown */}
+      {botConsensus && (
+        <BotConsensus
+          consensus={botConsensus}
+          isPro={isPro}
+        />
+      )}
 
       {/* Match notes — free signed-in feature */}
       <MatchNotes matchId={publicMatch.id} />
