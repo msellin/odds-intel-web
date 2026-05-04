@@ -413,34 +413,52 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
   const supabase = createSupabasePublic();
 
   const now = new Date();
-  // Include yesterday so recently-finished matches stay visible in the Finished tab.
-  // Settlement marks status='finished' at 21:00 UTC; without this, yesterday's results
-  // disappear at midnight UTC and today's unresolved matches show as 'upcoming' all day.
-  const windowStart = new Date(now);
-  windowStart.setUTCHours(0, 0, 0, 0);
-  windowStart.setUTCDate(windowStart.getUTCDate() - 1); // yesterday 00:00 UTC
+  // Today window: all matches from 00:00 UTC today onwards.
+  const todayStart = new Date(now);
+  todayStart.setUTCHours(0, 0, 0, 0);
   const todayEnd = new Date(now);
   todayEnd.setUTCHours(23, 59, 59, 999);
+  // Yesterday window: matches still live/scheduled from yesterday (not yet finished).
+  // These are matches that kicked off late and haven't been settled yet.
+  // Yesterday's finished matches are excluded — they'd just be stale clutter.
+  const yesterdayStart = new Date(todayStart);
+  yesterdayStart.setUTCDate(yesterdayStart.getUTCDate() - 1);
 
-  // Step 1: Fetch yesterday + today's matches from featured leagues only.
-  // The !inner join excludes matches whose league has show_on_frontend = false
-  // (or whose league_id doesn't exist in the leagues table at all).
-  // Engine pipelines still analyze ALL leagues; this only filters the UI.
-  const { data: matches, error } = await supabase
-    .from("matches")
-    .select(
-      `id, date, status, score_home, score_away, form_home, form_away, af_prediction,
+  // Step 1a: Fetch today's matches (all statuses).
+  // Step 1b: Fetch yesterday's matches that are NOT finished (still live or delayed).
+  // Two queries because PostgREST doesn't support OR across date + status in one filter.
+  // The !inner join excludes leagues with show_on_frontend = false.
+  const selectFields = `id, date, status, score_home, score_away, form_home, form_away, af_prediction,
        home_team:home_team_id(id, name, country, logo_url),
        away_team:away_team_id(id, name, country, logo_url),
-       league:league_id!inner(id, name, country, tier, priority)`
-    )
-    .eq("league.show_on_frontend", true)
-    .gte("date", windowStart.toISOString())
-    .lte("date", todayEnd.toISOString())
-    .order("date", { ascending: true })
-    .limit(1000);
+       league:league_id!inner(id, name, country, tier, priority)`;
 
-  if (error || !matches || matches.length === 0) return [];
+  const [{ data: todayMatches, error }, { data: yesterdayOngoing }] = await Promise.all([
+    supabase
+      .from("matches")
+      .select(selectFields)
+      .eq("league.show_on_frontend", true)
+      .gte("date", todayStart.toISOString())
+      .lte("date", todayEnd.toISOString())
+      .order("date", { ascending: true })
+      .limit(500),
+    supabase
+      .from("matches")
+      .select(selectFields)
+      .eq("league.show_on_frontend", true)
+      .gte("date", yesterdayStart.toISOString())
+      .lt("date", todayStart.toISOString())
+      .neq("status", "finished")
+      .order("date", { ascending: true })
+      .limit(50),
+  ]);
+
+  const matches = [
+    ...(yesterdayOngoing ?? []),
+    ...(todayMatches ?? []),
+  ];
+
+  if (error || matches.length === 0) return [];
 
   type PublicMatchRow = Pick<MatchRow, "id" | "date" | "status" | "score_home" | "score_away" | "form_home" | "form_away" | "af_prediction" | "home_team" | "away_team" | "league">;
   const matchIds = (matches as PublicMatchRow[]).map((m) => m.id);
@@ -461,7 +479,7 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
     const batch = matchIds.slice(i, i + batchSize);
     const { data: oddsRows } = await supabase.rpc("get_best_match_odds", {
       p_match_ids: batch,
-      p_since: windowStart.toISOString(),
+      p_since: yesterdayStart.toISOString(),
     });
     for (const o of (oddsRows || []) as {
       match_id: string; selection: string; best_odds: number;
@@ -484,7 +502,7 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
   const matchIdsWithOdds = new Set(Object.keys(oddsByMatch));
 
   // Fetch signal intelligence for all matches (SUX-1/2/3)
-  const signalSummary = await batchFetchSignalSummary(matchIds, windowStart);
+  const signalSummary = await batchFetchSignalSummary(matchIds, yesterdayStart);
 
   const MOVE_THRESHOLD = 0.05; // min odds delta to show ↑↓
 
