@@ -371,8 +371,11 @@ function BetRow({
               </span>
             )}
           </div>
-        <p className="font-medium text-foreground/90 truncate max-w-[200px] mt-0.5">{bet.match}</p>
-        <p className="text-[10px] text-muted-foreground/60 truncate">{bet.league}</p>
+          <div>
+            <p className="font-medium text-foreground/90 truncate max-w-[200px] mt-0.5">{bet.match}</p>
+            <p className="text-[10px] text-muted-foreground/60 truncate">{bet.league}</p>
+          </div>
+        </div>
       </td>
 
       {/* Market */}
