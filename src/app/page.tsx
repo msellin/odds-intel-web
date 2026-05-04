@@ -430,6 +430,7 @@ export default function LandingPage() {
           </div>
           <div className="flex flex-wrap items-center justify-center gap-6 text-xs text-muted-foreground">
             <span>&copy; {new Date().getFullYear()} OddsIntel</span>
+            <Link href="/changelog" className="transition-colors hover:text-green-400">Changelog</Link>
             <Link href="/terms" className="transition-colors hover:text-green-400">Terms of Service</Link>
             <Link href="/privacy" className="transition-colors hover:text-green-400">Privacy Policy</Link>
           </div>
