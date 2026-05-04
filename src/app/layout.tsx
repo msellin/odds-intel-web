@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth-provider";
+import { PostHogProvider } from "@/components/posthog-provider";
 import { Analytics } from "@vercel/analytics/next";
 import { CookieBanner } from "@/components/cookie-banner";
 
@@ -101,7 +102,9 @@ export default function RootLayout({
             }),
           }}
         />
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <PostHogProvider>{children}</PostHogProvider>
+        </AuthProvider>
         <CookieBanner />
         <Analytics />
         <Script id="hotjar" strategy="afterInteractive">
