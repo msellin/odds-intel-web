@@ -91,7 +91,7 @@ export function DailyValueTeaser({
                 @ {pick.odds.toFixed(2)}
               </span>
               <span className="font-mono font-bold text-amber-400">
-                +{pick.edge.toFixed(1)}%
+                +{(pick.edge * 100).toFixed(1)}%
               </span>
               <span
                 className={cn(
@@ -148,7 +148,7 @@ export function DailyValueTeaser({
               </div>
               <div className="text-right shrink-0">
                 <p className="font-mono text-lg font-bold text-amber-400">
-                  +{pick.edge.toFixed(1)}%
+                  +{(pick.edge * 100).toFixed(1)}%
                 </p>
                 <p className="text-[10px] text-muted-foreground">edge</p>
               </div>

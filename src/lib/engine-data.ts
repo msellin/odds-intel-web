@@ -870,7 +870,7 @@ export async function getFreeDailyPick(): Promise<{ pick: FreePick | null; total
   todayStart.setHours(0, 0, 0, 0);
   const todayStartStr = todayStart.toISOString();
 
-  const [pickRes, countRes] = await Promise.all([
+  const [pickRes, allBetsRes] = await Promise.all([
     supabase
       .from("simulated_bets")
       .select(
@@ -884,13 +884,17 @@ export async function getFreeDailyPick(): Promise<{ pick: FreePick | null; total
       .gte("pick_time", todayStartStr)
       .order("edge_percent", { ascending: false })
       .limit(1),
+    // Fetch match_id+market+selection to deduplicate — same logic as value bets page
     supabase
       .from("simulated_bets")
-      .select("id", { count: "exact", head: true })
+      .select("match_id, market, selection")
       .gte("pick_time", todayStartStr),
   ]);
 
-  const totalCount = countRes.count ?? 0;
+  // Deduplicate by match+market+selection to match value bets page count
+  const allBets = (allBetsRes.data ?? []) as Array<{ match_id: string; market: string; selection: string }>;
+  const uniqueKeys = new Set(allBets.map((b) => `${b.match_id}|${b.market}|${b.selection}`));
+  const totalCount = uniqueKeys.size;
   const rows = pickRes.data;
   if (!rows || rows.length === 0) return { pick: null, totalCount };
 
@@ -2102,7 +2106,7 @@ export async function getBotConsensus(matchId: string): Promise<BotConsensusData
         market,
         selection,
         count: g.count,
-        avgEdge: Math.round((g.totalEdge / g.count) * 10) / 10,
+        avgEdge: Math.round((g.totalEdge / g.count) * 1000) / 10,
         avgProb: Math.round((g.totalProb / g.count) * 1000) / 10,
       };
     })
