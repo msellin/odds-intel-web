@@ -105,7 +105,12 @@ export function PredictionHistory({ rows, isPro, isElite }: Props) {
                   {/* Elite columns */}
                   <th className="py-2.5 px-2 text-center text-[10px] font-medium uppercase tracking-wider">
                     {isElite ? (
-                      <span className="text-muted-foreground">Edge %</span>
+                      <span className="group relative inline-flex items-center gap-1 text-muted-foreground cursor-default">
+                        Edge %
+                        <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 z-50 mb-2 w-60 rounded-lg border border-border/60 bg-popover p-2.5 text-left text-[10px] font-normal normal-case tracking-normal opacity-0 shadow-xl transition-opacity group-hover:opacity-100">
+                          Model probability minus market implied probability. Negative = market overpriced this outcome vs our model. Bots only place bets when edge is positive.
+                        </span>
+                      </span>
                     ) : (
                       <span className="flex items-center justify-center gap-1 text-emerald-400/70">
                         <Lock className="h-2.5 w-2.5" />
@@ -209,9 +214,12 @@ export function PredictionHistory({ rows, isPro, isElite }: Props) {
             </div>
           )}
 
-          <div className="border-t border-border/20 px-4 py-3 text-center">
+          <div className="border-t border-border/20 px-4 py-3 text-center space-y-1">
             <p className="text-[11px] text-muted-foreground/50">
               Every prediction shown — wins and losses. No cherry-picking.
+            </p>
+            <p className="text-[11px] text-muted-foreground/40">
+              This is the full model output. Bots only place bets on picks where edge is positive at the time of betting.
             </p>
           </div>
         </div>

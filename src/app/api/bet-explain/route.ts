@@ -150,9 +150,16 @@ Write a 2-3 sentence explanation of why this pick was placed. Translate any tech
     });
 
     if (!resp.ok) {
-      const err = await resp.text();
+      const errText = await resp.text();
+      // Surface quota/billing issues clearly rather than dumping raw API JSON
+      if (resp.status === 429 || errText.includes("quota") || errText.includes("RESOURCE_EXHAUSTED")) {
+        return NextResponse.json(
+          { error: "AI quota exceeded — please enable billing on the Gemini API key in Google Cloud." },
+          { status: 503 }
+        );
+      }
       return NextResponse.json(
-        { error: `LLM error: ${err.slice(0, 200)}` },
+        { error: `LLM error (${resp.status}): ${errText.slice(0, 200)}` },
         { status: 502 }
       );
     }

@@ -12,11 +12,11 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.hotjar.com https://script.hotjar.com https://*.sentry.io",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.hotjar.com https://script.hotjar.com https://*.sentry.io https://us-assets.i.posthog.com",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https://media.api-sports.io https://*.supabase.co",
               "font-src 'self'",
-              "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.hotjar.com https://*.hotjar.io https://*.sentry.io https://api.stripe.com",
+              "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.hotjar.com https://*.hotjar.io https://*.sentry.io https://api.stripe.com https://us.i.posthog.com https://us-assets.i.posthog.com",
               "frame-src 'self' https://js.stripe.com https://hooks.stripe.com https://vars.hotjar.com",
               "worker-src 'self' blob:",
             ].join("; "),
