@@ -998,7 +998,7 @@ function toBet(row: SimBetRow): LiveBet {
     odds: Number(row.odds_at_pick),
     modelProb: Number(row.model_probability),
     impliedProb: row.odds_at_pick > 0 ? 1 / Number(row.odds_at_pick) : 0,
-    edge: Number(row.edge_percent) / 100, // DB stores as percentage, frontend expects decimal
+    edge: Number(row.edge_percent), // DB stores as decimal (0.10 = 10%)
     stake: Number(row.stake),
     kickoff: match?.date || "",
     placedAt: row.pick_time,
