@@ -839,6 +839,32 @@ export async function getTodayBets(): Promise<LiveBet[]> {
   return (data as SimBetRow[]).map(toBet);
 }
 
+export interface BotRecord {
+  id: string;
+  name: string;
+  strategy: string | null;
+  startingBankroll: number;
+  currentBankroll: number;
+  isActive: boolean;
+}
+
+export async function getAllBotsFromDB(): Promise<BotRecord[]> {
+  const supabase = await createSupabaseServer();
+  const { data, error } = await supabase
+    .from("bots")
+    .select("id, name, strategy, starting_bankroll, current_bankroll, is_active")
+    .order("name");
+  if (error || !data) return [];
+  return (data as Record<string, unknown>[]).map((r) => ({
+    id: r.id as string,
+    name: r.name as string,
+    strategy: r.strategy as string | null,
+    startingBankroll: Number(r.starting_bankroll ?? 1000),
+    currentBankroll: Number(r.current_bankroll ?? 1000),
+    isActive: Boolean(r.is_active),
+  }));
+}
+
 export async function getAllBets(): Promise<LiveBet[]> {
   const supabase = await createSupabaseServer();
 

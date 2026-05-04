@@ -33,7 +33,9 @@ import {
 
 export interface BotStat {
   name: string;
+  description: string;
   total: number;
+  pending: number;
   settled: number;
   won: number;
   lost: number;
@@ -41,6 +43,7 @@ export interface BotStat {
   totalPnl: number;
   totalStaked: number;
   roi: number | null;
+  currentBankroll: number;
 }
 
 export interface MarketStat {
@@ -53,6 +56,7 @@ export interface MarketStat {
 }
 
 export interface Summary {
+  totalBots: number;
   totalBets: number;
   settledCount: number;
   wonCount: number;
@@ -65,6 +69,7 @@ export interface Summary {
 interface Props {
   bets: LiveBet[];
   activeBots: BotStat[];
+  pendingBots: BotStat[];
   inactiveBots: BotStat[];
   marketStats: MarketStat[];
   summary: Summary;
@@ -100,12 +105,12 @@ function roiClass(n: number | null) {
 
 function resultBadge(result: string) {
   if (result === "won")
-    return <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs">W</Badge>;
+    return <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-[10px] px-1.5 py-0 h-5">W</Badge>;
   if (result === "lost")
-    return <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-xs">L</Badge>;
+    return <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-[10px] px-1.5 py-0 h-5">L</Badge>;
   if (result === "void")
-    return <Badge variant="outline" className="text-xs">Void</Badge>;
-  return <Badge variant="outline" className="text-xs text-yellow-400 border-yellow-500/30">Pending</Badge>;
+    return <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">Void</Badge>;
+  return <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 text-yellow-400 border-yellow-500/30">Pending</Badge>;
 }
 
 // ── Bankroll chart data ───────────────────────────────────────────────────────
@@ -117,10 +122,9 @@ function buildBankrollData(bets: LiveBet[]) {
 
   if (settled.length === 0) return [];
 
-  // If we have bankrollAfter from DB, use it; otherwise reconstruct
   const hasBankrollData = settled.some((b) => b.bankrollAfter != null);
-
   let running = 1000;
+
   return settled.map((b, i) => {
     const bankroll = hasBankrollData && b.bankrollAfter != null
       ? b.bankrollAfter
@@ -151,52 +155,56 @@ function BotDetailModal({
 
   const chartData = buildBankrollData(botBets);
   const startLine = 1000;
-  const minBankroll = chartData.length > 0
-    ? Math.min(...chartData.map((d) => d.bankroll), 1000)
-    : 900;
-  const maxBankroll = chartData.length > 0
-    ? Math.max(...chartData.map((d) => d.bankroll), 1000)
-    : 1100;
+  const bankrollValues = chartData.map((d) => d.bankroll);
+  const minBankroll = bankrollValues.length > 0 ? Math.min(...bankrollValues, 1000) : 900;
+  const maxBankroll = bankrollValues.length > 0 ? Math.max(...bankrollValues, 1000) : 1100;
   const yDomain = [
-    Math.floor((minBankroll - 20) / 50) * 50,
-    Math.ceil((maxBankroll + 20) / 50) * 50,
+    Math.floor((minBankroll - 30) / 50) * 50,
+    Math.ceil((maxBankroll + 30) / 50) * 50,
   ];
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[95vw] max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-3">
-            <span className="font-mono">{bot.name}</span>
-            <span className={`text-base font-semibold ${pnlClass(bot.totalPnl)}`}>
-              {fmt(bot.totalPnl)}€
-            </span>
-            {bot.hitRate != null && (
-              <span className="text-sm text-muted-foreground">
-                {fmtPct(bot.hitRate)} hit rate · {bot.settled} settled
+          <DialogTitle className="flex flex-wrap items-center gap-3">
+            <span className="font-mono text-base">{bot.name}</span>
+            {bot.settled > 0 && (
+              <span className={`text-base font-semibold ${pnlClass(bot.totalPnl)}`}>
+                {fmt(bot.totalPnl)}€
               </span>
             )}
+            <span className="text-sm text-muted-foreground font-normal">
+              {bot.settled > 0
+                ? `${fmtPct(bot.hitRate)} hit rate · ${bot.settled} settled · ${bot.pending} pending`
+                : bot.total > 0
+                  ? `${bot.total} pending bets · no settled results yet`
+                  : "No bets placed yet"}
+            </span>
           </DialogTitle>
+          {bot.description && (
+            <p className="text-xs text-muted-foreground mt-1">{bot.description}</p>
+          )}
         </DialogHeader>
 
         {/* Bankroll chart */}
-        {chartData.length > 1 && (
+        {chartData.length > 1 ? (
           <div className="mt-2">
-            <p className="text-xs text-muted-foreground mb-2">Bankroll progression (€)</p>
-            <ResponsiveContainer width="100%" height={180}>
-              <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
+            <p className="text-xs text-muted-foreground mb-2">Bankroll progression (€) — {chartData.length} settled bets</p>
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                 <XAxis
                   dataKey="idx"
-                  tick={{ fontSize: 10, fill: "#888" }}
+                  tick={{ fontSize: 11, fill: "#888" }}
                   tickLine={false}
-                  label={{ value: "Bet #", position: "insideBottom", offset: -2, fontSize: 10, fill: "#888" }}
+                  label={{ value: "Bet #", position: "insideBottom", offset: -2, fontSize: 11, fill: "#888" }}
                 />
                 <YAxis
                   domain={yDomain}
-                  tick={{ fontSize: 10, fill: "#888" }}
+                  tick={{ fontSize: 11, fill: "#888" }}
                   tickLine={false}
-                  width={50}
+                  width={58}
                   tickFormatter={(v) => `€${v}`}
                 />
                 <Tooltip
@@ -207,7 +215,7 @@ function BotDetailModal({
                     return d ? `Bet #${label} · ${d.date}` : `Bet #${label}`;
                   }}
                 />
-                <ReferenceLine y={startLine} stroke="#555" strokeDasharray="4 4" />
+                <ReferenceLine y={startLine} stroke="#555" strokeDasharray="4 4" label={{ value: "€1,000 start", fontSize: 10, fill: "#666" }} />
                 <Line
                   type="monotone"
                   dataKey="bankroll"
@@ -216,70 +224,123 @@ function BotDetailModal({
                   dot={(props) => {
                     const { cx, cy, payload } = props;
                     const color = payload.result === "won" ? "#22c55e" : "#ef4444";
-                    return <circle key={`dot-${props.index}`} cx={cx} cy={cy} r={3} fill={color} stroke="none" />;
+                    return <circle key={`dot-${props.index}`} cx={cx} cy={cy} r={3.5} fill={color} stroke="none" />;
                   }}
                   activeDot={{ r: 5 }}
                 />
               </LineChart>
             </ResponsiveContainer>
           </div>
-        )}
-
-        {chartData.length <= 1 && (
-          <p className="text-sm text-muted-foreground py-4 text-center">
-            {bot.settled === 0 ? "No settled bets yet." : "Need 2+ settled bets for chart."}
-          </p>
+        ) : bot.settled === 0 ? (
+          <div className="mt-4 rounded-lg border border-white/[0.06] bg-white/[0.02] px-4 py-6 text-center text-sm text-muted-foreground">
+            {bot.total > 0
+              ? `${bot.total} pending bet${bot.total > 1 ? "s" : ""} — waiting for match results.`
+              : "This bot hasn't placed any bets yet. It's waiting for qualifying matches (odds range, edge threshold, league/tier filters)."}
+          </div>
+        ) : (
+          <div className="mt-4 text-sm text-muted-foreground text-center py-4">
+            Need 2+ settled bets for chart.
+          </div>
         )}
 
         {/* Bets table */}
-        <div className="mt-4">
-          <p className="text-xs text-muted-foreground mb-2">All bets ({botBets.length} total, newest first)</p>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-xs">Date</TableHead>
-                  <TableHead className="text-xs">Match</TableHead>
-                  <TableHead className="text-xs">Market</TableHead>
-                  <TableHead className="text-xs text-right">Odds</TableHead>
-                  <TableHead className="text-xs text-right">Stake</TableHead>
-                  <TableHead className="text-xs text-center">Result</TableHead>
-                  <TableHead className="text-xs text-right">P&L</TableHead>
-                  <TableHead className="text-xs text-right">CLV</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {botBets.map((bet) => (
-                  <TableRow key={bet.id} className="text-xs">
-                    <TableCell className="text-muted-foreground whitespace-nowrap">
-                      {new Date(bet.placedAt).toLocaleDateString("en-GB", {
-                        month: "short",
-                        day: "numeric",
-                      })}
-                    </TableCell>
-                    <TableCell className="max-w-[180px] truncate" title={bet.match}>
-                      {bet.match}
-                    </TableCell>
-                    <TableCell className="font-mono uppercase text-muted-foreground">
-                      {bet.market} · {bet.selection}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">{bet.odds.toFixed(2)}</TableCell>
-                    <TableCell className="text-right tabular-nums">€{bet.stake.toFixed(2)}</TableCell>
-                    <TableCell className="text-center">{resultBadge(bet.result)}</TableCell>
-                    <TableCell className={`text-right tabular-nums ${bet.result !== "pending" ? pnlClass(bet.pnl) : "text-muted-foreground"}`}>
-                      {bet.result !== "pending" ? fmt(bet.pnl) : "—"}
-                    </TableCell>
-                    <TableCell className={`text-right tabular-nums ${bet.clv != null ? (bet.clv > 0 ? "text-green-400" : bet.clv < 0 ? "text-red-400" : "text-muted-foreground") : "text-muted-foreground"}`}>
-                      {bet.clv != null ? (bet.clv >= 0 ? "+" : "") + (bet.clv * 100).toFixed(1) + "%" : "—"}
-                    </TableCell>
+        {botBets.length > 0 && (
+          <div className="mt-4">
+            <p className="text-xs text-muted-foreground mb-2">
+              All bets ({botBets.length} total, newest first)
+            </p>
+            <div className="rounded-md border border-white/[0.08] overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-white/[0.08]">
+                    <TableHead className="text-xs">Date</TableHead>
+                    <TableHead className="text-xs">Match</TableHead>
+                    <TableHead className="text-xs">League</TableHead>
+                    <TableHead className="text-xs">Market · Selection</TableHead>
+                    <TableHead className="text-xs text-right">Odds</TableHead>
+                    <TableHead className="text-xs text-right">Stake</TableHead>
+                    <TableHead className="text-xs text-right">Model%</TableHead>
+                    <TableHead className="text-xs text-center">Result</TableHead>
+                    <TableHead className="text-xs text-right">P&L</TableHead>
+                    <TableHead className="text-xs text-right">CLV</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {botBets.map((bet) => (
+                    <TableRow key={bet.id} className="text-xs border-white/[0.06]">
+                      <TableCell className="text-muted-foreground whitespace-nowrap py-2">
+                        {new Date(bet.placedAt).toLocaleDateString("en-GB", {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </TableCell>
+                      <TableCell className="py-2 max-w-[200px]">
+                        <span className="block truncate" title={bet.match}>{bet.match}</span>
+                      </TableCell>
+                      <TableCell className="py-2 max-w-[140px] text-muted-foreground">
+                        <span className="block truncate text-[10px]" title={bet.league}>{bet.league}</span>
+                      </TableCell>
+                      <TableCell className="font-mono uppercase text-muted-foreground py-2 whitespace-nowrap text-[10px]">
+                        {bet.market} · {bet.selection}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums py-2">{bet.odds.toFixed(2)}</TableCell>
+                      <TableCell className="text-right tabular-nums py-2 whitespace-nowrap">€{bet.stake.toFixed(2)}</TableCell>
+                      <TableCell className="text-right tabular-nums py-2 text-muted-foreground">
+                        {(bet.modelProb * 100).toFixed(1)}%
+                      </TableCell>
+                      <TableCell className="text-center py-2">{resultBadge(bet.result)}</TableCell>
+                      <TableCell className={`text-right tabular-nums py-2 ${bet.result !== "pending" ? pnlClass(bet.pnl) : "text-muted-foreground"}`}>
+                        {bet.result !== "pending" ? fmt(bet.pnl) : "—"}
+                      </TableCell>
+                      <TableCell className={`text-right tabular-nums py-2 ${bet.clv != null ? (bet.clv > 0 ? "text-green-400" : bet.clv < 0 ? "text-red-400" : "text-muted-foreground") : "text-muted-foreground"}`}>
+                        {bet.clv != null ? (bet.clv >= 0 ? "+" : "") + (bet.clv * 100).toFixed(1) + "%" : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </div>
-        </div>
+        )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ── Bot row ───────────────────────────────────────────────────────────────────
+
+function BotRow({
+  bot,
+  dimmed,
+  onClick,
+}: {
+  bot: BotStat;
+  dimmed: boolean;
+  onClick: () => void;
+}) {
+  const bankrollDelta = bot.currentBankroll - 1000;
+
+  return (
+    <TableRow
+      className={`cursor-pointer transition-colors hover:bg-muted/50 ${dimmed ? "opacity-35" : ""}`}
+      onClick={onClick}
+    >
+      <TableCell className="font-mono text-xs py-2.5">{bot.name}</TableCell>
+      <TableCell className="text-right text-sm py-2.5">{bot.total > 0 ? bot.total : <span className="text-muted-foreground">—</span>}</TableCell>
+      <TableCell className="text-right text-sm py-2.5">{bot.settled > 0 ? bot.settled : <span className="text-muted-foreground">{bot.pending > 0 ? `${bot.pending}p` : "—"}</span>}</TableCell>
+      <TableCell className="text-right text-sm py-2.5 text-green-400">{bot.won > 0 ? bot.won : <span className="text-muted-foreground">—</span>}</TableCell>
+      <TableCell className="text-right text-sm py-2.5 text-red-400">{bot.lost > 0 ? bot.lost : <span className="text-muted-foreground">—</span>}</TableCell>
+      <TableCell className="text-right text-sm py-2.5">{fmtPct(bot.hitRate)}</TableCell>
+      <TableCell className={`text-right text-sm py-2.5 ${bot.settled > 0 ? pnlClass(bot.totalPnl) : "text-muted-foreground"}`}>
+        {bot.settled > 0 ? fmt(bot.totalPnl) : "—"}
+      </TableCell>
+      <TableCell className={`text-right text-sm py-2.5 ${roiClass(bot.roi)}`}>
+        {fmtPct(bot.roi)}
+      </TableCell>
+      <TableCell className={`text-right text-sm py-2.5 tabular-nums ${bankrollDelta >= 0 ? "text-green-400" : "text-red-400"}`}>
+        {bot.total > 0 ? `€${bot.currentBankroll.toFixed(0)}` : <span className="text-muted-foreground">€1,000</span>}
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -288,6 +349,7 @@ function BotDetailModal({
 export function BotDashboardClient({
   bets,
   activeBots,
+  pendingBots,
   inactiveBots,
   marketStats,
   summary,
@@ -306,7 +368,7 @@ export function BotDashboardClient({
             </Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Paper trading · Started 2026-04-27 · €1,000/bot starting bankroll
+            Paper trading · Started 2026-04-27 · €1,000/bot starting bankroll · {summary.totalBots} bots configured
           </p>
         </div>
         <span className="text-xs text-muted-foreground">{bets.length} bets loaded</span>
@@ -316,9 +378,7 @@ export function BotDashboardClient({
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Card>
           <CardHeader className="pb-1 pt-4 px-4">
-            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Total Bets
-            </CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Total Bets</CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4">
             <p className="text-2xl font-bold">{summary.totalBets}</p>
@@ -330,9 +390,7 @@ export function BotDashboardClient({
 
         <Card>
           <CardHeader className="pb-1 pt-4 px-4">
-            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Settled
-            </CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Settled</CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4">
             <p className="text-2xl font-bold">{summary.settledCount}</p>
@@ -344,9 +402,7 @@ export function BotDashboardClient({
 
         <Card>
           <CardHeader className="pb-1 pt-4 px-4">
-            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Hit Rate
-            </CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Hit Rate</CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4">
             <p className="text-2xl font-bold">{fmtPct(summary.hitRate)}</p>
@@ -356,9 +412,7 @@ export function BotDashboardClient({
 
         <Card>
           <CardHeader className="pb-1 pt-4 px-4">
-            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Total P&L
-            </CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Total P&L</CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4">
             <p className={`text-2xl font-bold ${pnlClass(summary.allPnl)}`}>
@@ -377,7 +431,7 @@ export function BotDashboardClient({
           <CardTitle className="text-base">
             Per-Bot Performance
             <span className="ml-2 text-xs font-normal text-muted-foreground">
-              Click a row to see bets
+              Click any row to see bets · {summary.totalBots} bots total
             </span>
           </CardTitle>
         </CardHeader>
@@ -393,45 +447,30 @@ export function BotDashboardClient({
                 <TableHead className="text-right">Hit Rate</TableHead>
                 <TableHead className="text-right">P&L (€)</TableHead>
                 <TableHead className="text-right">ROI%</TableHead>
+                <TableHead className="text-right">Bankroll</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {activeBots.map((bot) => (
-                <TableRow
-                  key={bot.name}
-                  className="cursor-pointer hover:bg-muted/50 transition-colors"
-                  onClick={() => setSelectedBot(bot)}
-                >
-                  <TableCell className="font-mono text-xs">{bot.name}</TableCell>
-                  <TableCell className="text-right text-sm">{bot.total}</TableCell>
-                  <TableCell className="text-right text-sm">{bot.settled}</TableCell>
-                  <TableCell className="text-right text-sm text-green-400">{bot.won}</TableCell>
-                  <TableCell className="text-right text-sm text-red-400">{bot.lost}</TableCell>
-                  <TableCell className="text-right text-sm">{fmtPct(bot.hitRate)}</TableCell>
-                  <TableCell className={`text-right text-sm ${pnlClass(bot.totalPnl)}`}>
-                    {fmt(bot.totalPnl)}
-                  </TableCell>
-                  <TableCell className={`text-right text-sm ${roiClass(bot.roi)}`}>
-                    {fmtPct(bot.roi)}
-                  </TableCell>
-                </TableRow>
+                <BotRow key={bot.name} bot={bot} dimmed={false} onClick={() => setSelectedBot(bot)} />
               ))}
-              {inactiveBots.map((bot) => (
-                <TableRow
-                  key={bot.name}
-                  className="opacity-40 cursor-pointer hover:opacity-60 transition-opacity"
-                  onClick={() => setSelectedBot(bot)}
-                >
-                  <TableCell className="font-mono text-xs">{bot.name}</TableCell>
-                  <TableCell className="text-right text-sm">{bot.total}</TableCell>
-                  <TableCell className="text-right text-sm">0</TableCell>
-                  <TableCell className="text-right text-sm">—</TableCell>
-                  <TableCell className="text-right text-sm">—</TableCell>
-                  <TableCell className="text-right text-sm">—</TableCell>
-                  <TableCell className="text-right text-sm">—</TableCell>
-                  <TableCell className="text-right text-sm">—</TableCell>
-                </TableRow>
+              {pendingBots.map((bot) => (
+                <BotRow key={bot.name} bot={bot} dimmed={false} onClick={() => setSelectedBot(bot)} />
               ))}
+              {inactiveBots.length > 0 && (
+                <>
+                  <TableRow>
+                    <TableCell colSpan={9} className="py-1 px-4">
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-widest">
+                        {inactiveBots.length} bots waiting for qualifying conditions
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                  {inactiveBots.map((bot) => (
+                    <BotRow key={bot.name} bot={bot} dimmed={true} onClick={() => setSelectedBot(bot)} />
+                  ))}
+                </>
+              )}
             </TableBody>
           </Table>
         </CardContent>
