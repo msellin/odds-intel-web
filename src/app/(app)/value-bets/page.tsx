@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { getTodayBets, getTodayPicks, type LiveBet } from "@/lib/engine-data";
 import { ValueBetsLive } from "@/components/value-bets-live";

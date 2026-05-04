@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { getUserTier } from "@/lib/get-user-tier";
 import { getModelAccuracy, getTrackRecordStats, getSystemStatus } from "@/lib/engine-data";

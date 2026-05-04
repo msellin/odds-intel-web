@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { getAllBets, getAllBotsFromDB } from "@/lib/engine-data";
 import { BotDashboardClient } from "@/components/bot-dashboard-client";

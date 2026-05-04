@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { CalendarDays, SearchX, Info } from "lucide-react";
 import { getPublicMatches, getLiveSnapshots, getFreeDailyPick } from "@/lib/engine-data";
 import { MatchesClient } from "@/components/matches-client";
