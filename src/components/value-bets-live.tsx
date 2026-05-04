@@ -15,8 +15,8 @@ import { cn } from "@/lib/utils";
 import type { LiveBet } from "@/lib/engine-data";
 
 interface ValueBetsLiveProps {
-  bets: LiveBet[];
-  totalCount: number; // full count before tier-based filtering — used for locked row count
+  bets: (LiveBet & { botCount: number })[];
+  totalCount: number; // deduplicated count — used for stats + locked row count
   userTier: "free" | "pro" | "elite";
 }
 
@@ -343,7 +343,7 @@ function BetRow({
   isElite,
   isFreeHighlight = false,
 }: {
-  bet: LiveBet;
+  bet: LiveBet & { botCount: number };
   isPro: boolean;
   isElite: boolean;
   isFreeHighlight?: boolean;
@@ -359,12 +359,18 @@ function BetRow({
       {/* Match */}
       <td className="py-3 pl-4 pr-2">
         <div className="flex items-center gap-2">
-          {isFreeHighlight && (
-            <span className="shrink-0 rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-bold text-emerald-400 uppercase tracking-wide">
-              Free pick
-            </span>
-          )}
-        </div>
+              <div className="flex items-center gap-1.5">
+            {isFreeHighlight && (
+              <span className="shrink-0 rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-bold text-emerald-400 uppercase tracking-wide">
+                Free pick
+              </span>
+            )}
+            {isElite && bet.botCount > 1 && (
+              <span className="shrink-0 rounded border border-blue-500/30 bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-bold text-blue-400">
+                {bet.botCount} bots
+              </span>
+            )}
+          </div>
         <p className="font-medium text-foreground/90 truncate max-w-[200px] mt-0.5">{bet.match}</p>
         <p className="text-[10px] text-muted-foreground/60 truncate">{bet.league}</p>
       </td>
@@ -379,9 +385,9 @@ function BetRow({
         <span className="rounded bg-white/[0.06] px-2 py-0.5 font-medium">{bet.selection}</span>
       </td>
 
-      {/* Edge */}
+      {/* Edge — exact % for elite and free pick; label only for pro rows */}
       <td className="py-3 px-2 text-center">
-        {isElite ? (
+        {isElite || isFreeHighlight ? (
           <span className={cn("font-mono font-bold", edgeColor(bet.edge))}>
             +{formatEdge(bet.edge)}%
           </span>
@@ -390,12 +396,14 @@ function BetRow({
         )}
       </td>
 
-      {/* Odds */}
+      {/* Odds — visible to free for their 1 pick, locked for pro rows (elite-only column) */}
       <td className="py-3 px-2 text-center">
-        {isElite ? (
+        {isElite || isFreeHighlight ? (
           <span className="font-mono font-bold">{bet.odds.toFixed(2)}</span>
+        ) : isPro ? (
+          <LockedCell tier="elite" />
         ) : (
-          <LockedCell tier={isPro ? "elite" : "pro"} />
+          <LockedCell tier="pro" />
         )}
       </td>
 

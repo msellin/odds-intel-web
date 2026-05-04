@@ -5,6 +5,27 @@ import { ValueBetsGate } from "@/components/value-bets-gate";
 import { TodayPicksPreview } from "@/components/today-picks-preview";
 import { getUserTier } from "@/lib/get-user-tier";
 
+// Deduplicate bets by match+market+selection — multiple bots can place the
+// same pick independently, which creates duplicate rows. We keep the highest-edge
+// instance and track the bot count for Elite display.
+function deduplicateBets(bets: LiveBet[]): (LiveBet & { botCount: number })[] {
+  const seen = new Map<string, LiveBet & { botCount: number }>();
+  for (const bet of bets) {
+    const key = `${bet.match}|${bet.market}|${bet.selection}`;
+    const existing = seen.get(key);
+    if (!existing) {
+      seen.set(key, { ...bet, botCount: 1 });
+    } else {
+      existing.botCount += 1;
+      // Keep highest-edge row's data
+      if (bet.edge > existing.edge) {
+        seen.set(key, { ...bet, botCount: existing.botCount });
+      }
+    }
+  }
+  return Array.from(seen.values());
+}
+
 // Strip fields that a given tier should never receive.
 // This runs server-side — the result is what gets serialized into the RSC
 // payload, so anything not included here never reaches the browser.
@@ -12,14 +33,14 @@ function sanitizeBets(
   bets: LiveBet[],
   isPro: boolean,
   isElite: boolean
-): { bets: LiveBet[]; totalCount: number } {
-  const totalCount = bets.length;
+): { bets: (LiveBet & { botCount: number })[]; totalCount: number } {
+  const deduped = deduplicateBets(bets);
+  const totalCount = deduped.length;
 
-  if (isElite) return { bets, totalCount };
+  if (isElite) return { bets: deduped, totalCount };
 
   if (isPro) {
-    // Pro sees all bets but not Elite-only columns
-    const stripped = bets.map((b) => ({
+    const stripped = deduped.map((b) => ({
       ...b,
       odds: 0,
       modelProb: 0,
@@ -33,10 +54,8 @@ function sanitizeBets(
     return { bets: stripped, totalCount };
   }
 
-  // Free: only the top bet (highest edge), everything else is a server-side count.
-  // The blurred placeholder rows in the UI are fake — no real data sent.
-  const top = bets.slice(0, 1);
-  return { bets: top, totalCount };
+  // Free: only the top bet. Blurred placeholder rows in the UI are fake.
+  return { bets: deduped.slice(0, 1), totalCount };
 }
 
 export default async function ValueBetsPage() {

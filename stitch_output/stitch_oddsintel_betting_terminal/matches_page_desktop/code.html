@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ODDSINTEL - Today's Matches</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "primary-container": "#22c55e",
+                        "on-tertiary-fixed": "#410001",
+                        "on-secondary": "#302f3b",
+                        "on-surface-variant": "#bccbb9",
+                        "secondary-container": "#464552",
+                        "surface-variant": "#2f372e",
+                        "inverse-on-surface": "#2a322a",
+                        "on-surface": "#dce5d9",
+                        "on-primary-fixed": "#002109",
+                        "on-tertiary": "#60130d",
+                        "secondary-fixed": "#e3e0f1",
+                        "border": "rgba(255,255,255,0.06)",
+                        "on-tertiary-container": "#76231b",
+                        "tertiary-fixed": "#ffdad5",
+                        "accent-success": "#22c55e",
+                        "on-primary": "#003915",
+                        "surface": "#14141f",
+                        "text-muted": "#6b7280",
+                        "on-secondary-fixed-variant": "#464552",
+                        "inverse-surface": "#dce5d9",
+                        "primary-fixed-dim": "#4ae176",
+                        "surface-dim": "#0e150e",
+                        "tertiary": "#ffb5ab",
+                        "surface-bright": "#333b33",
+                        "on-error": "#690005",
+                        "on-primary-container": "#004b1e",
+                        "on-secondary-fixed": "#1b1b26",
+                        "inverse-primary": "#006e2f",
+                        "surface-container-high": "#242c24",
+                        "surface-container": "#1a221a",
+                        "tertiary-container": "#ff8b7c",
+                        "background": "#0a0a14",
+                        "error-container": "#93000a",
+                        "secondary": "#c7c5d4",
+                        "on-primary-fixed-variant": "#005321",
+                        "on-error-container": "#ffdad6",
+                        "primary": "#4be277",
+                        "surface-container-low": "#161d16",
+                        "text-primary": "#f0f0f5",
+                        "on-secondary-container": "#b6b3c3",
+                        "error": "#ffb4ab",
+                        "outline-variant": "#3d4a3d",
+                        "on-tertiary-fixed-variant": "#7f2a21",
+                        "surface-container-lowest": "#091009",
+                        "outline": "#869585",
+                        "on-background": "#dce5d9",
+                        "primary-fixed": "#6bff8f",
+                        "surface-container-highest": "#2f372e",
+                        "tertiary-fixed-dim": "#ffb4a9",
+                        "secondary-fixed-dim": "#c7c5d4",
+                        "surface-tint": "#4ae176"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "stack-sm": "0.5rem",
+                        "stack-md": "1rem",
+                        "stack-xs": "0.25rem",
+                        "margin-page": "1.5rem",
+                        "row-height": "40px",
+                        "touch-target": "48px",
+                        "gutter": "1rem"
+                    },
+                    "fontFamily": {
+                        "h1": ["Inter"],
+                        "body-base": ["Inter"],
+                        "data-sm": ["JetBrains Mono"],
+                        "data-lg": ["JetBrains Mono"],
+                        "body-sm": ["Inter"],
+                        "data-base": ["JetBrains Mono"],
+                        "h3": ["Inter"],
+                        "h2": ["Inter"]
+                    },
+                    "fontSize": {
+                        "h1": ["2.5rem", {"lineHeight": "1.2", "fontWeight": "700"}],
+                        "body-base": ["1rem", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "data-sm": ["0.75rem", {"lineHeight": "1", "fontWeight": "500"}],
+                        "data-lg": ["1rem", {"lineHeight": "1", "fontWeight": "600"}],
+                        "body-sm": ["0.875rem", {"lineHeight": "1.4", "fontWeight": "400"}],
+                        "data-base": ["0.875rem", {"lineHeight": "1", "fontWeight": "500"}],
+                        "h3": ["1.125rem", {"lineHeight": "1.4", "fontWeight": "600"}],
+                        "h2": ["1.5rem", {"lineHeight": "1.3", "fontWeight": "600"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #2f372e; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body-base antialiased">
+<!-- TopAppBar Shell -->
+<header class="bg-zinc-950 text-green-500 font-inter tracking-tight font-medium text-sm docked full-width top-0 border-b border-white/5 flat no shadows flex justify-between items-center w-full px-6 h-14 sticky top-0 z-50">
+<div class="text-xl font-black tracking-tighter text-white uppercase italic">ODDSINTEL</div>
+<nav class="hidden md:flex items-center gap-8 h-full">
+<a class="text-green-500 border-b-2 border-green-500 pb-1 h-full flex items-center" href="#">Matches</a>
+<a class="text-zinc-400 hover:text-white transition-colors h-full flex items-center" href="#">Live</a>
+<a class="text-zinc-400 hover:text-white transition-colors h-full flex items-center" href="#">Leagues</a>
+<a class="text-zinc-400 hover:text-white transition-colors h-full flex items-center" href="#">About</a>
+</nav>
+<div class="flex items-center gap-4">
+<button class="text-zinc-400 hover:text-white transition-colors duration-200 ease-out active:scale-95">Log In</button>
+<button class="bg-primary-container text-on-primary-container px-4 py-1.5 rounded-lg font-bold hover:bg-primary-container/90 transition-colors duration-200 ease-out active:scale-95">Get Pro</button>
+</div>
+</header>
+<main class="max-w-7xl mx-auto px-6 py-8 pb-24 md:pb-8">
+<!-- Main Header -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+<div>
+<h1 class="font-h1 text-h1 text-text-primary tracking-tight">Today's Matches</h1>
+<div class="flex items-center gap-3 mt-1">
+<span class="text-muted font-body-sm">October 24, 2024</span>
+<span class="text-muted px-2 border-l border-white/10 font-body-sm">240 matches</span>
+<span class="bg-primary-container/10 text-primary-container text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border border-primary-container/20">58 with odds</span>
+</div>
+</div>
+<!-- Sub-header: Filters & View Toggle -->
+<div class="flex flex-col sm:flex-row items-center gap-3">
+<div class="relative w-full sm:w-64">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm" data-icon="search">search</span>
+<input class="w-full bg-surface-container border border-white/5 rounded-lg pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-primary-container/50 transition-colors placeholder-muted" placeholder="Filter by league..." type="text"/>
+</div>
+<div class="flex p-1 bg-surface-container-low border border-white/5 rounded-lg self-stretch">
+<button class="flex-1 px-4 py-1.5 text-xs font-bold rounded bg-surface-container-high text-white shadow-sm transition-all">All matches</button>
+<button class="flex-1 px-4 py-1.5 text-xs font-bold rounded text-muted hover:text-white transition-all">With odds only</button>
+</div>
+</div>
+</div>
+<!-- Content Grid: Accordions -->
+<div class="space-y-4">
+<!-- League Accordion: Premier League (Expanded) -->
+<div class="border border-white/5 rounded-xl overflow-hidden bg-surface-container-lowest">
+<div class="bg-surface-container px-4 py-3 flex items-center justify-between cursor-pointer border-b border-white/5">
+<div class="flex items-center gap-3">
+<span class="text-lg">🏴󠁧󠁢󠁥󠁮󠁧󠁿</span>
+<h2 class="text-sm font-black tracking-widest text-text-primary uppercase">PREMIER LEAGUE</h2>
+<span class="text-xs text-muted font-medium bg-white/5 px-2 py-0.5 rounded">8 MATCHES</span>
+<span class="text-orange-500">🔥</span>
+</div>
+<span class="material-symbols-outlined text-muted" data-icon="expand_more">expand_more</span>
+</div>
+<div class="divide-y divide-white/5">
+<!-- Match Row 1 -->
+<div class="h-row-height flex items-center px-4 hover:bg-white/5 transition-colors group cursor-pointer">
+<div class="w-6 text-orange-500 flex items-center">
+<span class="text-xs">🔥</span>
+</div>
+<div class="w-16 font-data-sm text-data-sm text-muted">15:00</div>
+<div class="flex-1 flex items-center gap-4 text-sm font-medium text-on-surface">
+<span class="flex-1 text-right truncate">Arsenal</span>
+<span class="text-muted text-[10px] font-bold">VS</span>
+<span class="flex-1 text-left truncate">Chelsea</span>
+</div>
+<div class="flex items-center gap-1 ml-6">
+<div class="grid grid-cols-3 gap-1 w-48">
+<div class="bg-surface-container-high text-primary font-data-base text-data-base text-center py-1.5 rounded">2.10</div>
+<div class="bg-surface-container-low text-muted font-data-base text-data-base text-center py-1.5 rounded">3.40</div>
+<div class="bg-surface-container-low text-muted font-data-base text-data-base text-center py-1.5 rounded">3.25</div>
+</div>
+<span class="material-symbols-outlined text-muted group-hover:text-primary transition-colors text-lg" data-icon="arrow_forward">arrow_forward</span>
+</div>
+</div>
+<!-- Match Row 2 -->
+<div class="h-row-height flex items-center px-4 hover:bg-white/5 transition-colors group cursor-pointer">
+<div class="w-6"></div>
+<div class="w-16 font-data-sm text-data-sm text-muted">17:30</div>
+<div class="flex-1 flex items-center gap-4 text-sm font-medium text-on-surface">
+<span class="flex-1 text-right truncate">Man City</span>
+<span class="text-muted text-[10px] font-bold">VS</span>
+<span class="flex-1 text-left truncate">Liverpool</span>
+</div>
+<div class="flex items-center gap-1 ml-6">
+<div class="grid grid-cols-3 gap-1 w-48">
+<div class="bg-surface-container-low text-muted font-data-base text-data-base text-center py-1.5 rounded">1.95</div>
+<div class="bg-surface-container-low text-muted font-data-base text-data-base text-center py-1.5 rounded">3.80</div>
+<div class="bg-surface-container-high text-primary font-data-base text-data-base text-center py-1.5 rounded">3.90</div>
+</div>
+<span class="material-symbols-outlined text-muted group-hover:text-primary transition-colors text-lg" data-icon="arrow_forward">arrow_forward</span>
+</div>
+</div>
+</div>
+</div>
+<!-- League Accordion: La Liga (Expanded) -->
+<div class="border border-white/5 rounded-xl overflow-hidden bg-surface-container-lowest">
+<div class="bg-surface-container px-4 py-3 flex items-center justify-between cursor-pointer border-b border-white/5">
+<div class="flex items-center gap-3">
+<span class="text-lg">🇪🇸</span>
+<h2 class="text-sm font-black tracking-widest text-text-primary uppercase">LA LIGA</h2>
+<span class="text-xs text-muted font-medium bg-white/5 px-2 py-0.5 rounded">4 MATCHES</span>
+</div>
+<span class="material-symbols-outlined text-muted" data-icon="expand_more">expand_more</span>
+</div>
+<div class="divide-y divide-white/5">
+<div class="h-row-height flex items-center px-4 hover:bg-white/5 transition-colors group cursor-pointer">
+<div class="w-6"></div>
+<div class="w-16 font-data-sm text-data-sm text-muted">21:00</div>
+<div class="flex-1 flex items-center gap-4 text-sm font-medium text-on-surface">
+<span class="flex-1 text-right truncate">Real Madrid</span>
+<span class="text-muted text-[10px] font-bold">VS</span>
+<span class="flex-1 text-left truncate">Barcelona</span>
+</div>
+<div class="flex items-center gap-1 ml-6">
+<div class="grid grid-cols-3 gap-1 w-48">
+<div class="bg-surface-container-high text-primary font-data-base text-data-base text-center py-1.5 rounded">2.05</div>
+<div class="bg-surface-container-low text-muted font-data-base text-data-base text-center py-1.5 rounded">3.50</div>
+<div class="bg-surface-container-low text-muted font-data-base text-data-base text-center py-1.5 rounded">3.10</div>
+</div>
+<span class="material-symbols-outlined text-muted group-hover:text-primary transition-colors text-lg" data-icon="arrow_forward">arrow_forward</span>
+</div>
+</div>
+</div>
+</div>
+<!-- League Accordion: Serie A (Collapsed) -->
+<div class="border border-white/5 rounded-xl overflow-hidden bg-surface-container-lowest">
+<div class="bg-surface-container px-4 py-3 flex items-center justify-between cursor-pointer">
+<div class="flex items-center gap-3">
+<span class="text-lg">🇮🇹</span>
+<h2 class="text-sm font-black tracking-widest text-text-primary uppercase">SERIE A</h2>
+<span class="text-xs text-muted font-medium bg-white/5 px-2 py-0.5 rounded">10 MATCHES</span>
+</div>
+<span class="material-symbols-outlined text-muted" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+<!-- League Accordion: Bundesliga (Collapsed) -->
+<div class="border border-white/5 rounded-xl overflow-hidden bg-surface-container-lowest">
+<div class="bg-surface-container px-4 py-3 flex items-center justify-between cursor-pointer">
+<div class="flex items-center gap-3">
+<span class="text-lg">🇩🇪</span>
+<h2 class="text-sm font-black tracking-widest text-text-primary uppercase">BUNDESLIGA</h2>
+<span class="text-xs text-muted font-medium bg-white/5 px-2 py-0.5 rounded">6 MATCHES</span>
+<span class="text-orange-500">🔥</span>
+</div>
+<span class="material-symbols-outlined text-muted" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+<!-- League Accordion: Ligue 1 (Collapsed) -->
+<div class="border border-white/5 rounded-xl overflow-hidden bg-surface-container-lowest">
+<div class="bg-surface-container px-4 py-3 flex items-center justify-between cursor-pointer">
+<div class="flex items-center gap-3">
+<span class="text-lg">🇫🇷</span>
+<h2 class="text-sm font-black tracking-widest text-text-primary uppercase">LIGUE 1</h2>
+<span class="text-xs text-muted font-medium bg-white/5 px-2 py-0.5 rounded">5 MATCHES</span>
+</div>
+<span class="material-symbols-outlined text-muted" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+</div>
+<!-- Sticky Bottom CTA -->
+<div class="mt-12 mb-8 bg-primary-container/10 border border-primary-container/20 p-3 rounded-lg flex flex-col md:flex-row items-center justify-center gap-4 text-sm font-medium">
+<span class="text-on-surface">Sign up free to track your favourite leagues</span>
+<button class="bg-primary-container text-on-primary-container px-6 py-1.5 rounded-lg font-bold text-xs uppercase tracking-widest hover:bg-primary-container/90 transition-colors">Sign Up</button>
+</div>
+</main>
+<!-- Footer Shell -->
+<footer class="bg-zinc-950 border-t border-white/5">
+<div class="max-w-7xl mx-auto px-6 py-12 flex flex-col md:flex-row justify-between items-center gap-8">
+<div class="text-lg font-black text-white italic">ODDSINTEL</div>
+<div class="flex flex-wrap justify-center gap-6">
+<a class="font-inter text-xs text-zinc-500 hover:text-green-500 transition-colors cursor-pointer" href="#">Terms of Service</a>
+<a class="font-inter text-xs text-zinc-500 hover:text-green-500 transition-colors cursor-pointer" href="#">Privacy Policy</a>
+<a class="font-inter text-xs text-zinc-500 hover:text-green-500 transition-colors cursor-pointer" href="#">Cookie Settings</a>
+<a class="font-inter text-xs text-zinc-500 hover:text-green-500 transition-colors cursor-pointer" href="#">API Access</a>
+</div>
+<p class="font-inter text-xs text-zinc-500">© 2024 ODDSINTEL. High-Performance Football Intelligence.</p>
+</div>
+</footer>
+<!-- BottomNavBar (Mobile Only) -->
+<nav class="bg-zinc-950/95 backdrop-blur-md fixed bottom-0 left-0 w-full flex justify-around items-center h-16 pb-safe px-4 md:hidden border-t border-white/5 z-50">
+<div class="text-green-500 flex flex-col items-center gap-1 active:scale-90 transition-transform">
+<span class="material-symbols-outlined" data-icon="sports_soccer" data-weight="fill">sports_soccer</span>
+<span class="font-inter text-[10px] uppercase font-bold tracking-widest">Matches</span>
+</div>
+<div class="text-zinc-500 flex flex-col items-center gap-1 active:scale-90 transition-transform hover:text-zinc-200">
+<span class="material-symbols-outlined" data-icon="format_list_bulleted">format_list_bulleted</span>
+<span class="font-inter text-[10px] uppercase font-bold tracking-widest">Leagues</span>
+</div>
+<div class="text-zinc-500 flex flex-col items-center gap-1 active:scale-90 transition-transform hover:text-zinc-200">
+<span class="material-symbols-outlined" data-icon="notifications_active">notifications_active</span>
+<span class="font-inter text-[10px] uppercase font-bold tracking-widest">Alerts</span>
+</div>
+<div class="text-zinc-500 flex flex-col items-center gap-1 active:scale-90 transition-transform hover:text-zinc-200">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span class="font-inter text-[10px] uppercase font-bold tracking-widest">Profile</span>
+</div>
+</nav>
+</body></html>

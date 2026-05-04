@@ -1,5 +1,14 @@
+import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServer } from "./supabase-server";
 import { createSupabasePublic } from "./supabase-public";
+
+// Service role client — bypasses RLS. Server-side only, never sent to browser.
+function createSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 // ─── Frontend types (same interface as before) ──────────────────────────────
 
@@ -812,7 +821,9 @@ export async function getMatchById(matchId: string): Promise<LiveMatch | null> {
 }
 
 export async function getTodayBets(): Promise<LiveBet[]> {
-  const supabase = await createSupabaseServer();
+  // Use service role so RLS on simulated_bets doesn't block the server.
+  // Tier-based sanitization happens in page.tsx before data reaches the client.
+  const supabase = createSupabaseAdmin();
 
   const now = new Date();
   const todayStart = new Date(now);
@@ -837,6 +848,72 @@ export async function getTodayBets(): Promise<LiveBet[]> {
   if (error || !data) return [];
 
   return (data as SimBetRow[]).map(toBet);
+}
+
+// The single free pick shown on the matches page — intentionally public data
+// (we use this as a marketing teaser). Fetched server-side via service role
+// so no client-side Supabase query is needed in DailyValueTeaser.
+export interface FreePick {
+  id: string;
+  match: string;
+  league: string;
+  market: string;
+  selection: string;
+  odds: number;
+  edge: number;
+  result: string;
+}
+
+export async function getFreeDailyPick(): Promise<{ pick: FreePick | null; totalCount: number }> {
+  const supabase = createSupabaseAdmin();
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayStartStr = todayStart.toISOString();
+
+  const [pickRes, countRes] = await Promise.all([
+    supabase
+      .from("simulated_bets")
+      .select(
+        `id, market, selection, odds_at_pick, edge_percent, result,
+         match:match_id(
+           home_team:home_team_id(name),
+           away_team:away_team_id(name),
+           league:league_id(name, country)
+         )`
+      )
+      .gte("pick_time", todayStartStr)
+      .order("edge_percent", { ascending: false })
+      .limit(1),
+    supabase
+      .from("simulated_bets")
+      .select("id", { count: "exact", head: true })
+      .gte("pick_time", todayStartStr),
+  ]);
+
+  const totalCount = countRes.count ?? 0;
+  const rows = pickRes.data;
+  if (!rows || rows.length === 0) return { pick: null, totalCount };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const row = rows[0] as any;
+  const match = Array.isArray(row.match) ? row.match[0] : row.match;
+  const ht = match?.home_team ? (Array.isArray(match.home_team) ? match.home_team[0] : match.home_team) : null;
+  const at = match?.away_team ? (Array.isArray(match.away_team) ? match.away_team[0] : match.away_team) : null;
+  const lg = match?.league ? (Array.isArray(match.league) ? match.league[0] : match.league) : null;
+
+  return {
+    pick: {
+      id: row.id,
+      match: `${ht?.name ?? "?"} vs ${at?.name ?? "?"}`,
+      league: lg ? `${lg.country} / ${lg.name}` : "",
+      market: row.market,
+      selection: row.selection,
+      odds: Number(row.odds_at_pick),
+      edge: Number(row.edge_percent),
+      result: row.result ?? "pending",
+    },
+    totalCount,
+  };
 }
 
 export interface BotRecord {

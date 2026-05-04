@@ -1,5 +1,5 @@
 import { CalendarDays, SearchX, Info } from "lucide-react";
-import { getPublicMatches, getLiveSnapshots } from "@/lib/engine-data";
+import { getPublicMatches, getLiveSnapshots, getFreeDailyPick } from "@/lib/engine-data";
 import { MatchesClient } from "@/components/matches-client";
 import { DailyValueTeaser } from "@/components/daily-value-teaser";
 import { SignupBanner } from "@/components/signup-banner";
@@ -17,21 +17,36 @@ function formatDate(): string {
 }
 
 export default async function MatchesPage() {
-  // Run matches fetch and auth check in parallel (previously sequential)
-  const [allMatches, authResult] = await Promise.all([
+  // Run all fetches in parallel
+  const [allMatches, authResult, { pick: freePick, totalCount: freeTotalCount }] = await Promise.all([
     getPublicMatches(),
     (async () => {
       const supabase = await createSupabaseServer();
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (!user) return { isAuthenticated: false, isPro: false };
+      if (!user) return { isAuthenticated: false, isPro: false, userId: null };
       const { isPro } = await getUserTier(user.id, supabase);
-      return { isAuthenticated: true, isPro };
+      return { isAuthenticated: true, isPro, userId: user.id };
     })(),
+    getFreeDailyPick(),
   ]);
 
-  const { isAuthenticated, isPro } = authResult;
+  const { isAuthenticated, isPro, userId } = authResult;
+
+  // Check unlock status server-side so DailyValueTeaser doesn't need a client query
+  let alreadyUnlocked = false;
+  if (userId) {
+    const supabase = await createSupabaseServer();
+    const today = new Date().toISOString().split("T")[0];
+    const { data } = await supabase
+      .from("daily_unlocks")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("unlock_date", today)
+      .maybeSingle();
+    alreadyUnlocked = !!data;
+  }
 
   // Group by league
   const grouped = new Map<string, PublicMatch[]>();
@@ -107,7 +122,12 @@ export default async function MatchesPage() {
       {!isAuthenticated && <SignupBanner />}
 
       {/* Daily value bet teaser */}
-      <DailyValueTeaser isPro={isPro} />
+      <DailyValueTeaser
+        pick={freePick}
+        totalCount={freeTotalCount}
+        alreadyUnlocked={alreadyUnlocked}
+        isPro={isPro}
+      />
 
       {/* Empty state */}
       {sortedGroups.length === 0 && (
