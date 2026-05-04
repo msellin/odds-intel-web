@@ -173,7 +173,7 @@ export function DailyValueTeaser({ isPro = false }: DailyValueTeaserProps) {
             href="/signup"
             className="flex items-center justify-center gap-1.5 shrink-0 rounded-md bg-amber-500 px-3 py-1.5 text-xs font-bold text-black transition-colors hover:bg-amber-400"
           >
-            Sign up free{totalBets > 1 ? ` · ${totalBets} picks` : ""}
+            Sign up free · see {totalBets > 1 ? `all ${totalBets}` : "today's"} pick{totalBets !== 1 ? "s" : ""}
             <ArrowRight className="h-3 w-3" />
           </Link>
         </div>
