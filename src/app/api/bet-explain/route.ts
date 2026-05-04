@@ -11,6 +11,11 @@ const GEMINI_URL =
  * GET /api/bet-explain?betId=<uuid>
  * Returns a natural language explanation of why the engine placed a bet.
  * Elite tier only.
+ *
+ * Explanations are cached on the simulated_bets row (ai_explanation column).
+ * The first request generates and stores it; all subsequent requests return
+ * the cached text with no Gemini call. This bounds total API usage to the
+ * number of unique bets per day (~20-50), not to the number of users.
  */
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -25,7 +30,6 @@ export async function GET(req: Request) {
   }
 
   // Auth + Elite tier check
-  let userId: string;
   try {
     const supabase = await createSupabaseServer();
     const {
@@ -36,13 +40,11 @@ export async function GET(req: Request) {
     const { isElite } = await getUserTier(user.id, supabase);
     if (!isElite)
       return NextResponse.json({ error: "Elite required" }, { status: 403 });
-
-    userId = user.id;
   } catch {
     return NextResponse.json({ error: "Auth error" }, { status: 500 });
   }
 
-  // Fetch bet details using service role (simulated_bets may have RLS)
+  // Use service role for all DB operations (RLS on simulated_bets blocks anon)
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     (process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY)!
@@ -52,7 +54,7 @@ export async function GET(req: Request) {
     .from("simulated_bets")
     .select(
       `id, market, selection, odds, model_probability, edge_percent,
-       stake, result, pnl,
+       stake, result, pnl, ai_explanation,
        match:match_id(
          id, date,
          home_team:home_team_id(name, country),
@@ -68,12 +70,17 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Bet not found" }, { status: 404 });
   }
 
-  // Fetch signals for this match
+  // Return cached explanation if available — no Gemini call needed
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const betAny = bet as any;
+  if (betAny.ai_explanation) {
+    return NextResponse.json({ explanation: betAny.ai_explanation, cached: true });
+  }
+
   const matchRow = Array.isArray(betAny.match) ? betAny.match[0] : betAny.match;
   const matchId = matchRow?.id;
 
+  // Fetch signals for this match
   let signals: Record<string, number> = {};
   if (matchId) {
     const { data: sigRows } = await supabaseAdmin
@@ -151,7 +158,6 @@ Write a 2-3 sentence explanation of why this pick was placed. Translate any tech
 
     if (!resp.ok) {
       const errText = await resp.text();
-      // Surface quota/billing issues clearly rather than dumping raw API JSON
       if (resp.status === 429 || errText.includes("quota") || errText.includes("RESOURCE_EXHAUSTED")) {
         return NextResponse.json(
           { error: "AI quota exceeded — please enable billing on the Gemini API key in Google Cloud." },
@@ -167,14 +173,19 @@ Write a 2-3 sentence explanation of why this pick was placed. Translate any tech
     const json = await resp.json();
     const explanation =
       json?.candidates?.[0]?.content?.parts?.[0]?.text ?? "Unable to generate explanation.";
+    const trimmed = explanation.trim();
 
-    return NextResponse.json({ explanation: explanation.trim() });
+    // Cache on the bet row so future requests cost nothing
+    await supabaseAdmin
+      .from("simulated_bets")
+      .update({ ai_explanation: trimmed, ai_explanation_at: new Date().toISOString() })
+      .eq("id", betId);
+
+    return NextResponse.json({ explanation: trimmed });
   } catch (err) {
     return NextResponse.json(
       { error: `LLM request failed: ${String(err).slice(0, 100)}` },
       { status: 502 }
     );
   }
-
-  void userId; // used for auth check above
 }
