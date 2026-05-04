@@ -34,7 +34,7 @@ export function ValueBetsGate() {
         </div>
         <h1 className="text-2xl font-bold tracking-tight">Value Bets</h1>
         <p className="text-muted-foreground">
-          Where the model beats the bookmakers. Available on Pro and Elite.
+          Where the model beats the bookmakers. Free accounts see 1 pick/day — Pro and Elite see all.
         </p>
       </div>
 
@@ -80,8 +80,8 @@ export function ValueBetsGate() {
         {/* Overlay CTA */}
         <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-[2px]">
           <div className="text-center">
-            <p className="text-sm font-semibold text-foreground">Sign in to see today&apos;s value bets</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">Free to sign up — no card required</p>
+            <p className="text-sm font-semibold text-foreground">Pro feature — sign in to see today&apos;s free pick</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">Free accounts get 1 pick/day · Pro unlocks all</p>
           </div>
         </div>
       </div>
