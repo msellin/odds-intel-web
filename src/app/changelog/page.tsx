@@ -28,6 +28,7 @@ const CHANGELOG: ChangelogEntry[] = [
     date: "2026-05-04",
     title: "Bot detail modal · Alignment signals expanded · Matches fix",
     changes: [
+      { type: "feature", text: "Payments live: Pro (€4.99/mo) and Elite (€14.99/mo) subscriptions now accept real payments via Stripe" },
       { type: "feature", text: "Bot dashboard: click any bot to see full bet history with bankroll progression chart" },
       { type: "feature", text: "Sharp bookmaker consensus signal: tracks whether Pinnacle, Betfair et al. agree with the model pick" },
       { type: "feature", text: "Pinnacle anchor signal: flags picks where the sharpest market confirms (+) or rejects (–) model probability" },
