@@ -13,6 +13,7 @@ import {
   X,
   LogOut,
   LogIn,
+  Bot,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -30,7 +31,7 @@ export function Nav() {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const { user, loading, signOut } = useAuth();
+  const { user, profile, loading, signOut } = useAuth();
 
   const handleSignOut = async () => {
     await signOut();
@@ -75,6 +76,20 @@ export function Nav() {
               </Link>
             );
           })}
+          {profile?.is_superadmin && (
+            <Link
+              href="/admin/bots"
+              className={cn(
+                "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors",
+                pathname === "/admin/bots"
+                  ? "bg-amber-500/10 text-amber-400"
+                  : "text-amber-500/70 hover:bg-accent hover:text-amber-400"
+              )}
+            >
+              <Bot className="h-3.5 w-3.5" />
+              Bots
+            </Link>
+          )}
           <div className="ml-2 h-5 w-px bg-border" />
 
           {!loading && user ? (
@@ -154,6 +169,22 @@ export function Nav() {
               </Link>
             );
           })}
+
+          {profile?.is_superadmin && (
+            <Link
+              href="/admin/bots"
+              onClick={() => setOpen(false)}
+              className={cn(
+                "flex items-center gap-2 rounded-md px-3 py-2.5 text-sm transition-colors",
+                pathname === "/admin/bots"
+                  ? "bg-amber-500/10 text-amber-400"
+                  : "text-amber-500/70 hover:bg-accent hover:text-amber-400"
+              )}
+            >
+              <Bot className="h-4 w-4" />
+              Bot Dashboard
+            </Link>
+          )}
 
           {!loading && user ? (
             <>

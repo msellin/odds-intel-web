@@ -1891,6 +1891,55 @@ export interface BotConsensusData {
   markets: BotConsensusItem[];
 }
 
+// ─── PERF-CACHE: Pre-computed dashboard stats ───────────────────────────────
+
+export interface DashboardCache {
+  computed_at: string;
+  total_bets: number;
+  settled_bets: number;
+  pending_bets: number;
+  won_bets: number;
+  lost_bets: number;
+  hit_rate: number | null;
+  total_staked: number;
+  total_pnl: number;
+  roi_pct: number | null;
+  avg_clv: number | null;
+  bot_breakdown: Array<{
+    name: string;
+    timing_cohort: string | null;
+    settled: number;
+    won: number;
+    total_pnl: number;
+    roi_pct: number | null;
+    avg_clv: number | null;
+  }>;
+  market_breakdown: Array<{
+    market: string;
+    bets: number;
+    won: number;
+    avg_clv: number | null;
+  }>;
+  model_accuracy_pct: number | null;
+  prediction_sample_size: number;
+  pseudo_clv_count: number;
+  live_snapshot_matches: number;
+  alignment_settled_count: number;
+}
+
+export async function getDashboardCache(): Promise<DashboardCache | null> {
+  const supabase = createSupabasePublic();
+  const { data, error } = await supabase
+    .from("dashboard_cache")
+    .select("*")
+    .order("computed_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  if (error || !data) return null;
+  return data as DashboardCache;
+}
+
 export async function getBotConsensus(matchId: string): Promise<BotConsensusData | null> {
   const supabase = await createSupabaseServer();
 
