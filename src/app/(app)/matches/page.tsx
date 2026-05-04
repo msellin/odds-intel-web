@@ -4,6 +4,7 @@ import { MatchesClient } from "@/components/matches-client";
 import { DailyValueTeaser } from "@/components/daily-value-teaser";
 import { SignupBanner } from "@/components/signup-banner";
 import { createSupabaseServer } from "@/lib/supabase-server";
+import { getUserTier } from "@/lib/get-user-tier";
 import type { PublicMatch, LiveSnapshot } from "@/lib/engine-data";
 
 function formatDate(): string {
@@ -25,13 +26,8 @@ export default async function MatchesPage() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return { isAuthenticated: false, isPro: false };
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("tier, is_superadmin")
-        .eq("id", user.id)
-        .single();
-      const isElite = profile?.is_superadmin === true || profile?.tier === "elite";
-      return { isAuthenticated: true, isPro: isElite || profile?.tier === "pro" };
+      const { isPro } = await getUserTier(user.id, supabase);
+      return { isAuthenticated: true, isPro };
     })(),
   ]);
 

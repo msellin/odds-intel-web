@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServer } from "@/lib/supabase-server";
+import { getUserTier } from "@/lib/get-user-tier";
 import { createClient } from "@supabase/supabase-js";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
@@ -32,13 +33,7 @@ export async function GET(req: Request) {
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("tier, is_superadmin")
-      .eq("id", user.id)
-      .single();
-    const isElite =
-      profile?.is_superadmin === true || profile?.tier === "elite";
+    const { isElite } = await getUserTier(user.id, supabase);
     if (!isElite)
       return NextResponse.json({ error: "Elite required" }, { status: 403 });
 

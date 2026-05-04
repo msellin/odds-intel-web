@@ -2,6 +2,7 @@ import { createSupabaseServer } from "@/lib/supabase-server";
 import { getTodayBets } from "@/lib/engine-data";
 import { ValueBetsLive } from "@/components/value-bets-live";
 import { ValueBetsGate } from "@/components/value-bets-gate";
+import { getUserTier } from "@/lib/get-user-tier";
 
 export default async function ValueBetsPage() {
   const supabase = await createSupabaseServer();
@@ -13,15 +14,7 @@ export default async function ValueBetsPage() {
     return <ValueBetsGate />;
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("tier, is_superadmin")
-    .eq("id", user.id)
-    .single();
-
-  const isElite = profile?.is_superadmin === true || profile?.tier === "elite";
-  const isPro = isElite || profile?.tier === "pro";
-  const userTier: "free" | "pro" | "elite" = isElite ? "elite" : isPro ? "pro" : "free";
+  const { tier: userTier } = await getUserTier(user.id, supabase);
 
   const bets = await getTodayBets();
   const sorted = [...bets].sort((a, b) => b.edge - a.edge);

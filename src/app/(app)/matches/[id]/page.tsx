@@ -39,6 +39,7 @@ import { Separator } from "@/components/ui/separator";
 import { Clock, Calendar, Shield, MapPin, User } from "lucide-react";
 import Link from "next/link";
 import { createSupabaseServer } from "@/lib/supabase-server";
+import { getUserTier } from "@/lib/get-user-tier";
 
 export async function generateMetadata({
   params,
@@ -131,15 +132,9 @@ export default async function MatchDetailPage({
     if (user) {
       isAuthenticated = true;
       // Fetch tier from profiles — determines what data to serve
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("tier, is_superadmin")
-        .eq("id", user.id)
-        .single();
-      isElite = profile?.is_superadmin === true || profile?.tier === "elite";
-      isPro =
-        isElite ||
-        profile?.tier === "pro";
+      const tierResult = await getUserTier(user.id, supabase);
+      isElite = tierResult.isElite;
+      isPro = tierResult.isPro;
       if (isPro) {
         liveMatch = await getMatchById(id);
         matchStats = await getMatchStats(id);

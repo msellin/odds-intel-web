@@ -1,4 +1,5 @@
 import { createSupabaseServer } from "@/lib/supabase-server";
+import { getUserTier } from "@/lib/get-user-tier";
 import { getAllBets, getModelAccuracy, getTrackRecordStats, getSystemStatus } from "@/lib/engine-data";
 import { TrackRecordHero } from "@/components/track-record-hero";
 import { ClvEducation } from "@/components/clv-education";
@@ -16,24 +17,15 @@ export default async function TrackRecordPage() {
   // Determine user tier
   let tier: "free" | "pro" | "elite" = "free";
   let isSuperadmin = false;
+  let isPro = false;
+  let isElite = false;
   if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("tier, is_superadmin")
-      .eq("id", user.id)
-      .single();
-    if (profile?.is_superadmin) {
-      isSuperadmin = true;
-      tier = "elite"; // superadmins see everything
-    } else if (profile?.tier === "elite") {
-      tier = "elite";
-    } else if (profile?.tier === "pro") {
-      tier = "pro";
-    }
+    const tierResult = await getUserTier(user.id, supabase);
+    tier = tierResult.tier;
+    isSuperadmin = tierResult.is_superadmin;
+    isPro = tierResult.isPro;
+    isElite = tierResult.isElite;
   }
-
-  const isPro = tier === "pro" || tier === "elite";
-  const isElite = tier === "elite";
 
   // Public data — no login required
   const [accuracy, trackStats, systemStatus] = await Promise.all([

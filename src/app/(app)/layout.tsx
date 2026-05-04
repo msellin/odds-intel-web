@@ -1,5 +1,6 @@
 import { Nav } from "@/components/nav";
 import { LoginModal } from "@/components/login-modal";
+import { SuperadminTierBar } from "@/components/superadmin-tier-bar";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -9,6 +10,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {children}
       </main>
       <LoginModal />
+      <SuperadminTierBar />
     </>
   );
 }
