@@ -34,8 +34,9 @@ export function DailyValueTeaser({ isPro = false }: DailyValueTeaserProps) {
     const now = new Date();
     const todayStart = new Date(now);
     todayStart.setHours(0, 0, 0, 0);
+    const todayStartStr = todayStart.toISOString();
 
-    // Fetch today's top bet
+    // Fetch today's top bet (1 row for the teaser)
     supabase
       .from("simulated_bets")
       .select(
@@ -46,12 +47,11 @@ export function DailyValueTeaser({ isPro = false }: DailyValueTeaserProps) {
            league:league_id(name, country)
          )`
       )
-      .gte("pick_time", todayStart.toISOString())
+      .gte("pick_time", todayStartStr)
       .order("edge_percent", { ascending: false })
-      .limit(5)
+      .limit(1)
       .then(({ data }) => {
         if (data && data.length > 0) {
-          setTotalBets(data.length);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const row = data[0] as any;
           const match = Array.isArray(row.match) ? row.match[0] : row.match;
@@ -77,6 +77,15 @@ export function DailyValueTeaser({ isPro = false }: DailyValueTeaserProps) {
           });
         }
         setLoading(false);
+      });
+
+    // Separate count query so Pro view shows the real total, not a capped number
+    supabase
+      .from("simulated_bets")
+      .select("id", { count: "exact", head: true })
+      .gte("pick_time", todayStartStr)
+      .then(({ count }) => {
+        setTotalBets(count ?? 0);
       });
 
     // Check if user already used today's unlock
@@ -173,7 +182,7 @@ export function DailyValueTeaser({ isPro = false }: DailyValueTeaserProps) {
             href="/signup"
             className="flex items-center justify-center gap-1.5 shrink-0 rounded-md bg-amber-500 px-3 py-1.5 text-xs font-bold text-black transition-colors hover:bg-amber-400"
           >
-            Sign up free · see {totalBets > 1 ? `all ${totalBets}` : "today's"} pick{totalBets !== 1 ? "s" : ""}
+            Sign up free · 1 pick/day
             <ArrowRight className="h-3 w-3" />
           </Link>
         </div>
@@ -192,16 +201,13 @@ export function DailyValueTeaser({ isPro = false }: DailyValueTeaserProps) {
               Today&apos;s Free Value Pick
             </span>
           </div>
-          {totalBets > 1 && (
-            <Link
-              href="/value-bets"
-              className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-amber-400 transition-colors"
-            >
-              See all {totalBets} picks
-              <ArrowRight className="h-3 w-3" />
-              <Lock className="h-3 w-3" />
-            </Link>
-          )}
+          <Link
+            href="/value-bets"
+            className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-amber-400 transition-colors"
+          >
+            All picks on Pro
+            <Lock className="h-3 w-3" />
+          </Link>
         </div>
 
         {unlocked ? (
@@ -254,7 +260,7 @@ export function DailyValueTeaser({ isPro = false }: DailyValueTeaserProps) {
               Tap to reveal today&apos;s top value pick
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              1 free unlock per day — all {totalBets} picks available on Pro
+              1 free pick per day — upgrade to Pro for all picks
             </p>
           </button>
         )}
