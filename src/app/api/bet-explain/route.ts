@@ -53,7 +53,7 @@ export async function GET(req: Request) {
   const { data: bet } = await supabaseAdmin
     .from("simulated_bets")
     .select(
-      `id, market, selection, odds, model_probability, edge_percent,
+      `id, market, selection, odds_at_pick, model_probability, edge_percent,
        stake, result, pnl, ai_explanation,
        match:match_id(
          id, date,
@@ -121,7 +121,9 @@ export async function GET(req: Request) {
         : "Draw";
 
   const modelProb = Number(bet.model_probability);
-  const impliedProb = 1 / Number(bet.odds);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const oddsAtPick = Number((bet as any).odds_at_pick);
+  const impliedProb = oddsAtPick > 0 ? 1 / oddsAtPick : 0;
   const edgePct = (modelProb - impliedProb) * 100;
 
   const signalContext = Object.entries(signals)
@@ -133,7 +135,7 @@ export async function GET(req: Request) {
   const prompt = `You are an expert sports betting analyst. Explain in 2-3 clear, concise sentences why the model placed this specific bet. Focus on what the data shows — be specific and direct. Do not mention the model name. Do not say "the model" — say "our analysis" or "the signals".
 
 Match: ${homeTeam} vs ${awayTeam} (${league})
-Bet: ${selectionLabel} to win at odds ${Number(bet.odds).toFixed(2)}
+Bet: ${selectionLabel} to win at odds ${oddsAtPick.toFixed(2)}
 Market: ${bet.market}
 Model probability: ${(modelProb * 100).toFixed(1)}% (market implied: ${(impliedProb * 100).toFixed(1)}%)
 Edge: +${edgePct.toFixed(1)}%
