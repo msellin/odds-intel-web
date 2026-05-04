@@ -39,6 +39,10 @@ async function openCheckout(tier: "pro" | "elite") {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ tier }),
   });
+  if (res.status === 401) {
+    window.location.href = `/signup?plan=${tier}`;
+    return;
+  }
   const data = await res.json();
   if (data.url) window.location.href = data.url;
 }

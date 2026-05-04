@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { TrendingUp, Check, Loader2 } from "lucide-react";
 import {
   Card,
@@ -25,13 +25,15 @@ const FREE_FEATURES = [
   "Match notes & community voting",
 ];
 
-export default function SignUpPage() {
+function SignUpForm() {
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [step, setStep] = useState<"email" | "code">("email");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const plan = searchParams.get("plan") as "pro" | "elite" | null;
 
   const handleSendCode = async () => {
     if (!email) return;
@@ -60,57 +62,78 @@ export default function SignUpPage() {
       token: code,
       type: "email",
     });
-    setLoading(false);
     if (error) {
+      setLoading(false);
       setError(error.message);
-    } else {
-      router.push("/welcome");
+      return;
     }
+
+    // If user came here via "Get Pro" / "Get Elite", send them straight to Stripe
+    if (plan === "pro" || plan === "elite") {
+      try {
+        const res = await fetch("/api/stripe/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tier: plan }),
+        });
+        const data = await res.json();
+        if (data.url) {
+          window.location.href = data.url;
+          return;
+        }
+      } catch {
+        // checkout failed — fall through to welcome
+      }
+    }
+
+    router.push("/welcome");
   };
 
   return (
-    <div className="flex min-h-dvh items-center justify-center px-4 py-8">
-      <Card className="w-full max-w-md">
-        <CardHeader className="items-center space-y-4 pb-2">
-          <Link href="/" className="flex items-center gap-2">
-            <TrendingUp className="h-6 w-6 text-primary" />
-            <span className="font-mono text-lg font-bold tracking-tight">
-              ODDS<span className="text-primary">INTEL</span>
-            </span>
-          </Link>
-          <div className="text-center">
-            <h1 className="text-lg font-semibold">Create your free account</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Free forever — upgrade to Pro when you&apos;re ready
-            </p>
+    <Card className="w-full max-w-md">
+      <CardHeader className="items-center space-y-4 pb-2">
+        <Link href="/" className="flex items-center gap-2">
+          <TrendingUp className="h-6 w-6 text-primary" />
+          <span className="font-mono text-lg font-bold tracking-tight">
+            ODDS<span className="text-primary">INTEL</span>
+          </span>
+        </Link>
+        <div className="text-center">
+          <h1 className="text-lg font-semibold">
+            {plan ? `Create your account to get ${plan.charAt(0).toUpperCase() + plan.slice(1)}` : "Create your free account"}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {plan ? "You'll be taken to checkout right after." : "Free forever — upgrade to Pro when you're ready"}
+          </p>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {error && (
+          <div className="rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2 text-sm text-destructive">
+            {error}
           </div>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          {error && (
-            <div className="rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2 text-sm text-destructive">
-              {error}
+        )}
+
+        {step === "email" ? (
+          <>
+            <GoogleSignIn />
+            <DiscordSignIn />
+            <AuthDivider />
+
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSendCode()}
+              />
             </div>
-          )}
 
-          {step === "email" ? (
-            <>
-              <GoogleSignIn />
-              <DiscordSignIn />
-              <AuthDivider />
-
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSendCode()}
-                />
-              </div>
-
-              {/* What you get */}
+            {/* What you get */}
+            {!plan && (
               <div className="rounded-lg border border-border/50 bg-muted/20 p-4 space-y-2">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                   Free account includes
@@ -124,69 +147,79 @@ export default function SignUpPage() {
                   ))}
                 </ul>
               </div>
+            )}
 
-              <Button
-                className="w-full bg-emerald-600 text-white hover:bg-emerald-700"
-                onClick={handleSendCode}
-                disabled={loading || !email}
-              >
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Free Account"}
-              </Button>
+            <Button
+              className="w-full bg-emerald-600 text-white hover:bg-emerald-700"
+              onClick={handleSendCode}
+              disabled={loading || !email}
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Free Account"}
+            </Button>
 
-              <p className="text-center text-xs text-muted-foreground">
-                By signing up you agree to our{" "}
-                <Link href="/terms" className="text-primary hover:underline">Terms</Link>
-                {" "}and{" "}
-                <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>.
-              </p>
+            <p className="text-center text-xs text-muted-foreground">
+              By signing up you agree to our{" "}
+              <Link href="/terms" className="text-primary hover:underline">Terms</Link>
+              {" "}and{" "}
+              <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>.
+            </p>
 
-              <p className="text-center text-sm text-muted-foreground">
-                Already have an account?{" "}
-                <Link href="/login" className="text-primary hover:underline">
-                  Sign in
-                </Link>
-              </p>
-            </>
-          ) : (
-            <>
-              <p className="text-sm text-muted-foreground">
-                We sent a 6-digit code to{" "}
-                <span className="text-foreground">{email}</span>. Enter it below to confirm your account.
-              </p>
+            <p className="text-center text-sm text-muted-foreground">
+              Already have an account?{" "}
+              <Link href={plan ? `/login?plan=${plan}` : "/login"} className="text-primary hover:underline">
+                Sign in
+              </Link>
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-muted-foreground">
+              We sent a 6-digit code to{" "}
+              <span className="text-foreground">{email}</span>. Enter it below to confirm your account.
+            </p>
 
-              <div className="space-y-2">
-                <Label htmlFor="code">Code</Label>
-                <Input
-                  id="code"
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="123456"
-                  maxLength={6}
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-                  onKeyDown={(e) => e.key === "Enter" && handleVerify()}
-                  autoFocus
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="code">Code</Label>
+              <Input
+                id="code"
+                type="text"
+                inputMode="numeric"
+                placeholder="123456"
+                maxLength={6}
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                onKeyDown={(e) => e.key === "Enter" && handleVerify()}
+                autoFocus
+              />
+            </div>
 
-              <Button
-                className="w-full bg-emerald-600 text-white hover:bg-emerald-700"
-                onClick={handleVerify}
-                disabled={loading || code.length < 6}
-              >
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm account"}
-              </Button>
+            <Button
+              className="w-full bg-emerald-600 text-white hover:bg-emerald-700"
+              onClick={handleVerify}
+              disabled={loading || code.length < 6}
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : (plan ? `Confirm & go to ${plan.charAt(0).toUpperCase() + plan.slice(1)} checkout` : "Confirm account")}
+            </Button>
 
-              <button
-                className="w-full text-center text-sm text-muted-foreground hover:text-primary transition-colors"
-                onClick={() => { setStep("email"); setCode(""); setError(null); }}
-              >
-                Use a different email
-              </button>
-            </>
-          )}
-        </CardContent>
-      </Card>
+            <button
+              className="w-full text-center text-sm text-muted-foreground hover:text-primary transition-colors"
+              onClick={() => { setStep("email"); setCode(""); setError(null); }}
+            >
+              Use a different email
+            </button>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+export default function SignUpPage() {
+  return (
+    <div className="flex min-h-dvh items-center justify-center px-4 py-8">
+      <Suspense fallback={<div className="w-full max-w-md h-96 rounded-xl border border-white/[0.06] animate-pulse bg-card/20" />}>
+        <SignUpForm />
+      </Suspense>
     </div>
   );
 }
