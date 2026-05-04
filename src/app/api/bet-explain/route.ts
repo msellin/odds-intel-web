@@ -45,7 +45,7 @@ export async function GET(req: Request) {
   // Fetch bet details using service role (simulated_bets may have RLS)
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+    (process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY)!
   );
 
   const { data: bet } = await supabaseAdmin
