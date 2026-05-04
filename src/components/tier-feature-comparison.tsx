@@ -1,4 +1,7 @@
-import { Check, X } from "lucide-react";
+"use client";
+
+import { useState } from "react";
+import { Check, X, Loader2 } from "lucide-react";
 
 interface Props {
   currentTier: "free" | "pro" | "elite";
@@ -22,6 +25,22 @@ const FEATURES = [
 export function TierFeatureComparison({ currentTier }: Props) {
   const isPro = currentTier === "pro" || currentTier === "elite";
   const isElite = currentTier === "elite";
+  const [upgrading, setUpgrading] = useState(false);
+
+  const handleUpgrade = async () => {
+    setUpgrading(true);
+    try {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tier: "pro" }),
+      });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+    } finally {
+      setUpgrading(false);
+    }
+  };
 
   // Don't show if user is already Elite
   if (isElite) return null;
@@ -95,9 +114,14 @@ export function TierFeatureComparison({ currentTier }: Props) {
       {/* CTAs */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-center pt-1">
         {!isPro && (
-          <span className="rounded-md border border-blue-500/20 px-5 py-2 text-xs font-medium text-blue-400/50 text-center cursor-default">
-            Pro — Coming Soon
-          </span>
+          <button
+            onClick={handleUpgrade}
+            disabled={upgrading}
+            className="rounded-md bg-blue-600 px-5 py-2 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+          >
+            {upgrading && <Loader2 className="h-3 w-3 animate-spin" />}
+            Upgrade to Pro — €4.99/mo
+          </button>
         )}
         {!isElite && (
           <span className="rounded-md border border-emerald-500/20 px-5 py-2 text-xs font-medium text-emerald-400/50 text-center cursor-default">

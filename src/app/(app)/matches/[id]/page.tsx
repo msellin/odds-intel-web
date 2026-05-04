@@ -17,6 +17,7 @@ import {
   getMatchSignalHistory,
   getMatchCLVData,
   getBotConsensus,
+  getMatchPreview,
 } from "@/lib/engine-data";
 import type { LiveMatch, MatchStatsData, OddsMovementPoint, MatchSignalRow } from "@/lib/engine-data";
 import { getLiveMatchOdds } from "@/lib/engine-data";
@@ -34,6 +35,7 @@ import { BotConsensus } from "@/components/bot-consensus";
 import { SignalTimeline } from "@/components/signal-timeline";
 import { WhyThisPick } from "@/components/why-this-pick";
 import { CLVTracker } from "@/components/clv-tracker";
+import { MatchPreviewCard } from "@/components/match-preview-card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Clock, Calendar, Shield, MapPin, User } from "lucide-react";
@@ -181,7 +183,10 @@ export default async function MatchDetailPage({
     ? await getPublicMatchBookmakerCount(id)
     : 0;
 
-  const botConsensus = await getBotConsensus(id);
+  const [botConsensus, matchPreview] = await Promise.all([
+    getBotConsensus(id),
+    getMatchPreview(id),
+  ]);
 
   const kickoffDate = new Date(publicMatch.kickoff);
   const dateStr = kickoffDate.toLocaleDateString("en-GB", {
@@ -302,6 +307,11 @@ export default async function MatchDetailPage({
           homeTeam={publicMatch.homeTeam}
           awayTeam={publicMatch.awayTeam}
         />
+      )}
+
+      {/* AI Match Preview (ENG-3) — Free gets teaser, Pro/Elite get full */}
+      {matchPreview && (
+        <MatchPreviewCard preview={matchPreview} isPro={isPro} />
       )}
 
       {/* User pick + community vote + notes — below the data so users see match info first */}

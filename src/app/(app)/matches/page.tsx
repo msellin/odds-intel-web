@@ -107,7 +107,7 @@ export default async function MatchesPage() {
       {!isAuthenticated && <SignupBanner />}
 
       {/* Daily value bet teaser */}
-      <DailyValueTeaser />
+      <DailyValueTeaser isPro={isPro} />
 
       {/* Empty state */}
       {sortedGroups.length === 0 && (

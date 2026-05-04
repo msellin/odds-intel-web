@@ -18,7 +18,11 @@ interface TeaserBet {
   result: string;
 }
 
-export function DailyValueTeaser() {
+interface DailyValueTeaserProps {
+  isPro?: boolean;
+}
+
+export function DailyValueTeaser({ isPro = false }: DailyValueTeaserProps) {
   const { user } = useAuth();
   const [teaser, setTeaser] = useState<TeaserBet | null>(null);
   const [unlocked, setUnlocked] = useState(false);
@@ -103,6 +107,29 @@ export function DailyValueTeaser() {
   };
 
   if (loading || !teaser) return null;
+
+  // Pro/Elite — compact redirect to value bets (they already have full access)
+  if (isPro && user) {
+    return (
+      <div className="relative overflow-hidden rounded-xl border border-amber-500/20 bg-amber-500/[0.04] px-4 py-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            <Zap className="h-4 w-4 shrink-0 text-amber-400" />
+            <span className="text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">{totalBets} value {totalBets === 1 ? "opportunity" : "opportunities"}</span> detected today
+            </span>
+          </div>
+          <Link
+            href="/value-bets"
+            className="flex items-center justify-center gap-1.5 shrink-0 rounded-md bg-amber-500 px-3 py-1.5 text-xs font-bold text-black transition-colors hover:bg-amber-400"
+          >
+            View all picks
+            <ArrowRight className="h-3 w-3" />
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   // Anonymous — compact inline teaser
   if (!user) {

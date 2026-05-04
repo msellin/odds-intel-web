@@ -969,6 +969,32 @@ export interface ModelAccuracyData {
   stats: ModelAccuracyStats;
 }
 
+// ─── AI Match Preview (ENG-3) ─────────────────────────────────────────────────
+
+export interface MatchPreview {
+  previewShort: string;   // ~50 words — Free tier teaser
+  previewText: string;    // ~200 words — Pro/Elite full preview
+  generatedAt: string;
+}
+
+export async function getMatchPreview(matchId: string): Promise<MatchPreview | null> {
+  const supabase = await createSupabaseServer();
+  const { data } = await supabase
+    .from("match_previews")
+    .select("preview_short, preview_text, generated_at")
+    .eq("match_id", matchId)
+    .order("match_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!data) return null;
+  return {
+    previewShort: data.preview_short,
+    previewText: data.preview_text,
+    generatedAt: data.generated_at,
+  };
+}
+
 // Today's upcoming picks — no odds sent (intentionally; that's Pro data)
 export interface TodayPick {
   matchId: string;

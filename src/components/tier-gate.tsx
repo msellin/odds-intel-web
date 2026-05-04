@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 
 const TIERS = ["free", "pro", "elite"] as const;
@@ -38,6 +38,22 @@ interface TierGateProps {
 export function TierGate({ requiredTier, children, featureName }: TierGateProps) {
   const currentTier = useCurrentTier();
   const hasAccess = tierIndex(currentTier) >= tierIndex(requiredTier);
+  const [upgrading, setUpgrading] = useState(false);
+
+  const handleUpgrade = async () => {
+    setUpgrading(true);
+    try {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tier: requiredTier }),
+      });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+    } finally {
+      setUpgrading(false);
+    }
+  };
 
   if (hasAccess) {
     return <>{children}</>;
@@ -107,7 +123,7 @@ export function TierGate({ requiredTier, children, featureName }: TierGateProps)
               textTransform: "capitalize",
             }}
           >
-            {TIER_LABELS[requiredTier]} — Coming Soon
+            {TIER_LABELS[requiredTier]}{requiredTier !== "pro" ? " — Coming Soon" : ""}
           </h3>
 
           <p
@@ -136,23 +152,46 @@ export function TierGate({ requiredTier, children, featureName }: TierGateProps)
             {TIER_PRICES[requiredTier]}
           </p>
 
-          <span
-            style={{
-              display: "block",
-              backgroundColor: "rgba(34, 197, 94, 0.15)",
-              color: "rgba(34, 197, 94, 0.5)",
-              border: "1px solid rgba(34, 197, 94, 0.2)",
-              borderRadius: "8px",
-              padding: "12px 32px",
-              fontSize: "15px",
-              fontWeight: 600,
-              width: "100%",
-              textAlign: "center",
-              boxSizing: "border-box",
-            }}
-          >
-            Coming Soon
-          </span>
+          {requiredTier === "pro" ? (
+            <button
+              onClick={handleUpgrade}
+              disabled={upgrading}
+              style={{
+                display: "block",
+                backgroundColor: upgrading ? "rgba(34, 197, 94, 0.3)" : "rgb(34, 197, 94)",
+                color: "#000",
+                border: "none",
+                borderRadius: "8px",
+                padding: "12px 32px",
+                fontSize: "15px",
+                fontWeight: 600,
+                width: "100%",
+                textAlign: "center",
+                boxSizing: "border-box",
+                cursor: upgrading ? "not-allowed" : "pointer",
+              }}
+            >
+              {upgrading ? "Loading…" : "Upgrade to Pro — €4.99/mo"}
+            </button>
+          ) : (
+            <span
+              style={{
+                display: "block",
+                backgroundColor: "rgba(34, 197, 94, 0.15)",
+                color: "rgba(34, 197, 94, 0.5)",
+                border: "1px solid rgba(34, 197, 94, 0.2)",
+                borderRadius: "8px",
+                padding: "12px 32px",
+                fontSize: "15px",
+                fontWeight: 600,
+                width: "100%",
+                textAlign: "center",
+                boxSizing: "border-box",
+              }}
+            >
+              Coming Soon
+            </span>
+          )}
         </div>
       </div>
     </div>

@@ -90,6 +90,21 @@ export default function ProfilePage() {
     }
   }, []);
 
+  const openUpgrade = useCallback(async (tier: "pro" | "elite") => {
+    setUpgrading(tier);
+    try {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tier }),
+      });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+    } finally {
+      setUpgrading(null);
+    }
+  }, []);
+
   useEffect(() => {
     if (!loading && !user) router.push("/login");
   }, [user, loading, router]);
@@ -209,11 +224,12 @@ export default function ProfilePage() {
             {tierKey === "free" ? (
               <div className="flex flex-col items-end gap-2">
                 <button
-                  disabled
-                  className="flex items-center gap-1.5 rounded-md bg-green-500/40 px-3 py-1.5 text-xs font-bold text-black/60 cursor-not-allowed"
+                  onClick={() => openUpgrade("pro")}
+                  disabled={!!upgrading}
+                  className="flex items-center gap-1.5 rounded-md bg-green-500 px-3 py-1.5 text-xs font-bold text-black hover:bg-green-400 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <Zap className="h-3 w-3" />
-                  Pro — Coming Soon
+                  {upgrading === "pro" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                  Upgrade to Pro — €4.99/mo
                 </button>
                 <button
                   disabled
@@ -223,7 +239,7 @@ export default function ProfilePage() {
                   Elite — Coming Soon
                 </button>
                 <p className="text-[10px] text-muted-foreground">
-                  Paid tiers launching soon — founding member rates locked for early subscribers
+                  Founding member rates locked for early subscribers
                 </p>
               </div>
             ) : (

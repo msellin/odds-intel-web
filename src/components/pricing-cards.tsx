@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Check } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BillingToggle } from "@/components/billing-toggle";
 
@@ -33,8 +33,28 @@ const freeFeatures = [
   "Saved matches watchlist",
 ];
 
+async function openCheckout(tier: "pro" | "elite") {
+  const res = await fetch("/api/stripe/checkout", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tier }),
+  });
+  const data = await res.json();
+  if (data.url) window.location.href = data.url;
+}
+
 export function PricingCards() {
   const [annual, setAnnual] = useState(false);
+  const [upgrading, setUpgrading] = useState<"pro" | "elite" | null>(null);
+
+  const handleUpgrade = async (tier: "pro" | "elite") => {
+    setUpgrading(tier);
+    try {
+      await openCheckout(tier);
+    } finally {
+      setUpgrading(null);
+    }
+  };
 
   return (
     <div>
@@ -110,8 +130,12 @@ export function PricingCards() {
             ))}
           </ul>
           <div className="mt-6">
-            <Button className="w-full bg-green-500/40 font-bold text-black/60 cursor-not-allowed" disabled>
-              Coming Soon
+            <Button
+              className="w-full bg-green-500 font-bold text-black hover:bg-green-400 disabled:opacity-60"
+              onClick={() => handleUpgrade("pro")}
+              disabled={!!upgrading}
+            >
+              {upgrading === "pro" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Get Pro"}
             </Button>
             <p className="mt-2 text-center text-[10px] text-muted-foreground">
               Founding member rates locked for early subscribers

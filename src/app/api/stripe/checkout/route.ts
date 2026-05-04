@@ -49,9 +49,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { priceId: requestedPriceId } = await req.json();
+  const body = await req.json();
+  let requestedPriceId: string = body.priceId;
+
+  // Allow callers to pass { tier: "pro" | "elite" } instead of a raw price ID
+  if (!requestedPriceId && body.tier) {
+    requestedPriceId = body.tier === "pro"
+      ? process.env.STRIPE_PRO_FOUNDING_PRICE_ID!
+      : process.env.STRIPE_ELITE_FOUNDING_PRICE_ID!;
+  }
+
   if (!requestedPriceId) {
-    return NextResponse.json({ error: "Missing priceId" }, { status: 400 });
+    return NextResponse.json({ error: "Missing priceId or tier" }, { status: 400 });
   }
   const priceId = await resolvePrice(requestedPriceId);
 
