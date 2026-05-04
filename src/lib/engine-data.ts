@@ -49,6 +49,9 @@ export interface LiveBet {
   placedAt: string;
   result: string;
   pnl: number;
+  bankrollAfter: number | null;
+  closingOdds: number | null;
+  clv: number | null;
 }
 
 // ─── Supabase row types ─────────────────────────────────────────────────────
@@ -898,6 +901,9 @@ function toBet(row: SimBetRow): LiveBet {
     placedAt: row.pick_time,
     result: row.result,
     pnl: Number(row.pnl || 0),
+    bankrollAfter: row.bankroll_after != null ? Number(row.bankroll_after) : null,
+    closingOdds: row.closing_odds != null ? Number(row.closing_odds) : null,
+    clv: row.clv != null ? Number(row.clv) : null,
   };
 }
 
