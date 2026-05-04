@@ -1864,8 +1864,19 @@ export interface TrackRecordStats {
 
 export async function getTrackRecordStats(): Promise<TrackRecordStats> {
   // Fast path: read from dashboard_cache (written by settlement at 21:00 UTC).
-  // Falls back to live queries only if cache is missing (first run / fresh deploy).
-  const cache = await getDashboardCache();
+  // Cache is stale throughout the day, so always do a live COUNT for settledBets
+  // using the admin client (RLS blocks simulated_bets for the public key).
+  const admin = createSupabaseAdmin();
+  const [cache, liveCountRes] = await Promise.all([
+    getDashboardCache(),
+    admin
+      .from("simulated_bets")
+      .select("id", { count: "exact", head: true })
+      .neq("result", "pending")
+      .neq("result", "void"),
+  ]);
+  const liveSettledCount = liveCountRes.count ?? 0;
+
   if (cache) {
     const recentWindow = new Date();
     recentWindow.setUTCDate(recentWindow.getUTCDate() - 7);
@@ -1887,9 +1898,9 @@ export async function getTrackRecordStats(): Promise<TrackRecordStats> {
     return {
       avgClv: cache.avg_clv,
       posClvPct: cache.avg_clv != null && cache.avg_clv > 0 ? 100 : 0,
-      totalValueBets: cache.settled_bets,
+      totalValueBets: liveSettledCount,
       avgEdge: 0,
-      settledBets: cache.settled_bets,
+      settledBets: liveSettledCount,
       leaguesCovered: leagues.size,
       bookmakersCovered: bookmakers.size,
     };
