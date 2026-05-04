@@ -165,7 +165,7 @@ function BotDetailModal({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="w-[95vw] max-w-5xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[95vw] max-w-5xl sm:max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex flex-wrap items-center gap-3">
             <span className="font-mono text-base">{bot.name}</span>
