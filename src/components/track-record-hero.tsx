@@ -72,11 +72,11 @@ export function TrackRecordHero({ stats }: Props) {
           </CardHeader>
           <CardContent className="px-4 pb-3 pt-0">
             <span className="font-mono text-2xl font-bold tabular-nums text-foreground">
-              {stats.leaguesCovered > 0 ? stats.leaguesCovered : 41}
+              {stats.leaguesCovered > 0 ? stats.leaguesCovered : "—"}
             </span>
             <span className="text-sm text-muted-foreground ml-1.5">leagues</span>
             <p className="text-[10px] text-muted-foreground/60 mt-1">
-              {stats.bookmakersCovered > 0 ? stats.bookmakersCovered : 13} bookmakers, updated every 2h
+              {stats.bookmakersCovered > 0 ? stats.bookmakersCovered : "—"} bookmakers, updated every 2h
             </p>
           </CardContent>
         </Card>

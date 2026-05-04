@@ -1761,21 +1761,29 @@ export async function getTrackRecordStats(): Promise<TrackRecordStats> {
   const cache = await getDashboardCache();
   if (cache) {
     const recentWindow = new Date();
-    recentWindow.setUTCDate(recentWindow.getUTCDate() - 1);
+    recentWindow.setUTCDate(recentWindow.getUTCDate() - 7);
     const supabase = createSupabasePublic();
-    const bmResult = await supabase
-      .from("odds_snapshots")
-      .select("bookmaker")
-      .gte("timestamp", recentWindow.toISOString())
-      .limit(500);
+    const [bmResult, leagueResult] = await Promise.all([
+      supabase
+        .from("odds_snapshots")
+        .select("bookmaker")
+        .gte("timestamp", new Date(Date.now() - 86400000).toISOString())
+        .limit(500),
+      supabase
+        .from("matches")
+        .select("league_id")
+        .gte("date", recentWindow.toISOString())
+        .limit(2000),
+    ]);
     const bookmakers = new Set((bmResult.data || []).map((r: { bookmaker: string }) => r.bookmaker));
+    const leagues = new Set((leagueResult.data || []).map((r: { league_id: string }) => r.league_id));
     return {
       avgClv: cache.avg_clv,
       posClvPct: cache.avg_clv != null && cache.avg_clv > 0 ? 100 : 0,
       totalValueBets: cache.settled_bets,
       avgEdge: 0,
       settledBets: cache.settled_bets,
-      leaguesCovered: 0,
+      leaguesCovered: leagues.size,
       bookmakersCovered: bookmakers.size,
     };
   }

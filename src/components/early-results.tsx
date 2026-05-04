@@ -10,7 +10,7 @@ interface Props {
 }
 
 export function EarlyResults({ accuracy, trackStats }: Props) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const { stats } = accuracy;
 
   if (stats.total === 0) return null;

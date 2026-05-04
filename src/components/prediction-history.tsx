@@ -85,10 +85,10 @@ export function PredictionHistory({ rows, isPro, isElite }: Props) {
                     Pick
                   </th>
                   <th className="py-2.5 px-2 text-center text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                    Conf
+                    Confidence
                   </th>
                   <th className="py-2.5 px-2 text-center text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                    Worst odds
+                    Min odds
                   </th>
                   {/* Pro columns */}
                   <th className="py-2.5 px-2 text-center text-[10px] font-medium uppercase tracking-wider">
@@ -102,18 +102,7 @@ export function PredictionHistory({ rows, isPro, isElite }: Props) {
                       </span>
                     )}
                   </th>
-                  <th className="py-2.5 px-2 text-center text-[10px] font-medium uppercase tracking-wider">
-                    {isPro ? (
-                      <span className="text-muted-foreground">CLV</span>
-                    ) : (
-                      <span className="flex items-center justify-center gap-1 text-blue-400/70">
-                        <Lock className="h-2.5 w-2.5" />
-                        CLV
-                        <span className="rounded bg-blue-500/10 px-1 py-0.5 font-bold text-blue-400" style={{ fontSize: 9 }}>PRO</span>
-                      </span>
-                    )}
-                  </th>
-                  {/* Elite column */}
+                  {/* Elite columns */}
                   <th className="py-2.5 px-2 text-center text-[10px] font-medium uppercase tracking-wider">
                     {isElite ? (
                       <span className="text-muted-foreground">Edge %</span>
@@ -147,7 +136,7 @@ export function PredictionHistory({ rows, isPro, isElite }: Props) {
                     <td className="py-2.5 px-2 text-center">
                       {confidenceBadge(row.confidence)}
                     </td>
-                    {/* Worst odds — free */}
+                    {/* Min odds (worst bookmaker — free) */}
                     <td className="py-2.5 px-2 text-center font-mono text-xs text-muted-foreground/70">
                       {row.worstOddsForPick.toFixed(2)}
                     </td>
@@ -163,25 +152,17 @@ export function PredictionHistory({ rows, isPro, isElite }: Props) {
                         </span>
                       )}
                     </td>
-                    {/* CLV — Pro */}
+                    {/* Edge % — Elite (computed: model confidence minus implied prob from best odds) */}
                     <td className="py-2.5 px-2 text-center">
-                      {isPro ? (
-                        <span className="font-mono text-xs text-muted-foreground/50">
-                          —
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded border border-blue-500/20 bg-blue-500/5 px-2 py-0.5 text-[10px] text-blue-400/50">
-                          <Lock className="h-2.5 w-2.5" />
-                        </span>
-                      )}
-                    </td>
-                    {/* Edge % — Elite */}
-                    <td className="py-2.5 px-2 text-center">
-                      {isElite ? (
-                        <span className="font-mono text-xs text-muted-foreground/50">
-                          —
-                        </span>
-                      ) : (
+                      {isElite ? (() => {
+                        const edge = row.confidence - (1 / row.bestOddsForPick);
+                        const edgePct = edge * 100;
+                        return (
+                          <span className={`font-mono text-xs font-medium ${edgePct >= 5 ? "text-emerald-400" : edgePct >= 0 ? "text-amber-400" : "text-red-400/70"}`}>
+                            {edgePct >= 0 ? "+" : ""}{edgePct.toFixed(1)}%
+                          </span>
+                        );
+                      })() : (
                         <span className="inline-flex items-center gap-1 rounded border border-emerald-500/20 bg-emerald-500/5 px-2 py-0.5 text-[10px] text-emerald-400/50">
                           <Lock className="h-2.5 w-2.5" />
                         </span>
@@ -211,7 +192,7 @@ export function PredictionHistory({ rows, isPro, isElite }: Props) {
                 href="/how-it-works"
                 className="inline-block rounded-md bg-blue-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-blue-700 transition-colors"
               >
-                Upgrade to Pro — full history + CLV tracking
+                Upgrade to Pro — full history + best odds per pick
               </Link>
             </div>
           )}

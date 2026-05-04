@@ -6,7 +6,7 @@ interface Props {
 }
 
 function timeAgo(isoDate: string | null): string {
-  if (!isoDate) return "—";
+  if (!isoDate) return "Not yet today";
   const diff = Date.now() - new Date(isoDate).getTime();
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return "just now";
