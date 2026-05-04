@@ -36,6 +36,7 @@ import { SignalTimeline } from "@/components/signal-timeline";
 import { WhyThisPick } from "@/components/why-this-pick";
 import { CLVTracker } from "@/components/clv-tracker";
 import { MatchPreviewCard } from "@/components/match-preview-card";
+import { MatchViewingCounter } from "@/components/match-viewing-counter";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Clock, Calendar, Shield, MapPin, User } from "lucide-react";
@@ -253,6 +254,7 @@ export default async function MatchDetailPage({
                   <span>{publicMatch.referee}</span>
                 </span>
               )}
+              <MatchViewingCounter matchId={publicMatch.id} />
             </div>
           </div>
         </div>

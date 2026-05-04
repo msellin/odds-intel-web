@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Users } from "lucide-react";
+import { Lock, Users } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
 import { cn } from "@/lib/utils";
@@ -37,10 +37,14 @@ export function CommunityVote({
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
+  const isLocked = matchStatus === "live" || matchStatus === "finished";
+  const canVote = !!user && !myVote && !isLocked;
+  // Show percentages once there are any votes, or the match is live/finished
+  const showResults = !!myVote || isLocked || counts.total > 0;
+
   useEffect(() => {
     const supabase = createSupabaseBrowser();
 
-    // Fetch counts for all users
     supabase
       .from("match_votes")
       .select("vote")
@@ -57,7 +61,6 @@ export function CommunityVote({
         setLoaded(true);
       });
 
-    // Fetch user's vote
     if (user) {
       supabase
         .from("match_votes")
@@ -72,12 +75,12 @@ export function CommunityVote({
   }, [user, matchId]);
 
   const handleVote = async (vote: Vote) => {
-    if (!user || loading || myVote) return;
+    if (!canVote || loading) return;
     setLoading(true);
 
     const supabase = createSupabaseBrowser();
     const { error } = await supabase.from("match_votes").insert({
-      user_id: user.id,
+      user_id: user!.id,
       match_id: matchId,
       vote,
     });
@@ -104,9 +107,8 @@ export function CommunityVote({
     { vote: "away", label: awayTeam },
   ];
 
-  // Not yet signed in — show a compact one-liner, not locked empty boxes
+  // Not signed in — compact one-liner
   if (!user) {
-    if (!loaded) return null;
     return (
       <div className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-card/40 px-4 py-3">
         <Users className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
@@ -125,9 +127,6 @@ export function CommunityVote({
     );
   }
 
-  // Has voted or results shown
-  const showResults = !!myVote;
-
   return (
     <div className="rounded-lg border border-white/[0.06] bg-card/40 p-4 space-y-3">
       <div className="flex items-center justify-between">
@@ -135,11 +134,19 @@ export function CommunityVote({
           <Users className="h-3 w-3" />
           Community Prediction
         </p>
-        {counts.total > 0 && (
-          <span className="text-[10px] text-muted-foreground">
-            {counts.total} vote{counts.total !== 1 ? "s" : ""}
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {isLocked && (
+            <span className="flex items-center gap-1 text-[10px] text-muted-foreground/60">
+              <Lock className="h-2.5 w-2.5" />
+              Locked at kickoff
+            </span>
+          )}
+          {counts.total > 0 && (
+            <span className="text-[10px] text-muted-foreground">
+              {counts.total} vote{counts.total !== 1 ? "s" : ""}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-2">
@@ -151,17 +158,17 @@ export function CommunityVote({
             <button
               key={opt.vote}
               onClick={() => handleVote(opt.vote)}
-              disabled={!!myVote || loading}
+              disabled={!canVote || loading}
               className={cn(
                 "relative flex flex-col items-center gap-1 rounded-lg border px-3 py-3 transition-all overflow-hidden",
                 isMyVote
                   ? "border-emerald-500/40 bg-emerald-500/10"
-                  : myVote
-                    ? "border-white/[0.06] bg-muted/10"
-                    : "border-white/[0.06] bg-muted/20 hover:border-emerald-500/30 hover:bg-emerald-500/5"
+                  : canVote
+                    ? "border-white/[0.06] bg-muted/20 hover:border-emerald-500/30 hover:bg-emerald-500/5"
+                    : "border-white/[0.06] bg-muted/10 cursor-default"
               )}
             >
-              {/* Result bar background */}
+              {/* Result bar background — shown whenever showResults is true */}
               {showResults && (
                 <div
                   className={cn(
