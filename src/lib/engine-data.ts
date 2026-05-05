@@ -2166,17 +2166,17 @@ export interface LeaguePredictionPage {
 
 // Featured leagues for the predictions index page
 export const PREDICTION_LEAGUES = [
-  { slug: "premier-league", name: "Premier League", country: "England" },
-  { slug: "la-liga", name: "La Liga", country: "Spain" },
-  { slug: "bundesliga", name: "Bundesliga", country: "Germany" },
-  { slug: "serie-a", name: "Serie A", country: "Italy" },
-  { slug: "ligue-1", name: "Ligue 1", country: "France" },
-  { slug: "champions-league", name: "Champions League", country: "Europe" },
-  { slug: "eredivisie", name: "Eredivisie", country: "Netherlands" },
-  { slug: "primeira-liga", name: "Primeira Liga", country: "Portugal" },
-] as const;
+  { slug: "premier-league", name: "Premier League", country: "England", searchName: undefined, searchCountry: undefined },
+  { slug: "la-liga", name: "La Liga", country: "Spain", searchName: undefined, searchCountry: undefined },
+  { slug: "bundesliga", name: "Bundesliga", country: "Germany", searchName: undefined, searchCountry: undefined },
+  { slug: "serie-a", name: "Serie A", country: "Italy", searchName: undefined, searchCountry: undefined },
+  { slug: "ligue-1", name: "Ligue 1", country: "France", searchName: undefined, searchCountry: undefined },
+  { slug: "champions-league", name: "Champions League", country: "Europe", searchName: "UEFA Champions League", searchCountry: "World" },
+  { slug: "eredivisie", name: "Eredivisie", country: "Netherlands", searchName: undefined, searchCountry: undefined },
+  { slug: "primeira-liga", name: "Primeira Liga", country: "Portugal", searchName: undefined, searchCountry: undefined },
+];
 
-export type PredictionLeagueSlug = typeof PREDICTION_LEAGUES[number]["slug"];
+export type PredictionLeagueSlug = (typeof PREDICTION_LEAGUES)[number]["slug"];
 
 export async function getLeaguePredictions(
   leagueSlug: string
@@ -2195,9 +2195,11 @@ export async function getLeaguePredictions(
   // Search by league name + country (handle both known and unknown leagues)
   let leagueQuery = supabase.from("leagues").select("id, name, country");
   if (meta) {
+    const searchName = meta.searchName ?? meta.name;
+    const searchCountry = meta.searchCountry ?? meta.country;
     leagueQuery = leagueQuery
-      .ilike("name", `%${meta.name.split(" ")[0]}%`)
-      .ilike("country", `%${meta.country.split(" ")[0]}%`);
+      .ilike("name", `%${searchName.split(" ")[0]}%`)
+      .ilike("country", `%${searchCountry.split(" ")[0]}%`);
   } else {
     // Try matching slug pattern (e.g. "scottish-premier" → "scottish" "premier")
     const parts = leagueSlug.replace(/-/g, " ").split(" ");
@@ -2222,7 +2224,7 @@ export async function getLeaguePredictions(
     .in("league_id", leagueIds)
     .gte("date", weekStart)
     .lte("date", weekEnd)
-    .in("status", ["scheduled", "1h", "2h", "ht", "live", "finished"])
+    .in("status", ["scheduled", "live", "finished"])
     .order("date", { ascending: true })
     .limit(20);
 
