@@ -25,6 +25,16 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-05-05",
+    title: "Magic link sign-in · Branded auth emails · Auth flow improvements",
+    changes: [
+      { type: "feature", text: "Email sign-in now uses one-click magic link — no more typing a 6-digit code" },
+      { type: "feature", text: "Entering an unknown email on the login page auto-redirects to signup with email pre-filled" },
+      { type: "infra", text: "Auth emails (confirm, magic link) now sent from noreply@oddsintel.app via Resend — no more supabase.co sender" },
+      { type: "infra", text: "Branded magic link email template with OddsIntel dark styling" },
+    ],
+  },
+  {
     date: "2026-05-04",
     title: "Bot detail modal · Alignment signals expanded · Matches fix",
     changes: [
