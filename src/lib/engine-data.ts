@@ -2165,15 +2165,16 @@ export interface LeaguePredictionPage {
 }
 
 // Featured leagues for the predictions index page
+// leagueId: hardcoded Supabase UUID — skips the ilike search that often matches wrong leagues
 export const PREDICTION_LEAGUES = [
-  { slug: "premier-league", name: "Premier League", country: "England", searchName: undefined, searchCountry: undefined },
-  { slug: "la-liga", name: "La Liga", country: "Spain", searchName: undefined, searchCountry: undefined },
-  { slug: "bundesliga", name: "Bundesliga", country: "Germany", searchName: undefined, searchCountry: undefined },
-  { slug: "serie-a", name: "Serie A", country: "Italy", searchName: undefined, searchCountry: undefined },
-  { slug: "ligue-1", name: "Ligue 1", country: "France", searchName: undefined, searchCountry: undefined },
-  { slug: "champions-league", name: "Champions League", country: "Europe", searchName: "UEFA Champions League", searchCountry: "World" },
-  { slug: "eredivisie", name: "Eredivisie", country: "Netherlands", searchName: undefined, searchCountry: undefined },
-  { slug: "primeira-liga", name: "Primeira Liga", country: "Portugal", searchName: undefined, searchCountry: undefined },
+  { slug: "premier-league",  name: "Premier League",  country: "England",     leagueId: "73c57213-6829-4c04-b5aa-04db792b98e8", searchName: undefined,              searchCountry: undefined },
+  { slug: "la-liga",         name: "La Liga",          country: "Spain",       leagueId: "0cfb91ae-0f59-4278-8229-ef92118960c3", searchName: undefined,              searchCountry: undefined },
+  { slug: "bundesliga",      name: "Bundesliga",       country: "Germany",     leagueId: "e8094a6f-70b5-4c9d-ba89-4ed16fe29403", searchName: undefined,              searchCountry: undefined },
+  { slug: "serie-a",         name: "Serie A",          country: "Italy",       leagueId: "fc8d465e-202a-48d4-9ef3-512e84f854d9", searchName: undefined,              searchCountry: undefined },
+  { slug: "ligue-1",         name: "Ligue 1",          country: "France",      leagueId: "01c7bf8f-bcd8-4342-81bd-939c33780d7b", searchName: undefined,              searchCountry: undefined },
+  { slug: "champions-league",name: "Champions League", country: "Europe",      leagueId: "1bb28d8a-8b00-436b-aef7-7ba9c86dcc3f", searchName: "UEFA Champions League", searchCountry: "World" },
+  { slug: "eredivisie",      name: "Eredivisie",       country: "Netherlands", leagueId: "3a05f941-ee5f-44c4-8c9d-67ecf8ea5b3b", searchName: undefined,              searchCountry: undefined },
+  { slug: "primeira-liga",   name: "Primeira Liga",    country: "Portugal",    leagueId: "eb39f011-6493-4e06-8c50-56034e1a3e37", searchName: undefined,              searchCountry: undefined },
 ];
 
 export type PredictionLeagueSlug = (typeof PREDICTION_LEAGUES)[number]["slug"];
@@ -2192,26 +2193,31 @@ export async function getLeaguePredictions(
     .toISOString()
     .split("T")[0];
 
-  // Search by league name + country (handle both known and unknown leagues)
-  let leagueQuery = supabase.from("leagues").select("id, name, country");
-  if (meta) {
-    const searchName = meta.searchName ?? meta.name;
-    const searchCountry = meta.searchCountry ?? meta.country;
-    leagueQuery = leagueQuery
-      .ilike("name", `%${searchName.split(" ")[0]}%`)
-      .ilike("country", `%${searchCountry.split(" ")[0]}%`);
-  } else {
-    // Try matching slug pattern (e.g. "scottish-premier" → "scottish" "premier")
-    const parts = leagueSlug.replace(/-/g, " ").split(" ");
-    leagueQuery = leagueQuery.ilike("name", `%${parts[0]}%`);
-  }
-  const { data: leagues } = await leagueQuery.limit(3);
-  if (!leagues || leagues.length === 0) return null;
+  // Use hardcoded leagueId when available — avoids ilike matching wrong leagues
+  let leagueIds: string[];
+  let primaryLeague: { id: string; name: string; country: string };
 
-  const leagueIds = (leagues as Array<{ id: string; name: string; country: string }>).map(
-    (l) => l.id
-  );
-  const primaryLeague = leagues[0] as { id: string; name: string; country: string };
+  if (meta?.leagueId) {
+    leagueIds = [meta.leagueId];
+    primaryLeague = { id: meta.leagueId, name: meta.name, country: meta.country };
+  } else {
+    // Fall back to ilike search for dynamic/unknown leagues
+    let leagueQuery = supabase.from("leagues").select("id, name, country");
+    if (meta) {
+      const searchName = meta.searchName ?? meta.name;
+      const searchCountry = meta.searchCountry ?? meta.country;
+      leagueQuery = leagueQuery
+        .ilike("name", `%${searchName}%`)
+        .ilike("country", `%${searchCountry}%`);
+    } else {
+      const parts = leagueSlug.replace(/-/g, " ").split(" ");
+      leagueQuery = leagueQuery.ilike("name", `%${parts[0]}%`);
+    }
+    const { data: leagues } = await leagueQuery.limit(3);
+    if (!leagues || leagues.length === 0) return null;
+    leagueIds = (leagues as Array<{ id: string; name: string; country: string }>).map((l) => l.id);
+    primaryLeague = leagues[0] as { id: string; name: string; country: string };
+  }
 
   const { data: matchRows } = await supabase
     .from("matches")
