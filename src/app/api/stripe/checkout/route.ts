@@ -92,6 +92,8 @@ export async function POST(req: NextRequest) {
     payment_method_types: ["card"],
     mode: "subscription",
     line_items: [{ price: priceId, quantity: 1 }],
+    subscription_data: { trial_period_days: 7 },
+    allow_promotion_codes: true,
     success_url: `${origin}/profile?checkout=success`,
     cancel_url: `${origin}/profile?checkout=cancelled`,
     metadata: { supabase_user_id: user.id },
