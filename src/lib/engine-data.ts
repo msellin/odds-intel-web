@@ -2614,7 +2614,7 @@ export async function getUserBankrollData(userId: string): Promise<BankrollData>
     .eq("user_id", userId)
     .order("created_at", { ascending: true });
 
-  const rows = (rawPicks ?? []) as Array<{
+  const rows = (rawPicks ?? []) as unknown as Array<{
     id: string;
     match_id: string;
     selection: string;

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { User, Settings, X, Plus, Loader2, Zap } from "lucide-react";
+import { User, Settings, X, Plus, Loader2, Zap, Bell } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -73,6 +73,13 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState<string | null>(null); // league name being saved
   const [upgrading, setUpgrading] = useState<string | null>(null); // "pro" | "elite" | "portal"
   const [checkoutMsg, setCheckoutMsg] = useState<string | null>(null);
+  type NotifSettings = {
+    weekly_report: boolean;
+    email_digest_enabled: boolean;
+    watchlist_alerts_enabled: boolean;
+  };
+  const [notifSettings, setNotifSettings] = useState<NotifSettings | null>(null);
+  const [savingNotif, setSavingNotif] = useState<string | null>(null);
 
   const handleCheckoutResult = useCallback((msg: string) => {
     setCheckoutMsg(msg);
@@ -104,6 +111,33 @@ export default function ProfilePage() {
       setUpgrading(null);
     }
   }, []);
+
+  // Load notification settings
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from("user_notification_settings")
+      .select("weekly_report, email_digest_enabled, watchlist_alerts_enabled")
+      .eq("user_id", user.id)
+      .single()
+      .then(({ data }) => {
+        if (data) setNotifSettings(data as NotifSettings);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  const toggleNotif = useCallback(async (field: "weekly_report" | "email_digest_enabled" | "watchlist_alerts_enabled") => {
+    if (!user || savingNotif || !notifSettings) return;
+    setSavingNotif(field);
+    const newVal = !notifSettings[field];
+    const updated = { ...notifSettings, [field]: newVal };
+    setNotifSettings(updated);
+    await supabase
+      .from("user_notification_settings")
+      .update({ [field]: newVal })
+      .eq("user_id", user.id);
+    setSavingNotif(null);
+  }, [user, savingNotif, notifSettings, supabase]);
 
   useEffect(() => {
     if (!loading && !user) router.push("/login");
@@ -341,6 +375,48 @@ export default function ProfilePage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Notification Settings */}
+      {notifSettings && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Bell className="h-4 w-4" />
+              Email Notifications
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(
+              [
+                { field: "email_digest_enabled", label: "Daily digest", desc: "Morning email with top matches and value bets" },
+                { field: "weekly_report", label: "Weekly performance report", desc: "Monday summary of model stats and upcoming fixtures" },
+                { field: "watchlist_alerts_enabled", label: "Watchlist alerts", desc: "Kickoff reminders and odds movement alerts for saved matches" },
+              ] as const
+            ).map(({ field, label, desc }) => (
+              <div key={field} className="flex items-start justify-between gap-4 py-1">
+                <div>
+                  <p className="text-sm font-medium text-foreground">{label}</p>
+                  <p className="text-xs text-muted-foreground">{desc}</p>
+                </div>
+                <button
+                  onClick={() => toggleNotif(field)}
+                  disabled={savingNotif === field}
+                  aria-label={notifSettings[field] ? `Disable ${label}` : `Enable ${label}`}
+                  className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none disabled:opacity-50 ${
+                    notifSettings[field] ? "bg-primary" : "bg-muted"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                      notifSettings[field] ? "translate-x-4" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
