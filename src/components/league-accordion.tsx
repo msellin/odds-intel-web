@@ -216,7 +216,7 @@ function MatchRow({
               {match.score_home}&thinsp;–&thinsp;{match.score_away}
             </span>
           ) : (
-            <span className="w-10 shrink-0 text-center text-[10px] font-bold text-muted-foreground/60">
+            <span className="w-10 shrink-0 text-center text-[10px] font-bold tracking-widest text-muted-foreground/40">
               VS
             </span>
           )}
@@ -367,7 +367,9 @@ export function LeagueAccordion({
           <div className="flex items-center px-4 py-1.5 bg-muted/10">
             {favoriteMatchIds && onMatchFavoriteToggle && <div className="w-5 shrink-0" />}
             <div className="w-8 shrink-0" />
-            <div className="w-[4.5rem] shrink-0" />
+            <div className="w-[4.5rem] shrink-0 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30 leading-none">
+              local
+            </div>
             <div className="flex-1" />
             {/* ML-6: Prediction column header */}
             <div className="w-14 shrink-0 text-center">
@@ -378,11 +380,9 @@ export function LeagueAccordion({
               )}
             </div>
             <div className="ml-2 flex shrink-0 items-center gap-1">
-              <div className="flex w-44 items-center justify-center gap-1">
-                <span className="w-14 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">H</span>
-                <span className="w-14 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">X</span>
-                <span className="w-14 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">A</span>
-              </div>
+              <span className="w-14 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">H</span>
+              <span className="w-14 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">X</span>
+              <span className="w-14 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">A</span>
               <div className="group relative ml-1 w-4">
                 <Info className="size-3 cursor-help text-muted-foreground/25 transition-colors hover:text-muted-foreground/50" />
                 <div className="pointer-events-none absolute bottom-full right-0 z-50 mb-2 w-64 rounded-lg border border-border/60 bg-popover p-3 text-xs text-muted-foreground opacity-0 shadow-xl transition-opacity group-hover:opacity-100">

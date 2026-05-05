@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { getUserTier } from "@/lib/get-user-tier";
 import { createClient } from "@supabase/supabase-js";
+import * as Sentry from "@sentry/nextjs";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GEMINI_MODEL = "gemini-2.5-flash";
 const GEMINI_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent";
+  `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 /**
  * GET /api/bet-explain?betId=<uuid>
@@ -145,18 +147,28 @@ ${bet.result && bet.result !== "pending" ? `Outcome: ${bet.result} (P&L: ${Numbe
 
 Write a 2-3 sentence explanation of why this pick was placed. Translate any technical signals into plain English.`;
 
-  try {
-    const resp = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
+  const geminiBody = JSON.stringify({
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { temperature: 0.4, maxOutputTokens: 200 },
+  });
+
+  // Attempt Gemini call with one retry for transient 503s
+  async function callGemini() {
+    return fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.4,
-          maxOutputTokens: 200,
-        },
-      }),
+      body: geminiBody,
     });
+  }
+
+  try {
+    let resp = await callGemini();
+
+    // Single retry for transient 503 "high demand" errors
+    if (resp.status === 503) {
+      await new Promise((r) => setTimeout(r, 1500));
+      resp = await callGemini();
+    }
 
     if (!resp.ok) {
       const errText = await resp.text();
@@ -166,8 +178,17 @@ Write a 2-3 sentence explanation of why this pick was placed. Translate any tech
           { status: 503 }
         );
       }
+      if (resp.status === 503 || errText.includes("UNAVAILABLE") || errText.includes("high demand")) {
+        return NextResponse.json(
+          { error: "AI is temporarily unavailable — please try again in a moment." },
+          { status: 503 }
+        );
+      }
+      Sentry.captureException(new Error(`Gemini API error ${resp.status}: ${errText.slice(0, 500)}`), {
+        extra: { betId, status: resp.status },
+      });
       return NextResponse.json(
-        { error: `LLM error (${resp.status}): ${errText.slice(0, 200)}` },
+        { error: "AI service error — please try again." },
         { status: 502 }
       );
     }
@@ -185,8 +206,9 @@ Write a 2-3 sentence explanation of why this pick was placed. Translate any tech
 
     return NextResponse.json({ explanation: trimmed });
   } catch (err) {
+    Sentry.captureException(err, { extra: { betId } });
     return NextResponse.json(
-      { error: `LLM request failed: ${String(err).slice(0, 100)}` },
+      { error: "AI request failed — please try again." },
       { status: 502 }
     );
   }

@@ -32,7 +32,7 @@ export function BetExplainButton({ betId }: BetExplainButtonProps) {
       setState("done");
       setExpanded(true);
     } catch (err) {
-      setExplanation(String(err));
+      setExplanation(err instanceof Error ? err.message : String(err));
       setState("error");
     }
   };
