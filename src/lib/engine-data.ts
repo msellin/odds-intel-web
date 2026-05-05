@@ -2185,10 +2185,10 @@ export async function getLeaguePredictions(
 
   const meta = PREDICTION_LEAGUES.find((l) => l.slug === leagueSlug);
 
-  // Find matches for this league in next 7 days
+  // Show up to 21 days ahead so next-round fixtures appear even if a bit out
   const now = new Date();
   const weekStart = now.toISOString().split("T")[0];
-  const weekEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+  const weekEnd = new Date(now.getTime() + 21 * 24 * 60 * 60 * 1000)
     .toISOString()
     .split("T")[0];
 
@@ -2216,17 +2216,16 @@ export async function getLeaguePredictions(
   const { data: matchRows } = await supabase
     .from("matches")
     .select(`
-      id, date, kickoff,
+      id, date,
       home_team:home_team_id(name),
-      away_team:away_team_id(name),
-      odds_home, odds_draw, odds_away
+      away_team:away_team_id(name)
     `)
     .in("league_id", leagueIds)
     .gte("date", weekStart)
     .lte("date", weekEnd)
     .in("status", ["scheduled", "live", "finished"])
     .order("date", { ascending: true })
-    .limit(20);
+    .limit(30);
 
   if (!matchRows || matchRows.length === 0) {
     return {
@@ -2242,8 +2241,10 @@ export async function getLeaguePredictions(
 
   const matchIds = (matchRows as Array<Record<string, unknown>>).map((m) => m.id as string);
 
-  // Fetch predictions + previews in parallel
-  const [{ data: preds }, { data: previews }] = await Promise.all([
+  // Fetch predictions, previews, and best odds in parallel
+  // Best odds via RPC (same approach as getPublicMatches) — odds_home/draw/away don't exist on matches table
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+  const [{ data: preds }, { data: previews }, { data: oddsRows }] = await Promise.all([
     supabase
       .from("predictions")
       .select("match_id, market, model_probability")
@@ -2254,6 +2255,10 @@ export async function getLeaguePredictions(
       .from("match_previews")
       .select("match_id, teaser")
       .in("match_id", matchIds),
+    supabase.rpc("get_best_match_odds", {
+      p_match_ids: matchIds,
+      p_since: yesterday,
+    }),
   ]);
 
   const predMap = new Map<string, Record<string, number>>();
@@ -2267,6 +2272,16 @@ export async function getLeaguePredictions(
     if (pv.teaser) previewMap.set(pv.match_id, pv.teaser);
   }
 
+  // Build odds map from RPC result
+  const oddsMap = new Map<string, { home: number; draw: number; away: number }>();
+  for (const o of (oddsRows ?? []) as Array<{ match_id: string; selection: string; best_odds: number }>) {
+    if (!oddsMap.has(o.match_id)) oddsMap.set(o.match_id, { home: 0, draw: 0, away: 0 });
+    const entry = oddsMap.get(o.match_id)!;
+    if (o.selection === "home") entry.home = o.best_odds;
+    else if (o.selection === "draw") entry.draw = o.best_odds;
+    else if (o.selection === "away") entry.away = o.best_odds;
+  }
+
   const matches: LeaguePredictionMatch[] = (
     matchRows as Array<Record<string, unknown>>
   ).map((m) => {
@@ -2276,6 +2291,7 @@ export async function getLeaguePredictions(
     const hp = probs?.["1x2_home"] ?? null;
     const dp = probs?.["1x2_draw"] ?? null;
     const ap = probs?.["1x2_away"] ?? null;
+    const odds = oddsMap.get(m.id as string);
 
     let modelCall: "home" | "draw" | "away" | null = null;
     let confidence: number | null = null;
@@ -2288,7 +2304,7 @@ export async function getLeaguePredictions(
     return {
       id: m.id as string,
       date: m.date as string,
-      kickoff: (m.kickoff as string) ?? (m.date as string),
+      kickoff: m.date as string,
       homeTeam: (ht as Record<string, string>)?.name ?? "Home",
       awayTeam: (at as Record<string, string>)?.name ?? "Away",
       leagueName: meta?.name ?? primaryLeague.name,
@@ -2298,9 +2314,9 @@ export async function getLeaguePredictions(
       homeProb: hp !== null ? Math.round(hp * 100) : null,
       drawProb: dp !== null ? Math.round(dp * 100) : null,
       awayProb: ap !== null ? Math.round(ap * 100) : null,
-      bestHomeOdds: m.odds_home ? Number(m.odds_home) : null,
-      bestDrawOdds: m.odds_draw ? Number(m.odds_draw) : null,
-      bestAwayOdds: m.odds_away ? Number(m.odds_away) : null,
+      bestHomeOdds: odds?.home ?? null,
+      bestDrawOdds: odds?.draw ?? null,
+      bestAwayOdds: odds?.away ?? null,
       previewTeaser: previewMap.get(m.id as string) ?? null,
     };
   });

@@ -187,7 +187,7 @@ export default async function LeaguePredictionsPage({
             {data.leagueName} Predictions
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            {data.leagueCountry} · {data.matches.length} fixtures this week
+            {data.leagueCountry} · {data.matches.length} upcoming fixtures
             {withPreds.length > 0 && ` · ${withPreds.length} with model predictions`}
           </p>
         </div>
@@ -195,9 +195,9 @@ export default async function LeaguePredictionsPage({
         {/* Match list */}
         {noMatches ? (
           <div className="rounded-xl border border-white/[0.06] bg-card/40 p-8 text-center">
-            <p className="text-sm text-muted-foreground">No upcoming fixtures found for this week.</p>
+            <p className="text-sm text-muted-foreground">No upcoming fixtures in the next 3 weeks.</p>
             <p className="mt-1 text-xs text-muted-foreground/60">
-              Fixtures are added daily at 04:00 UTC. Check back tomorrow.
+              Fixtures are loaded daily. Check back tomorrow.
             </p>
           </div>
         ) : (
