@@ -39,7 +39,11 @@ function LoginForm() {
     });
     setLoading(false);
     if (error) {
-      setError(error.message);
+      if (error.message.toLowerCase().includes("signups not allowed")) {
+        setError("No account found with that email. Sign up free below.");
+      } else {
+        setError(error.message);
+      }
     } else {
       setStep("sent");
     }
