@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import posthog from "posthog-js";
 import { User, Settings, X, Plus, Loader2, Zap, Bell } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -59,8 +60,13 @@ function CheckoutBanner({ onMessage }: { onMessage: (msg: string) => void }) {
   const searchParams = useSearchParams();
   useEffect(() => {
     const result = searchParams.get("checkout");
-    if (result === "success") onMessage("Subscription activated! Your tier will update shortly.");
-    else if (result === "cancelled") onMessage("Checkout cancelled.");
+    if (result === "success") {
+      posthog.capture("upgrade_completed");
+      onMessage("Subscription activated! Your tier will update shortly.");
+    } else if (result === "cancelled") {
+      posthog.capture("upgrade_cancelled");
+      onMessage("Checkout cancelled.");
+    }
   }, [searchParams, onMessage]);
   return null;
 }
@@ -98,6 +104,7 @@ export default function ProfilePage() {
   }, []);
 
   const openUpgrade = useCallback(async (tier: "pro" | "elite") => {
+    posthog.capture("upgrade_clicked", { tier, source: "profile_page" });
     setUpgrading(tier);
     try {
       const res = await fetch("/api/stripe/checkout", {

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import posthog from "posthog-js";
 import { Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BillingToggle } from "@/components/billing-toggle";
@@ -52,6 +53,7 @@ export function PricingCards() {
   const [upgrading, setUpgrading] = useState<"pro" | "elite" | null>(null);
 
   const handleUpgrade = async (tier: "pro" | "elite") => {
+    posthog.capture("upgrade_clicked", { tier, source: "pricing_cards" });
     setUpgrading(tier);
     try {
       await openCheckout(tier);
