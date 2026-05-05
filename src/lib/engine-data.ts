@@ -2327,6 +2327,23 @@ export async function getLeaguePredictions(
     };
   });
 
+  // Deduplicate: same match can be stored twice with different team name variants
+  // (e.g. "Atletico Madrid" vs "Atlético Madrid"). Group by kickoff timestamp,
+  // keep the richer record (has model predictions > has odds > neither).
+  const seen = new Map<string, LeaguePredictionMatch>();
+  for (const m of matches) {
+    const key = m.kickoff; // exact ISO timestamp — same match = same kickoff
+    const existing = seen.get(key);
+    if (!existing) {
+      seen.set(key, m);
+    } else {
+      const score = (x: LeaguePredictionMatch) =>
+        (x.modelCall !== null ? 2 : 0) + (x.bestHomeOdds !== null ? 1 : 0);
+      if (score(m) > score(existing)) seen.set(key, m);
+    }
+  }
+  const deduped = Array.from(seen.values());
+
   return {
     leagueId: primaryLeague.id,
     leagueName: meta?.name ?? primaryLeague.name,
@@ -2334,7 +2351,7 @@ export async function getLeaguePredictions(
     leagueSlug,
     weekStart,
     weekEnd,
-    matches,
+    matches: deduped,
   };
 }
 
