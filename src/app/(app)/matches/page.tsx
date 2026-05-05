@@ -1,10 +1,11 @@
 export const dynamic = 'force-dynamic';
 
 import { CalendarDays, SearchX, Info } from "lucide-react";
-import { getPublicMatches, getLiveSnapshots, getFreeDailyPick } from "@/lib/engine-data";
+import { getPublicMatches, getLiveSnapshots, getFreeDailyPick, getWhatChangedToday } from "@/lib/engine-data";
 import { MatchesClient } from "@/components/matches-client";
 import { DailyValueTeaser } from "@/components/daily-value-teaser";
 import { SignupBanner } from "@/components/signup-banner";
+import { WhatChangedToday } from "@/components/what-changed-today";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { getUserTier } from "@/lib/get-user-tier";
 import type { PublicMatch, LiveSnapshot } from "@/lib/engine-data";
@@ -20,7 +21,7 @@ function formatDate(): string {
 
 export default async function MatchesPage() {
   // Run all fetches in parallel
-  const [allMatches, authResult, { pick: freePick, totalCount: freeTotalCount }] = await Promise.all([
+  const [allMatches, authResult, { pick: freePick, totalCount: freeTotalCount }, changedItems] = await Promise.all([
     getPublicMatches(),
     (async () => {
       const supabase = await createSupabaseServer();
@@ -32,6 +33,7 @@ export default async function MatchesPage() {
       return { isAuthenticated: true, isPro, userId: user.id };
     })(),
     getFreeDailyPick(),
+    getWhatChangedToday(),
   ]);
 
   const { isAuthenticated, isPro, userId } = authResult;
@@ -122,6 +124,11 @@ export default async function MatchesPage() {
 
       {/* Sign-up banner */}
       {!isAuthenticated && <SignupBanner />}
+
+      {/* ENG-11: What Changed Today */}
+      {changedItems.length > 0 && (
+        <WhatChangedToday items={changedItems} isPro={isPro} />
+      )}
 
       {/* Daily value bet teaser */}
       <DailyValueTeaser

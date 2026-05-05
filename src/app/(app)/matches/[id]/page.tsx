@@ -20,6 +20,7 @@ import {
   getMatchCLVData,
   getBotConsensus,
   getMatchPreview,
+  getModelMarketUsers,
 } from "@/lib/engine-data";
 import type { LiveMatch, MatchStatsData, OddsMovementPoint, MatchSignalRow } from "@/lib/engine-data";
 import { getLiveMatchOdds } from "@/lib/engine-data";
@@ -39,6 +40,7 @@ import { WhyThisPick } from "@/components/why-this-pick";
 import { CLVTracker } from "@/components/clv-tracker";
 import { MatchPreviewCard } from "@/components/match-preview-card";
 import { MatchViewingCounter } from "@/components/match-viewing-counter";
+import { ModelMarketUsers } from "@/components/model-market-users";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Clock, Calendar, Shield, MapPin, User } from "lucide-react";
@@ -186,9 +188,10 @@ export default async function MatchDetailPage({
     ? await getPublicMatchBookmakerCount(id)
     : 0;
 
-  const [botConsensus, matchPreview] = await Promise.all([
+  const [botConsensus, matchPreview, modelMarketUsers] = await Promise.all([
     getBotConsensus(id),
     getMatchPreview(id),
+    getModelMarketUsers(id),
   ]);
 
   const kickoffDate = new Date(publicMatch.kickoff);
@@ -336,6 +339,15 @@ export default async function MatchDetailPage({
         matchStatus={publicMatch.status}
         isAuthenticated={isAuthenticated}
       />
+
+      {/* ENG-12: Model vs Market vs Users triangulation */}
+      {modelMarketUsers && (
+        <ModelMarketUsers
+          data={modelMarketUsers}
+          homeTeam={publicMatch.homeTeam}
+          awayTeam={publicMatch.awayTeam}
+        />
+      )}
 
       {/* ENG-6: Bot consensus — free sees count+lock, pro sees full breakdown */}
       {botConsensus && (

@@ -1,9 +1,10 @@
 import type { MetadataRoute } from "next";
+import { ALL_SLUGS } from "@/lib/glossary";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const base = "https://oddsintel.app";
 
-  return [
+  const staticPages: MetadataRoute.Sitemap = [
     {
       url: base,
       lastModified: new Date(),
@@ -15,6 +16,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       lastModified: new Date(),
       changeFrequency: "daily",
       priority: 0.9,
+    },
+    {
+      url: `${base}/learn`,
+      lastModified: new Date(),
+      changeFrequency: "monthly",
+      priority: 0.8,
     },
     {
       url: `${base}/signup`,
@@ -41,4 +48,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.3,
     },
   ];
+
+  const glossaryPages: MetadataRoute.Sitemap = ALL_SLUGS.map((slug) => ({
+    url: `${base}/learn/${slug}`,
+    lastModified: new Date(),
+    changeFrequency: "monthly" as const,
+    priority: 0.7,
+  }));
+
+  return [...staticPages, ...glossaryPages];
 }

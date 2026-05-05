@@ -14,6 +14,7 @@ import {
   LogOut,
   LogIn,
   Bot,
+  BookOpen,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -25,6 +26,7 @@ const links = [
   { href: "/value-bets", label: "Value Bets", icon: Target, authOnly: false },
   { href: "/track-record", label: "Track Record", icon: BarChart3, authOnly: false },
   { href: "/how-it-works", label: "How it works", icon: Info, authOnly: false },
+  { href: "/learn", label: "Glossary", icon: BookOpen, authOnly: false },
 ];
 
 export function Nav() {

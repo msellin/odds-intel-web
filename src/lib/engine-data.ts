@@ -2129,3 +2129,238 @@ export async function getBotConsensus(matchId: string): Promise<BotConsensusData
     markets,
   };
 }
+
+// ─── ENG-12: Model vs Market vs Users ────────────────────────────────────────
+
+export interface ModelMarketUsersData {
+  modelHome: number;   // model probability for home win (0-1)
+  marketHome: number;  // 1/best_home_odds (implied, vig-inclusive)
+  usersHome: number;   // community vote share for home (0-1), null if no votes
+  homeTeam: string;
+  hasVotes: boolean;
+  totalVotes: number;
+}
+
+export async function getModelMarketUsers(matchId: string): Promise<ModelMarketUsersData | null> {
+  const supabase = await createSupabaseServer();
+
+  // Fetch ensemble 1x2_home prediction + match odds + community votes in parallel
+  const [predResult, voteResult] = await Promise.all([
+    supabase
+      .from("predictions")
+      .select("model_probability, implied_probability, market")
+      .eq("match_id", matchId)
+      .eq("source", "ensemble")
+      .eq("market", "1x2_home")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("match_votes")
+      .select("vote")
+      .eq("match_id", matchId),
+  ]);
+
+  const pred = predResult.data;
+  if (!pred) return null;
+
+  const votes = voteResult.data ?? [];
+  const voteCounts = { home: 0, draw: 0, away: 0, total: votes.length };
+  for (const v of votes as { vote: string }[]) {
+    if (v.vote === "home") voteCounts.home++;
+    else if (v.vote === "draw") voteCounts.draw++;
+    else if (v.vote === "away") voteCounts.away++;
+  }
+
+  return {
+    modelHome:  Math.round(Number(pred.model_probability) * 1000) / 10,
+    marketHome: Math.round(Number(pred.implied_probability) * 1000) / 10,
+    usersHome:  voteCounts.total > 0
+      ? Math.round((voteCounts.home / voteCounts.total) * 1000) / 10
+      : 50,
+    homeTeam:   "",  // filled by caller from match data
+    hasVotes:   voteCounts.total > 0,
+    totalVotes: voteCounts.total,
+  };
+}
+
+// ─── ENG-11: What Changed Today ───────────────────────────────────────────────
+
+export interface WhatChangedItem {
+  matchId: string;
+  homeTeam: string;
+  awayTeam: string;
+  league: string;
+  signalName: string;
+  signalLabel: string;
+  valueBefore: number | null;
+  valueNow: number;
+  delta: number;
+  direction: "up" | "down";
+  magnitude: "small" | "medium" | "large";
+}
+
+export async function getWhatChangedToday(): Promise<WhatChangedItem[]> {
+  const supabase = await createSupabaseServer();
+
+  // Find signals that changed significantly in the last 8 hours
+  // by comparing the most recent value to a value from 20-32 hours ago
+  const now = new Date();
+  const recentCutoff = new Date(now.getTime() - 8 * 60 * 60 * 1000).toISOString();
+  const oldStart = new Date(now.getTime() - 32 * 60 * 60 * 1000).toISOString();
+  const oldEnd = new Date(now.getTime() - 20 * 60 * 60 * 1000).toISOString();
+
+  // Signals worth tracking for changes
+  const TRACKED_SIGNALS = [
+    "elo_diff",
+    "odds_drift_home",
+    "odds_drift_away",
+    "news_impact_score",
+    "injury_count_home",
+    "injury_count_away",
+    "model_confidence",
+    "sharp_consensus_home",
+    "pinnacle_implied_home",
+  ];
+
+  const { data: recentRows } = await supabase
+    .from("match_signals")
+    .select("match_id, signal_name, signal_value, captured_at")
+    .in("signal_name", TRACKED_SIGNALS)
+    .gte("captured_at", recentCutoff)
+    .not("signal_value", "is", null);
+
+  if (!recentRows || recentRows.length === 0) return [];
+
+  // Get yesterday's values for same matches+signals
+  const matchIds = [...new Set(recentRows.map((r) => r.match_id))];
+  const { data: oldRows } = await supabase
+    .from("match_signals")
+    .select("match_id, signal_name, signal_value, captured_at")
+    .in("signal_name", TRACKED_SIGNALS)
+    .in("match_id", matchIds)
+    .gte("captured_at", oldStart)
+    .lte("captured_at", oldEnd)
+    .not("signal_value", "is", null);
+
+  // Build map: matchId+signalName → old value
+  const oldMap = new Map<string, number>();
+  for (const row of (oldRows ?? [])) {
+    const key = `${row.match_id}::${row.signal_name}`;
+    const existing = oldMap.get(key);
+    const val = Number(row.signal_value);
+    // Keep most recent old value
+    if (existing === undefined || Number(row.captured_at) > Number(existing)) {
+      oldMap.set(key, val);
+    }
+  }
+
+  // Build map: matchId+signalName → newest recent value
+  const recentMap = new Map<string, number>();
+  for (const row of recentRows) {
+    const key = `${row.match_id}::${row.signal_name}`;
+    const existing = recentMap.get(key);
+    const val = Number(row.signal_value);
+    if (existing === undefined) recentMap.set(key, val);
+  }
+
+  // Find matches with significant deltas
+  const THRESHOLDS: Record<string, number> = {
+    elo_diff: 50,
+    odds_drift_home: 0.04,
+    odds_drift_away: 0.04,
+    news_impact_score: 0.3,
+    injury_count_home: 1,
+    injury_count_away: 1,
+    model_confidence: 0.04,
+    sharp_consensus_home: 0.03,
+    pinnacle_implied_home: 0.03,
+  };
+
+  const SIGNAL_LABELS: Record<string, string> = {
+    elo_diff: "ELO gap shifted",
+    odds_drift_home: "Home odds moved",
+    odds_drift_away: "Away odds moved",
+    news_impact_score: "News impact spiked",
+    injury_count_home: "Home injuries",
+    injury_count_away: "Away injuries",
+    model_confidence: "Model confidence changed",
+    sharp_consensus_home: "Sharp money moved",
+    pinnacle_implied_home: "Pinnacle line shifted",
+  };
+
+  interface DeltaRow {
+    matchId: string;
+    signalName: string;
+    delta: number;
+    valueBefore: number | null;
+    valueNow: number;
+  }
+
+  const deltas: DeltaRow[] = [];
+
+  for (const [key, nowVal] of recentMap) {
+    const [mId, sigName] = key.split("::");
+    const oldVal = oldMap.get(key) ?? null;
+    if (oldVal === null) continue;
+    const delta = nowVal - oldVal;
+    const threshold = THRESHOLDS[sigName] ?? 0.05;
+    if (Math.abs(delta) >= threshold) {
+      deltas.push({ matchId: mId, signalName: sigName, delta, valueBefore: oldVal, valueNow: nowVal });
+    }
+  }
+
+  if (deltas.length === 0) return [];
+
+  // Sort by abs(delta) descending, take top 8
+  deltas.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+  const topDeltas = deltas.slice(0, 8);
+  const topMatchIds = [...new Set(topDeltas.map((d) => d.matchId))];
+
+  // Fetch match info for these matches
+  const { data: matchRows } = await supabase
+    .from("matches")
+    .select(`
+      id,
+      home_team:teams!matches_home_team_id_fkey(name),
+      away_team:teams!matches_away_team_id_fkey(name),
+      league:leagues(name)
+    `)
+    .in("id", topMatchIds);
+
+  const matchMeta = new Map<string, { home: string; away: string; league: string }>();
+  for (const m of (matchRows ?? []) as Array<{
+    id: string;
+    home_team: { name: string } | null;
+    away_team: { name: string } | null;
+    league: { name: string } | null;
+  }>) {
+    matchMeta.set(m.id, {
+      home: m.home_team?.name ?? "Home",
+      away: m.away_team?.name ?? "Away",
+      league: m.league?.name ?? "",
+    });
+  }
+
+  return topDeltas
+    .filter((d) => matchMeta.has(d.matchId))
+    .slice(0, 5)
+    .map((d) => {
+      const meta = matchMeta.get(d.matchId)!;
+      const absDelta = Math.abs(d.delta);
+      const threshold = THRESHOLDS[d.signalName] ?? 0.05;
+      return {
+        matchId: d.matchId,
+        homeTeam: meta.home,
+        awayTeam: meta.away,
+        league: meta.league,
+        signalName: d.signalName,
+        signalLabel: SIGNAL_LABELS[d.signalName] ?? d.signalName,
+        valueBefore: d.valueBefore,
+        valueNow: d.valueNow,
+        delta: Math.round(d.delta * 1000) / 1000,
+        direction: d.delta > 0 ? "up" : "down",
+        magnitude: absDelta > threshold * 3 ? "large" : absDelta > threshold * 1.5 ? "medium" : "small",
+      };
+    });
+}
