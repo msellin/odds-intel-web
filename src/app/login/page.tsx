@@ -29,12 +29,11 @@ function LoginForm() {
     setError(null);
     setLoading(true);
     const supabase = createSupabaseBrowser();
-    const next = plan ? `/matches?upgrade=${plan}` : "/matches";
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
         shouldCreateUser: false,
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     });
     setLoading(false);

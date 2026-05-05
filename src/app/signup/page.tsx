@@ -38,12 +38,11 @@ function SignUpForm() {
     setError(null);
     setLoading(true);
     const supabase = createSupabaseBrowser();
-    const next = plan ? `/matches?upgrade=${plan}` : "/welcome";
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
         shouldCreateUser: true,
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     });
     setLoading(false);

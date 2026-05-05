@@ -56,7 +56,7 @@ export function LoginModal() {
       email,
       options: {
         shouldCreateUser: true,
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo: "https://oddsintel.app/auth/callback",
       },
     });
     setLoading(false);
