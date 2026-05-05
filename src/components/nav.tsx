@@ -17,6 +17,7 @@ import {
   Crosshair,
   ChevronDown,
   User,
+  Wallet,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -134,6 +135,22 @@ export function Nav() {
                       <Crosshair className="h-3.5 w-3.5" />
                       My Picks
                     </Link>
+                    {(profile?.tier === "elite" || profile?.is_superadmin) && (
+                      <Link
+                        href="/bankroll"
+                        onClick={() => setProfileOpen(false)}
+                        className={cn(
+                          "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
+                          pathname === "/bankroll"
+                            ? "bg-primary/10 text-primary"
+                            : "text-foreground hover:bg-accent"
+                        )}
+                      >
+                        <Wallet className="h-3.5 w-3.5" />
+                        Bankroll Analytics
+                        <span className="ml-auto rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-400">Elite</span>
+                      </Link>
+                    )}
                     <Link
                       href="/profile"
                       onClick={() => setProfileOpen(false)}
@@ -272,6 +289,21 @@ export function Nav() {
                 <Crosshair className="h-4 w-4" />
                 My Picks
               </Link>
+              {(profile?.tier === "elite" || profile?.is_superadmin) && (
+                <Link
+                  href="/bankroll"
+                  onClick={() => setMobileOpen(false)}
+                  className={cn(
+                    "flex items-center gap-2 rounded-md px-3 py-2.5 text-sm transition-colors",
+                    pathname === "/bankroll"
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                  )}
+                >
+                  <Wallet className="h-4 w-4" />
+                  Bankroll Analytics
+                </Link>
+              )}
               <Link
                 href="/profile"
                 onClick={() => setMobileOpen(false)}

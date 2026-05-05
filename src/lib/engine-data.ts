@@ -2545,3 +2545,208 @@ export async function getWhatChangedToday(): Promise<WhatChangedItem[]> {
       };
     });
 }
+
+// ─── ELITE-BANKROLL: Personal bankroll analytics ───────────────────────────
+
+export interface BankrollPick {
+  id: string;
+  date: string;
+  homeTeam: string;
+  awayTeam: string;
+  league: string;
+  selection: string;
+  odds: number;
+  result: "won" | "lost" | "pending";
+  units: number;       // net units for this pick (won: odds-1, lost: -1)
+  clv: number | null;  // closing line value from pseudo_clv on matches table
+}
+
+export interface BankrollLeagueStat {
+  league: string;
+  total: number;
+  won: number;
+  lost: number;
+  netUnits: number;
+  roi: number;
+}
+
+export interface BankrollData {
+  picks: BankrollPick[];
+  cumulativeSeries: { date: string; units: number }[];
+  stats: {
+    total: number;
+    won: number;
+    lost: number;
+    pending: number;
+    hitRate: number;
+    roi: number;
+    netUnits: number;
+    avgClv: number | null;
+    maxDrawdown: number;
+  };
+  leagueBreakdown: BankrollLeagueStat[];
+  modelComparison: {
+    total: number;
+    won: number;
+    lost: number;
+    netUnits: number;
+    hitRate: number;
+    avgClv: number | null;
+  } | null;
+}
+
+export async function getUserBankrollData(userId: string): Promise<BankrollData> {
+  const supabase = await createSupabaseServer();
+
+  // Fetch all user picks with match info (session-RLS filters to this user)
+  const { data: rawPicks } = await supabase
+    .from("user_picks")
+    .select(
+      `id, match_id, selection, odds, stake, result, created_at,
+       match:match_id(
+         date,
+         pseudo_clv_home, pseudo_clv_draw, pseudo_clv_away,
+         home_team:home_team_id(name),
+         away_team:away_team_id(name),
+         league:league_id(name, country)
+       )`
+    )
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true });
+
+  const rows = (rawPicks ?? []) as Array<{
+    id: string;
+    match_id: string;
+    selection: string;
+    odds: number | null;
+    stake: number | null;
+    result: string;
+    created_at: string;
+    match: {
+      date: string;
+      pseudo_clv_home: number | null;
+      pseudo_clv_draw: number | null;
+      pseudo_clv_away: number | null;
+      home_team: { name: string } | { name: string }[];
+      away_team: { name: string } | { name: string }[];
+      league: { name: string; country: string } | { name: string; country: string }[];
+    } | null;
+  }>;
+
+  const picks: BankrollPick[] = rows.map((r) => {
+    const m = r.match;
+    const ht = m?.home_team ? (Array.isArray(m.home_team) ? m.home_team[0] : m.home_team) : null;
+    const at = m?.away_team ? (Array.isArray(m.away_team) ? m.away_team[0] : m.away_team) : null;
+    const lg = m?.league ? (Array.isArray(m.league) ? m.league[0] : m.league) : null;
+
+    const result = (r.result || "pending") as "won" | "lost" | "pending";
+    const odds   = r.odds ? Number(r.odds) : 2.0;
+    const stake  = r.stake ? Number(r.stake) : 1;
+    const units  = result === "won" ? (odds - 1) * stake : result === "lost" ? -stake : 0;
+
+    let clv: number | null = null;
+    if (r.selection === "home" && m?.pseudo_clv_home != null)       clv = Number(m.pseudo_clv_home) * 100;
+    else if (r.selection === "draw" && m?.pseudo_clv_draw != null)  clv = Number(m.pseudo_clv_draw) * 100;
+    else if (r.selection === "away" && m?.pseudo_clv_away != null)  clv = Number(m.pseudo_clv_away) * 100;
+
+    return {
+      id: r.id,
+      date: m?.date ?? r.created_at,
+      homeTeam: ht?.name ?? "?",
+      awayTeam: at?.name ?? "?",
+      league: lg ? `${lg.country} / ${lg.name}` : "Unknown",
+      selection: r.selection,
+      odds,
+      result,
+      units: Math.round(units * 100) / 100,
+      clv: clv !== null ? Math.round(clv * 10) / 10 : null,
+    };
+  });
+
+  const settled = picks.filter((p) => p.result !== "pending");
+
+  // Cumulative units over time (settled picks only, chronological)
+  let running = 0;
+  const cumulativeSeries: { date: string; units: number }[] = settled.map((p) => {
+    running += p.units;
+    return { date: p.date.slice(0, 10), units: Math.round(running * 100) / 100 };
+  });
+
+  // Max drawdown
+  let peak = 0;
+  let maxDrawdown = 0;
+  let runningDd = 0;
+  for (const p of settled) {
+    runningDd += p.units;
+    if (runningDd > peak) peak = runningDd;
+    const dd = peak - runningDd;
+    if (dd > maxDrawdown) maxDrawdown = dd;
+  }
+
+  // Per-league breakdown
+  const leagueMap = new Map<string, BankrollLeagueStat>();
+  for (const p of settled) {
+    const key = p.league;
+    const existing = leagueMap.get(key) ?? { league: key, total: 0, won: 0, lost: 0, netUnits: 0, roi: 0 };
+    existing.total++;
+    if (p.result === "won") existing.won++;
+    if (p.result === "lost") existing.lost++;
+    existing.netUnits = Math.round((existing.netUnits + p.units) * 100) / 100;
+    leagueMap.set(key, existing);
+  }
+  const leagueBreakdown = Array.from(leagueMap.values())
+    .map((l) => ({ ...l, roi: l.total > 0 ? Math.round((l.netUnits / l.total) * 1000) / 10 : 0 }))
+    .sort((a, b) => b.netUnits - a.netUnits);
+
+  // Stats
+  const won     = settled.filter((p) => p.result === "won").length;
+  const lost    = settled.filter((p) => p.result === "lost").length;
+  const pending = picks.filter((p) => p.result === "pending").length;
+  const netUnits = Math.round(running * 100) / 100;
+  const roi = settled.length > 0 ? Math.round((netUnits / settled.length) * 1000) / 10 : 0;
+  const clvValues = picks.map((p) => p.clv).filter((c): c is number => c !== null);
+  const avgClv = clvValues.length > 0 ? Math.round(clvValues.reduce((a, b) => a + b, 0) / clvValues.length * 10) / 10 : null;
+
+  // Model comparison — admin client needed (simulated_bets has service-role RLS)
+  const admin = createSupabaseAdmin();
+  const { data: modelBets } = await admin
+    .from("simulated_bets")
+    .select("result, pnl, clv")
+    .in("result", ["won", "lost"])
+    .order("created_at", { ascending: true })
+    .limit(500);
+
+  let modelComparison = null;
+  if (modelBets && modelBets.length > 0) {
+    const mWon = modelBets.filter((b) => b.result === "won").length;
+    const mLost = modelBets.filter((b) => b.result === "lost").length;
+    const mUnits = modelBets.reduce((s, b) => s + Number(b.pnl ?? 0), 0);
+    const mClvArr = modelBets.map((b) => b.clv).filter((c) => c != null).map(Number);
+    modelComparison = {
+      total: modelBets.length,
+      won: mWon,
+      lost: mLost,
+      netUnits: Math.round(mUnits * 100) / 100,
+      hitRate: Math.round((mWon / modelBets.length) * 100),
+      avgClv: mClvArr.length > 0 ? Math.round(mClvArr.reduce((a, b) => a + b, 0) / mClvArr.length * 1000) / 10 : null,
+    };
+  }
+
+  return {
+    picks: picks.reverse(), // most recent first for table display
+    cumulativeSeries,
+    stats: {
+      total: picks.length,
+      won,
+      lost,
+      pending,
+      hitRate: settled.length > 0 ? Math.round((won / settled.length) * 100) : 0,
+      roi,
+      netUnits,
+      avgClv,
+      maxDrawdown: Math.round(maxDrawdown * 100) / 100,
+    },
+    leagueBreakdown,
+    modelComparison,
+  };
+}
