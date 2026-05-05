@@ -5,6 +5,7 @@ import "./globals.css";
 import { AuthProvider } from "@/components/auth-provider";
 import { PostHogProvider } from "@/components/posthog-provider";
 import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { CookieBanner } from "@/components/cookie-banner";
 
 const inter = Inter({
@@ -107,6 +108,7 @@ export default function RootLayout({
         </AuthProvider>
         <CookieBanner />
         <Analytics />
+        <SpeedInsights />
         <Script id="hotjar" strategy="afterInteractive">
           {`
             (function(h,o,t,j,a,r){
