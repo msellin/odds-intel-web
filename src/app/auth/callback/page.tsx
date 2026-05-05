@@ -17,29 +17,29 @@ function CallbackHandler() {
     const code = searchParams.get("code");
     if (code) {
       supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
-        if (!error) {
-          router.replace(next);
-        } else {
-          router.replace("/login");
-        }
+        router.replace(error ? "/login" : next);
       });
       return;
     }
 
-    // Magic link — implicit flow, token arrives in URL hash
-    // Supabase client auto-detects and sets the session from the hash
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // Implicit flow — access_token arrives in URL hash fragment.
+    // Supabase client auto-processes the hash and fires onAuthStateChange.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session) {
+        subscription.unsubscribe();
         router.replace(next);
-      } else {
-        // Wait briefly for Supabase to process the hash fragment
-        const timeout = setTimeout(async () => {
-          const { data } = await supabase.auth.getSession();
-          router.replace(data.session ? next : "/login");
-        }, 500);
-        return () => clearTimeout(timeout);
       }
     });
+
+    // Also check immediately in case session was already set
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        subscription.unsubscribe();
+        router.replace(next);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, [router, searchParams]);
 
   return (
