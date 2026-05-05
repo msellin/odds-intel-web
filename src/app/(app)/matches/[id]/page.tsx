@@ -1,43 +1,29 @@
 export const dynamic = 'force-dynamic';
 
+import { Suspense, cache } from "react";
 import type { Metadata } from "next";
 import {
   getPublicMatchById,
   getPublicMatchBookmakerCount,
-  getMatchById,
-  getMatchStats,
-  getOddsMovement,
   getLiveSnapshots,
   getMatchH2H,
   getTeamStandings,
   getMatchInjuries,
-  getMatchEvents,
-  getMatchLineups,
-  getMatchPlayerStats,
-  getTeamSeasonStats,
   getMatchSignals,
-  getMatchSignalHistory,
-  getMatchCLVData,
   getBotConsensus,
   getMatchPreview,
   getModelMarketUsers,
 } from "@/lib/engine-data";
-import type { LiveMatch, MatchStatsData, OddsMovementPoint, MatchSignalRow } from "@/lib/engine-data";
-import { getLiveMatchOdds } from "@/lib/engine-data";
+import type { MatchSignalRow } from "@/lib/engine-data";
 import { MatchDetailFree } from "@/components/match-detail-free";
-import { MatchDetailLive } from "@/components/match-detail-live";
 import { MatchScoreDisplay } from "@/components/match-score-display";
 import { MatchSignalSummary } from "@/components/match-signal-summary";
 import { SignalAccordion } from "@/components/signal-accordion";
-import { LiveOddsChart } from "@/components/live-odds-chart";
 import { SignalDelta } from "@/components/signal-delta";
 import { MatchPickButton } from "@/components/match-pick-button";
 import { MatchNotes } from "@/components/match-notes";
 import { CommunityVote } from "@/components/community-vote";
 import { BotConsensus } from "@/components/bot-consensus";
-import { SignalTimeline } from "@/components/signal-timeline";
-import { WhyThisPick } from "@/components/why-this-pick";
-import { CLVTracker } from "@/components/clv-tracker";
 import { MatchPreviewCard } from "@/components/match-preview-card";
 import { MatchViewingCounter } from "@/components/match-viewing-counter";
 import { ModelMarketUsers } from "@/components/model-market-users";
@@ -47,6 +33,10 @@ import { Clock, Calendar, Shield, MapPin, User } from "lucide-react";
 import Link from "next/link";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { getUserTier } from "@/lib/get-user-tier";
+import { MatchProContent } from "./match-pro-content";
+
+// Deduplicate between generateMetadata and page — same request, one DB call
+const getPublicMatchCached = cache(getPublicMatchById);
 
 export async function generateMetadata({
   params,
@@ -54,7 +44,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const match = await getPublicMatchById(id);
+  const match = await getPublicMatchCached(id);
 
   if (!match) {
     return { title: "Match Not Found — OddsIntel" };
@@ -95,8 +85,11 @@ export default async function MatchDetailPage({
 }) {
   const { id } = await params;
 
-  // Always fetch public match data (works without auth)
-  const publicMatch = await getPublicMatchById(id);
+  // Start supabase client creation in parallel with the match fetch
+  const [publicMatch, supabase] = await Promise.all([
+    getPublicMatchCached(id),
+    createSupabaseServer().catch(() => null),
+  ]);
 
   if (!publicMatch) {
     return (
@@ -129,22 +122,17 @@ export default async function MatchDetailPage({
   let isAuthenticated = false;
   let isPro = false; // true for pro, elite, and superadmin
   let isElite = false; // true for elite and superadmin only
-  let liveMatch: LiveMatch | null = null;
-  let matchStats: MatchStatsData | null = null;
   try {
-    const supabase = await createSupabaseServer();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (user) {
-      isAuthenticated = true;
-      // Fetch tier from profiles — determines what data to serve
-      const tierResult = await getUserTier(user.id, supabase);
-      isElite = tierResult.isElite;
-      isPro = tierResult.isPro;
-      if (isPro) {
-        liveMatch = await getMatchById(id);
-        matchStats = await getMatchStats(id);
+    if (supabase) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        isAuthenticated = true;
+        // Fetch tier from profiles — determines what data to serve
+        const tierResult = await getUserTier(user.id, supabase);
+        isElite = tierResult.isElite;
+        isPro = tierResult.isPro;
       }
     }
   } catch {
@@ -154,45 +142,30 @@ export default async function MatchDetailPage({
   // Fetch free-tier enrichment data in parallel (all users)
   // Injuries are fetched for all users — used only as a boolean hint in free tier
   // Signals are fetched for all users — free gets teaser (1 signal), pro/elite get full summary
-  const [liveSnapshotsArr, h2h, standings, injuries, matchSignals] = await Promise.all([
+  // bookmakerCount, botConsensus, matchPreview, modelMarketUsers don't need auth — fetch here
+  const [
+    liveSnapshotsArr,
+    h2h,
+    standings,
+    injuries,
+    matchSignals,
+    bookmakerCount,
+    botConsensus,
+    matchPreview,
+    modelMarketUsers,
+  ] = await Promise.all([
     getLiveSnapshots([id]),
     getMatchH2H(id),
     getTeamStandings(publicMatch.homeTeam, publicMatch.awayTeam),
     getMatchInjuries(id),
     getMatchSignals(id),
-  ]);
-
-  // Fetch Pro-tier data only when tier is confirmed server-side — never sent to free/anon users
-  const [oddsMovement, matchEvents, lineups, playerStats, seasonStats, liveOdds, signalHistory] = isPro
-    ? await Promise.all([
-        getOddsMovement(id) as Promise<OddsMovementPoint[]>,
-        getMatchEvents(id),
-        getMatchLineups(id),
-        getMatchPlayerStats(id),
-        getTeamSeasonStats(
-          standings.home?.teamApiId ?? null,
-          standings.away?.teamApiId ?? null
-        ),
-        getLiveMatchOdds(id),
-        getMatchSignalHistory(id),
-      ])
-    : [[], [], null, [], { home: null, away: null }, [], []];
-
-  // Fetch Elite-tier data
-  const clvData = isElite ? await getMatchCLVData(id) : null;
-
-  const initialSnapshot = liveSnapshotsArr[0] ?? null;
-
-  // Bookmaker count for the pro teaser
-  const bookmakerCount = publicMatch.hasOdds
-    ? await getPublicMatchBookmakerCount(id)
-    : 0;
-
-  const [botConsensus, matchPreview, modelMarketUsers] = await Promise.all([
+    publicMatch.hasOdds ? getPublicMatchBookmakerCount(id) : Promise.resolve(0),
     getBotConsensus(id),
     getMatchPreview(id),
     getModelMarketUsers(id),
   ]);
+
+  const initialSnapshot = liveSnapshotsArr[0] ?? null;
 
   const kickoffDate = new Date(publicMatch.kickoff);
   const dateStr = kickoffDate.toLocaleDateString("en-GB", {
@@ -360,72 +333,27 @@ export default async function MatchDetailPage({
       {/* Match notes — free signed-in feature */}
       <MatchNotes matchId={publicMatch.id} />
 
-      {/* Live in-play odds chart (FE-LIVE) — Pro only, shown for live/finished matches with live odds */}
-      {isPro && (publicMatch.status === "live" || publicMatch.status === "finished") && (
-        <LiveOddsChart
-          matchId={publicMatch.id}
-          initialData={liveOdds}
-          isLive={publicMatch.status === "live"}
-          homeTeam={publicMatch.homeTeam}
-          awayTeam={publicMatch.awayTeam}
-        />
-      )}
-
-      {/* SUX-8: Signal Timeline — Pro only */}
-      {isPro && (signalHistory as MatchSignalRow[]).length > 0 && (
-        <SignalTimeline
-          signals={signalHistory as MatchSignalRow[]}
-          homeTeam={publicMatch.homeTeam}
-          awayTeam={publicMatch.awayTeam}
-        />
-      )}
-
-      {/* SUX-11: Why This Pick — Elite only */}
-      {isElite && matchSignals.length > 0 && (
-        <WhyThisPick
-          signals={matchSignals}
-          homeTeam={publicMatch.homeTeam}
-          awayTeam={publicMatch.awayTeam}
-        />
-      )}
-
-      {/* SUX-12: CLV Tracker — Elite only */}
-      {isElite && clvData && (
-        <CLVTracker
-          clvData={clvData}
-          homeTeam={publicMatch.homeTeam}
-          awayTeam={publicMatch.awayTeam}
-          matchStatus={publicMatch.status}
-        />
-      )}
-
-      {/* Pro content — only rendered server-side for pro/elite users (B3: server-side field stripping) */}
-      {isPro && (liveMatch || matchEvents.length > 0 || injuries.length > 0 || lineups || playerStats.length > 0 || seasonStats.home || seasonStats.away || matchStats) && (
-        <MatchDetailLive
-          match={liveMatch ?? {
-            id: publicMatch.id,
-            homeTeam: publicMatch.homeTeam,
-            awayTeam: publicMatch.awayTeam,
-            kickoff: publicMatch.kickoff,
-            league: publicMatch.league,
-            leagueCode: "",
-            sport: "soccer",
-            tier: publicMatch.tier,
-            odds: [],
-            bestHome: publicMatch.bestHome,
-            bestDraw: publicMatch.bestDraw,
-            bestAway: publicMatch.bestAway,
-            scrapedAt: new Date().toISOString(),
-          }}
-          matchStats={matchStats}
-          oddsMovement={oddsMovement}
-          injuries={injuries}
-          matchEvents={matchEvents}
-          lineups={lineups}
-          playerStats={playerStats}
-          homeSeasonStats={seasonStats.home}
-          awaySeasonStats={seasonStats.away}
-        />
+      {/* Pro content — streamed in after free content renders (B3: server-side field stripping) */}
+      {isPro && (
+        <Suspense fallback={
+          <div className="space-y-4">
+            <div className="rounded-xl border border-border/50 bg-card p-5 space-y-3">
+              <div className="h-4 w-32 animate-pulse rounded bg-muted" />
+              <div className="h-3 w-full animate-pulse rounded bg-muted" />
+              <div className="h-3 w-3/4 animate-pulse rounded bg-muted" />
+            </div>
+          </div>
+        }>
+          <MatchProContent
+            matchId={publicMatch.id}
+            publicMatch={publicMatch}
+            isElite={isElite}
+            injuries={injuries}
+            homeStanding={standings.home}
+            awayStanding={standings.away}
+            matchSignals={matchSignals as MatchSignalRow[]}
+          />
+        </Suspense>
       )}
     </div>
   );
