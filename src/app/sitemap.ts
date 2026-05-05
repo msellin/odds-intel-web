@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { ALL_SLUGS } from "@/lib/glossary";
+import { PREDICTION_LEAGUES } from "@/lib/engine-data";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const base = "https://oddsintel.app";
@@ -56,5 +57,15 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.7,
   }));
 
-  return [...staticPages, ...glossaryPages];
+  const predictionPages: MetadataRoute.Sitemap = [
+    { url: `${base}/predictions`, lastModified: new Date(), changeFrequency: "daily" as const, priority: 0.85 },
+    ...PREDICTION_LEAGUES.map((l) => ({
+      url: `${base}/predictions/${l.slug}`,
+      lastModified: new Date(),
+      changeFrequency: "daily" as const,
+      priority: 0.8,
+    })),
+  ];
+
+  return [...staticPages, ...predictionPages, ...glossaryPages];
 }

@@ -2130,6 +2130,187 @@ export async function getBotConsensus(matchId: string): Promise<BotConsensusData
   };
 }
 
+// ─── ENG-14: League prediction pages ─────────────────────────────────────────
+
+export interface LeaguePredictionMatch {
+  id: string;
+  date: string;
+  kickoff: string;
+  homeTeam: string;
+  awayTeam: string;
+  leagueName: string;
+  leagueCountry: string;
+  modelCall: "home" | "draw" | "away" | null;
+  confidence: number | null;   // 0-100
+  homeProb: number | null;
+  drawProb: number | null;
+  awayProb: number | null;
+  bestHomeOdds: number | null;
+  bestDrawOdds: number | null;
+  bestAwayOdds: number | null;
+  previewTeaser: string | null;
+}
+
+export interface LeaguePredictionPage {
+  leagueId: string;
+  leagueName: string;
+  leagueCountry: string;
+  leagueSlug: string;
+  weekStart: string;
+  weekEnd: string;
+  matches: LeaguePredictionMatch[];
+}
+
+// Featured leagues for the predictions index page
+export const PREDICTION_LEAGUES = [
+  { slug: "premier-league", name: "Premier League", country: "England" },
+  { slug: "la-liga", name: "La Liga", country: "Spain" },
+  { slug: "bundesliga", name: "Bundesliga", country: "Germany" },
+  { slug: "serie-a", name: "Serie A", country: "Italy" },
+  { slug: "ligue-1", name: "Ligue 1", country: "France" },
+  { slug: "champions-league", name: "Champions League", country: "Europe" },
+  { slug: "eredivisie", name: "Eredivisie", country: "Netherlands" },
+  { slug: "primeira-liga", name: "Primeira Liga", country: "Portugal" },
+] as const;
+
+export type PredictionLeagueSlug = typeof PREDICTION_LEAGUES[number]["slug"];
+
+export async function getLeaguePredictions(
+  leagueSlug: string
+): Promise<LeaguePredictionPage | null> {
+  const supabase = await createSupabaseServer();
+
+  const meta = PREDICTION_LEAGUES.find((l) => l.slug === leagueSlug);
+
+  // Find matches for this league in next 7 days
+  const now = new Date();
+  const weekStart = now.toISOString().split("T")[0];
+  const weekEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .split("T")[0];
+
+  // Search by league name + country (handle both known and unknown leagues)
+  let leagueQuery = supabase.from("leagues").select("id, name, country");
+  if (meta) {
+    leagueQuery = leagueQuery
+      .ilike("name", `%${meta.name.split(" ")[0]}%`)
+      .ilike("country", `%${meta.country.split(" ")[0]}%`);
+  } else {
+    // Try matching slug pattern (e.g. "scottish-premier" → "scottish" "premier")
+    const parts = leagueSlug.replace(/-/g, " ").split(" ");
+    leagueQuery = leagueQuery.ilike("name", `%${parts[0]}%`);
+  }
+  const { data: leagues } = await leagueQuery.limit(3);
+  if (!leagues || leagues.length === 0) return null;
+
+  const leagueIds = (leagues as Array<{ id: string; name: string; country: string }>).map(
+    (l) => l.id
+  );
+  const primaryLeague = leagues[0] as { id: string; name: string; country: string };
+
+  const { data: matchRows } = await supabase
+    .from("matches")
+    .select(`
+      id, date, kickoff,
+      home_team:home_team_id(name),
+      away_team:away_team_id(name),
+      odds_home, odds_draw, odds_away
+    `)
+    .in("league_id", leagueIds)
+    .gte("date", weekStart)
+    .lte("date", weekEnd)
+    .in("status", ["scheduled", "1h", "2h", "ht", "live", "finished"])
+    .order("date", { ascending: true })
+    .limit(20);
+
+  if (!matchRows || matchRows.length === 0) {
+    return {
+      leagueId: primaryLeague.id,
+      leagueName: meta?.name ?? primaryLeague.name,
+      leagueCountry: meta?.country ?? primaryLeague.country,
+      leagueSlug,
+      weekStart,
+      weekEnd,
+      matches: [],
+    };
+  }
+
+  const matchIds = (matchRows as Array<Record<string, unknown>>).map((m) => m.id as string);
+
+  // Fetch predictions + previews in parallel
+  const [{ data: preds }, { data: previews }] = await Promise.all([
+    supabase
+      .from("predictions")
+      .select("match_id, market, model_probability")
+      .in("match_id", matchIds)
+      .in("market", ["1x2_home", "1x2_draw", "1x2_away"])
+      .eq("source", "ensemble"),
+    supabase
+      .from("match_previews")
+      .select("match_id, teaser")
+      .in("match_id", matchIds),
+  ]);
+
+  const predMap = new Map<string, Record<string, number>>();
+  for (const p of (preds ?? []) as Array<{ match_id: string; market: string; model_probability: number }>) {
+    if (!predMap.has(p.match_id)) predMap.set(p.match_id, {});
+    predMap.get(p.match_id)![p.market] = Number(p.model_probability);
+  }
+
+  const previewMap = new Map<string, string>();
+  for (const pv of (previews ?? []) as Array<{ match_id: string; teaser: string | null }>) {
+    if (pv.teaser) previewMap.set(pv.match_id, pv.teaser);
+  }
+
+  const matches: LeaguePredictionMatch[] = (
+    matchRows as Array<Record<string, unknown>>
+  ).map((m) => {
+    const ht = Array.isArray(m.home_team) ? m.home_team[0] : m.home_team;
+    const at = Array.isArray(m.away_team) ? m.away_team[0] : m.away_team;
+    const probs = predMap.get(m.id as string);
+    const hp = probs?.["1x2_home"] ?? null;
+    const dp = probs?.["1x2_draw"] ?? null;
+    const ap = probs?.["1x2_away"] ?? null;
+
+    let modelCall: "home" | "draw" | "away" | null = null;
+    let confidence: number | null = null;
+    if (hp !== null && dp !== null && ap !== null) {
+      const maxP = Math.max(hp, dp, ap);
+      modelCall = hp === maxP ? "home" : dp === maxP ? "draw" : "away";
+      confidence = Math.round(maxP * 100);
+    }
+
+    return {
+      id: m.id as string,
+      date: m.date as string,
+      kickoff: (m.kickoff as string) ?? (m.date as string),
+      homeTeam: (ht as Record<string, string>)?.name ?? "Home",
+      awayTeam: (at as Record<string, string>)?.name ?? "Away",
+      leagueName: meta?.name ?? primaryLeague.name,
+      leagueCountry: meta?.country ?? primaryLeague.country,
+      modelCall,
+      confidence,
+      homeProb: hp !== null ? Math.round(hp * 100) : null,
+      drawProb: dp !== null ? Math.round(dp * 100) : null,
+      awayProb: ap !== null ? Math.round(ap * 100) : null,
+      bestHomeOdds: m.odds_home ? Number(m.odds_home) : null,
+      bestDrawOdds: m.odds_draw ? Number(m.odds_draw) : null,
+      bestAwayOdds: m.odds_away ? Number(m.odds_away) : null,
+      previewTeaser: previewMap.get(m.id as string) ?? null,
+    };
+  });
+
+  return {
+    leagueId: primaryLeague.id,
+    leagueName: meta?.name ?? primaryLeague.name,
+    leagueCountry: meta?.country ?? primaryLeague.country,
+    leagueSlug,
+    weekStart,
+    weekEnd,
+    matches,
+  };
+}
+
 // ─── ENG-12: Model vs Market vs Users ────────────────────────────────────────
 
 export interface ModelMarketUsersData {
