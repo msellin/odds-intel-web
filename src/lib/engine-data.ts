@@ -2510,7 +2510,7 @@ export async function getWhatChangedToday(): Promise<WhatChangedItem[]> {
     .in("id", topMatchIds);
 
   const matchMeta = new Map<string, { home: string; away: string; league: string }>();
-  for (const m of (matchRows ?? []) as Array<{
+  for (const m of (matchRows ?? []) as unknown as Array<{
     id: string;
     home_team: { name: string } | null;
     away_team: { name: string } | null;
