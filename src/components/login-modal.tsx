@@ -13,8 +13,7 @@ import { useAuth } from "@/components/auth-provider";
 export function LoginModal() {
   const { loginModalOpen, closeLoginModal, user } = useAuth();
   const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
-  const [step, setStep] = useState<"email" | "code">("email");
+  const [step, setStep] = useState<"email" | "sent">("email");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -31,7 +30,6 @@ export function LoginModal() {
   useEffect(() => {
     if (!loginModalOpen) {
       setEmail("");
-      setCode("");
       setStep("email");
       setError(null);
     }
@@ -49,39 +47,24 @@ export function LoginModal() {
 
   if (!loginModalOpen) return null;
 
-  const handleSendCode = async () => {
+  const handleSendLink = async () => {
     if (!email) return;
     setError(null);
     setLoading(true);
     const supabase = createSupabaseBrowser();
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { shouldCreateUser: true },
+      options: {
+        shouldCreateUser: true,
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
     });
     setLoading(false);
     if (error) {
       setError(error.message);
     } else {
-      setStep("code");
+      setStep("sent");
     }
-  };
-
-  const handleVerify = async () => {
-    if (!code) return;
-    setError(null);
-    setLoading(true);
-    const supabase = createSupabaseBrowser();
-    const { error } = await supabase.auth.verifyOtp({
-      email,
-      token: code,
-      type: "email",
-    });
-    setLoading(false);
-    if (error) {
-      setError(error.message);
-    }
-    // on success, the auth state change listener in AuthProvider will set user
-    // and the useEffect above will close the modal
   };
 
   return (
@@ -106,7 +89,7 @@ export function LoginModal() {
               ODDS<span className="text-green-500">INTEL</span>
             </p>
             <h2 className="mt-2 text-lg font-semibold">
-              {step === "email" ? "Sign in or create a free account" : "Enter your code"}
+              {step === "email" ? "Sign in or create a free account" : "Check your email"}
             </h2>
             {step === "email" && (
               <p className="mt-1 text-sm text-muted-foreground">
@@ -135,52 +118,32 @@ export function LoginModal() {
                   placeholder="you@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSendCode()}
+                  onKeyDown={(e) => e.key === "Enter" && handleSendLink()}
                   autoFocus
                 />
               </div>
 
               <Button
                 className="w-full bg-emerald-600 text-white hover:bg-emerald-700"
-                onClick={handleSendCode}
+                onClick={handleSendLink}
                 disabled={loading || !email}
               >
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Continue with email"}
               </Button>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-4 text-center">
               <p className="text-sm text-muted-foreground">
-                We sent a 6-digit code to{" "}
+                We sent a sign-in link to{" "}
                 <span className="font-medium text-foreground">{email}</span>.
+                Click the link in your email to continue.
               </p>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="modal-code">Code</Label>
-                <Input
-                  id="modal-code"
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="123456"
-                  maxLength={6}
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-                  onKeyDown={(e) => e.key === "Enter" && handleVerify()}
-                  autoFocus
-                />
-              </div>
-
-              <Button
-                className="w-full bg-emerald-600 text-white hover:bg-emerald-700"
-                onClick={handleVerify}
-                disabled={loading || code.length < 6}
-              >
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verify"}
-              </Button>
-
+              <p className="text-xs text-muted-foreground">
+                The link expires in 1 hour. Check your spam folder if you don&apos;t see it.
+              </p>
               <button
                 className="w-full text-center text-sm text-muted-foreground transition-colors hover:text-foreground"
-                onClick={() => { setStep("email"); setCode(""); setError(null); }}
+                onClick={() => { setStep("email"); setError(null); }}
               >
                 Use a different email
               </button>

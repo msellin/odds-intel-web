@@ -17,66 +17,32 @@ import { GoogleSignIn, DiscordSignIn, AuthDivider } from "@/components/google-si
 
 function LoginForm() {
   const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
-  const [step, setStep] = useState<"email" | "code">("email");
+  const [step, setStep] = useState<"email" | "sent">("email");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
   const plan = searchParams.get("plan") as "pro" | "elite" | null;
 
-  const handleSendCode = async () => {
+  const handleSendLink = async () => {
     if (!email) return;
     setError(null);
     setLoading(true);
     const supabase = createSupabaseBrowser();
+    const next = plan ? `/matches?upgrade=${plan}` : "/matches";
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { shouldCreateUser: false },
+      options: {
+        shouldCreateUser: false,
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+      },
     });
     setLoading(false);
     if (error) {
       setError(error.message);
     } else {
-      setStep("code");
+      setStep("sent");
     }
-  };
-
-  const handleVerify = async () => {
-    if (!code) return;
-    setError(null);
-    setLoading(true);
-    const supabase = createSupabaseBrowser();
-    const { error } = await supabase.auth.verifyOtp({
-      email,
-      token: code,
-      type: "email",
-    });
-    if (error) {
-      setLoading(false);
-      setError(error.message);
-      return;
-    }
-
-    // If user came here via "Get Pro" / "Get Elite", send them straight to Stripe
-    if (plan === "pro" || plan === "elite") {
-      try {
-        const res = await fetch("/api/stripe/checkout", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tier: plan }),
-        });
-        const data = await res.json();
-        if (data.url) {
-          window.location.href = data.url;
-          return;
-        }
-      } catch {
-        // checkout failed — fall through to matches
-      }
-    }
-
-    router.push("/matches");
   };
 
   return (
@@ -113,16 +79,16 @@ function LoginForm() {
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSendCode()}
+                onKeyDown={(e) => e.key === "Enter" && handleSendLink()}
               />
             </div>
 
             <Button
               className="w-full bg-emerald-600 text-white hover:bg-emerald-700"
-              onClick={handleSendCode}
+              onClick={handleSendLink}
               disabled={loading || !email}
             >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send code"}
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send sign-in link"}
             </Button>
 
             <p className="text-center text-sm text-muted-foreground">
@@ -135,36 +101,16 @@ function LoginForm() {
         ) : (
           <>
             <p className="text-sm text-muted-foreground">
-              We sent a 6-digit code to{" "}
-              <span className="text-foreground">{email}</span>.
+              We sent a sign-in link to{" "}
+              <span className="text-foreground font-medium">{email}</span>.
+              Click the link in your email to continue.
             </p>
-
-            <div className="space-y-2">
-              <Label htmlFor="code">Code</Label>
-              <Input
-                id="code"
-                type="text"
-                inputMode="numeric"
-                placeholder="123456"
-                maxLength={6}
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-                onKeyDown={(e) => e.key === "Enter" && handleVerify()}
-                autoFocus
-              />
-            </div>
-
-            <Button
-              className="w-full bg-emerald-600 text-white hover:bg-emerald-700"
-              onClick={handleVerify}
-              disabled={loading || code.length < 6}
-            >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : (plan ? `Verify & go to ${plan.charAt(0).toUpperCase() + plan.slice(1)} checkout` : "Verify")}
-            </Button>
-
+            <p className="text-xs text-muted-foreground">
+              The link expires in 1 hour. Check your spam folder if you don&apos;t see it.
+            </p>
             <button
               className="w-full text-center text-sm text-muted-foreground hover:text-primary transition-colors"
-              onClick={() => { setStep("email"); setCode(""); setError(null); }}
+              onClick={() => { setStep("email"); setError(null); }}
             >
               Use a different email
             </button>
