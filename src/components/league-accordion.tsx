@@ -125,6 +125,7 @@ function MatchRow({
 
   const isLive = match.status === "live" && !!liveSnapshot;
   const isFinished = match.status === "finished";
+  const isPastUnresolved = !isLive && !isFinished && new Date(match.kickoff) < new Date();
   const hasTeasers = (match.teasers?.length ?? 0) > 0;
   const hasPrediction = match.predictedHome !== null && match.predictedAway !== null;
   const hasForm = match.formHome != null && match.formAway != null;
@@ -187,6 +188,10 @@ function MatchRow({
             <span className="inline-block rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] font-bold text-muted-foreground">
               FT
             </span>
+          ) : isPastUnresolved ? (
+            <span className="inline-block rounded bg-amber-500/10 px-1.5 py-0.5 font-mono text-[10px] font-bold text-amber-500/60">
+              {formatKickoff(match.kickoff)}
+            </span>
           ) : (
             <span className="font-mono text-xs text-muted-foreground" suppressHydrationWarning>
               {formatKickoff(match.kickoff)}
@@ -239,7 +244,11 @@ function MatchRow({
 
         {/* Odds — ML-7 arrows (Pro only) + ML-8 bookmaker badge */}
         <div className="ml-2 flex shrink-0 items-center gap-1">
-          {hasOdds ? (
+          {isPastUnresolved ? (
+            <div className="w-44 text-center font-mono text-[10px] text-amber-500/50">
+              result pending
+            </div>
+          ) : hasOdds ? (
             <>
               <OddsCell value={match.bestHome} isBest={bestIsHome} move={isPro ? match.moveHome : null} />
               <OddsCell value={match.bestDraw} isBest={bestIsDraw} move={isPro ? match.moveDraw : null} />
