@@ -6,38 +6,39 @@ import {
   Activity,
   BarChart3,
   Target,
-  Crosshair,
-  Info,
-  User,
+  TrendingUp,
   Menu,
   X,
   LogOut,
   LogIn,
   Bot,
   BookOpen,
-  TrendingUp,
+  Info,
+  Crosshair,
+  ChevronDown,
+  User,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/auth-provider";
 
-const links = [
-  { href: "/matches", label: "Matches", icon: Activity, authOnly: false },
-  { href: "/my-picks", label: "My Picks", icon: Crosshair, authOnly: true },
-  { href: "/value-bets", label: "Value Bets", icon: Target, authOnly: false },
-  { href: "/track-record", label: "Track Record", icon: BarChart3, authOnly: false },
-  { href: "/predictions", label: "Predictions", icon: TrendingUp, authOnly: false },
-  { href: "/how-it-works", label: "How it works", icon: Info, authOnly: false },
-  { href: "/learn", label: "Glossary", icon: BookOpen, authOnly: false },
+const primaryLinks = [
+  { href: "/matches", label: "Matches", icon: Activity },
+  { href: "/value-bets", label: "Value Bets", icon: Target },
+  { href: "/track-record", label: "Track Record", icon: BarChart3 },
+  { href: "/predictions", label: "Predictions", icon: TrendingUp },
 ];
 
 export function Nav() {
   const pathname = usePathname();
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const { user, profile, loading, signOut } = useAuth();
 
   const handleSignOut = async () => {
+    setProfileOpen(false);
     await signOut();
     router.push("/");
   };
@@ -45,6 +46,17 @@ export function Nav() {
   const initials = user?.email
     ? user.email.substring(0, 2).toUpperCase()
     : null;
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setProfileOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   return (
     <header className="sticky top-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-xl">
@@ -60,7 +72,7 @@ export function Nav() {
 
         {/* Desktop nav */}
         <nav className="hidden items-center gap-1 md:flex">
-          {links.filter((link) => !link.authOnly || user).map((link) => {
+          {primaryLinks.map((link) => {
             const Icon = link.icon;
             const active =
               pathname === link.href || pathname.startsWith(link.href + "/");
@@ -80,47 +92,117 @@ export function Nav() {
               </Link>
             );
           })}
-          {profile?.is_superadmin && (
-            <Link
-              href="/admin/bots"
-              className={cn(
-                "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors",
-                pathname === "/admin/bots"
-                  ? "bg-amber-500/10 text-amber-400"
-                  : "text-amber-500/70 hover:bg-accent hover:text-amber-400"
-              )}
-            >
-              <Bot className="h-3.5 w-3.5" />
-              Bots
-            </Link>
-          )}
+
           <div className="ml-2 h-5 w-px bg-border" />
 
           {!loading && user ? (
-            <>
-              <Link
-                href="/profile"
+            /* Logged-in: profile dropdown */
+            <div className="relative" ref={dropdownRef}>
+              <button
+                onClick={() => setProfileOpen((o) => !o)}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors",
-                  pathname === "/profile"
-                    ? "bg-primary/10 text-primary"
+                  "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+                  profileOpen
+                    ? "bg-accent text-foreground"
                     : "text-muted-foreground hover:bg-accent hover:text-foreground"
                 )}
               >
-                <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/20 text-[10px] font-bold text-primary">
+                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-[10px] font-bold text-primary">
                   {initials}
                 </div>
-                <span className="max-w-[120px] truncate">{user.email}</span>
-              </Link>
-              <button
-                onClick={handleSignOut}
-                className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-              >
-                <LogOut className="h-3.5 w-3.5" />
-                Sign Out
+                <ChevronDown className={cn("h-3 w-3 transition-transform", profileOpen && "rotate-180")} />
               </button>
-            </>
+
+              {profileOpen && (
+                <div className="absolute right-0 top-full mt-1.5 w-52 rounded-xl border border-border/60 bg-popover shadow-xl ring-1 ring-black/5">
+                  {/* Email header */}
+                  <div className="border-b border-border/40 px-3 py-2.5">
+                    <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                  </div>
+
+                  <div className="p-1">
+                    <Link
+                      href="/my-picks"
+                      onClick={() => setProfileOpen(false)}
+                      className={cn(
+                        "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
+                        pathname === "/my-picks"
+                          ? "bg-primary/10 text-primary"
+                          : "text-foreground hover:bg-accent"
+                      )}
+                    >
+                      <Crosshair className="h-3.5 w-3.5" />
+                      My Picks
+                    </Link>
+                    <Link
+                      href="/profile"
+                      onClick={() => setProfileOpen(false)}
+                      className={cn(
+                        "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
+                        pathname === "/profile"
+                          ? "bg-primary/10 text-primary"
+                          : "text-foreground hover:bg-accent"
+                      )}
+                    >
+                      <User className="h-3.5 w-3.5" />
+                      Profile & Billing
+                    </Link>
+                  </div>
+
+                  <div className="border-t border-border/40 p-1">
+                    <p className="px-3 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/50">
+                      Learn
+                    </p>
+                    <Link
+                      href="/learn"
+                      onClick={() => setProfileOpen(false)}
+                      className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-accent"
+                    >
+                      <BookOpen className="h-3.5 w-3.5" />
+                      Glossary
+                    </Link>
+                    <Link
+                      href="/how-it-works"
+                      onClick={() => setProfileOpen(false)}
+                      className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-accent"
+                    >
+                      <Info className="h-3.5 w-3.5" />
+                      How it Works
+                    </Link>
+                  </div>
+
+                  {profile?.is_superadmin && (
+                    <div className="border-t border-border/40 p-1">
+                      <Link
+                        href="/admin/bots"
+                        onClick={() => setProfileOpen(false)}
+                        className={cn(
+                          "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
+                          pathname === "/admin/bots"
+                            ? "bg-amber-500/10 text-amber-400"
+                            : "text-amber-500/70 hover:bg-accent hover:text-amber-400"
+                        )}
+                      >
+                        <Bot className="h-3.5 w-3.5" />
+                        Bot Dashboard
+                      </Link>
+                    </div>
+                  )}
+
+                  <div className="border-t border-border/40 p-1">
+                    <button
+                      onClick={handleSignOut}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                    >
+                      <LogOut className="h-3.5 w-3.5" />
+                      Sign Out
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           ) : !loading ? (
+            /* Logged-out */
             <>
               <Link
                 href="/login"
@@ -141,18 +223,18 @@ export function Nav() {
 
         {/* Mobile hamburger */}
         <button
-          onClick={() => setOpen(!open)}
+          onClick={() => setMobileOpen(!mobileOpen)}
           className="md:hidden text-muted-foreground"
-          aria-label={open ? "Close menu" : "Open menu"}
+          aria-label={mobileOpen ? "Close menu" : "Open menu"}
         >
-          {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
       </div>
 
       {/* Mobile nav */}
-      {open && (
+      {mobileOpen && (
         <nav className="border-t border-border/50 bg-background px-4 pb-4 pt-2 md:hidden">
-          {links.filter((link) => !link.authOnly || user).map((link) => {
+          {primaryLinks.map((link) => {
             const Icon = link.icon;
             const active =
               pathname === link.href || pathname.startsWith(link.href + "/");
@@ -160,7 +242,7 @@ export function Nav() {
               <Link
                 key={link.href}
                 href={link.href}
-                onClick={() => setOpen(false)}
+                onClick={() => setMobileOpen(false)}
                 className={cn(
                   "flex items-center gap-2 rounded-md px-3 py-2.5 text-sm transition-colors",
                   active
@@ -174,27 +256,25 @@ export function Nav() {
             );
           })}
 
-          {profile?.is_superadmin && (
-            <Link
-              href="/admin/bots"
-              onClick={() => setOpen(false)}
-              className={cn(
-                "flex items-center gap-2 rounded-md px-3 py-2.5 text-sm transition-colors",
-                pathname === "/admin/bots"
-                  ? "bg-amber-500/10 text-amber-400"
-                  : "text-amber-500/70 hover:bg-accent hover:text-amber-400"
-              )}
-            >
-              <Bot className="h-4 w-4" />
-              Bot Dashboard
-            </Link>
-          )}
-
           {!loading && user ? (
             <>
+              <div className="my-2 h-px bg-border/50" />
+              <Link
+                href="/my-picks"
+                onClick={() => setMobileOpen(false)}
+                className={cn(
+                  "flex items-center gap-2 rounded-md px-3 py-2.5 text-sm transition-colors",
+                  pathname === "/my-picks"
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                )}
+              >
+                <Crosshair className="h-4 w-4" />
+                My Picks
+              </Link>
               <Link
                 href="/profile"
-                onClick={() => setOpen(false)}
+                onClick={() => setMobileOpen(false)}
                 className={cn(
                   "flex items-center gap-2 rounded-md px-3 py-2.5 text-sm transition-colors",
                   pathname === "/profile"
@@ -203,11 +283,43 @@ export function Nav() {
                 )}
               >
                 <User className="h-4 w-4" />
-                Profile
+                Profile & Billing
               </Link>
+              <Link
+                href="/learn"
+                onClick={() => setMobileOpen(false)}
+                className="flex items-center gap-2 rounded-md px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+              >
+                <BookOpen className="h-4 w-4" />
+                Glossary
+              </Link>
+              <Link
+                href="/how-it-works"
+                onClick={() => setMobileOpen(false)}
+                className="flex items-center gap-2 rounded-md px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+              >
+                <Info className="h-4 w-4" />
+                How it Works
+              </Link>
+              {profile?.is_superadmin && (
+                <Link
+                  href="/admin/bots"
+                  onClick={() => setMobileOpen(false)}
+                  className={cn(
+                    "flex items-center gap-2 rounded-md px-3 py-2.5 text-sm transition-colors",
+                    pathname === "/admin/bots"
+                      ? "bg-amber-500/10 text-amber-400"
+                      : "text-amber-500/70 hover:bg-accent hover:text-amber-400"
+                  )}
+                >
+                  <Bot className="h-4 w-4" />
+                  Bot Dashboard
+                </Link>
+              )}
+              <div className="my-2 h-px bg-border/50" />
               <button
                 onClick={() => {
-                  setOpen(false);
+                  setMobileOpen(false);
                   handleSignOut();
                 }}
                 className="flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
@@ -218,9 +330,27 @@ export function Nav() {
             </>
           ) : !loading ? (
             <>
+              <div className="my-2 h-px bg-border/50" />
+              <Link
+                href="/learn"
+                onClick={() => setMobileOpen(false)}
+                className="flex items-center gap-2 rounded-md px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+              >
+                <BookOpen className="h-4 w-4" />
+                Glossary
+              </Link>
+              <Link
+                href="/how-it-works"
+                onClick={() => setMobileOpen(false)}
+                className="flex items-center gap-2 rounded-md px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+              >
+                <Info className="h-4 w-4" />
+                How it Works
+              </Link>
+              <div className="my-2 h-px bg-border/50" />
               <Link
                 href="/login"
-                onClick={() => setOpen(false)}
+                onClick={() => setMobileOpen(false)}
                 className="flex items-center gap-2 rounded-md px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
               >
                 <LogIn className="h-4 w-4" />
@@ -228,7 +358,7 @@ export function Nav() {
               </Link>
               <Link
                 href="/signup"
-                onClick={() => setOpen(false)}
+                onClick={() => setMobileOpen(false)}
                 className="flex items-center gap-2 rounded-md px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
               >
                 <User className="h-4 w-4" />
