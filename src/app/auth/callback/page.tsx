@@ -12,34 +12,16 @@ function CallbackHandler() {
   useEffect(() => {
     const supabase = createSupabaseBrowser();
     const next = searchParams.get("next") ?? "/matches";
-
-    // OAuth providers (Google, Discord) — PKCE code flow
     const code = searchParams.get("code");
+
     if (code) {
       supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
         router.replace(error ? "/login" : next);
       });
-      return;
+    } else {
+      // No code — shouldn't happen, send to login
+      router.replace("/login");
     }
-
-    // Implicit flow — access_token arrives in URL hash fragment.
-    // Supabase client auto-processes the hash and fires onAuthStateChange.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session) {
-        subscription.unsubscribe();
-        router.replace(next);
-      }
-    });
-
-    // Also check immediately in case session was already set
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        subscription.unsubscribe();
-        router.replace(next);
-      }
-    });
-
-    return () => subscription.unsubscribe();
   }, [router, searchParams]);
 
   return (

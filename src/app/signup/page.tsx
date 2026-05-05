@@ -26,12 +26,12 @@ const FREE_FEATURES = [
 ];
 
 function SignUpForm() {
-  const [email, setEmail] = useState("");
+  const searchParams = useSearchParams();
+  const plan = searchParams.get("plan") as "pro" | "elite" | null;
+  const [email, setEmail] = useState(searchParams.get("email") ?? "");
   const [step, setStep] = useState<"email" | "sent">("email");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const searchParams = useSearchParams();
-  const plan = searchParams.get("plan") as "pro" | "elite" | null;
 
   const handleSendLink = async () => {
     if (!email) return;

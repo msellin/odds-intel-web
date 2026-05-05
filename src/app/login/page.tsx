@@ -39,7 +39,7 @@ function LoginForm() {
     setLoading(false);
     if (error) {
       if (error.message.toLowerCase().includes("signups not allowed")) {
-        setError("No account found with that email. Sign up free below.");
+        router.push(plan ? `/signup?plan=${plan}&email=${encodeURIComponent(email)}` : `/signup?email=${encodeURIComponent(email)}`);
       } else {
         setError(error.message);
       }
