@@ -425,11 +425,14 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
   const supabase = createSupabasePublic();
 
   const now = new Date();
-  // Today window: all matches from 00:00 UTC today onwards.
+  // Today window: all matches from 00:00 UTC today to 03:00 UTC tomorrow.
+  // The +3h overhang captures games played in the evening (e.g. South America at
+  // 22:00-01:00 UTC) that still belong to "today" in European timezones (UTC+1..+3).
   const todayStart = new Date(now);
   todayStart.setUTCHours(0, 0, 0, 0);
-  const todayEnd = new Date(now);
-  todayEnd.setUTCHours(23, 59, 59, 999);
+  const todayEnd = new Date(todayStart);
+  todayEnd.setUTCDate(todayEnd.getUTCDate() + 1);
+  todayEnd.setUTCHours(3, 0, 0, 0);
   // Yesterday window: matches still live/scheduled from yesterday (not yet finished).
   // These are matches that kicked off late and haven't been settled yet.
   // Yesterday's finished matches are excluded — they'd just be stale clutter.

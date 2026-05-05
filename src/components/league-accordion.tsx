@@ -189,7 +189,7 @@ function MatchRow({
               FT
             </span>
           ) : isPastUnresolved ? (
-            <span className="inline-block rounded bg-amber-500/10 px-1.5 py-0.5 font-mono text-[10px] font-bold text-amber-500/60">
+            <span className="inline-block rounded bg-amber-500/10 px-1.5 py-0.5 font-mono text-[10px] font-bold text-amber-500/60" suppressHydrationWarning>
               {formatKickoff(match.kickoff)}
             </span>
           ) : (

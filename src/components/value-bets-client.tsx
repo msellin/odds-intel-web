@@ -28,6 +28,15 @@ interface ValueBetsClientProps {
 
 const ALL = "__all__";
 
+function formatKickoff(iso: string): string {
+  return new Date(iso).toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "short",
+    day: "numeric",
+  });
+}
+
 export function ValueBetsClient({ bets }: ValueBetsClientProps) {
   const [league, setLeague] = useState(ALL);
   const [market, setMarket] = useState(ALL);
@@ -138,8 +147,8 @@ export function ValueBetsClient({ bets }: ValueBetsClientProps) {
                     <TableCell className="text-xs text-muted-foreground">
                       {bet.league}
                     </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {bet.kickoff}
+                    <TableCell className="font-mono text-xs" suppressHydrationWarning>
+                      {formatKickoff(bet.kickoff)}
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="text-[10px]">
@@ -214,7 +223,7 @@ export function ValueBetsClient({ bets }: ValueBetsClientProps) {
                 </Link>
                 <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
                   <span>{bet.league}</span>
-                  <span className="font-mono">{bet.kickoff}</span>
+                  <span className="font-mono" suppressHydrationWarning>{formatKickoff(bet.kickoff)}</span>
                 </div>
               </div>
               <div className="text-right">

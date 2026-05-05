@@ -112,7 +112,7 @@ export function TodayPicksPreview({ picks, isPro = false, isElite = false }: Pro
             {picks.map((pick) => (
               <tr key={pick.matchId} className="hover:bg-muted/5">
                 {/* Kickoff */}
-                <td className="py-2.5 pl-4 pr-2 font-mono text-muted-foreground">
+                <td className="py-2.5 pl-4 pr-2 font-mono text-muted-foreground" suppressHydrationWarning>
                   {formatKickoff(pick.kickoff)}
                 </td>
 
