@@ -301,14 +301,12 @@ async function batchFetchSignalSummary(
   if (!matchIds.length) return {};
   const supabase = createSupabasePublic();
 
-  const [signalNamesResult, keySignalsResult, predsResult] = await Promise.all([
-    // All distinct signal names per match (for count)
-    supabase
-      .from("match_signals")
-      .select("match_id, signal_name")
-      .in("match_id", matchIds)
-      .gte("captured_at", todayStart.toISOString())
-      .limit(60000),
+  const [signalCountsResult, keySignalsResult, predsResult] = await Promise.all([
+    // Signal counts via RPC — replaces 60k-row fetch with a single aggregated DB call
+    supabase.rpc("get_signal_counts", {
+      p_match_ids: matchIds,
+      p_since: todayStart.toISOString(),
+    }),
     // Latest values of key signals (for pulse + teasers)
     supabase
       .from("match_signals")
@@ -326,11 +324,10 @@ async function batchFetchSignalSummary(
       .eq("market", "1x2_home"),
   ]);
 
-  // Count distinct signal names per match
-  const signalNamesSeen: Record<string, Set<string>> = {};
-  for (const s of (signalNamesResult.data || []) as { match_id: string; signal_name: string }[]) {
-    if (!signalNamesSeen[s.match_id]) signalNamesSeen[s.match_id] = new Set();
-    signalNamesSeen[s.match_id].add(s.signal_name);
+  // Signal counts from RPC (one row per match)
+  const signalCountMap: Record<string, number> = {};
+  for (const r of (signalCountsResult.data || []) as { match_id: string; signal_count: number }[]) {
+    signalCountMap[r.match_id] = Number(r.signal_count);
   }
 
   // Latest value per key signal per match (results already ordered desc by captured_at)
@@ -360,7 +357,7 @@ async function batchFetchSignalSummary(
 
   for (const matchId of matchIds) {
     const sigs = keySignals[matchId] || {};
-    const signalCount = signalNamesSeen[matchId]?.size ?? 0;
+    const signalCount = signalCountMap[matchId] ?? 0;
 
     // Grade: A = XGBoost ran, B = Poisson only, D = AF prediction only
     const sources = predSources[matchId] ?? new Set<string>();
@@ -421,21 +418,21 @@ async function batchFetchSignalSummary(
  *   CREATE POLICY "Public read" ON leagues FOR SELECT USING (true);
  *   CREATE POLICY "Public read" ON odds_snapshots FOR SELECT USING (true);
  */
-export async function getPublicMatches(): Promise<PublicMatch[]> {
+export async function getPublicMatches(dayOffset = 0): Promise<PublicMatch[]> {
   const supabase = createSupabasePublic();
 
   const now = new Date();
-  // Today window: all matches from 00:00 UTC today to 03:00 UTC tomorrow.
-  // The +3h overhang captures games played in the evening (e.g. South America at
-  // 22:00-01:00 UTC) that still belong to "today" in European timezones (UTC+1..+3).
+  // Base day: today (dayOffset=0) or tomorrow (dayOffset=1).
+  // todayStart = 00:00 UTC of the target day.
   const todayStart = new Date(now);
   todayStart.setUTCHours(0, 0, 0, 0);
+  todayStart.setUTCDate(todayStart.getUTCDate() + dayOffset);
+  // Window end: 03:00 UTC of the following day (+3h overhang for late South American games).
   const todayEnd = new Date(todayStart);
   todayEnd.setUTCDate(todayEnd.getUTCDate() + 1);
   todayEnd.setUTCHours(3, 0, 0, 0);
-  // Yesterday window: matches still live/scheduled from yesterday (not yet finished).
-  // These are matches that kicked off late and haven't been settled yet.
-  // Yesterday's finished matches are excluded — they'd just be stale clutter.
+  // For "today": also include yesterday's ongoing matches.
+  // For "tomorrow": no yesterday overhang needed (nothing is live yet).
   const yesterdayStart = new Date(todayStart);
   yesterdayStart.setUTCDate(yesterdayStart.getUTCDate() - 1);
 
@@ -457,15 +454,18 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
       .lte("date", todayEnd.toISOString())
       .order("date", { ascending: true })
       .limit(500),
-    supabase
-      .from("matches")
-      .select(selectFields)
-      .eq("league.show_on_frontend", true)
-      .gte("date", yesterdayStart.toISOString())
-      .lt("date", todayStart.toISOString())
-      .neq("status", "finished")
-      .order("date", { ascending: true })
-      .limit(50),
+    // Yesterday overhang: only for today tab (dayOffset=0). Tomorrow has no live matches yet.
+    dayOffset === 0
+      ? supabase
+          .from("matches")
+          .select(selectFields)
+          .eq("league.show_on_frontend", true)
+          .gte("date", yesterdayStart.toISOString())
+          .lt("date", todayStart.toISOString())
+          .neq("status", "finished")
+          .order("date", { ascending: true })
+          .limit(50)
+      : Promise.resolve({ data: [] as MatchRow[] | null, error: null }),
   ]);
 
   const matches = [
@@ -490,28 +490,36 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
     prevHome: number | null; prevDraw: number | null; prevAway: number | null;
   }> = {};
   const batchSize = 80;
+  const oddsBatches: string[][] = [];
   for (let i = 0; i < matchIds.length; i += batchSize) {
-    const batch = matchIds.slice(i, i + batchSize);
-    const { data: oddsRows } = await supabase.rpc("get_best_match_odds", {
-      p_match_ids: batch,
-      p_since: yesterdayStart.toISOString(),
-    });
-    for (const o of (oddsRows || []) as {
-      match_id: string; selection: string; best_odds: number;
-      bookmaker_count: number; prev_best_odds: number | null;
-    }[]) {
-      if (!oddsByMatch[o.match_id]) {
-        oddsByMatch[o.match_id] = { home: 0, draw: 0, away: 0, bookmakerCount: 0, prevHome: null, prevDraw: null, prevAway: null };
-      }
-      const num = Number(o.best_odds);
-      const prev = o.prev_best_odds != null ? Number(o.prev_best_odds) : null;
-      const bk = o.bookmaker_count ?? 0;
-      if (o.selection === "home") { oddsByMatch[o.match_id].home = num; oddsByMatch[o.match_id].prevHome = prev; }
-      if (o.selection === "draw") { oddsByMatch[o.match_id].draw = num; oddsByMatch[o.match_id].prevDraw = prev; }
-      if (o.selection === "away") { oddsByMatch[o.match_id].away = num; oddsByMatch[o.match_id].prevAway = prev; }
-      // Take max bookmaker_count across selections (should be same, but take max to be safe)
-      if (bk > oddsByMatch[o.match_id].bookmakerCount) oddsByMatch[o.match_id].bookmakerCount = bk;
+    oddsBatches.push(matchIds.slice(i, i + batchSize));
+  }
+  // Fire all batches in parallel — previously sequential, each waiting on the last
+  const allOddsRows = (
+    await Promise.all(
+      oddsBatches.map((batch) =>
+        supabase.rpc("get_best_match_odds", {
+          p_match_ids: batch,
+          p_since: yesterdayStart.toISOString(),
+        })
+      )
+    )
+  ).flatMap(({ data }) => (data || []) as {
+    match_id: string; selection: string; best_odds: number;
+    bookmaker_count: number; prev_best_odds: number | null;
+  }[]);
+
+  for (const o of allOddsRows) {
+    if (!oddsByMatch[o.match_id]) {
+      oddsByMatch[o.match_id] = { home: 0, draw: 0, away: 0, bookmakerCount: 0, prevHome: null, prevDraw: null, prevAway: null };
     }
+    const num = Number(o.best_odds);
+    const prev = o.prev_best_odds != null ? Number(o.prev_best_odds) : null;
+    const bk = o.bookmaker_count ?? 0;
+    if (o.selection === "home") { oddsByMatch[o.match_id].home = num; oddsByMatch[o.match_id].prevHome = prev; }
+    if (o.selection === "draw") { oddsByMatch[o.match_id].draw = num; oddsByMatch[o.match_id].prevDraw = prev; }
+    if (o.selection === "away") { oddsByMatch[o.match_id].away = num; oddsByMatch[o.match_id].prevAway = prev; }
+    if (bk > oddsByMatch[o.match_id].bookmakerCount) oddsByMatch[o.match_id].bookmakerCount = bk;
   }
 
   const matchIdsWithOdds = new Set(Object.keys(oddsByMatch));

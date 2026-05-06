@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { CalendarDays, SearchX, Info } from "lucide-react";
+import Link from "next/link";
 import { getPublicMatches, getLiveSnapshots, getFreeDailyPick, getWhatChangedToday } from "@/lib/engine-data";
 import { MatchesClient } from "@/components/matches-client";
 import { DailyValueTeaser } from "@/components/daily-value-teaser";
@@ -10,8 +11,10 @@ import { createSupabaseServer } from "@/lib/supabase-server";
 import { getUserTier } from "@/lib/get-user-tier";
 import type { PublicMatch, LiveSnapshot } from "@/lib/engine-data";
 
-function formatDate(): string {
-  return new Date().toLocaleDateString("en-US", {
+function formatDate(dayOffset: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + dayOffset);
+  return d.toLocaleDateString("en-US", {
     weekday: "long",
     year: "numeric",
     month: "long",
@@ -19,10 +22,17 @@ function formatDate(): string {
   });
 }
 
-export default async function MatchesPage() {
+export default async function MatchesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
+  const { tab } = await searchParams;
+  const dayOffset = tab === "tomorrow" ? 1 : 0;
+
   // Run all fetches in parallel
   const [allMatches, authResult, { pick: freePick, totalCount: freeTotalCount }, changedItems] = await Promise.all([
-    getPublicMatches(),
+    getPublicMatches(dayOffset),
     (async () => {
       const supabase = await createSupabaseServer();
       const {
@@ -101,32 +111,56 @@ export default async function MatchesPage() {
       {/* Page header */}
       <div>
         <h1 className="text-3xl font-black tracking-tight text-foreground">
-          Today&apos;s Matches
+          {dayOffset === 0 ? "Today\u2019s Matches" : "Tomorrow\u2019s Matches"}
         </h1>
         <div className="mt-1 flex flex-wrap items-center gap-3">
           <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
             <CalendarDays className="size-3.5" />
-            {formatDate()}
+            {formatDate(dayOffset)}
           </span>
           <span className="text-muted-foreground/40">·</span>
           <span className="text-sm text-muted-foreground">
             {allMatches.length} fixtures
           </span>
-          {/* Tooltip explaining data window */}
-          <span className="group relative flex items-center gap-1 cursor-default">
-            <Info className="size-3.5 text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors" />
-            <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-60 -translate-x-1/2 rounded-lg border border-border/60 bg-popover p-2.5 text-xs text-muted-foreground opacity-0 shadow-xl transition-opacity group-hover:opacity-100">
-              Includes today&apos;s fixtures plus yesterday&apos;s finished matches. Use the <strong className="text-foreground/80">Finished</strong> tab to filter.
+          {dayOffset === 0 && (
+            <span className="group relative flex items-center gap-1 cursor-default">
+              <Info className="size-3.5 text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors" />
+              <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-60 -translate-x-1/2 rounded-lg border border-border/60 bg-popover p-2.5 text-xs text-muted-foreground opacity-0 shadow-xl transition-opacity group-hover:opacity-100">
+                Includes today&apos;s fixtures plus yesterday&apos;s ongoing matches. Use the <strong className="text-foreground/80">Finished</strong> tab to filter.
+              </span>
             </span>
-          </span>
+          )}
+        </div>
+        {/* Today / Tomorrow tab toggle */}
+        <div className="mt-3 flex gap-1">
+          <Link
+            href="/matches"
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+              dayOffset === 0
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+            }`}
+          >
+            Today
+          </Link>
+          <Link
+            href="/matches?tab=tomorrow"
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+              dayOffset === 1
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+            }`}
+          >
+            Tomorrow
+          </Link>
         </div>
       </div>
 
       {/* Sign-up banner */}
       {!isAuthenticated && <SignupBanner />}
 
-      {/* ENG-11: What Changed Today */}
-      {changedItems.length > 0 && (
+      {/* ENG-11: What Changed Today — today tab only */}
+      {dayOffset === 0 && changedItems.length > 0 && (
         <WhatChangedToday items={changedItems} isPro={isPro} />
       )}
 
