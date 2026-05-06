@@ -583,25 +583,38 @@ export async function getPublicMatches(): Promise<PublicMatch[]> {
 
   // Deduplicate matches from different sources (e.g. API-Football vs Kambi)
   // that create separate team/match records for the same real-world fixture.
-  // Key by normalized team names + date; keep the record with better data.
+  // Two keys cover two failure modes:
+  //   nameKey — different spellings of the same team ("Bayern Munich" vs "Bayern München")
+  //   timeKey — abbreviations that don't normalize the same ("PSG" vs "Paris Saint Germain"):
+  //             same league + same kickoff minute + same home-team prefix = same fixture.
   const normalize = (s: string) =>
     s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/gi, "").toLowerCase();
-  const seen = new Map<string, number>();
+  const seenByName = new Map<string, number>();
+  const seenByTime = new Map<string, number>();
   const deduped: PublicMatch[] = [];
 
   for (const match of allResults) {
-    const key = `${normalize(match.homeTeam)}|${normalize(match.awayTeam)}|${match.kickoff.slice(0, 10)}`;
-    const existing = seen.get(key);
-    if (existing == null) {
-      seen.set(key, deduped.length);
+    const nameKey = `${normalize(match.homeTeam)}|${normalize(match.awayTeam)}|${match.kickoff.slice(0, 10)}`;
+    // Kickoff slice(0,16) = "YYYY-MM-DDTHH:MM" — minute-level precision is enough.
+    // Home prefix (4 chars) disambiguates two different matches in the same league at the same time.
+    const timeKey = `${match.league}|${match.kickoff.slice(0, 16)}|${normalize(match.homeTeam).slice(0, 4)}`;
+    const existingIdx = seenByName.get(nameKey) ?? seenByTime.get(timeKey);
+
+    if (existingIdx == null) {
+      const idx = deduped.length;
+      seenByName.set(nameKey, idx);
+      seenByTime.set(timeKey, idx);
       deduped.push(match);
     } else {
       // Keep whichever has better data: live/finished > scheduled, hasOdds > no odds
-      const prev = deduped[existing];
+      const prev = deduped[existingIdx];
       const statusRank = (s: string) => s === "live" ? 2 : s === "finished" ? 1 : 0;
       const score = (m: PublicMatch) => statusRank(m.status) * 10 + (m.hasOdds ? 5 : 0) + m.signalCount;
       if (score(match) > score(prev)) {
-        deduped[existing] = match;
+        deduped[existingIdx] = match;
+        // Register the winning record's keys so future duplicates are also caught
+        seenByName.set(nameKey, existingIdx);
+        seenByTime.set(timeKey, existingIdx);
       }
     }
   }
