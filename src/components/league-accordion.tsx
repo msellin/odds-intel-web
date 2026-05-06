@@ -28,14 +28,14 @@ function OddsCell({
 }) {
   if (!value) {
     return (
-      <div className="w-11 sm:w-14 text-center font-mono text-xs text-muted-foreground/40">
+      <div className="w-12 sm:w-14 text-center font-mono text-xs text-muted-foreground/40">
         —
       </div>
     );
   }
   return (
     <div
-      className={`relative w-11 sm:w-14 rounded py-0.5 sm:py-1 text-center font-mono text-xs ${
+      className={`relative w-12 sm:w-14 rounded py-0.5 sm:py-1 text-center font-mono text-xs ${
         isBest
           ? "bg-green-500/15 text-white font-semibold"
           : "text-muted-foreground"
@@ -52,7 +52,7 @@ function OddsCell({
   );
 }
 
-// Team logo — small circle with initials fallback (16px on mobile, 20px on desktop)
+// Team logo — 16px on mobile, 20px on desktop
 function TeamLogo({ logo, name }: { logo: string | null; name: string }) {
   const [failed, setFailed] = useState(false);
   const initial = name.charAt(0).toUpperCase();
@@ -130,14 +130,121 @@ function MatchRow({
   const hasPrediction = match.predictedHome !== null && match.predictedAway !== null;
   const hasForm = match.formHome != null && match.formAway != null;
 
+  const hasScore = isLive || (isFinished && match.score_home != null);
+  const scoreHome = isLive ? liveSnapshot!.score_home : match.score_home;
+  const scoreAway = isLive ? liveSnapshot!.score_away : match.score_away;
+
   return (
     <Link
       href={`/matches/${match.id}`}
-      className={`group flex flex-col px-3 sm:px-4 transition-colors hover:bg-white/[0.03] ${(hasTeasers || hasForm) ? "py-2 sm:py-1.5" : "py-2 sm:py-0 sm:h-11 sm:justify-center"}`}
+      className="group flex flex-col transition-colors hover:bg-white/[0.03]"
     >
-      {/* Main row — single line on all sizes */}
-      <div className="flex items-center">
-        {/* Per-match star — margin-only width */}
+      {/* ── MOBILE: two-line stacked layout ── */}
+      <div className="flex sm:hidden items-stretch px-2 py-2">
+        {/* Left column: star + grade + time/status */}
+        <div className="flex flex-col items-center w-14 shrink-0 pt-0.5 gap-1">
+          <div className="flex items-center gap-0.5">
+            {favoriteMatchIds && onMatchFavoriteToggle && (
+              <MatchFavoriteButton
+                matchId={match.id}
+                favoriteMatchIds={favoriteMatchIds}
+                onToggle={onMatchFavoriteToggle}
+              />
+            )}
+            {match.dataGrade && (
+              <span
+                className={`inline-block rounded px-0.5 text-[8px] font-bold leading-4 ${GRADE_STYLES[match.dataGrade]}`}
+                title={`Data grade ${match.dataGrade}`}
+              >
+                {match.dataGrade}
+              </span>
+            )}
+            {match.pulse === "high-alert" && (
+              <span className="text-[9px] text-orange-400 leading-none">⚡</span>
+            )}
+          </div>
+          {isLive ? (
+            <div className="flex items-center gap-1">
+              <span className="size-1.5 animate-pulse rounded-full bg-green-400 shrink-0" />
+              <span className="font-mono text-[10px] font-bold text-green-400">
+                {liveSnapshot!.minute}&apos;
+              </span>
+            </div>
+          ) : isFinished ? (
+            <span className="font-mono text-[10px] font-bold text-muted-foreground/50">FT</span>
+          ) : isPastUnresolved ? (
+            <span className="font-mono text-[10px] font-bold text-amber-500/60" suppressHydrationWarning>
+              {formatKickoff(match.kickoff)}
+            </span>
+          ) : (
+            <span className="font-mono text-[11px] text-muted-foreground" suppressHydrationWarning>
+              {formatKickoff(match.kickoff)}
+            </span>
+          )}
+        </div>
+
+        {/* Center: stacked team names */}
+        <div className="flex flex-col justify-center gap-1 flex-1 min-w-0">
+          {/* Home team row */}
+          <div className="flex items-center gap-1.5">
+            <TeamLogo logo={match.logoHome} name={match.homeTeam} />
+            <span className="truncate text-[13px] font-medium text-foreground">{match.homeTeam}</span>
+            {hasScore && (
+              <span className="ml-auto font-mono text-[13px] font-bold tabular-nums text-foreground shrink-0">
+                {scoreHome}
+              </span>
+            )}
+          </div>
+          {/* Away team row */}
+          <div className="flex items-center gap-1.5">
+            <TeamLogo logo={match.logoAway} name={match.awayTeam} />
+            <span className="truncate text-[13px] font-medium text-foreground">{match.awayTeam}</span>
+            {hasScore && (
+              <span className="ml-auto font-mono text-[13px] font-bold tabular-nums text-foreground shrink-0">
+                {scoreAway}
+              </span>
+            )}
+          </div>
+          {/* Form strips below team names */}
+          {hasForm && (
+            <div className="flex items-center gap-4 mt-0.5">
+              <FormStrip form={match.formHome!} />
+              <FormStrip form={match.formAway!} />
+            </div>
+          )}
+        </div>
+
+        {/* Right: odds columns */}
+        <div className="flex items-center gap-0.5 ml-2 shrink-0">
+          {isPastUnresolved ? (
+            <span className="font-mono text-[9px] text-amber-500/50 w-[9.5rem] text-center">pending</span>
+          ) : hasOdds ? (
+            <>
+              <OddsCell value={match.bestHome} isBest={bestIsHome} move={isPro ? match.moveHome : null} />
+              <OddsCell value={match.bestDraw} isBest={bestIsDraw} move={isPro ? match.moveDraw : null} />
+              <OddsCell value={match.bestAway} isBest={bestIsAway} move={isPro ? match.moveAway : null} />
+            </>
+          ) : (
+            <div className="w-[9.5rem] text-center font-mono text-xs text-muted-foreground/25">
+              — — —
+            </div>
+          )}
+        </div>
+
+        <ChevronRight className="size-3.5 text-muted-foreground/20 self-center ml-0.5 shrink-0 transition-colors group-hover:text-green-500" />
+      </div>
+
+      {/* Mobile teasers */}
+      {hasTeasers && (
+        <div className="flex sm:hidden gap-3 px-2 pb-1.5 pl-16">
+          {match.teasers.map((teaser, i) => (
+            <span key={i} className="text-[10px] italic text-muted-foreground/50">{teaser}</span>
+          ))}
+        </div>
+      )}
+
+      {/* ── DESKTOP: single-line layout (unchanged from before) ── */}
+      <div className={`hidden sm:flex items-center px-4 transition-colors ${(hasTeasers || hasForm) ? "py-1.5" : "h-11"}`}>
         {favoriteMatchIds && onMatchFavoriteToggle && (
           <div className="w-5 shrink-0 flex items-center">
             <MatchFavoriteButton
@@ -148,80 +255,60 @@ function MatchRow({
           </div>
         )}
 
-        {/* Grade badge — compact, tucked into left margin */}
-        <div className="w-6 sm:w-8 shrink-0 flex items-center gap-0.5">
+        {/* Grade badge */}
+        <div className="w-8 shrink-0 flex items-center gap-0.5">
           {match.dataGrade ? (
             <span
-              className={`inline-block rounded px-0.5 sm:px-1 text-[8px] sm:text-[9px] font-bold leading-4 ${GRADE_STYLES[match.dataGrade]}`}
+              className={`inline-block rounded px-1 text-[9px] font-bold leading-4 ${GRADE_STYLES[match.dataGrade]}`}
               title={`Data grade ${match.dataGrade} — ${match.dataGrade === "A" ? "full data coverage" : match.dataGrade === "B" ? "good data coverage" : "limited data"}${match.signalCount ? ` · ${match.signalCount} signals` : ""}`}
             >
               {match.dataGrade}
             </span>
           ) : (
-            <span className="inline-block w-3 sm:w-4" />
+            <span className="inline-block w-4" />
           )}
           {match.pulse === "high-alert" && (
-            <span className="text-[9px] text-orange-400 leading-none" title="Sharp activity or market divergence">
-              ⚡
-            </span>
+            <span className="text-[9px] text-orange-400 leading-none" title="Sharp activity or market divergence">⚡</span>
           )}
         </div>
 
-        {/* Kickoff time / LIVE / FT — compact */}
-        <div className="w-12 sm:w-[4.5rem] shrink-0">
+        {/* Kickoff / status */}
+        <div className="w-[4.5rem] shrink-0">
           {isLive ? (
             <div className="flex items-center gap-1">
               <span className="size-1.5 animate-pulse rounded-full bg-green-400 shrink-0" />
-              <span className="font-mono text-[10px] font-bold text-green-400">
-                {liveSnapshot!.minute}&apos;
-              </span>
+              <span className="font-mono text-[10px] font-bold text-green-400">{liveSnapshot!.minute}&apos;</span>
             </div>
           ) : isFinished ? (
-            <span className="font-mono text-[10px] font-bold text-muted-foreground/50">
-              FT
-            </span>
+            <span className="font-mono text-[10px] font-bold text-muted-foreground/50">FT</span>
           ) : isPastUnresolved ? (
-            <span className="font-mono text-[10px] font-bold text-amber-500/60" suppressHydrationWarning>
-              {formatKickoff(match.kickoff)}
-            </span>
+            <span className="font-mono text-[10px] font-bold text-amber-500/60" suppressHydrationWarning>{formatKickoff(match.kickoff)}</span>
           ) : (
-            <span className="font-mono text-xs text-muted-foreground" suppressHydrationWarning>
-              {formatKickoff(match.kickoff)}
-            </span>
+            <span className="font-mono text-xs text-muted-foreground" suppressHydrationWarning>{formatKickoff(match.kickoff)}</span>
           )}
         </div>
 
-        {/* Teams — left-aligned block taking ~60% on mobile */}
-        <div className="flex flex-1 items-center justify-center gap-1.5 sm:gap-2 overflow-hidden text-sm min-w-0">
-          <div className="flex flex-1 items-center justify-end gap-1 sm:gap-1.5 min-w-0">
-            <span className="truncate font-medium text-foreground text-xs sm:text-sm">
-              {match.homeTeam}
-            </span>
+        {/* Teams inline */}
+        <div className="flex flex-1 items-center justify-center gap-2 overflow-hidden text-sm">
+          <div className="flex flex-1 items-center justify-end gap-1.5 min-w-0">
+            <span className="truncate font-medium text-foreground">{match.homeTeam}</span>
             <TeamLogo logo={match.logoHome} name={match.homeTeam} />
           </div>
-          {isLive ? (
-            <span className="w-9 sm:w-10 shrink-0 text-center font-mono text-xs sm:text-sm font-bold tabular-nums text-foreground">
-              {liveSnapshot!.score_home}&thinsp;–&thinsp;{liveSnapshot!.score_away}
-            </span>
-          ) : isFinished && match.score_home != null ? (
-            <span className="w-9 sm:w-10 shrink-0 text-center font-mono text-xs sm:text-sm font-bold tabular-nums text-foreground">
-              {match.score_home}&thinsp;–&thinsp;{match.score_away}
+          {hasScore ? (
+            <span className="w-10 shrink-0 text-center font-mono text-sm font-bold tabular-nums text-foreground">
+              {scoreHome}&thinsp;–&thinsp;{scoreAway}
             </span>
           ) : (
-            <span className="w-9 sm:w-10 shrink-0 text-center text-[9px] font-bold tracking-widest text-muted-foreground/30">
-              VS
-            </span>
+            <span className="w-10 shrink-0 text-center text-[9px] font-bold tracking-widest text-muted-foreground/30">VS</span>
           )}
-          <div className="flex flex-1 items-center gap-1 sm:gap-1.5 min-w-0">
+          <div className="flex flex-1 items-center gap-1.5 min-w-0">
             <TeamLogo logo={match.logoAway} name={match.awayTeam} />
-            <span className="truncate font-medium text-foreground text-xs sm:text-sm">
-              {match.awayTeam}
-            </span>
+            <span className="truncate font-medium text-foreground">{match.awayTeam}</span>
           </div>
         </div>
 
-        {/* AI predicted score — desktop only */}
-        <div className="hidden sm:block w-14 shrink-0 text-center">
+        {/* AI predicted score */}
+        <div className="w-14 shrink-0 text-center">
           {hasPrediction ? (
             <span className="font-mono text-xs font-bold tabular-nums text-violet-400/80" title="AI predicted score">
               {match.predictedHome}–{match.predictedAway}
@@ -231,51 +318,43 @@ function MatchRow({
           )}
         </div>
 
-        {/* Odds — visible on ALL sizes, right-aligned */}
-        <div className="flex ml-1 sm:ml-2 shrink-0 items-center gap-0.5 sm:gap-1">
+        {/* Odds */}
+        <div className="ml-2 shrink-0 flex items-center gap-1">
           {isPastUnresolved ? (
-            <div className="w-[8.5rem] sm:w-44 text-center font-mono text-[9px] sm:text-[10px] text-amber-500/50">
-              pending
-            </div>
+            <div className="w-44 text-center font-mono text-[10px] text-amber-500/50">result pending</div>
           ) : hasOdds ? (
             <>
               <OddsCell value={match.bestHome} isBest={bestIsHome} move={isPro ? match.moveHome : null} />
               <OddsCell value={match.bestDraw} isBest={bestIsDraw} move={isPro ? match.moveDraw : null} />
               <OddsCell value={match.bestAway} isBest={bestIsAway} move={isPro ? match.moveAway : null} />
+              {match.bookmakerCount > 1 && (
+                <span className="ml-1 text-[9px] font-bold text-muted-foreground/30 tabular-nums" title={`${match.bookmakerCount} bookmakers`}>
+                  {match.bookmakerCount}
+                </span>
+              )}
             </>
           ) : (
-            <div className="w-[8.5rem] sm:w-44 text-center font-mono text-xs text-muted-foreground/30">
-              — — —
-            </div>
+            <div className="w-44 text-center font-mono text-sm text-muted-foreground/30">— — —</div>
           )}
         </div>
 
-        {/* Desktop bookmaker count */}
-        {hasOdds && match.bookmakerCount > 1 && (
-          <span className="hidden sm:inline ml-1 text-[9px] font-bold text-muted-foreground/30 tabular-nums" title={`${match.bookmakerCount} bookmakers`}>
-            {match.bookmakerCount}
-          </span>
-        )}
-
-        <div className="ml-0.5 sm:ml-1 shrink-0">
-          <ChevronRight className="size-3.5 sm:size-4 text-muted-foreground/20 transition-colors group-hover:text-green-500" />
+        <div className="ml-1 shrink-0">
+          <ChevronRight className="size-4 text-muted-foreground/20 transition-colors group-hover:text-green-500" />
         </div>
       </div>
 
-      {/* SUX-3: Free-tier signal teasers */}
+      {/* Desktop teasers */}
       {hasTeasers && (
-        <div className="flex gap-3 pl-6 sm:pl-8 mt-0.5">
+        <div className="hidden sm:flex gap-3 pl-8 pb-1">
           {match.teasers.map((teaser, i) => (
-            <span key={i} className="text-[10px] italic text-muted-foreground/50">
-              {teaser}
-            </span>
+            <span key={i} className="text-[10px] italic text-muted-foreground/50">{teaser}</span>
           ))}
         </div>
       )}
 
-      {/* Form strips */}
+      {/* Desktop form strips */}
       {hasForm && (
-        <div className="flex items-center gap-2 pl-6 sm:pl-8 mt-0.5">
+        <div className="hidden sm:flex items-center gap-2 pl-8 pb-1">
           <div className="flex flex-1 items-center justify-end gap-1.5">
             <span className="text-[9px] text-muted-foreground/40 uppercase tracking-wide">form</span>
             <FormStrip form={match.formHome!} />
@@ -316,7 +395,7 @@ export function LeagueAccordion({
 
   return (
     <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-card/40">
-      {/* League header — compact, left-aligned name, right-aligned meta */}
+      {/* League header */}
       <div
         role="button"
         tabIndex={0}
@@ -362,9 +441,7 @@ export function LeagueAccordion({
             <div className="flex-1" />
             <div className="w-14 shrink-0 text-center">
               {hasPredictions && (
-                <span className="text-[10px] font-bold uppercase tracking-widest text-violet-400/40">
-                  AI
-                </span>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-violet-400/40">AI</span>
               )}
             </div>
             <div className="ml-2 shrink-0 flex items-center gap-1">
