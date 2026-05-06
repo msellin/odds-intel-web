@@ -136,8 +136,15 @@ function MatchRow({
     >
       {/* ── MOBILE: two-line stacked layout ── */}
       <div className="flex sm:hidden items-stretch pl-1 pr-1 py-2">
-        {/* Left column: ONLY time/status — clean like Flashscore */}
-        <div className="flex items-center justify-center w-10 shrink-0">
+        {/* Left column: star + time/status */}
+        <div className="flex flex-col items-center justify-center w-10 shrink-0 gap-1">
+          {favoriteMatchIds && onMatchFavoriteToggle && (
+            <MatchFavoriteButton
+              matchId={match.id}
+              favoriteMatchIds={favoriteMatchIds}
+              onToggle={onMatchFavoriteToggle}
+            />
+          )}
           {isLive ? (
             <div className="flex flex-col items-center gap-0.5">
               <span className="size-1.5 animate-pulse rounded-full bg-green-400" />
