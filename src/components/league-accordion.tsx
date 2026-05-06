@@ -382,8 +382,6 @@ export function LeagueAccordion({
   onMatchFavoriteToggle,
 }: LeagueAccordionProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
-  const hasOdds = matches.some((m) => m.hasOdds);
-  const oddsCount = matches.filter((m) => m.hasOdds).length;
   const hasPredictions = matches.some((m) => m.predictedHome !== null);
 
   return (
@@ -408,11 +406,6 @@ export function LeagueAccordion({
           <span className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[9px] sm:text-[10px] font-medium text-muted-foreground tabular-nums">
             {matches.length}
           </span>
-          {hasOdds && (
-            <span className="text-xs sm:text-sm" title={`Odds available — ${oddsCount} match${oddsCount === 1 ? "" : "es"} with bookmaker data`}>
-              🔥
-            </span>
-          )}
           {expanded ? (
             <ChevronDown className="size-3.5 sm:size-4 text-muted-foreground" />
           ) : (
