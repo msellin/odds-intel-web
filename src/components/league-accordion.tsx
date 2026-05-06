@@ -216,22 +216,14 @@ function MatchRow({
 
         {/* Right: odds columns */}
         <div className="flex items-center gap-0.5 ml-2 shrink-0">
-          {isPastUnresolved ? (
-            <span className="font-mono text-[9px] text-amber-500/50 w-[9.5rem] text-center">pending</span>
-          ) : hasOdds ? (
+          {hasOdds ? (
             <>
               <OddsCell value={match.bestHome} isBest={bestIsHome} move={isPro ? match.moveHome : null} />
               <OddsCell value={match.bestDraw} isBest={bestIsDraw} move={isPro ? match.moveDraw : null} />
               <OddsCell value={match.bestAway} isBest={bestIsAway} move={isPro ? match.moveAway : null} />
             </>
-          ) : (
-            <div className="w-[9.5rem] text-center font-mono text-xs text-muted-foreground/25">
-              — — —
-            </div>
-          )}
+          ) : null}
         </div>
-
-        <ChevronRight className="size-3.5 text-muted-foreground/20 self-center ml-0.5 shrink-0 transition-colors group-hover:text-green-500" />
       </div>
 
       {/* Mobile teasers */}
@@ -318,9 +310,7 @@ function MatchRow({
 
         {/* Odds */}
         <div className="ml-2 shrink-0 flex items-center gap-1">
-          {isPastUnresolved ? (
-            <div className="w-44 text-center font-mono text-[10px] text-amber-500/50">result pending</div>
-          ) : hasOdds ? (
+          {hasOdds ? (
             <>
               <OddsCell value={match.bestHome} isBest={bestIsHome} move={isPro ? match.moveHome : null} />
               <OddsCell value={match.bestDraw} isBest={bestIsDraw} move={isPro ? match.moveDraw : null} />
@@ -329,10 +319,6 @@ function MatchRow({
           ) : (
             <div className="w-44 text-center font-mono text-sm text-muted-foreground/30">— — —</div>
           )}
-        </div>
-
-        <div className="ml-1 shrink-0">
-          <ChevronRight className="size-4 text-muted-foreground/20 transition-colors group-hover:text-green-500" />
         </div>
       </div>
 
