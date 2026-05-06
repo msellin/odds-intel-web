@@ -19,11 +19,9 @@ function formatKickoff(iso: string): string {
 
 function OddsCell({
   value,
-  isBest,
   move,
 }: {
   value: number;
-  isBest: boolean;
   move?: "up" | "down" | null;
 }) {
   if (!value) {
@@ -34,13 +32,7 @@ function OddsCell({
     );
   }
   return (
-    <div
-      className={`relative w-12 sm:w-14 rounded py-0.5 sm:py-1 text-center font-mono text-xs ${
-        isBest
-          ? "bg-green-500/15 text-white font-semibold"
-          : "text-muted-foreground"
-      }`}
-    >
+    <div className="relative w-12 sm:w-14 rounded py-0.5 sm:py-1 text-center font-mono text-xs text-muted-foreground">
       {value.toFixed(2)}
       {move === "up" && (
         <TrendingUp className="absolute -top-1 -right-1 size-2.5 text-green-400" />
@@ -119,10 +111,6 @@ function MatchRow({
 }) {
   const hasOdds = match.hasOdds && (match.bestHome > 0 || match.bestDraw > 0 || match.bestAway > 0);
 
-  const bestIsHome = hasOdds && match.bestHome >= match.bestDraw && match.bestHome >= match.bestAway;
-  const bestIsDraw = hasOdds && match.bestDraw > match.bestHome && match.bestDraw >= match.bestAway;
-  const bestIsAway = hasOdds && !bestIsHome && !bestIsDraw;
-
   const isLive = match.status === "live" && !!liveSnapshot;
   const isFinished = match.status === "finished";
   const isPastUnresolved = !isLive && !isFinished && new Date(match.kickoff) < new Date();
@@ -134,15 +122,22 @@ function MatchRow({
   const scoreHome = isLive ? liveSnapshot!.score_home : match.score_home;
   const scoreAway = isLive ? liveSnapshot!.score_away : match.score_away;
 
+  // Determine which team is ahead (for bold styling)
+  const homeAhead = hasScore && scoreHome != null && scoreAway != null && scoreHome > scoreAway;
+  const awayAhead = hasScore && scoreHome != null && scoreAway != null && scoreAway > scoreHome;
+
+  // Live scores get red color like Flashscore
+  const scoreColor = isLive ? "text-red-500" : "text-foreground";
+
   return (
     <Link
       href={`/matches/${match.id}`}
       className="group flex flex-col transition-colors hover:bg-white/[0.03]"
     >
       {/* ── MOBILE: two-line stacked layout ── */}
-      <div className="flex sm:hidden items-stretch px-2 py-2">
+      <div className="flex sm:hidden items-stretch px-1 py-2">
         {/* Left column: star + grade + time/status */}
-        <div className="flex flex-col items-center w-14 shrink-0 pt-0.5 gap-1">
+        <div className="flex flex-col items-center w-12 shrink-0 pt-0.5 gap-1">
           <div className="flex items-center gap-0.5">
             {favoriteMatchIds && onMatchFavoriteToggle && (
               <MatchFavoriteButton
@@ -188,9 +183,9 @@ function MatchRow({
           {/* Home team row */}
           <div className="flex items-center gap-1.5">
             <TeamLogo logo={match.logoHome} name={match.homeTeam} />
-            <span className="truncate text-[13px] font-medium text-foreground">{match.homeTeam}</span>
+            <span className={`truncate text-[13px] leading-[19px] ${homeAhead ? "font-bold" : "font-medium"} text-foreground`}>{match.homeTeam}</span>
             {hasScore && (
-              <span className="ml-auto font-mono text-[13px] font-bold tabular-nums text-foreground shrink-0">
+              <span className={`ml-auto font-mono text-[13px] font-bold tabular-nums shrink-0 ${scoreColor}`}>
                 {scoreHome}
               </span>
             )}
@@ -198,9 +193,9 @@ function MatchRow({
           {/* Away team row */}
           <div className="flex items-center gap-1.5">
             <TeamLogo logo={match.logoAway} name={match.awayTeam} />
-            <span className="truncate text-[13px] font-medium text-foreground">{match.awayTeam}</span>
+            <span className={`truncate text-[13px] leading-[19px] ${awayAhead ? "font-bold" : "font-medium"} text-foreground`}>{match.awayTeam}</span>
             {hasScore && (
-              <span className="ml-auto font-mono text-[13px] font-bold tabular-nums text-foreground shrink-0">
+              <span className={`ml-auto font-mono text-[13px] font-bold tabular-nums shrink-0 ${scoreColor}`}>
                 {scoreAway}
               </span>
             )}
@@ -218,9 +213,9 @@ function MatchRow({
         <div className="flex items-center gap-0.5 ml-2 shrink-0">
           {hasOdds ? (
             <>
-              <OddsCell value={match.bestHome} isBest={bestIsHome} move={isPro ? match.moveHome : null} />
-              <OddsCell value={match.bestDraw} isBest={bestIsDraw} move={isPro ? match.moveDraw : null} />
-              <OddsCell value={match.bestAway} isBest={bestIsAway} move={isPro ? match.moveAway : null} />
+              <OddsCell value={match.bestHome} move={isPro ? match.moveHome : null} />
+              <OddsCell value={match.bestDraw} move={isPro ? match.moveDraw : null} />
+              <OddsCell value={match.bestAway} move={isPro ? match.moveAway : null} />
             </>
           ) : null}
         </div>
@@ -228,14 +223,14 @@ function MatchRow({
 
       {/* Mobile teasers */}
       {hasTeasers && (
-        <div className="flex sm:hidden gap-3 px-2 pb-1.5 pl-16">
+        <div className="flex sm:hidden gap-3 px-1 pb-1.5 pl-13">
           {match.teasers.map((teaser, i) => (
             <span key={i} className="text-[10px] italic text-muted-foreground/50">{teaser}</span>
           ))}
         </div>
       )}
 
-      {/* ── DESKTOP: single-line layout (unchanged from before) ── */}
+      {/* ── DESKTOP: single-line layout ── */}
       <div className={`hidden sm:flex items-center px-4 transition-colors ${(hasTeasers || hasForm) ? "py-1.5" : "h-11"}`}>
         {favoriteMatchIds && onMatchFavoriteToggle && (
           <div className="w-5 shrink-0 flex items-center">
@@ -283,11 +278,11 @@ function MatchRow({
         {/* Teams inline */}
         <div className="flex flex-1 items-center justify-center gap-2 overflow-hidden text-sm">
           <div className="flex flex-1 items-center justify-end gap-1.5 min-w-0">
-            <span className="truncate font-medium text-foreground">{match.homeTeam}</span>
+            <span className={`truncate ${homeAhead ? "font-bold" : "font-medium"} text-foreground`}>{match.homeTeam}</span>
             <TeamLogo logo={match.logoHome} name={match.homeTeam} />
           </div>
           {hasScore ? (
-            <span className="w-10 shrink-0 text-center font-mono text-sm font-bold tabular-nums text-foreground">
+            <span className={`w-10 shrink-0 text-center font-mono text-sm font-bold tabular-nums ${scoreColor}`}>
               {scoreHome}&thinsp;–&thinsp;{scoreAway}
             </span>
           ) : (
@@ -295,7 +290,7 @@ function MatchRow({
           )}
           <div className="flex flex-1 items-center gap-1.5 min-w-0">
             <TeamLogo logo={match.logoAway} name={match.awayTeam} />
-            <span className="truncate font-medium text-foreground">{match.awayTeam}</span>
+            <span className={`truncate ${awayAhead ? "font-bold" : "font-medium"} text-foreground`}>{match.awayTeam}</span>
           </div>
         </div>
 
@@ -312,9 +307,9 @@ function MatchRow({
         <div className="ml-2 shrink-0 flex items-center gap-1">
           {hasOdds ? (
             <>
-              <OddsCell value={match.bestHome} isBest={bestIsHome} move={isPro ? match.moveHome : null} />
-              <OddsCell value={match.bestDraw} isBest={bestIsDraw} move={isPro ? match.moveDraw : null} />
-              <OddsCell value={match.bestAway} isBest={bestIsAway} move={isPro ? match.moveAway : null} />
+              <OddsCell value={match.bestHome} move={isPro ? match.moveHome : null} />
+              <OddsCell value={match.bestDraw} move={isPro ? match.moveDraw : null} />
+              <OddsCell value={match.bestAway} move={isPro ? match.moveAway : null} />
             </>
           ) : (
             <div className="w-44 text-center font-mono text-sm text-muted-foreground/30">— — —</div>
