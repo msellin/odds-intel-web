@@ -716,7 +716,7 @@ export async function getPublicMatchBookmakerCount(matchId: string): Promise<num
   return new Set(data.map((r: { bookmaker: string }) => r.bookmaker)).size;
 }
 
-export async function getTodayOdds(): Promise<LiveMatch[]> {
+async function getTodayOdds(): Promise<LiveMatch[]> {
   const supabase = await createSupabaseServer();
 
   const now = new Date();
@@ -1311,12 +1311,6 @@ function emptyAccuracy(): ModelAccuracyData {
       },
     },
   };
-}
-
-export async function getAvailableLeagues(): Promise<string[]> {
-  const matches = await getTodayOdds();
-  const leagues = [...new Set(matches.map((m) => m.league))];
-  return leagues.sort();
 }
 
 export async function getMatchStats(matchId: string): Promise<MatchStatsData | null> {
@@ -2100,7 +2094,7 @@ export interface DashboardCache {
   alignment_settled_count: number;
 }
 
-export async function getDashboardCache(): Promise<DashboardCache | null> {
+async function getDashboardCache(): Promise<DashboardCache | null> {
   const supabase = createSupabasePublic();
   const { data, error } = await supabase
     .from("dashboard_cache")

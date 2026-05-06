@@ -47,6 +47,3 @@ export function getCountryFlag(leaguePath: string): string {
   return countryFlags[country] ?? "\u26BD";
 }
 
-export function getCountryFromLeague(leaguePath: string): string {
-  return leaguePath.split(" / ")[0].trim();
-}

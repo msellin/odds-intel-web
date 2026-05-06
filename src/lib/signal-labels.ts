@@ -148,63 +148,6 @@ export function leagueAvgGoalsLabel(avg: number): SignalLabel {
   return { label: "Low scoring", icon: "−", severity: "low", description: "Tight league — goals at a premium" }
 }
 
-// ─── Consolidated entry point ─────────────────────────────────────────────────
-
-/**
- * Translate any signal name + value into a human-readable label.
- * Returns null for unknown signals so callers can skip gracefully.
- */
-export function signalLabel(name: string, value: number): SignalLabel | null {
-  switch (name) {
-    case "form_slope_home":
-    case "form_slope_away":
-      return formSlopeLabel(value)
-
-    case "odds_volatility":
-      return oddsVolatilityLabel(value)
-
-    case "overnight_line_move":
-      return overnightMoveLabel(value)
-
-    case "bookmaker_disagreement":
-      return bookmakerDisagreementLabel(value)
-
-    case "fixture_importance":
-    case "fixture_importance_home":
-    case "fixture_importance_away":
-      return fixtureImportanceLabel(value)
-
-    case "importance_diff":
-      return importanceDiffLabel(value)
-
-    case "news_impact_score":
-      return newsImpactLabel(value)
-
-    case "injury_count_home":
-    case "injury_count_away":
-      return injuryCountLabel(value)
-
-    case "referee_cards_avg":
-      return refereeCardsLabel(value)
-
-    case "h2h_win_pct":
-      return h2hEdgeLabel(value, 10) // can't know total here; callers should use h2hEdgeLabel directly
-
-    case "elo_home":
-    case "elo_away":
-      return eloStrengthLabel(value)
-
-    case "elo_diff":
-      return eloDiffLabel(value)
-
-    case "league_avg_goals":
-      return leagueAvgGoalsLabel(value)
-
-    default:
-      return null
-  }
-}
-
 /**
  * Human-readable signal group names for use in UI headers.
  */
@@ -217,19 +160,3 @@ export const SIGNAL_GROUP_LABELS: Record<string, string> = {
   live: "Live",
 }
 
-/**
- * The 9 pulse signals used for SUX-1/2/3 badges (matches PULSE_SIGNAL_NAMES in engine-data.ts).
- */
-export const PULSE_SIGNALS = [
-  "bookmaker_disagreement",
-  "importance_diff",
-  "overnight_line_move",
-  "odds_volatility",
-  "form_slope_home",
-  "form_slope_away",
-  "injury_count_home",
-  "injury_count_away",
-  "news_impact_score",
-] as const
-
-export type PulseSignalName = (typeof PULSE_SIGNALS)[number]
