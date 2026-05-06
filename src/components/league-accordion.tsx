@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { ChevronDown, ChevronRight, TrendingUp, TrendingDown, Info } from "lucide-react";
+import { ChevronDown, ChevronRight, TrendingUp, TrendingDown } from "lucide-react";
 import type { PublicMatch, LiveSnapshot } from "@/lib/engine-data";
 import { getCountryFlag } from "@/lib/country-flags";
 import { FavoriteButton } from "@/components/favorite-button";
@@ -313,9 +313,7 @@ function MatchRow({
             <span className="font-mono text-xs font-bold tabular-nums text-violet-400/80" title="AI predicted score">
               {match.predictedHome}–{match.predictedAway}
             </span>
-          ) : (
-            <span className="text-xs text-muted-foreground/20">—</span>
-          )}
+          ) : null}
         </div>
 
         {/* Odds */}
@@ -327,11 +325,6 @@ function MatchRow({
               <OddsCell value={match.bestHome} isBest={bestIsHome} move={isPro ? match.moveHome : null} />
               <OddsCell value={match.bestDraw} isBest={bestIsDraw} move={isPro ? match.moveDraw : null} />
               <OddsCell value={match.bestAway} isBest={bestIsAway} move={isPro ? match.moveAway : null} />
-              {match.bookmakerCount > 1 && (
-                <span className="ml-1 text-[9px] font-bold text-muted-foreground/30 tabular-nums" title={`${match.bookmakerCount} bookmakers`}>
-                  {match.bookmakerCount}
-                </span>
-              )}
             </>
           ) : (
             <div className="w-44 text-center font-mono text-sm text-muted-foreground/30">— — —</div>
@@ -448,17 +441,7 @@ export function LeagueAccordion({
               <span className="w-14 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">H</span>
               <span className="w-14 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">X</span>
               <span className="w-14 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">A</span>
-              <div className="group relative ml-1 w-4">
-                <Info className="size-3 cursor-help text-muted-foreground/30 transition-colors hover:text-muted-foreground/60" />
-                <div className="pointer-events-none absolute bottom-full right-0 z-50 mb-2 w-64 rounded-lg border border-border/60 bg-popover p-3 text-xs text-muted-foreground opacity-0 shadow-xl transition-opacity group-hover:opacity-100">
-                  <p className="mb-1.5 font-semibold text-foreground">Best available odds</p>
-                  <p className="mb-2"><strong className="text-foreground/80">H / X / A</strong> — Home win, Draw, Away win (decimal odds).</p>
-                  <p className="mb-1.5">These are the <strong className="text-foreground/80">highest odds available</strong> across all bookmakers we track. Green = best value option.</p>
-                  <p className="text-muted-foreground/70">Higher odds = better return per euro staked. 2.00 means you double your stake; 1.50 means 50% profit.</p>
-                </div>
-              </div>
             </div>
-            <div className="ml-1 w-4 shrink-0" />
           </div>
           {matches.map((match) => (
             <MatchRow
