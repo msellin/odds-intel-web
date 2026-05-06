@@ -30,7 +30,8 @@ export default async function MatchesPage({
   const { tab } = await searchParams;
   const dayOffset = tab === "tomorrow" ? 1 : 0;
 
-  // Run all fetches in parallel
+  // Run all fetches in parallel — daily_unlocks check runs inside the auth IIFE
+  // so it fires in parallel with getUserTier instead of sequentially after.
   const [allMatches, authResult, { pick: freePick, totalCount: freeTotalCount }, changedItems] = await Promise.all([
     getPublicMatches(dayOffset),
     (async () => {
@@ -38,29 +39,24 @@ export default async function MatchesPage({
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (!user) return { isAuthenticated: false, isPro: false, userId: null };
-      const { isPro } = await getUserTier(user.id, supabase);
-      return { isAuthenticated: true, isPro, userId: user.id };
+      if (!user) return { isAuthenticated: false, isPro: false, userId: null, alreadyUnlocked: false };
+      const today = new Date().toISOString().split("T")[0];
+      const [{ isPro }, unlockRes] = await Promise.all([
+        getUserTier(user.id, supabase),
+        supabase
+          .from("daily_unlocks")
+          .select("id")
+          .eq("user_id", user.id)
+          .eq("unlock_date", today)
+          .maybeSingle(),
+      ]);
+      return { isAuthenticated: true, isPro, userId: user.id, alreadyUnlocked: !!unlockRes.data };
     })(),
     getFreeDailyPick(),
     getWhatChangedToday(),
   ]);
 
-  const { isAuthenticated, isPro, userId } = authResult;
-
-  // Check unlock status server-side so DailyValueTeaser doesn't need a client query
-  let alreadyUnlocked = false;
-  if (userId) {
-    const supabase = await createSupabaseServer();
-    const today = new Date().toISOString().split("T")[0];
-    const { data } = await supabase
-      .from("daily_unlocks")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("unlock_date", today)
-      .maybeSingle();
-    alreadyUnlocked = !!data;
-  }
+  const { isAuthenticated, isPro, alreadyUnlocked } = authResult;
 
   // Group by league
   const grouped = new Map<string, PublicMatch[]>();

@@ -706,14 +706,10 @@ export async function getPublicMatchById(matchId: string): Promise<PublicMatch |
 
 export async function getPublicMatchBookmakerCount(matchId: string): Promise<number> {
   const supabase = createSupabasePublic();
-  const { data } = await supabase
-    .from("odds_snapshots")
-    .select("bookmaker")
-    .eq("match_id", matchId)
-    .in("market", ["1x2", "1X2"]);
-
-  if (!data) return 0;
-  return new Set(data.map((r: { bookmaker: string }) => r.bookmaker)).size;
+  const { data } = await supabase.rpc("get_bookmaker_count_for_match", {
+    p_match_id: matchId,
+  });
+  return Number(data ?? 0);
 }
 
 async function getTodayOdds(): Promise<LiveMatch[]> {
@@ -740,13 +736,11 @@ async function getTodayOdds(): Promise<LiveMatch[]> {
 
   if (error || !matches) return [];
 
-  // Fetch odds for all today's matches
+  // Fetch latest odds per (match, bookmaker, market, selection) — replaces
+  // SELECT * which returned all historical snapshots (~18k rows for 160 matches).
   const matchIds = matches.map((m: MatchRow) => m.id);
   const { data: oddsRows } = matchIds.length
-    ? await supabase
-        .from("odds_snapshots")
-        .select("*")
-        .in("match_id", matchIds)
+    ? await supabase.rpc("get_latest_match_odds", { p_match_ids: matchIds })
     : { data: [] };
 
   // Group odds by match
@@ -1653,33 +1647,29 @@ export async function getTeamSeasonStats(
 }
 
 export async function getOddsMovement(matchId: string): Promise<OddsMovementPoint[]> {
+  // DATE_TRUNC('hour') + MAX GROUP BY in DB — replaces fetching all snapshots
+  // and bucketing by hour in JS. Returns ~20-50 rows instead of 100-1000.
   const supabase = createSupabasePublic();
-  const { data, error } = await supabase
-    .from("odds_snapshots")
-    .select("timestamp, market, selection, odds")
-    .eq("match_id", matchId)
-    .in("market", ["1x2", "1X2", "over_under_25", "OU25"])
-    .order("timestamp", { ascending: true });
+  const { data, error } = await supabase.rpc("get_odds_movement_bucketed", {
+    p_match_id: matchId,
+  });
   if (error || !data) return [];
 
-  // Bucket by hour → best odds per bucket
-  type HourBucket = { home: number[]; draw: number[]; away: number[]; over25: number[]; under25: number[] };
-  const byHour: Record<string, HourBucket> = {};
-  for (const row of data as { timestamp: string; market: string; selection: string; odds: number }[]) {
-    const ts = new Date(row.timestamp);
-    ts.setMinutes(0, 0, 0);
-    const key = ts.toISOString();
-    if (!byHour[key]) byHour[key] = { home: [], draw: [], away: [], over25: [], under25: [] };
-    const num = Number(row.odds);
-    const mkt = row.market.toLowerCase();
-    if (mkt === "1x2") {
-      if (row.selection === "home") byHour[key].home.push(num);
-      if (row.selection === "draw") byHour[key].draw.push(num);
-      if (row.selection === "away") byHour[key].away.push(num);
-    }
-    if (mkt === "over_under_25" || mkt === "ou25") {
-      if (row.selection === "over") byHour[key].over25.push(num);
-      if (row.selection === "under") byHour[key].under25.push(num);
+  type BucketRow = { hour_bucket: string; market: string; selection: string; best_odds: number };
+
+  // Pivot the flat rows into the OddsMovementPoint shape
+  const byHour: Record<string, { home: number; draw: number; away: number; over25: number; under25: number }> = {};
+  for (const row of data as BucketRow[]) {
+    const key = row.hour_bucket;
+    if (!byHour[key]) byHour[key] = { home: 0, draw: 0, away: 0, over25: 0, under25: 0 };
+    const odds = Number(row.best_odds);
+    if (row.market === "1x2") {
+      if (row.selection === "home") byHour[key].home = odds;
+      if (row.selection === "draw") byHour[key].draw = odds;
+      if (row.selection === "away") byHour[key].away = odds;
+    } else if (row.market === "over_under_25") {
+      if (row.selection === "over") byHour[key].over25 = odds;
+      if (row.selection === "under") byHour[key].under25 = odds;
     }
   }
 
@@ -1687,11 +1677,11 @@ export async function getOddsMovement(matchId: string): Promise<OddsMovementPoin
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([ts, odds]) => ({
       timestamp: ts,
-      bestHome: odds.home.length ? Math.max(...odds.home) : 0,
-      bestDraw: odds.draw.length ? Math.max(...odds.draw) : 0,
-      bestAway: odds.away.length ? Math.max(...odds.away) : 0,
-      bestOver25: odds.over25.length ? Math.max(...odds.over25) : 0,
-      bestUnder25: odds.under25.length ? Math.max(...odds.under25) : 0,
+      bestHome: odds.home,
+      bestDraw: odds.draw,
+      bestAway: odds.away,
+      bestOver25: odds.over25,
+      bestUnder25: odds.under25,
     }))
     .filter((p) => p.bestHome > 0 || p.bestDraw > 0 || p.bestAway > 0 || p.bestOver25 > 0);
 }
@@ -1896,50 +1886,38 @@ export async function getTrackRecordStats(): Promise<TrackRecordStats> {
   const liveSettledCount = liveCountRes.count ?? 0;
 
   if (cache) {
-    const recentWindow = new Date();
-    recentWindow.setUTCDate(recentWindow.getUTCDate() - 7);
+    // Use COUNT(DISTINCT ...) RPCs — replaces fetching 500 + 2000 rows and
+    // counting in JS. Returns two integers.
     const supabase = createSupabasePublic();
-    const [bmResult, leagueResult] = await Promise.all([
-      supabase
-        .from("odds_snapshots")
-        .select("bookmaker")
-        .gte("timestamp", new Date(Date.now() - 86400000).toISOString())
-        .limit(500),
-      supabase
-        .from("matches")
-        .select("league_id")
-        .gte("date", recentWindow.toISOString())
-        .limit(2000),
-    ]);
-    const bookmakers = new Set((bmResult.data || []).map((r: { bookmaker: string }) => r.bookmaker));
-    const leagues = new Set((leagueResult.data || []).map((r: { league_id: string }) => r.league_id));
+    const { data: counts } = await supabase.rpc("get_coverage_counts", {
+      p_odds_since_hours: 24,
+      p_matches_since_days: 7,
+    });
+    const row = Array.isArray(counts) ? counts[0] : counts;
     return {
       avgClv: cache.avg_clv,
       posClvPct: cache.avg_clv != null && cache.avg_clv > 0 ? 100 : 0,
       totalValueBets: liveSettledCount,
       avgEdge: 0,
       settledBets: liveSettledCount,
-      leaguesCovered: leagues.size,
-      bookmakersCovered: bookmakers.size,
+      leaguesCovered: Number(row?.league_count ?? 0),
+      bookmakersCovered: Number(row?.bookmaker_count ?? 0),
     };
   }
 
   // Fallback: live queries (cache not yet populated)
   const supabase = createSupabasePublic();
-  const recentWindow = new Date();
-  recentWindow.setUTCDate(recentWindow.getUTCDate() - 1);
 
-  const [betsResult, bmResult] = await Promise.all([
+  const [betsResult, countsResult] = await Promise.all([
     supabase
       .from("simulated_bets")
       .select("clv, edge_percent, match:match_id(league:league_id(name))")
       .neq("result", "pending")
       .limit(1000),
-    supabase
-      .from("odds_snapshots")
-      .select("bookmaker")
-      .gte("timestamp", recentWindow.toISOString())
-      .limit(500),
+    supabase.rpc("get_coverage_counts", {
+      p_odds_since_hours: 24,
+      p_matches_since_days: 7,
+    }),
   ]);
 
   const settled = (betsResult.data || []) as Array<{
@@ -1960,19 +1938,12 @@ export async function getTrackRecordStats(): Promise<TrackRecordStats> {
     ? withEdge.reduce((sum, b) => sum + Number(b.edge_percent), 0) / withEdge.length
     : 0;
   const totalValueBets = withEdge.filter((b) => Number(b.edge_percent) > 0).length;
-  const leagues = new Set<string>();
-  for (const b of settled) {
-    const m = Array.isArray(b.match) ? b.match[0] : b.match;
-    const l = m?.league;
-    const league = Array.isArray(l) ? l[0] : l;
-    if (league?.name) leagues.add(league.name);
-  }
-  const bookmakers = new Set((bmResult.data || []).map((r: { bookmaker: string }) => r.bookmaker));
+  const countsRow = Array.isArray(countsResult.data) ? countsResult.data[0] : countsResult.data;
   return {
     avgClv, posClvPct, totalValueBets, avgEdge,
     settledBets: settled.length,
-    leaguesCovered: leagues.size,
-    bookmakersCovered: bookmakers.size,
+    leaguesCovered: Number(countsRow?.league_count ?? 0),
+    bookmakersCovered: Number(countsRow?.bookmaker_count ?? 0),
   };
 }
 
