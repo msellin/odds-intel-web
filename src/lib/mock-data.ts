@@ -992,7 +992,6 @@ export const trackRecordStats: TrackRecordStats = (() => {
   const totalPnl = bets.reduce((sum, b) => sum + b.pnl, 0);
   const avgClv = bets.reduce((sum, b) => sum + b.clv, 0) / bets.length;
 
-  let streak = 0;
   let maxWin = 0;
   let maxLoss = 0;
   let curWin = 0;

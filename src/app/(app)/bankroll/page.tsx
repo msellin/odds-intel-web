@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { getUserTier } from "@/lib/get-user-tier";
@@ -148,7 +149,7 @@ export default async function BankrollPage() {
           <p className="text-sm text-muted-foreground">No settled picks yet.</p>
           <p className="mt-1 text-xs text-muted-foreground/60">
             Stats and charts appear once picks are settled.{" "}
-            <a href="/matches" className="text-primary hover:underline">Browse today&apos;s matches →</a>
+            <Link href="/matches" className="text-primary hover:underline">Browse today&apos;s matches →</Link>
           </p>
         </div>
       )}

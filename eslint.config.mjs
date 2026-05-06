@@ -13,6 +13,14 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    rules: {
+      complexity: ["warn", 10],
+      // setState-in-effect flags common valid React patterns (guard clauses, form resets,
+      // derived state from props) — too strict for our use cases.
+      "react-hooks/set-state-in-effect": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

@@ -83,7 +83,7 @@ export async function GET(req: Request) {
   const matchId = matchRow?.id;
 
   // Fetch signals for this match
-  let signals: Record<string, number> = {};
+  const signals: Record<string, number> = {};
   if (matchId) {
     const { data: sigRows } = await supabaseAdmin
       .from("match_signals")

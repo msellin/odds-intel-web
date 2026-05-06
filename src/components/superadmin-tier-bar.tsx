@@ -3,6 +3,8 @@ import { cookies } from "next/headers";
 import { SuperadminTierBarClient } from "./superadmin-tier-bar-client";
 
 export async function SuperadminTierBar() {
+  let previewTier: "free" | "pro" | "elite" | undefined;
+
   try {
     const supabase = await createSupabaseServer();
     const {
@@ -19,14 +21,14 @@ export async function SuperadminTierBar() {
     if (!profile?.is_superadmin) return null;
 
     const cookieStore = await cookies();
-    const previewTier = cookieStore.get("preview_tier")?.value as
+    previewTier = cookieStore.get("preview_tier")?.value as
       | "free"
       | "pro"
       | "elite"
       | undefined;
-
-    return <SuperadminTierBarClient previewTier={previewTier ?? null} />;
   } catch {
     return null;
   }
+
+  return <SuperadminTierBarClient previewTier={previewTier ?? null} />;
 }
