@@ -135,33 +135,13 @@ function MatchRow({
       className="group flex flex-col transition-colors hover:bg-white/[0.03]"
     >
       {/* ── MOBILE: two-line stacked layout ── */}
-      <div className="flex sm:hidden items-stretch px-1 py-2">
-        {/* Left column: star + grade + time/status */}
-        <div className="flex flex-col items-center w-12 shrink-0 pt-0.5 gap-1">
-          <div className="flex items-center gap-0.5">
-            {favoriteMatchIds && onMatchFavoriteToggle && (
-              <MatchFavoriteButton
-                matchId={match.id}
-                favoriteMatchIds={favoriteMatchIds}
-                onToggle={onMatchFavoriteToggle}
-              />
-            )}
-            {match.dataGrade && (
-              <span
-                className={`inline-block rounded px-0.5 text-[8px] font-bold leading-4 ${GRADE_STYLES[match.dataGrade]}`}
-                title={`Data grade ${match.dataGrade}`}
-              >
-                {match.dataGrade}
-              </span>
-            )}
-            {match.pulse === "high-alert" && (
-              <span className="text-[9px] text-orange-400 leading-none">⚡</span>
-            )}
-          </div>
+      <div className="flex sm:hidden items-stretch pl-1 pr-1 py-2">
+        {/* Left column: ONLY time/status — clean like Flashscore */}
+        <div className="flex items-center justify-center w-10 shrink-0">
           {isLive ? (
-            <div className="flex items-center gap-1">
-              <span className="size-1.5 animate-pulse rounded-full bg-green-400 shrink-0" />
-              <span className="font-mono text-[10px] font-bold text-green-400">
+            <div className="flex flex-col items-center gap-0.5">
+              <span className="size-1.5 animate-pulse rounded-full bg-green-400" />
+              <span className="font-mono text-[10px] font-bold text-green-400 leading-none">
                 {liveSnapshot!.minute}&apos;
               </span>
             </div>
@@ -179,7 +159,7 @@ function MatchRow({
         </div>
 
         {/* Center: stacked team names */}
-        <div className="flex flex-col justify-center gap-1 flex-1 min-w-0">
+        <div className="flex flex-col justify-center gap-1 flex-1 min-w-0 ml-1">
           {/* Home team row */}
           <div className="flex items-center gap-1.5">
             <TeamLogo logo={match.logoHome} name={match.homeTeam} />
@@ -223,7 +203,7 @@ function MatchRow({
 
       {/* Mobile teasers */}
       {hasTeasers && (
-        <div className="flex sm:hidden gap-3 px-1 pb-1.5 pl-13">
+        <div className="flex sm:hidden gap-3 px-1 pb-1.5 pl-12">
           {match.teasers.map((teaser, i) => (
             <span key={i} className="text-[10px] italic text-muted-foreground/50">{teaser}</span>
           ))}

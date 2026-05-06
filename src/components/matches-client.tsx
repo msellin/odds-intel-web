@@ -176,7 +176,7 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro }: Props) 
   }, [sortedGroups, favoriteLeagues, favoriteMatchIds]);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-1 sm:space-y-3">
       {/* Top row: status tabs + league search */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         {/* ML-5: Status tabs — primary navigation */}
