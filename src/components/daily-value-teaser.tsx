@@ -121,7 +121,7 @@ export function DailyValueTeaser({
 
   // Free signed-in user — show with unlock mechanic
   return (
-    <div className="relative overflow-hidden rounded-xl border border-amber-500/20 bg-amber-500/[0.04] p-5">
+    <div className="relative overflow-hidden rounded-xl border border-amber-500/20 bg-amber-500/[0.04] p-5 ring-1 ring-amber-500/10">
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -176,13 +176,13 @@ export function DailyValueTeaser({
         ) : (
           <button
             onClick={handleUnlock}
-            className="w-full rounded-lg border border-dashed border-amber-500/30 bg-black/20 p-4 text-center transition-colors hover:border-amber-500/50 hover:bg-black/30"
+            className="w-full rounded-lg border border-dashed border-amber-500/30 bg-black/20 py-6 px-4 text-center transition-all hover:border-amber-500/50 hover:bg-black/30 hover:shadow-[0_0_20px_rgba(245,158,11,0.08)]"
           >
             <Lock className="mx-auto h-5 w-5 text-amber-400/60 mb-2" />
             <p className="text-sm font-medium text-foreground">
               Tap to reveal today&apos;s top value pick
             </p>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-xs text-muted-foreground mt-1.5">
               1 free pick per day — upgrade to Pro for all picks
             </p>
           </button>

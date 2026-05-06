@@ -28,14 +28,14 @@ function OddsCell({
 }) {
   if (!value) {
     return (
-      <div className="w-14 text-center font-mono text-sm text-muted-foreground">
+      <div className="w-12 sm:w-14 text-center font-mono text-sm text-muted-foreground">
         —
       </div>
     );
   }
   return (
     <div
-      className={`relative w-14 rounded py-1 text-center font-mono text-sm ${
+      className={`relative w-12 sm:w-14 rounded py-1 text-center font-mono text-sm ${
         isBest
           ? "bg-green-500/10 text-green-400"
           : "text-muted-foreground"
@@ -130,12 +130,14 @@ function MatchRow({
   const hasPrediction = match.predictedHome !== null && match.predictedAway !== null;
   const hasForm = match.formHome != null && match.formAway != null;
 
+  const showMobileOddsRow = hasOdds || hasPrediction || isPastUnresolved;
+
   return (
     <Link
       href={`/matches/${match.id}`}
-      className={`group flex flex-col px-4 transition-colors hover:bg-white/[0.03] ${(hasTeasers || hasForm) ? "py-1.5" : "h-10 justify-center"}`}
+      className={`group flex flex-col px-4 transition-colors hover:bg-white/[0.03] ${(hasTeasers || hasForm) ? "py-2 sm:py-1.5" : "py-2.5 sm:py-0 sm:h-11 sm:justify-center"}`}
     >
-      {/* Main row */}
+      {/* Main row — line 1 */}
       <div className="flex items-center gap-0">
         {/* Per-match star */}
         {favoriteMatchIds && onMatchFavoriteToggle && (
@@ -152,7 +154,7 @@ function MatchRow({
           {match.dataGrade ? (
             <span
               className={`inline-block rounded px-1 text-[9px] font-bold leading-4 ${GRADE_STYLES[match.dataGrade]}`}
-              title={`Data grade ${match.dataGrade}${match.signalCount ? ` · ${match.signalCount} signals` : ""}`}
+              title={`Data grade ${match.dataGrade} — ${match.dataGrade === "A" ? "full data coverage" : match.dataGrade === "B" ? "good data coverage" : "limited data"}${match.signalCount ? ` · ${match.signalCount} signals` : ""}`}
             >
               {match.dataGrade}
             </span>
@@ -228,8 +230,8 @@ function MatchRow({
           </div>
         </div>
 
-        {/* ML-6: Predicted score (all users) */}
-        <div className="w-14 shrink-0 text-center">
+        {/* Desktop: AI predicted score */}
+        <div className="hidden sm:block w-14 shrink-0 text-center">
           {hasPrediction ? (
             <span
               className="font-mono text-xs font-bold tabular-nums text-violet-400/80"
@@ -242,8 +244,8 @@ function MatchRow({
           )}
         </div>
 
-        {/* Odds — ML-7 arrows (Pro only) + ML-8 bookmaker badge */}
-        <div className="ml-2 flex shrink-0 items-center gap-1">
+        {/* Desktop: Odds + bookmaker badge */}
+        <div className="hidden sm:flex ml-2 shrink-0 items-center gap-1">
           {isPastUnresolved ? (
             <div className="w-44 text-center font-mono text-[10px] text-amber-500/50">
               result pending
@@ -253,7 +255,6 @@ function MatchRow({
               <OddsCell value={match.bestHome} isBest={bestIsHome} move={isPro ? match.moveHome : null} />
               <OddsCell value={match.bestDraw} isBest={bestIsDraw} move={isPro ? match.moveDraw : null} />
               <OddsCell value={match.bestAway} isBest={bestIsAway} move={isPro ? match.moveAway : null} />
-              {/* ML-8: Bookmaker count badge */}
               {match.bookmakerCount > 1 && (
                 <span
                   className="ml-1 text-[9px] font-bold text-muted-foreground/30 tabular-nums"
@@ -274,6 +275,37 @@ function MatchRow({
           <ChevronRight className="size-4 text-muted-foreground/30 transition-colors group-hover:text-green-500" />
         </div>
       </div>
+
+      {/* Mobile: odds row (line 2) */}
+      {showMobileOddsRow && (
+        <div className="flex sm:hidden items-center mt-0.5 pl-[3.25rem]">
+          {isPastUnresolved ? (
+            <span className="font-mono text-[10px] text-amber-500/50">result pending</span>
+          ) : (
+            <>
+              {hasPrediction && (
+                <span
+                  className="font-mono text-[10px] font-bold tabular-nums text-violet-400/60"
+                  title="AI predicted score"
+                >
+                  {match.predictedHome}–{match.predictedAway}
+                </span>
+              )}
+              {hasOdds ? (
+                <div className="flex items-center gap-1 ml-auto mr-5">
+                  <OddsCell value={match.bestHome} isBest={bestIsHome} move={isPro ? match.moveHome : null} />
+                  <OddsCell value={match.bestDraw} isBest={bestIsDraw} move={isPro ? match.moveDraw : null} />
+                  <OddsCell value={match.bestAway} isBest={bestIsAway} move={isPro ? match.moveAway : null} />
+                </div>
+              ) : (
+                <div className="flex items-center gap-1 ml-auto mr-5 font-mono text-sm text-muted-foreground/40">
+                  — — —
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* SUX-3: Free-tier signal teasers */}
       {hasTeasers && (
@@ -362,29 +394,29 @@ export function LeagueAccordion({
 
       {/* Match rows */}
       {expanded && (
-        <div className="divide-y divide-white/[0.04]">
+        <div className="divide-y divide-white/[0.08]">
           {/* Column header */}
           <div className="flex items-center px-4 py-1.5 bg-muted/10">
             {favoriteMatchIds && onMatchFavoriteToggle && <div className="w-5 shrink-0" />}
             <div className="w-8 shrink-0" />
-            <div className="w-[4.5rem] shrink-0 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/30 leading-none">
+            <div className="w-[4.5rem] shrink-0 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/40 leading-none">
               local
             </div>
             <div className="flex-1" />
-            {/* ML-6: Prediction column header */}
-            <div className="w-14 shrink-0 text-center">
+            {/* Desktop: AI + odds column headers */}
+            <div className="hidden sm:block w-14 shrink-0 text-center">
               {hasPredictions && (
                 <span className="text-[10px] font-bold uppercase tracking-widest text-violet-400/40">
                   AI
                 </span>
               )}
             </div>
-            <div className="ml-2 flex shrink-0 items-center gap-1">
-              <span className="w-14 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">H</span>
-              <span className="w-14 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">X</span>
-              <span className="w-14 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">A</span>
+            <div className="hidden sm:flex ml-2 shrink-0 items-center gap-1">
+              <span className="w-14 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">H</span>
+              <span className="w-14 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">X</span>
+              <span className="w-14 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">A</span>
               <div className="group relative ml-1 w-4">
-                <Info className="size-3 cursor-help text-muted-foreground/25 transition-colors hover:text-muted-foreground/50" />
+                <Info className="size-3 cursor-help text-muted-foreground/30 transition-colors hover:text-muted-foreground/60" />
                 <div className="pointer-events-none absolute bottom-full right-0 z-50 mb-2 w-64 rounded-lg border border-border/60 bg-popover p-3 text-xs text-muted-foreground opacity-0 shadow-xl transition-opacity group-hover:opacity-100">
                   <p className="mb-1.5 font-semibold text-foreground">Best available odds</p>
                   <p className="mb-2"><strong className="text-foreground/80">H / X / A</strong> — Home win, Draw, Away win (decimal odds).</p>
@@ -393,7 +425,13 @@ export function LeagueAccordion({
                 </div>
               </div>
             </div>
-            <div className="ml-1 w-4 shrink-0" />
+            <div className="hidden sm:block ml-1 w-4 shrink-0" />
+            {/* Mobile: compact H/X/A aligned right */}
+            <div className="flex sm:hidden items-center gap-1 mr-5">
+              <span className="w-12 text-center text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">H</span>
+              <span className="w-12 text-center text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">X</span>
+              <span className="w-12 text-center text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">A</span>
+            </div>
           </div>
           {matches.map((match) => (
             <MatchRow

@@ -250,7 +250,11 @@ export function Nav() {
 
       {/* Mobile nav */}
       {mobileOpen && (
-        <nav className="border-t border-border/50 bg-background px-4 pb-4 pt-2 md:hidden">
+        <nav className="border-t border-border/50 bg-background px-4 pb-4 pt-3 md:hidden">
+          {/* Section: Features */}
+          <p className="px-3 pb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/40">
+            Features
+          </p>
           {primaryLinks.map((link) => {
             const Icon = link.icon;
             const active =
@@ -263,8 +267,8 @@ export function Nav() {
                 className={cn(
                   "flex items-center gap-2 rounded-md px-3 py-2.5 text-sm transition-colors",
                   active
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                    ? "border-l-2 border-primary bg-primary/10 text-primary"
+                    : "border-l-2 border-transparent text-muted-foreground hover:bg-accent hover:text-foreground"
                 )}
               >
                 <Icon className="h-4 w-4" />
@@ -275,15 +279,19 @@ export function Nav() {
 
           {!loading && user ? (
             <>
+              {/* Section: Account */}
               <div className="my-2 h-px bg-border/50" />
+              <p className="px-3 pb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/40">
+                Account
+              </p>
               <Link
                 href="/my-picks"
                 onClick={() => setMobileOpen(false)}
                 className={cn(
                   "flex items-center gap-2 rounded-md px-3 py-2.5 text-sm transition-colors",
                   pathname === "/my-picks"
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                    ? "border-l-2 border-primary bg-primary/10 text-primary"
+                    : "border-l-2 border-transparent text-muted-foreground hover:bg-accent hover:text-foreground"
                 )}
               >
                 <Crosshair className="h-4 w-4" />
@@ -296,8 +304,8 @@ export function Nav() {
                   className={cn(
                     "flex items-center gap-2 rounded-md px-3 py-2.5 text-sm transition-colors",
                     pathname === "/bankroll"
-                      ? "bg-primary/10 text-primary"
-                      : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                      ? "border-l-2 border-primary bg-primary/10 text-primary"
+                      : "border-l-2 border-transparent text-muted-foreground hover:bg-accent hover:text-foreground"
                   )}
                 >
                   <Wallet className="h-4 w-4" />
@@ -310,17 +318,23 @@ export function Nav() {
                 className={cn(
                   "flex items-center gap-2 rounded-md px-3 py-2.5 text-sm transition-colors",
                   pathname === "/profile"
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                    ? "border-l-2 border-primary bg-primary/10 text-primary"
+                    : "border-l-2 border-transparent text-muted-foreground hover:bg-accent hover:text-foreground"
                 )}
               >
                 <User className="h-4 w-4" />
                 Profile & Billing
               </Link>
+
+              {/* Section: Learn */}
+              <div className="my-2 h-px bg-border/50" />
+              <p className="px-3 pb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/40">
+                Learn
+              </p>
               <Link
                 href="/learn"
                 onClick={() => setMobileOpen(false)}
-                className="flex items-center gap-2 rounded-md px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                className="flex items-center gap-2 border-l-2 border-transparent rounded-md px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
               >
                 <BookOpen className="h-4 w-4" />
                 Glossary
@@ -328,25 +342,31 @@ export function Nav() {
               <Link
                 href="/how-it-works"
                 onClick={() => setMobileOpen(false)}
-                className="flex items-center gap-2 rounded-md px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                className="flex items-center gap-2 border-l-2 border-transparent rounded-md px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
               >
                 <Info className="h-4 w-4" />
                 How it Works
               </Link>
               {profile?.is_superadmin && (
-                <Link
-                  href="/admin/bots"
-                  onClick={() => setMobileOpen(false)}
-                  className={cn(
-                    "flex items-center gap-2 rounded-md px-3 py-2.5 text-sm transition-colors",
-                    pathname === "/admin/bots"
-                      ? "bg-amber-500/10 text-amber-400"
-                      : "text-amber-500/70 hover:bg-accent hover:text-amber-400"
-                  )}
-                >
-                  <Bot className="h-4 w-4" />
-                  Bot Dashboard
-                </Link>
+                <>
+                  <div className="my-2 h-px bg-border/50" />
+                  <p className="px-3 pb-1 text-[10px] font-medium uppercase tracking-wider text-amber-500/40">
+                    Admin
+                  </p>
+                  <Link
+                    href="/admin/bots"
+                    onClick={() => setMobileOpen(false)}
+                    className={cn(
+                      "flex items-center gap-2 border-l-2 rounded-md px-3 py-2.5 text-sm transition-colors",
+                      pathname === "/admin/bots"
+                        ? "border-amber-400 bg-amber-500/10 text-amber-400"
+                        : "border-transparent text-amber-500/70 hover:bg-accent hover:text-amber-400"
+                    )}
+                  >
+                    <Bot className="h-4 w-4" />
+                    Bot Dashboard
+                  </Link>
+                </>
               )}
               <div className="my-2 h-px bg-border/50" />
               <button
@@ -354,7 +374,7 @@ export function Nav() {
                   setMobileOpen(false);
                   handleSignOut();
                 }}
-                className="flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                className="flex w-full items-center gap-2 border-l-2 border-transparent rounded-md px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
               >
                 <LogOut className="h-4 w-4" />
                 Sign Out
@@ -362,11 +382,15 @@ export function Nav() {
             </>
           ) : !loading ? (
             <>
+              {/* Section: Learn */}
               <div className="my-2 h-px bg-border/50" />
+              <p className="px-3 pb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/40">
+                Learn
+              </p>
               <Link
                 href="/learn"
                 onClick={() => setMobileOpen(false)}
-                className="flex items-center gap-2 rounded-md px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                className="flex items-center gap-2 border-l-2 border-transparent rounded-md px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
               >
                 <BookOpen className="h-4 w-4" />
                 Glossary
@@ -374,7 +398,7 @@ export function Nav() {
               <Link
                 href="/how-it-works"
                 onClick={() => setMobileOpen(false)}
-                className="flex items-center gap-2 rounded-md px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                className="flex items-center gap-2 border-l-2 border-transparent rounded-md px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
               >
                 <Info className="h-4 w-4" />
                 How it Works
@@ -383,7 +407,7 @@ export function Nav() {
               <Link
                 href="/login"
                 onClick={() => setMobileOpen(false)}
-                className="flex items-center gap-2 rounded-md px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                className="flex items-center gap-2 border-l-2 border-transparent rounded-md px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
               >
                 <LogIn className="h-4 w-4" />
                 Log In
@@ -391,10 +415,10 @@ export function Nav() {
               <Link
                 href="/signup"
                 onClick={() => setMobileOpen(false)}
-                className="flex items-center gap-2 rounded-md px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                className="flex items-center gap-2 rounded-md bg-emerald-600 px-3 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 transition-colors mt-1"
               >
                 <User className="h-4 w-4" />
-                Sign Up
+                Sign Up Free
               </Link>
             </>
           ) : null}
