@@ -2,10 +2,20 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 // Only routes that require login and have no graceful guest state
-// /value-bets and /track-record handle unauthenticated users within the page itself
 const PROTECTED_ROUTES = ["/profile", "/my-picks"];
 
+// Fully public pages — skip the Supabase session refresh entirely to avoid
+// a network round-trip to Supabase on every landing-page / static-page hit.
+const PUBLIC_STATIC_ROUTES = ["/", "/changelog", "/terms", "/privacy", "/how-it-works"];
+
 export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // Skip auth refresh for static public pages — no session needed
+  if (PUBLIC_STATIC_ROUTES.includes(pathname)) {
+    return NextResponse.next({ request });
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -33,8 +43,6 @@ export async function middleware(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  const { pathname } = request.nextUrl;
 
   // Check if this is a protected route
   const isProtected = PROTECTED_ROUTES.some(

@@ -118,32 +118,9 @@ export default async function MatchDetailPage({
     );
   }
 
-  // Try to get authenticated user + tier (server-side field stripping — B3)
-  let isAuthenticated = false;
-  let isPro = false; // true for pro, elite, and superadmin
-  let isElite = false; // true for elite and superadmin only
-  try {
-    if (supabase) {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) {
-        isAuthenticated = true;
-        // Fetch tier from profiles — determines what data to serve
-        const tierResult = await getUserTier(user.id, supabase);
-        isElite = tierResult.isElite;
-        isPro = tierResult.isPro;
-      }
-    }
-  } catch {
-    // Not authenticated — free content only
-  }
-
-  // Fetch free-tier enrichment data in parallel (all users)
-  // Injuries are fetched for all users — used only as a boolean hint in free tier
-  // Signals are fetched for all users — free gets teaser (1 signal), pro/elite get full summary
-  // bookmakerCount, botConsensus, matchPreview, modelMarketUsers don't need auth — fetch here
+  // Run auth check AND data queries in parallel — data doesn't depend on auth
   const [
+    authResult,
     liveSnapshotsArr,
     h2h,
     standings,
@@ -154,6 +131,19 @@ export default async function MatchDetailPage({
     matchPreview,
     modelMarketUsers,
   ] = await Promise.all([
+    // Auth check (server-side field stripping — B3)
+    (async () => {
+      try {
+        if (!supabase) return { isAuthenticated: false, isPro: false, isElite: false };
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return { isAuthenticated: false, isPro: false, isElite: false };
+        const tierResult = await getUserTier(user.id, supabase);
+        return { isAuthenticated: true, isPro: tierResult.isPro, isElite: tierResult.isElite };
+      } catch {
+        return { isAuthenticated: false, isPro: false, isElite: false };
+      }
+    })(),
+    // Data queries — all public, no auth needed
     getLiveSnapshots([id]),
     getMatchH2H(id),
     getTeamStandings(publicMatch.homeTeam, publicMatch.awayTeam),
@@ -164,6 +154,8 @@ export default async function MatchDetailPage({
     getMatchPreview(id),
     getModelMarketUsers(id),
   ]);
+
+  const { isAuthenticated, isPro, isElite } = authResult;
 
   const initialSnapshot = liveSnapshotsArr[0] ?? null;
 

@@ -12,22 +12,20 @@ import { PredictionHistory } from "@/components/prediction-history";
 import { TrackRecordFooterCta } from "@/components/track-record-footer-cta";
 
 export default async function TrackRecordPage() {
-  const supabase = await createSupabaseServer();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  let isPro = false;
-  let isElite = false;
-  if (user) {
-    const tierResult = await getUserTier(user.id, supabase);
-    isPro = tierResult.isPro;
-    isElite = tierResult.isElite;
-  }
-
-  const [accuracy, trackStats, systemStatus] = await Promise.all([
+  // Run auth and data queries in parallel — data doesn't depend on auth
+  const [authResult, accuracy, trackStats, systemStatus] = await Promise.all([
+    (async () => {
+      const supabase = await createSupabaseServer();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return { isPro: false, isElite: false };
+      return getUserTier(user.id, supabase);
+    })(),
     getModelAccuracy(),
     getTrackRecordStats(),
     getSystemStatus(),
   ]);
+
+  const { isPro, isElite } = authResult;
 
   return (
     <div className="space-y-8">
