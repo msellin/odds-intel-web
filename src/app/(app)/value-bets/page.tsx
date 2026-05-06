@@ -7,13 +7,22 @@ import { ValueBetsGate } from "@/components/value-bets-gate";
 import { TodayPicksPreview } from "@/components/today-picks-preview";
 import { getUserTier } from "@/lib/get-user-tier";
 
-// Deduplicate bets by match+market+selection — multiple bots can place the
-// same pick independently, which creates duplicate rows. We keep the highest-edge
-// instance and track the bot count for Elite display.
+// Strip common club prefixes so "FK Septemvri Sofia" and "Septemvri Sofia"
+// hash to the same key. Covers the most frequent Kambi vs AF-Football name mismatches.
+const CLUB_PREFIX_RE = /^(FK|FC|AC|AS|SC|RC|CD|CF|BK|SK|NK|GK|SV|TSV|BSC|SG|RB|SpVgg)\s+/i;
+function normalizeTeam(name: string): string {
+  return name.replace(CLUB_PREFIX_RE, "").toLowerCase().trim();
+}
+
+// Deduplicate bets by kickoff+team names (normalised)+market+selection.
+// Multiple bots place the same pick independently, and the same fixture can
+// appear under two league records when Kambi uses a different league/team name
+// than API-Football. We keep the highest-edge instance and track bot count for Elite.
 function deduplicateBets(bets: LiveBet[]): (LiveBet & { botCount: number })[] {
   const seen = new Map<string, LiveBet & { botCount: number }>();
   for (const bet of bets) {
-    const key = `${bet.match}|${bet.market}|${bet.selection}`;
+    const [home = "", away = ""] = bet.match.split(" vs ");
+    const key = `${bet.kickoff}|${normalizeTeam(home)}|${normalizeTeam(away)}|${bet.market}|${bet.selection}`;
     const existing = seen.get(key);
     if (!existing) {
       seen.set(key, { ...bet, botCount: 1 });
