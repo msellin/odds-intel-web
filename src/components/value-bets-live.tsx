@@ -98,12 +98,12 @@ export function ValueBetsLive({ bets, totalCount, userTier }: ValueBetsLiveProps
   const isElite = userTier === "elite";
 
   const leagues = useMemo(
-    () => Array.from(new Set(bets.map((b) => b.league))).sort(),
+    () => Array.from(new Set(bets.map((b) => b.league))).sort((a, b) => a.localeCompare(b)),
     [bets]
   );
 
   const bots = useMemo(
-    () => Array.from(new Set(bets.map((b) => b.bot))).sort(),
+    () => Array.from(new Set(bets.map((b) => b.bot))).sort((a, b) => a.localeCompare(b)),
     [bets]
   );
 

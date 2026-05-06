@@ -72,6 +72,9 @@ export function LoginModal() {
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
       onClick={(e) => { if (e.target === e.currentTarget) closeLoginModal(); }}
+      onKeyDown={(e) => { if (e.key === "Escape") closeLoginModal(); }}
+      role="dialog"
+      aria-modal="true"
     >
       <div className="relative w-full max-w-sm rounded-2xl border border-border/60 bg-background shadow-2xl">
         {/* Close button */}
