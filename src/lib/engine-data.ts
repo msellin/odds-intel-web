@@ -29,6 +29,9 @@ export interface OpsSnapshot {
   odds_snapshots_today: number | null;
   distinct_bookmakers: number | null;
   matches_without_pinnacle: number | null;
+  odds_market_match_winner: number | null;
+  odds_market_goals_ou: number | null;
+  odds_market_btts: number | null;
   // ③ Bets
   bets_placed_today: number | null;
   bets_pending: number | null;
@@ -51,6 +54,11 @@ export interface OpsSnapshot {
   matches_with_h2h: number | null;
   matches_with_injuries: number | null;
   matches_with_lineups: number | null;
+  signals_with_elo: number | null;
+  signals_with_form: number | null;
+  signals_with_h2h: number | null;
+  signals_with_injuries: number | null;
+  signals_with_standings: number | null;
   // ⑦ Email
   digests_sent_today: number | null;
   value_bet_alerts_today: number | null;
@@ -2935,6 +2943,25 @@ export async function getRecentPipelineRuns(): Promise<PipelineRun[]> {
     .order("started_at", { ascending: false })
     .limit(50);
   return (data ?? []) as PipelineRun[];
+}
+
+/** Returns the single latest run per job_name — used for the per-job status dashboard. */
+export async function getLatestJobStatuses(): Promise<PipelineRun[]> {
+  const admin = createSupabaseAdmin();
+  const { data } = await admin
+    .from("pipeline_runs")
+    .select("id, job_name, run_date, status, started_at, completed_at, fixtures_count, records_count, error_message")
+    .order("started_at", { ascending: false })
+    .limit(300);
+  const seen = new Set<string>();
+  const latest: PipelineRun[] = [];
+  for (const run of data ?? []) {
+    if (!seen.has(run.job_name)) {
+      seen.add(run.job_name);
+      latest.push(run as PipelineRun);
+    }
+  }
+  return latest;
 }
 
 /** Pending bets where the match has already kicked off >2h ago (truly overdue).
