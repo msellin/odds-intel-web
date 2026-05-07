@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import React from "react";
+import { AutoRefresh } from "./auto-refresh";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import {
   getOpsSnapshot,
@@ -52,6 +53,7 @@ export default async function OpsDashboardPage() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">
+      <AutoRefresh intervalMs={60_000} />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -552,15 +554,13 @@ function PipelineJobGrid({ jobs, recentRuns }: { jobs: PipelineRun[]; recentRuns
 
     const borderColor = isFailed
       ? "border-red-500/40"
-      : isStaleRunning
-      ? "border-amber-500/40"
-      : isStaleOld
+      : isRunning || isStaleOld
       ? "border-amber-500/30"
       : "border-emerald-500/30";
 
     const dotColor = isFailed
       ? "bg-red-500"
-      : isStaleRunning || isStaleOld
+      : isRunning || isStaleOld
       ? "bg-amber-500"
       : "bg-emerald-500";
 
@@ -577,7 +577,7 @@ function PipelineJobGrid({ jobs, recentRuns }: { jobs: PipelineRun[]; recentRuns
         <div className="flex items-center gap-2">
           <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dotColor}`} />
           <span className="text-xs font-medium text-foreground truncate">{label}</span>
-          <span className={`ml-auto text-[10px] font-mono ${isFailed ? "text-red-400" : isStaleOld || isStaleRunning ? "text-amber-400" : "text-emerald-500"}`}>
+          <span className={`ml-auto text-[10px] font-mono ${isFailed ? "text-red-400" : isRunning || isStaleOld ? "text-amber-400" : "text-emerald-500"}`}>
             {statusText}
           </span>
         </div>
