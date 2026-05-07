@@ -49,21 +49,7 @@ function formatDate(dayOffset: number): string {
   });
 }
 
-function MatchesSkeleton() {
-  return (
-    <div className="space-y-2 animate-pulse">
-      <div className="h-9 w-40 rounded-lg bg-white/[0.06]" />
-      <div className="space-y-2 pt-1">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="h-14 rounded-xl bg-white/[0.04]" />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// Sync page — renders the h1 + date + tab toggle immediately at TTFB.
-// This makes the h1 the fast LCP element (~20ms) instead of waiting for data (~2.5s).
+// Sync page — renders the date + tab toggle immediately at TTFB.
 export default function MatchesPage({
   searchParams,
 }: {
@@ -106,17 +92,17 @@ export default function MatchesPage({
         </div>
       </div>
 
-      {/* Dynamic content — streams when data fetches complete */}
+      {/* Tier 1: fast queries — auth, counts, pick, changed items. LCP element is here. */}
       <Suspense fallback={null}>
-        <MatchesContent dayOffset={dayOffset} />
+        <AboveFoldContent dayOffset={dayOffset} />
       </Suspense>
     </div>
   );
 }
 
-async function MatchesContent({ dayOffset }: { dayOffset: number }) {
-  const [activeMatches, counts, authResult, { pick: freePick, totalCount: freeTotalCount }, changedItems] = await Promise.all([
-    getActiveMatches(dayOffset),
+// Awaits only fast queries. Renders above-fold content and kicks off match list in nested Suspense.
+async function AboveFoldContent({ dayOffset }: { dayOffset: number }) {
+  const [counts, authResult, { pick: freePick, totalCount: freeTotalCount }, changedItems] = await Promise.all([
     getMatchCounts(dayOffset),
     (async () => {
       const supabase = await createSupabaseServer();
@@ -134,18 +120,11 @@ async function MatchesContent({ dayOffset }: { dayOffset: number }) {
     getWhatChangedToday(),
   ]);
 
-  const finishedGroupsPromise = getFinishedMatches(dayOffset).then(groupAndSort);
   const { isAuthenticated, isPro, alreadyUnlocked } = authResult;
-  const sortedGroups = groupAndSort(activeMatches);
-
-  const liveMatchIds = activeMatches.filter((m) => m.status === "live").map((m) => m.id);
-  const liveSnapshotsArr = await getLiveSnapshots(liveMatchIds);
-  const initialSnapshots: Record<string, LiveSnapshot> = {};
-  for (const s of liveSnapshotsArr) initialSnapshots[s.match_id] = s;
 
   return (
     <>
-      {/* Fixture count — shown once data is ready */}
+      {/* Fixture count */}
       <div className="flex flex-wrap items-center gap-3 -mt-2">
         <span className="text-sm text-muted-foreground">{counts.total} fixtures</span>
         {dayOffset === 0 && (
@@ -164,6 +143,7 @@ async function MatchesContent({ dayOffset }: { dayOffset: number }) {
         <WhatChangedToday items={changedItems} isPro={isPro} />
       )}
 
+      {/* LCP element — renders as soon as this component resolves */}
       <DailyValueTeaser
         pick={freePick}
         totalCount={freeTotalCount}
@@ -171,27 +151,56 @@ async function MatchesContent({ dayOffset }: { dayOffset: number }) {
         isPro={isPro}
       />
 
-      {sortedGroups.length === 0 && (
-        <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-white/[0.06] bg-card/40 py-16">
-          <div className="rounded-full bg-muted p-4">
-            <SearchX className="size-8 text-muted-foreground" />
-          </div>
-          <div className="text-center">
-            <p className="text-sm font-medium text-foreground">No matches found</p>
-            <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-              Check back later — fixtures are loaded daily at 04:00 UTC.
-            </p>
-          </div>
-        </div>
-      )}
-
-      <MatchesClient
-        sortedGroups={sortedGroups}
-        initialSnapshots={initialSnapshots}
-        isPro={isPro}
-        counts={counts}
-        finishedGroupsPromise={finishedGroupsPromise}
-      />
+      {/* Tier 2: heavy match data streams in after above-fold is painted */}
+      <Suspense fallback={null}>
+        <MatchListContent dayOffset={dayOffset} isPro={isPro} counts={counts} />
+      </Suspense>
     </>
+  );
+}
+
+// Awaits the heavy fetches (500+ match rows + live snapshots). Streams in after AboveFoldContent.
+async function MatchListContent({
+  dayOffset,
+  isPro,
+  counts,
+}: {
+  dayOffset: number;
+  isPro: boolean;
+  counts: { live: number; upcoming: number; finished: number; total: number };
+}) {
+  const finishedGroupsPromise = getFinishedMatches(dayOffset).then(groupAndSort);
+  const activeMatches = await getActiveMatches(dayOffset);
+  const sortedGroups = groupAndSort(activeMatches);
+
+  const liveMatchIds = activeMatches.filter((m) => m.status === "live").map((m) => m.id);
+  const liveSnapshotsArr = await getLiveSnapshots(liveMatchIds);
+  const initialSnapshots: Record<string, LiveSnapshot> = {};
+  for (const s of liveSnapshotsArr) initialSnapshots[s.match_id] = s;
+
+  if (sortedGroups.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-white/[0.06] bg-card/40 py-16">
+        <div className="rounded-full bg-muted p-4">
+          <SearchX className="size-8 text-muted-foreground" />
+        </div>
+        <div className="text-center">
+          <p className="text-sm font-medium text-foreground">No matches found</p>
+          <p className="mt-1 max-w-sm text-xs text-muted-foreground">
+            Check back later — fixtures are loaded daily at 04:00 UTC.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <MatchesClient
+      sortedGroups={sortedGroups}
+      initialSnapshots={initialSnapshots}
+      isPro={isPro}
+      counts={counts}
+      finishedGroupsPromise={finishedGroupsPromise}
+    />
   );
 }
