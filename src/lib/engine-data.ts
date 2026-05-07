@@ -2937,18 +2937,32 @@ export async function getRecentPipelineRuns(): Promise<PipelineRun[]> {
   return (data ?? []) as PipelineRun[];
 }
 
-/** Pending bets older than 4 hours (stale bets alert — live query). */
-export async function getStalePendingBets(): Promise<{ id: string; market: string; pick_time: string; bot_id: string }[]> {
+/** Pending bets where the match has already kicked off >2h ago (truly overdue).
+ *  Joins to matches so pre-kickoff morning bets don't trigger false alarms. */
+export async function getStalePendingBets(): Promise<{ id: string; market: string; pick_time: string; bot_id: string; match_kickoff: string | null }[]> {
   const admin = createSupabaseAdmin();
-  const cutoff = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
+  const kickoffCutoff = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
   const { data } = await admin
     .from("simulated_bets")
-    .select("id, market, pick_time, bot_id")
+    .select("id, market, pick_time, bot_id, match:match_id(date)")
     .eq("result", "pending")
-    .lt("pick_time", cutoff)
     .order("pick_time", { ascending: true })
-    .limit(20);
-  return data ?? [];
+    .limit(100);
+  if (!data) return [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data as any[])
+    .filter((b) => {
+      const kickoff = b.match?.date;
+      return kickoff && new Date(kickoff) < new Date(kickoffCutoff);
+    })
+    .slice(0, 20)
+    .map((b) => ({
+      id: b.id,
+      market: b.market,
+      pick_time: b.pick_time,
+      bot_id: b.bot_id,
+      match_kickoff: b.match?.date ?? null,
+    }));
 }
 
 /** Timestamp of most recent live snapshot (live query — 1 row). */

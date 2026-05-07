@@ -85,7 +85,7 @@ export default async function OpsDashboardPage() {
       {/* ② Odds Pipeline */}
       <Section title="Odds Pipeline" icon="📊">
         <Grid>
-          <Stat label="Odds snapshots today" value={snapshot?.odds_snapshots_today} />
+          <Stat label="Odds rows today (all bookmakers × polls)" value={snapshot?.odds_snapshots_today} />
           <Stat label="Distinct bookmakers" value={snapshot?.distinct_bookmakers} warn={v => v < 3} />
         </Grid>
       </Section>
@@ -98,19 +98,25 @@ export default async function OpsDashboardPage() {
           <Stat label="Settled today" value={snapshot?.bets_settled_today} />
           <Stat label="P&L today" value={snapshot?.pnl_today} prefix="$" decimals={2} warn={v => v < -50} good={v => v > 0} />
           <Stat label="Inplay bets today" value={snapshot?.bets_inplay_today} />
-          <Stat label="Active bots" value={snapshot?.active_bots} total={17} warn={v => v < 10} />
-          <Stat label="Silent bots" value={snapshot?.silent_bots} warn={v => v > 7} />
+          <Stat
+            label="Bots betting today"
+            value={snapshot?.active_bots}
+            total={(snapshot?.active_bots ?? 0) + (snapshot?.silent_bots ?? 0)}
+            warn={v => v < 10}
+          />
+          <Stat label="Idle bots today" value={snapshot?.silent_bots} />
           <Stat label="Duplicate bets" value={snapshot?.duplicate_bets} warn={v => v > 0} />
         </Grid>
         {staleBets.length > 0 && (
-          <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
-            <p className="text-sm font-medium text-amber-400 mb-2">
-              ⚠ {staleBets.length} stale pending bet{staleBets.length > 1 ? "s" : ""} (&gt;4h old)
+          <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3">
+            <p className="text-sm font-medium text-red-400 mb-2">
+              ⚠ {staleBets.length} pending bet{staleBets.length > 1 ? "s" : ""} on matches that already kicked off — check settlement
             </p>
             <div className="space-y-1">
               {staleBets.slice(0, 5).map(b => (
                 <p key={b.id} className="text-xs text-muted-foreground font-mono">
-                  {b.market} — {new Date(b.pick_time).toLocaleTimeString()}
+                  {b.market} — bet placed {new Date(b.pick_time).toLocaleTimeString()}
+                  {b.match_kickoff && ` · kickoff ${new Date(b.match_kickoff).toLocaleTimeString()}`}
                 </p>
               ))}
               {staleBets.length > 5 && (
@@ -124,9 +130,9 @@ export default async function OpsDashboardPage() {
       {/* ④ Live Tracker */}
       <Section title="Live Tracker" icon="⚡">
         <Grid>
-          <Stat label="Live snapshots today" value={snapshot?.live_snapshots_today} />
-          <Stat label="With xG data" value={snapshot?.snapshots_with_xg} total={snapshot?.live_snapshots_today} />
-          <Stat label="With live odds" value={snapshot?.snapshots_with_live_odds} total={snapshot?.live_snapshots_today} />
+          <Stat label="Live snapshots today (score + odds + events)" value={snapshot?.live_snapshots_today} />
+          <Stat label="Snapshots with xG data" value={snapshot?.snapshots_with_xg} total={snapshot?.live_snapshots_today} pctDecimals={1} />
+          <Stat label="Snapshots with live odds" value={snapshot?.snapshots_with_live_odds} total={snapshot?.live_snapshots_today} />
           <div className="rounded-lg border border-border bg-card p-3">
             <p className="text-xs text-muted-foreground mb-1">Last snapshot</p>
             <p className={`text-lg font-bold tabular-nums ${liveAge !== null && liveAge > 60 ? "text-amber-500" : "text-foreground"}`}>
@@ -140,7 +146,7 @@ export default async function OpsDashboardPage() {
       <Section title="Post-Match / Settlement" icon="✅">
         <Grid>
           <Stat label="Finished today" value={snapshot?.matches_finished_today} />
-          <Stat label="Feature vectors built" value={snapshot?.feature_vectors_today} />
+          <Stat label="ML vectors for today's matches" value={snapshot?.feature_vectors_today} total={snapshot?.matches_finished_today} />
           <Stat label="ELO updates" value={snapshot?.elo_updates_today} />
           <div className="rounded-lg border border-border bg-card p-3">
             <p className="text-xs text-muted-foreground mb-1">Post-mortem ran</p>
@@ -267,6 +273,7 @@ function Stat({
   total,
   prefix = "",
   decimals = 0,
+  pctDecimals = 0,
   warn,
   good,
 }: {
@@ -275,6 +282,7 @@ function Stat({
   total?: number | null;
   prefix?: string;
   decimals?: number;
+  pctDecimals?: number;
   warn?: (v: number) => boolean;
   good?: (v: number) => boolean;
 }) {
@@ -292,8 +300,9 @@ function Stat({
     ? `${prefix}${value!.toFixed(decimals)}`
     : "—";
 
-  const pct = hasValue && total && total > 0
-    ? ` (${Math.round((value! / total) * 100)}%)`
+  const pctVal = hasValue && total && total > 0 ? (value! / total) * 100 : null;
+  const pct = pctVal !== null
+    ? ` (${pctDecimals > 0 ? pctVal.toFixed(pctDecimals) : Math.round(pctVal)}%)`
     : "";
 
   return (
