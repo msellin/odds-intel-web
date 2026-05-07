@@ -26,7 +26,10 @@ import {
   squadDisruptionLabel,
   h1ShotDominanceLabel,
   refereeCardsLabel,
+  refereeOver25Label,
   h2hEdgeLabel,
+  h2hGoalDiffLabel,
+  h2hRecencyLabel,
   eloDiffLabel,
   eloStrengthLabel,
   leagueAvgGoalsLabel,
@@ -35,6 +38,19 @@ import {
   sharpConsensusLabel,
   playersDoubtfulLabel,
   injuryUncertaintyLabel,
+  managerChangeDaysLabel,
+  venueSurfaceLabel,
+  goalsForAvgLabel,
+  goalsAgainstAvgLabel,
+  pointsToRelegationLabel,
+  pointsToTitleLabel,
+  pinnacleImpliedLabel,
+  pinnacleLineMoveLabel,
+  pinnacleAHLineLabel,
+  pinnacleAHMoveLabel,
+  ahBookmakerDisagreementLabel,
+  pinnacleOULabel,
+  pinnacleBTTSLabel,
   restDaysNormLabel,
   fixtureUrgencyLabel,
   turfFamiliarityLabel,
@@ -142,6 +158,31 @@ function buildGroups(
     const l = sharpConsensusLabel(get("sharp_consensus_away"), "away");
     marketItems.push({ ...l, value: fmt(get("sharp_consensus_away"), 4) });
   }
+  if (has("pinnacle_implied_home") && has("pinnacle_implied_draw") && has("pinnacle_implied_away")) {
+    marketItems.push({
+      label: "Pinnacle fair odds",
+      icon: "📌",
+      severity: "neutral",
+      description: `Pinnacle vig-removed: Home ${pct(get("pinnacle_implied_home"))} / Draw ${pct(get("pinnacle_implied_draw"))} / Away ${pct(get("pinnacle_implied_away"))}`,
+      value: "",
+    });
+  }
+  if (has("pinnacle_line_move_home")) {
+    const l = pinnacleLineMoveLabel(get("pinnacle_line_move_home"), "home");
+    marketItems.push({ ...l, value: `${get("pinnacle_line_move_home") > 0 ? "+" : ""}${(get("pinnacle_line_move_home") * 100).toFixed(1)}pp` });
+  }
+  if (has("pinnacle_line_move_draw")) {
+    const l = pinnacleLineMoveLabel(get("pinnacle_line_move_draw"), "draw");
+    marketItems.push({ ...l, value: `${get("pinnacle_line_move_draw") > 0 ? "+" : ""}${(get("pinnacle_line_move_draw") * 100).toFixed(1)}pp` });
+  }
+  if (has("pinnacle_line_move_away")) {
+    const l = pinnacleLineMoveLabel(get("pinnacle_line_move_away"), "away");
+    marketItems.push({ ...l, value: `${get("pinnacle_line_move_away") > 0 ? "+" : ""}${(get("pinnacle_line_move_away") * 100).toFixed(1)}pp` });
+  }
+  if (has("pinnacle_implied_over25")) {
+    const l = pinnacleOULabel(get("pinnacle_implied_over25"));
+    marketItems.push({ ...l, value: `Over ${pct(get("pinnacle_implied_over25"))}` });
+  }
 
   // ── Form & Strength group ───────────────────────────────────────────────────
   const formItems: SignalItem[] = [];
@@ -178,6 +219,48 @@ function buildGroups(
       ...l,
       value: `${Math.round(get("h2h_win_pct") * 100)}% (${Math.round(get("h2h_total"))} meetings)`,
       description: `${homeTeam} home H2H win rate`,
+    });
+  }
+  if (has("h2h_avg_goal_diff")) {
+    const l = h2hGoalDiffLabel(get("h2h_avg_goal_diff"));
+    formItems.push({ ...l, value: `${get("h2h_avg_goal_diff") > 0 ? "+" : ""}${get("h2h_avg_goal_diff").toFixed(2)}` });
+  }
+  if (has("h2h_recency_premium")) {
+    const l = h2hRecencyLabel(get("h2h_recency_premium"));
+    formItems.push({ ...l, value: `${get("h2h_recency_premium") > 0 ? "+" : ""}${(get("h2h_recency_premium") * 100).toFixed(1)}pp` });
+  }
+  if (has("goals_for_avg_home") && has("goals_against_avg_home")) {
+    const lf = goalsForAvgLabel(get("goals_for_avg_home"));
+    formItems.push({
+      ...lf,
+      value: `${fmt(get("goals_for_avg_home"))} scored / ${fmt(get("goals_against_avg_home"))} conceded`,
+      description: `${homeTeam}: season average per game`,
+    });
+  }
+  if (has("goals_for_avg_away") && has("goals_against_avg_away")) {
+    const lf = goalsForAvgLabel(get("goals_for_avg_away"));
+    formItems.push({
+      ...lf,
+      value: `${fmt(get("goals_for_avg_away"))} scored / ${fmt(get("goals_against_avg_away"))} conceded`,
+      description: `${awayTeam}: season average per game`,
+    });
+  }
+  if (has("goals_for_venue_home") && has("goals_against_venue_home")) {
+    formItems.push({
+      label: "Home venue record",
+      icon: "🏠",
+      severity: "neutral",
+      value: `${fmt(get("goals_for_venue_home"))} / ${fmt(get("goals_against_venue_home"))}`,
+      description: `${homeTeam} at home: ${fmt(get("goals_for_venue_home"))} scored, ${fmt(get("goals_against_venue_home"))} conceded per game`,
+    });
+  }
+  if (has("goals_for_venue_away") && has("goals_against_venue_away")) {
+    formItems.push({
+      label: "Away venue record",
+      icon: "✈",
+      severity: "neutral",
+      value: `${fmt(get("goals_for_venue_away"))} / ${fmt(get("goals_against_venue_away"))}`,
+      description: `${awayTeam} away: ${fmt(get("goals_for_venue_away"))} scored, ${fmt(get("goals_against_venue_away"))} conceded per game`,
     });
   }
   if (has("rest_days_home") && has("rest_days_away")) {
@@ -236,6 +319,30 @@ function buildGroups(
       value: pct(get("referee_home_win_pct")),
       description: "Historical home win rate with this referee",
     });
+  }
+  if (has("referee_over25_pct")) {
+    const l = refereeOver25Label(get("referee_over25_pct"));
+    contextItems.push({ ...l, value: pct(get("referee_over25_pct")) });
+  }
+  if (has("venue_surface_artificial")) {
+    const l = venueSurfaceLabel(get("venue_surface_artificial") === 1);
+    contextItems.push({ ...l, value: get("venue_surface_artificial") === 1 ? "Artificial" : "Grass" });
+  }
+  if (has("points_to_relegation_home")) {
+    const l = pointsToRelegationLabel(Math.round(get("points_to_relegation_home")));
+    contextItems.push({ ...l, value: `${Math.round(get("points_to_relegation_home"))} pts`, description: `${homeTeam}: ${l.description}` });
+  }
+  if (has("points_to_relegation_away")) {
+    const l = pointsToRelegationLabel(Math.round(get("points_to_relegation_away")));
+    contextItems.push({ ...l, value: `${Math.round(get("points_to_relegation_away"))} pts`, description: `${awayTeam}: ${l.description}` });
+  }
+  if (has("points_to_title_home")) {
+    const l = pointsToTitleLabel(Math.round(get("points_to_title_home")));
+    contextItems.push({ ...l, value: `${Math.round(get("points_to_title_home"))} pts`, description: `${homeTeam}: ${l.description}` });
+  }
+  if (has("points_to_title_away")) {
+    const l = pointsToTitleLabel(Math.round(get("points_to_title_away")));
+    contextItems.push({ ...l, value: `${Math.round(get("points_to_title_away"))} pts`, description: `${awayTeam}: ${l.description}` });
   }
   if (has("league_home_win_pct")) {
     contextItems.push({
@@ -352,12 +459,40 @@ function buildGroups(
     const l = h1ShotDominanceLabel(get("h1_shot_dominance_away"));
     infoItems.push({ ...l, value: `${Math.round(get("h1_shot_dominance_away") * 100)}%`, description: `${awayTeam}: ${l.description}` });
   }
+  if (has("manager_change_home_days")) {
+    const l = managerChangeDaysLabel(Math.round(get("manager_change_home_days")));
+    infoItems.push({ ...l, value: `${Math.round(get("manager_change_home_days"))}d ago`, description: `${homeTeam}: ${l.description}` });
+  }
+  if (has("manager_change_away_days")) {
+    const l = managerChangeDaysLabel(Math.round(get("manager_change_away_days")));
+    infoItems.push({ ...l, value: `${Math.round(get("manager_change_away_days"))}d ago`, description: `${awayTeam}: ${l.description}` });
+  }
+
+  // ── Specialist Markets group (Pinnacle AH + BTTS) ───────────────────────────
+  const specialistItems: SignalItem[] = [];
+  if (has("pinnacle_ah_line")) {
+    const l = pinnacleAHLineLabel(get("pinnacle_ah_line"));
+    specialistItems.push({ ...l, value: `${get("pinnacle_ah_line") > 0 ? "+" : ""}${get("pinnacle_ah_line")}` });
+  }
+  if (has("pinnacle_ah_line_move")) {
+    const l = pinnacleAHMoveLabel(get("pinnacle_ah_line_move"));
+    specialistItems.push({ ...l, value: `${get("pinnacle_ah_line_move") > 0 ? "+" : ""}${get("pinnacle_ah_line_move")}` });
+  }
+  if (has("ah_bookmaker_disagreement")) {
+    const l = ahBookmakerDisagreementLabel(get("ah_bookmaker_disagreement"));
+    specialistItems.push({ ...l, value: fmt(get("ah_bookmaker_disagreement"), 3) });
+  }
+  if (has("pinnacle_btts_yes_prob")) {
+    const l = pinnacleBTTSLabel(get("pinnacle_btts_yes_prob"));
+    specialistItems.push({ ...l, value: pct(get("pinnacle_btts_yes_prob")) });
+  }
 
   return [
     { id: "market", title: SIGNAL_GROUP_LABELS.market, icon: "📊", color: "border-l-sky-500", items: marketItems },
     { id: "form", title: SIGNAL_GROUP_LABELS.quality, icon: "⚡", color: "border-l-emerald-500", items: formItems },
     { id: "context", title: SIGNAL_GROUP_LABELS.context, icon: "🏟", color: "border-l-amber-500", items: contextItems },
     { id: "info", title: SIGNAL_GROUP_LABELS.information, icon: "📰", color: "border-l-rose-500", items: infoItems },
+    { id: "specialist", title: SIGNAL_GROUP_LABELS.specialist, icon: "🎯", color: "border-l-violet-500", items: specialistItems },
   ].filter((g) => g.items.length > 0);
 }
 

@@ -287,6 +287,172 @@ export function h1ShotDominanceLabel(ratio: number): SignalLabel {
   return { label: "Balanced", icon: "=", severity: "neutral", description: "Shot output spread evenly across both halves" }
 }
 
+// ─── Pinnacle market signals ──────────────────────────────────────────────────
+
+export function pinnacleImpliedLabel(prob: number, selection: "home" | "draw" | "away"): SignalLabel {
+  const who = selection === "home" ? "Home" : selection === "draw" ? "Draw" : "Away"
+  return {
+    label: `Pinnacle ${who}`,
+    icon: "📌",
+    severity: "neutral",
+    description: `Pinnacle fair probability (vig-removed): ${(prob * 100).toFixed(1)}%`,
+  }
+}
+
+export function pinnacleLineMoveLabel(move: number, selection: "home" | "draw" | "away"): SignalLabel {
+  const who = selection === "home" ? "Home" : selection === "draw" ? "Draw" : "Away"
+  const abs = Math.abs(move)
+  const dir = move > 0 ? "shortened" : "drifted"
+  if (abs > 0.04)
+    return { label: `${who} sharp move`, icon: "🔺", severity: "high", description: `Pinnacle ${who} has ${dir} ${(abs * 100).toFixed(1)}pp since open — strong sharp signal` }
+  if (abs > 0.02)
+    return { label: `${who} moved`, icon: "↕", severity: "medium", description: `Pinnacle ${who} ${dir} ${(abs * 100).toFixed(1)}pp — notable line movement` }
+  return { label: `${who} stable`, icon: "−", severity: "neutral", description: `Pinnacle ${who} line largely unchanged since open` }
+}
+
+export function pinnacleAHLineLabel(line: number): SignalLabel {
+  if (line > 0.5)
+    return { label: `Home +${line}`, icon: "↑", severity: "medium", description: `Pinnacle gives home team a ${line} goal head start — away favoured` }
+  if (line < -0.5)
+    return { label: `Home ${line}`, icon: "↓", severity: "medium", description: `Home team gives ${Math.abs(line)} goal head start — clear home favourite` }
+  return { label: "Pick-em AH", icon: "=", severity: "neutral", description: "Asian Handicap is near level — evenly matched teams" }
+}
+
+export function pinnacleAHMoveLabel(move: number): SignalLabel {
+  const abs = Math.abs(move)
+  if (abs >= 0.5)
+    return { label: "AH line shifted", icon: "⚡", severity: "high", description: `AH line moved ${move > 0 ? "toward home" : "toward away"} by ${abs} goals — significant sharp activity` }
+  if (abs >= 0.25)
+    return { label: "AH moving", icon: "↕", severity: "medium", description: `AH line shifted ${move > 0 ? "toward home" : "toward away"} — some sharp action` }
+  return { label: "AH stable", icon: "−", severity: "neutral", description: "Asian Handicap line unchanged since open" }
+}
+
+export function ahBookmakerDisagreementLabel(val: number): SignalLabel {
+  if (val > 0.15)
+    return { label: "AH disagreement", icon: "⚠", severity: "high", description: "Books split on the handicap line — uncertain team strength assessment" }
+  if (val > 0.08)
+    return { label: "AH split", icon: "≈", severity: "medium", description: "Some bookmaker disagreement on Asian Handicap" }
+  return { label: "AH consensus", icon: "✓", severity: "neutral", description: "Books broadly agree on the Asian Handicap" }
+}
+
+export function pinnacleOULabel(overProb: number): SignalLabel {
+  if (overProb > 0.65)
+    return { label: "High-scoring likely", icon: "⚽⚽", severity: "medium", description: `Pinnacle prices Over 2.5 at ${(overProb * 100).toFixed(1)}% — goal-heavy match expected` }
+  if (overProb > 0.55)
+    return { label: "Slight Over lean", icon: "⚽", severity: "low", description: `Pinnacle Over 2.5 at ${(overProb * 100).toFixed(1)}%` }
+  if (overProb < 0.40)
+    return { label: "Low-scoring likely", icon: "−", severity: "low", description: `Pinnacle prices Under 2.5 strongly — tight match expected` }
+  return { label: "O/U balanced", icon: "=", severity: "neutral", description: `Pinnacle Over 2.5 at ${(overProb * 100).toFixed(1)}% — close call` }
+}
+
+export function pinnacleBTTSLabel(prob: number): SignalLabel {
+  if (prob > 0.65)
+    return { label: "BTTS likely", icon: "⚽", severity: "medium", description: `Pinnacle prices both teams to score at ${(prob * 100).toFixed(1)}%` }
+  if (prob > 0.55)
+    return { label: "BTTS leaning", icon: "↑", severity: "low", description: `Pinnacle BTTS at ${(prob * 100).toFixed(1)}% — slight lean` }
+  if (prob < 0.38)
+    return { label: "BTTS unlikely", icon: "↓", severity: "low", description: `Pinnacle BTTS only ${(prob * 100).toFixed(1)}% — clean sheet expected` }
+  return { label: "BTTS neutral", icon: "=", severity: "neutral", description: `Pinnacle BTTS at ${(prob * 100).toFixed(1)}%` }
+}
+
+// ─── Manager change ───────────────────────────────────────────────────────────
+
+export function managerChangeDaysLabel(days: number): SignalLabel {
+  if (days <= 7)
+    return { label: "New manager", icon: "👤", severity: "high", description: `Manager changed ${days} day${days === 1 ? "" : "s"} ago — new manager bounce possible, tactical uncertainty high` }
+  if (days <= 21)
+    return { label: "Recent manager change", icon: "↕", severity: "medium", description: `Manager changed ${days} days ago — team still adjusting to new system` }
+  return { label: "Manager settled", icon: "=", severity: "low", description: `Manager changed ${days} days ago — squad likely settled` }
+}
+
+// ─── Venue surface ────────────────────────────────────────────────────────────
+
+export function venueSurfaceLabel(isArtificial: boolean): SignalLabel {
+  if (isArtificial)
+    return { label: "Artificial turf", icon: "🟩", severity: "medium", description: "Home team plays on artificial turf — away teams often uncomfortable on this surface" }
+  return { label: "Natural grass", icon: "✓", severity: "neutral", description: "Standard grass pitch" }
+}
+
+// ─── H2H depth ────────────────────────────────────────────────────────────────
+
+export function h2hGoalDiffLabel(diff: number): SignalLabel {
+  // diff from home team's perspective (positive = home scores more in H2H)
+  if (diff > 1.0)
+    return { label: "Home dominates H2H goals", icon: "↑↑", severity: "high", description: `Home team outscores away by ${diff.toFixed(1)} goals/game in H2H meetings` }
+  if (diff > 0.4)
+    return { label: "Home H2H edge", icon: "↑", severity: "medium", description: `Home scores more than away by ${diff.toFixed(1)} goals/game historically` }
+  if (diff < -1.0)
+    return { label: "Away dominates H2H goals", icon: "↓↓", severity: "high", description: `Away team outscores home by ${Math.abs(diff).toFixed(1)} goals/game in H2H meetings` }
+  if (diff < -0.4)
+    return { label: "Away H2H goal edge", icon: "↓", severity: "medium", description: `Away scores more than home by ${Math.abs(diff).toFixed(1)} goals/game historically` }
+  return { label: "H2H goals even", icon: "=", severity: "neutral", description: "Goals roughly even in historical H2H meetings" }
+}
+
+export function h2hRecencyLabel(premium: number): SignalLabel {
+  // premium = (last 3 win rate) - (overall win rate), from home perspective
+  if (premium > 0.25)
+    return { label: "Recent H2H improving", icon: "↑", severity: "medium", description: "Home side has done better in recent meetings than H2H overall suggests" }
+  if (premium < -0.25)
+    return { label: "Recent H2H declining", icon: "↓", severity: "medium", description: "Home side has done worse in recent meetings than the H2H history suggests" }
+  return { label: "H2H trend stable", icon: "=", severity: "neutral", description: "Recent meetings in line with overall H2H record" }
+}
+
+// ─── Season goals averages ────────────────────────────────────────────────────
+
+export function goalsForAvgLabel(avg: number): SignalLabel {
+  if (avg > 2.2)
+    return { label: "Strong attack", icon: "⚽⚽", severity: "high", description: `${avg.toFixed(2)} goals scored per game this season` }
+  if (avg > 1.6)
+    return { label: "Good attack", icon: "⚽", severity: "medium", description: `${avg.toFixed(2)} goals per game — above average output` }
+  if (avg < 1.0)
+    return { label: "Weak attack", icon: "↓", severity: "medium", description: `Only ${avg.toFixed(2)} goals per game — struggling to score` }
+  return { label: "Average attack", icon: "=", severity: "neutral", description: `${avg.toFixed(2)} goals per game this season` }
+}
+
+export function goalsAgainstAvgLabel(avg: number): SignalLabel {
+  if (avg < 0.8)
+    return { label: "Solid defence", icon: "🛡", severity: "high", description: `Only ${avg.toFixed(2)} goals conceded per game — very tight` }
+  if (avg < 1.2)
+    return { label: "Good defence", icon: "↑", severity: "medium", description: `${avg.toFixed(2)} goals conceded per game — above average` }
+  if (avg > 2.0)
+    return { label: "Leaky defence", icon: "↓↓", severity: "high", description: `${avg.toFixed(2)} goals conceded per game — vulnerable at the back` }
+  if (avg > 1.6)
+    return { label: "Weak defence", icon: "↓", severity: "medium", description: `${avg.toFixed(2)} goals conceded per game — defensive issues` }
+  return { label: "Average defence", icon: "=", severity: "neutral", description: `${avg.toFixed(2)} goals conceded per game` }
+}
+
+// ─── Relegation / title pressure ─────────────────────────────────────────────
+
+export function pointsToRelegationLabel(pts: number): SignalLabel {
+  if (pts <= 2)
+    return { label: "Relegation battle", icon: "🔴", severity: "high", description: `Only ${pts} point${pts === 1 ? "" : "s"} above the drop zone — must-win territory` }
+  if (pts <= 5)
+    return { label: "Danger zone", icon: "⚠", severity: "high", description: `${pts} points above relegation — under serious threat` }
+  if (pts <= 10)
+    return { label: "Relegation concern", icon: "↓", severity: "medium", description: `${pts} points above the drop — within range` }
+  return { label: "Safe", icon: "✓", severity: "neutral", description: `${pts} points above relegation — comfortable position` }
+}
+
+export function pointsToTitleLabel(pts: number): SignalLabel {
+  if (pts === 0)
+    return { label: "Title leader", icon: "★", severity: "high", description: "This team is currently top of the league" }
+  if (pts <= 3)
+    return { label: "Title race", icon: "↑↑", severity: "high", description: `${pts} point${pts === 1 ? "" : "s"} off the top — deep in title contention` }
+  if (pts <= 7)
+    return { label: "Title outsider", icon: "↑", severity: "medium", description: `${pts} points off the lead — still in contention` }
+  return { label: "Out of title race", icon: "=", severity: "neutral", description: `${pts} points behind the leaders` }
+}
+
+// ─── Referee over 2.5 ────────────────────────────────────────────────────────
+
+export function refereeOver25Label(pct: number): SignalLabel {
+  if (pct > 0.65)
+    return { label: "Goals-friendly ref", icon: "⚽", severity: "medium", description: `${(pct * 100).toFixed(0)}% of matches with this referee go over 2.5 goals` }
+  if (pct < 0.40)
+    return { label: "Tight-game ref", icon: "−", severity: "low", description: `Only ${(pct * 100).toFixed(0)}% of this referee's matches go over 2.5 — tends toward low-scoring games` }
+  return { label: "Average O/U rate", icon: "=", severity: "neutral", description: `${(pct * 100).toFixed(0)}% over 2.5 with this referee — typical` }
+}
+
 /**
  * Human-readable signal group names for use in UI headers.
  */
@@ -296,6 +462,7 @@ export const SIGNAL_GROUP_LABELS: Record<string, string> = {
   quality: "Team Quality",
   information: "News & Injuries",
   context: "Context",
+  specialist: "Specialist Markets",
   live: "Live",
 }
 

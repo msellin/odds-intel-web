@@ -20,6 +20,9 @@ import {
   h2hEdgeLabel,
   eloDiffLabel,
   leagueAvgGoalsLabel,
+  managerChangeDaysLabel,
+  pointsToRelegationLabel,
+  pinnacleLineMoveLabel,
   type SignalLabel,
   type SignalSeverity,
 } from "@/lib/signal-labels";
@@ -186,6 +189,58 @@ function buildSignalInsights(
   if (leagueAvgGoals !== undefined && (leagueAvgGoals > 3.0 || leagueAvgGoals < 2.0)) {
     const lbl = leagueAvgGoalsLabel(leagueAvgGoals);
     insights.push({ label: lbl, signalName: "league_avg_goals", priority: 5 });
+  }
+
+  // ── Manager change ────────────────────────────────────────────────────────
+  const mgrHome = byName["manager_change_home_days"];
+  if (mgrHome !== undefined && mgrHome <= 21) {
+    const lbl = managerChangeDaysLabel(Math.round(mgrHome));
+    insights.push({
+      label: { ...lbl, description: `${homeTeam}: ${lbl.description}` },
+      signalName: "manager_change_home_days",
+      priority: mgrHome <= 7 ? 1 : 2,
+    });
+  }
+  const mgrAway = byName["manager_change_away_days"];
+  if (mgrAway !== undefined && mgrAway <= 21) {
+    const lbl = managerChangeDaysLabel(Math.round(mgrAway));
+    insights.push({
+      label: { ...lbl, description: `${awayTeam}: ${lbl.description}` },
+      signalName: "manager_change_away_days",
+      priority: mgrAway <= 7 ? 1 : 2,
+    });
+  }
+
+  // ── Relegation pressure ───────────────────────────────────────────────────
+  const relHome = byName["points_to_relegation_home"];
+  if (relHome !== undefined && relHome <= 5) {
+    const lbl = pointsToRelegationLabel(Math.round(relHome));
+    insights.push({
+      label: { ...lbl, description: `${homeTeam}: ${lbl.description}` },
+      signalName: "points_to_relegation_home",
+      priority: relHome <= 2 ? 1 : 2,
+    });
+  }
+  const relAway = byName["points_to_relegation_away"];
+  if (relAway !== undefined && relAway <= 5) {
+    const lbl = pointsToRelegationLabel(Math.round(relAway));
+    insights.push({
+      label: { ...lbl, description: `${awayTeam}: ${lbl.description}` },
+      signalName: "points_to_relegation_away",
+      priority: relAway <= 2 ? 1 : 2,
+    });
+  }
+
+  // ── Pinnacle sharp line move (if strong) ──────────────────────────────────
+  const pinMoveHome = byName["pinnacle_line_move_home"];
+  if (pinMoveHome !== undefined && Math.abs(pinMoveHome) > 0.04) {
+    const lbl = pinnacleLineMoveLabel(pinMoveHome, "home");
+    insights.push({ label: lbl, signalName: "pinnacle_line_move_home", priority: 1 });
+  }
+  const pinMoveAway = byName["pinnacle_line_move_away"];
+  if (pinMoveAway !== undefined && Math.abs(pinMoveAway) > 0.04) {
+    const lbl = pinnacleLineMoveLabel(pinMoveAway, "away");
+    insights.push({ label: lbl, signalName: "pinnacle_line_move_away", priority: 1 });
   }
 
   // Sort by priority (lower = more important), keep top 5
