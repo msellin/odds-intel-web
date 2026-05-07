@@ -263,6 +263,7 @@ export interface MatchInjury {
   teamSide: "home" | "away";
   status: string;
   reason: string | null;
+  injuryCount: number | null;  // career injury episodes from player_sidelined
 }
 
 export interface MatchEvent {
@@ -347,14 +348,20 @@ export interface MatchStatsData {
   yellow_cards_away: number | null;
   red_cards_home: number | null;
   red_cards_away: number | null;
-  // Half-time
+  // Half-time breakdown (API-Football v3.9.3, data from 2024 season)
   shots_home_ht: number | null;
   shots_away_ht: number | null;
+  shots_on_target_home_ht: number | null;
+  shots_on_target_away_ht: number | null;
   possession_home_ht: number | null;
   corners_home_ht: number | null;
   corners_away_ht: number | null;
   xg_home_ht: number | null;
   xg_away_ht: number | null;
+  fouls_home_ht: number | null;
+  fouls_away_ht: number | null;
+  yellow_cards_home_ht: number | null;
+  yellow_cards_away_ht: number | null;
 }
 
 export interface OddsMovementPoint {
@@ -535,10 +542,10 @@ export async function getMatchCounts(dayOffset = 0): Promise<{ live: number; upc
   yesterdayStart.setUTCDate(yesterdayStart.getUTCDate() - 1);
 
   const [{ data: todayRows }, { data: yesterdayRows }] = await Promise.all([
-    supabase.from("matches").select("status").eq("league.is_active", true)
+    supabase.from("matches").select("status, league:league_id!inner(is_active)").eq("league.is_active", true)
       .gte("date", todayStart.toISOString()).lte("date", todayEnd.toISOString()).limit(500),
     dayOffset === 0
-      ? supabase.from("matches").select("status").eq("league.is_active", true)
+      ? supabase.from("matches").select("status, league:league_id!inner(is_active)").eq("league.is_active", true)
           .gte("date", yesterdayStart.toISOString()).lt("date", todayStart.toISOString())
           .neq("status", "finished").limit(50)
       : Promise.resolve({ data: [] as { status: string }[] | null }),
@@ -1492,8 +1499,10 @@ export async function getMatchStats(matchId: string): Promise<MatchStatsData | n
        saves_home, saves_away, blocked_shots_home, blocked_shots_away,
        pass_accuracy_home, pass_accuracy_away,
        yellow_cards_home, yellow_cards_away, red_cards_home, red_cards_away,
-       shots_home_ht, shots_away_ht, possession_home_ht,
-       corners_home_ht, corners_away_ht, xg_home_ht, xg_away_ht`
+       shots_home_ht, shots_away_ht, shots_on_target_home_ht, shots_on_target_away_ht,
+       possession_home_ht, corners_home_ht, corners_away_ht,
+       xg_home_ht, xg_away_ht, fouls_home_ht, fouls_away_ht,
+       yellow_cards_home_ht, yellow_cards_away_ht`
     )
     .eq("match_id", matchId)
     .single();
@@ -1570,18 +1579,41 @@ export async function getMatchH2H(matchId: string): Promise<MatchH2H | null> {
 
 export async function getMatchInjuries(matchId: string): Promise<MatchInjury[]> {
   const supabase = createSupabasePublic();
+
+  // Fetch injuries with player_id so we can join sidelined history count
   const { data, error } = await supabase
     .from("match_injuries")
-    .select("player_name, team_side, status, reason")
+    .select("player_name, player_id, team_side, status, reason")
     .eq("match_id", matchId);
 
   if (error || !data) return [];
 
-  return (data as { player_name: string; team_side: string; status: string; reason: string | null }[]).map((r) => ({
+  type InjRow = { player_name: string; player_id: number | null; team_side: string; status: string; reason: string | null };
+  const rows = data as InjRow[];
+
+  // Fetch career injury counts from player_sidelined for all player IDs
+  const playerIds = rows.map((r) => r.player_id).filter(Boolean) as number[];
+  const sidCountMap = new Map<number, number>();
+
+  if (playerIds.length > 0) {
+    const { data: sidRows } = await supabase
+      .from("player_sidelined")
+      .select("player_id")
+      .in("player_id", playerIds);
+
+    if (sidRows) {
+      for (const r of sidRows as { player_id: number }[]) {
+        sidCountMap.set(r.player_id, (sidCountMap.get(r.player_id) ?? 0) + 1);
+      }
+    }
+  }
+
+  return rows.map((r) => ({
     playerName: r.player_name,
     teamSide: r.team_side as "home" | "away",
     status: r.status,
     reason: r.reason,
+    injuryCount: r.player_id ? (sidCountMap.get(r.player_id) ?? null) : null,
   }));
 }
 
