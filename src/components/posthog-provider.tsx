@@ -61,7 +61,7 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
       capture_pageleave: true,
       persistence: "localStorage",
       disable_session_recording: true,
-      enable_surveys: false,
+      disable_surveys: true,
       autocapture: false,
     });
     initialized = true;
