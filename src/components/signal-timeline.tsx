@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import type { MatchSignalRow } from "@/lib/engine-data";
 
 interface SignalTimelineProps {
@@ -58,6 +59,7 @@ const GROUP_COLORS: Record<string, string> = {
 
 export function SignalTimeline({ signals, homeTeam, awayTeam }: SignalTimelineProps) {
   const buckets = useMemo(() => bucketByHour(signals), [signals]);
+  const [isOpen, setIsOpen] = useState(false);
 
   if (buckets.length === 0) return null;
 
@@ -68,18 +70,28 @@ export function SignalTimeline({ signals, homeTeam, awayTeam }: SignalTimelinePr
     : null;
 
   return (
-    <div className="rounded-xl border border-white/[0.06] bg-card/40 p-4">
-      <div className="mb-3 flex items-center justify-between">
+    <div className="rounded-xl border border-white/[0.06] bg-card/40">
+      <button
+        onClick={() => setIsOpen((v) => !v)}
+        className="flex w-full items-center justify-between p-4 text-left"
+      >
         <h3 className="text-xs font-black uppercase tracking-widest text-foreground">
           Signal Timeline
         </h3>
-        {nextRun && (
-          <span className="text-[10px] text-muted-foreground/50">
-            Next update ~{nextRun.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Tallinn" })}
-          </span>
-        )}
-      </div>
+        <div className="flex items-center gap-2">
+          {nextRun && !isOpen && (
+            <span className="text-[10px] text-muted-foreground/50">
+              Next ~{nextRun.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Tallinn" })}
+            </span>
+          )}
+          <ChevronDown
+            className={`size-4 text-muted-foreground/50 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+          />
+        </div>
+      </button>
 
+      {isOpen && (
+      <div className="px-4 pb-4">
       <div className="relative pl-4">
         {/* Vertical line */}
         <div className="absolute left-0 top-2 bottom-2 w-px bg-white/[0.08]" />
@@ -132,6 +144,8 @@ export function SignalTimeline({ signals, homeTeam, awayTeam }: SignalTimelinePr
       <p className="mt-3 text-[10px] text-muted-foreground/40">
         {homeTeam} vs {awayTeam} · {signals.length} signal captures
       </p>
+      </div>
+      )}
     </div>
   );
 }
