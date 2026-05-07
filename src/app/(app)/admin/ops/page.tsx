@@ -171,7 +171,43 @@ export default async function OpsDashboardPage() {
         </Grid>
       </Section>
 
-      {/* ⑧ Users */}
+      {/* ⑧ AF API Budget */}
+      <Section title="AF API Budget" icon="💳">
+        <Grid>
+          <Stat label="Calls today" value={snapshot?.af_calls_today} />
+          <Stat
+            label="Remaining"
+            value={snapshot?.af_budget_remaining}
+            warn={v => v < 5000}
+            good={v => v > 50000}
+          />
+          {(() => {
+            const calls = snapshot?.af_calls_today;
+            if (calls == null) return null;
+            const pct = (calls / 75000) * 100;
+            return (
+              <div className="rounded-lg border border-border bg-card p-3 col-span-2">
+                <p className="text-xs text-muted-foreground mb-1">Usage</p>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${
+                        pct > 80 ? "bg-red-500" : pct > 50 ? "bg-amber-500" : "bg-emerald-500"
+                      }`}
+                      style={{ width: `${Math.min(100, pct).toFixed(1)}%` }}
+                    />
+                  </div>
+                  <span className="text-xs font-mono text-muted-foreground">
+                    {pct.toFixed(1)}%
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
+        </Grid>
+      </Section>
+
+      {/* ⑨ Users */}
       <Section title="Users" icon="👤">
         <Grid>
           <Stat label="Total users" value={snapshot?.total_users} />
