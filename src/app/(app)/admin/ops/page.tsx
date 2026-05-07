@@ -109,8 +109,8 @@ export default async function OpsDashboardPage() {
             note="Points-per-game over last 5 games for each team" />
           <Stat label="H2H history" value={snapshot?.signals_with_h2h} total={snapshot?.matches_today}
             note="Head-to-head win rate from past meetings" />
-          <Stat label="Injury data" value={snapshot?.signals_with_injuries} total={snapshot?.matches_today}
-            note="Injury count for home/away team fetched today" />
+          <Stat label="Injury data" value={snapshot?.signals_with_injuries}
+            note="AF only covers injuries for a handful of top leagues — low count is normal" />
           <Stat label="Standings" value={snapshot?.signals_with_standings} total={snapshot?.matches_today}
             note="League position, points-to-title, points-to-relegation" />
           <Stat label="Postponed" value={snapshot?.matches_postponed_today} warn={v => v > 0}
@@ -263,8 +263,8 @@ export default async function OpsDashboardPage() {
         <Grid>
           <Stat label="Have H2H data" value={snapshot?.matches_with_h2h} total={snapshot?.matches_today}
             note="Stored in h2h_raw column on matches. Fetched by enrichment job." />
-          <Stat label="Have injury reports" value={snapshot?.matches_with_injuries} total={snapshot?.matches_today}
-            note="Stored in match_injuries table. At least one team affected." />
+          <Stat label="Have injury reports" value={snapshot?.matches_with_injuries}
+            note="Coverage-limited — AF only provides injury data for top leagues, not all 149 matches" />
           <Stat label="Have confirmed lineups" value={snapshot?.matches_with_lineups} total={snapshot?.matches_today}
             note="0% until ~1h before kick-off — completely normal before evening games" />
         </Grid>
