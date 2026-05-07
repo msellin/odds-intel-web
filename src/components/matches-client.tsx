@@ -385,7 +385,7 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
             </div>
           )}
 
-          {filteredGroups.map(([league, matches]) => (
+          {filteredGroups.map(([league, matches], i) => (
             <LeagueAccordion
               key={league}
               league={league}
@@ -395,6 +395,7 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
               isPro={isPro}
               favoriteMatchIds={favoriteMatchIds}
               onMatchFavoriteToggle={handleMatchFavoriteToggle}
+              prioritizeFirstLogos={i === 0}
             />
           ))}
         </>

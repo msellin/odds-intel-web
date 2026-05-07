@@ -45,7 +45,7 @@ function OddsCell({
 }
 
 // Team logo — 16px on mobile, 20px on desktop
-function TeamLogo({ logo, name }: { logo: string | null; name: string }) {
+function TeamLogo({ logo, name, priority = false }: { logo: string | null; name: string; priority?: boolean }) {
   const [failed, setFailed] = useState(false);
   const initial = name.charAt(0).toUpperCase();
 
@@ -58,8 +58,7 @@ function TeamLogo({ logo, name }: { logo: string | null; name: string }) {
           fill
           sizes="20px"
           className="object-contain p-0.5"
-          loading="lazy"
-          unoptimized
+          priority={priority}
           onError={() => setFailed(true)}
         />
       </div>
@@ -102,12 +101,14 @@ function MatchRow({
   isPro,
   favoriteMatchIds,
   onMatchFavoriteToggle,
+  prioritizeLogos = false,
 }: {
   match: PublicMatch;
   liveSnapshot?: LiveSnapshot;
   isPro: boolean;
   favoriteMatchIds?: Set<string>;
   onMatchFavoriteToggle?: (matchId: string, isFavorited: boolean) => void;
+  prioritizeLogos?: boolean;
 }) {
   const hasOdds = match.hasOdds && (match.bestHome > 0 || match.bestDraw > 0 || match.bestAway > 0);
 
@@ -169,7 +170,7 @@ function MatchRow({
         <div className="flex flex-col justify-center gap-1 flex-1 min-w-0 ml-1">
           {/* Home team row */}
           <div className="flex items-center gap-1.5">
-            <TeamLogo logo={match.logoHome} name={match.homeTeam} />
+            <TeamLogo logo={match.logoHome} name={match.homeTeam} priority={prioritizeLogos} />
             <span className={`truncate text-[13px] leading-[19px] ${homeAhead ? "font-bold" : "font-medium"} text-foreground`}>{match.homeTeam}</span>
             {hasScore && (
               <span className={`ml-auto font-mono text-[13px] font-bold tabular-nums shrink-0 ${scoreColor}`}>
@@ -179,7 +180,7 @@ function MatchRow({
           </div>
           {/* Away team row */}
           <div className="flex items-center gap-1.5">
-            <TeamLogo logo={match.logoAway} name={match.awayTeam} />
+            <TeamLogo logo={match.logoAway} name={match.awayTeam} priority={prioritizeLogos} />
             <span className={`truncate text-[13px] leading-[19px] ${awayAhead ? "font-bold" : "font-medium"} text-foreground`}>{match.awayTeam}</span>
             {hasScore && (
               <span className={`ml-auto font-mono text-[13px] font-bold tabular-nums shrink-0 ${scoreColor}`}>
@@ -266,7 +267,7 @@ function MatchRow({
         <div className="flex flex-1 items-center justify-center gap-2 overflow-hidden text-sm">
           <div className="flex flex-1 items-center justify-end gap-1.5 min-w-0">
             <span className={`truncate ${homeAhead ? "font-bold" : "font-medium"} text-foreground`}>{match.homeTeam}</span>
-            <TeamLogo logo={match.logoHome} name={match.homeTeam} />
+            <TeamLogo logo={match.logoHome} name={match.homeTeam} priority={prioritizeLogos} />
           </div>
           {hasScore ? (
             <span className={`w-10 shrink-0 text-center font-mono text-sm font-bold tabular-nums ${scoreColor}`}>
@@ -276,7 +277,7 @@ function MatchRow({
             <span className="w-10 shrink-0 text-center text-[9px] font-bold tracking-widest text-muted-foreground/30">VS</span>
           )}
           <div className="flex flex-1 items-center gap-1.5 min-w-0">
-            <TeamLogo logo={match.logoAway} name={match.awayTeam} />
+            <TeamLogo logo={match.logoAway} name={match.awayTeam} priority={prioritizeLogos} />
             <span className={`truncate ${awayAhead ? "font-bold" : "font-medium"} text-foreground`}>{match.awayTeam}</span>
           </div>
         </div>
@@ -338,6 +339,7 @@ interface LeagueAccordionProps {
   isPro: boolean;
   favoriteMatchIds?: Set<string>;
   onMatchFavoriteToggle?: (matchId: string, isFavorited: boolean) => void;
+  prioritizeFirstLogos?: boolean;
 }
 
 export function LeagueAccordion({
@@ -348,6 +350,7 @@ export function LeagueAccordion({
   isPro,
   favoriteMatchIds,
   onMatchFavoriteToggle,
+  prioritizeFirstLogos = false,
 }: LeagueAccordionProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const hasPredictions = matches.some((m) => m.predictedHome !== null);
@@ -404,7 +407,7 @@ export function LeagueAccordion({
               <span className="w-14 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">A</span>
             </div>
           </div>
-          {matches.map((match) => (
+          {matches.map((match, i) => (
             <MatchRow
               key={match.id}
               match={match}
@@ -412,6 +415,7 @@ export function LeagueAccordion({
               isPro={isPro}
               favoriteMatchIds={favoriteMatchIds}
               onMatchFavoriteToggle={onMatchFavoriteToggle}
+              prioritizeLogos={prioritizeFirstLogos && i === 0}
             />
           ))}
         </div>

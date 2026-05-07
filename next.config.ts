@@ -2,6 +2,13 @@ import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "media.api-sports.io" },
+      { protocol: "https", hostname: "*.supabase.co" },
+    ],
+    minimumCacheTTL: 604800, // 7 days — team logos rarely change
+  },
   async headers() {
     return [
       {
@@ -13,7 +20,7 @@ const nextConfig: NextConfig = {
               "default-src 'self'",
               "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.sentry.io https://us-assets.i.posthog.com",
               "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: blob: https://media.api-sports.io https://*.supabase.co",
+              "img-src 'self' data: blob: https://*.supabase.co",
               "font-src 'self'",
               "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.sentry.io https://api.stripe.com https://us.i.posthog.com https://us-assets.i.posthog.com",
               "frame-src 'self' https://js.stripe.com https://hooks.stripe.com",
