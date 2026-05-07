@@ -101,6 +101,7 @@ const SEVERITY_DOT: Record<SignalSeverity, string> = {
   low: "bg-sky-400/60",
   medium: "bg-amber-400",
   high: "bg-emerald-400",
+  negative: "bg-rose-400",
 };
 
 const SEVERITY_LABEL_COLOR: Record<SignalSeverity, string> = {
@@ -108,6 +109,7 @@ const SEVERITY_LABEL_COLOR: Record<SignalSeverity, string> = {
   low: "text-sky-400",
   medium: "text-amber-400",
   high: "text-emerald-400",
+  negative: "text-rose-400",
 };
 
 // ─── Build signal groups from flat EAV rows ───────────────────────────────────

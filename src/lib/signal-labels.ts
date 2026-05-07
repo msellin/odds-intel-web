@@ -4,7 +4,7 @@
  * Used by SUX-4 (summary tab), SUX-5 (accordion), SUX-7 (conversion hooks).
  */
 
-export type SignalSeverity = "neutral" | "low" | "medium" | "high"
+export type SignalSeverity = "neutral" | "low" | "medium" | "high" | "negative"
 
 export interface SignalLabel {
   label: string
@@ -20,7 +20,7 @@ export function formSlopeLabel(slope: number): SignalLabel {
   if (slope > 0.15) return { label: "Improving", icon: "↑", severity: "medium", description: "Form trending up" }
   if (slope > -0.15) return { label: "Stable", icon: "→", severity: "neutral", description: "Consistent recent form" }
   if (slope > -0.4) return { label: "Declining", icon: "↓", severity: "medium", description: "Form trending down" }
-  return { label: "Collapsing", icon: "↓↓", severity: "high", description: "Sharp recent decline" }
+  return { label: "Collapsing", icon: "↓↓", severity: "negative", description: "Sharp recent decline" }
 }
 
 // ─── Market signals ───────────────────────────────────────────────────────────
@@ -77,7 +77,7 @@ export function newsImpactLabel(score: number): SignalLabel {
   if (score > 0.3)
     return { label: "Positive news", icon: "✓", severity: "low", description: "Recent news favors this team" }
   if (score < -0.3)
-    return { label: "Negative news", icon: "✗", severity: "high", description: "Concerning news — key absences or disruption" }
+    return { label: "Negative news", icon: "✗", severity: "negative", description: "Concerning news — key absences or disruption" }
   return { label: "Neutral", icon: "−", severity: "neutral", description: "No significant news impact" }
 }
 
@@ -132,7 +132,7 @@ export function eloDiffLabel(diff: number): SignalLabel {
   if (diff > 80)
     return { label: "Favourite", icon: "↑", severity: "medium", description: "Home side stronger by ELO" }
   if (diff < -200)
-    return { label: "Heavy underdog", icon: "↓↓", severity: "high", description: "Away side significantly stronger by ELO" }
+    return { label: "Heavy underdog", icon: "↓↓", severity: "negative", description: "Away side significantly stronger by ELO" }
   if (diff < -80)
     return { label: "Underdog", icon: "↓", severity: "medium", description: "Away side stronger by ELO" }
   return { label: "Even", icon: "=", severity: "neutral", description: "Teams closely matched by ELO" }
@@ -273,7 +273,7 @@ export function formVsEloLabel(residual: number): SignalLabel {
     return { label: "As expected", icon: "=", severity: "neutral", description: "Recent form matches ELO quality" }
   if (residual > -0.5)
     return { label: "Below expectation", icon: "↓", severity: "medium", description: "Recent results below ELO rating — potential regression inbound" }
-  return { label: "Cold streak", icon: "↓↓", severity: "high", description: "Team underperforming their quality by a wide margin" }
+  return { label: "Cold streak", icon: "↓↓", severity: "negative", description: "Team underperforming their quality by a wide margin" }
 }
 
 // ─── Half-time tendency ───────────────────────────────────────────────────────
@@ -425,9 +425,9 @@ export function goalsAgainstAvgLabel(avg: number): SignalLabel {
 
 export function pointsToRelegationLabel(pts: number): SignalLabel {
   if (pts <= 2)
-    return { label: "Relegation battle", icon: "🔴", severity: "high", description: `Only ${pts} point${pts === 1 ? "" : "s"} above the drop zone — must-win territory` }
+    return { label: "Relegation battle", icon: "🔴", severity: "negative", description: `Only ${pts} point${pts === 1 ? "" : "s"} above the drop zone — must-win territory` }
   if (pts <= 5)
-    return { label: "Danger zone", icon: "⚠", severity: "high", description: `${pts} points above relegation — under serious threat` }
+    return { label: "Danger zone", icon: "⚠", severity: "negative", description: `${pts} points above relegation — under serious threat` }
   if (pts <= 10)
     return { label: "Relegation concern", icon: "↓", severity: "medium", description: `${pts} points above the drop — within range` }
   return { label: "Safe", icon: "✓", severity: "neutral", description: `${pts} points above relegation — comfortable position` }
