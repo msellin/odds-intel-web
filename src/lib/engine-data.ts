@@ -10,6 +10,78 @@ function createSupabaseAdmin() {
   );
 }
 
+// ─── Ops snapshot types ──────────────────────────────────────────────────────
+
+export interface OpsSnapshot {
+  id: number;
+  snapshot_date: string;
+  created_at: string;
+  // ① Fixtures
+  matches_today: number | null;
+  matches_with_odds: number | null;
+  matches_with_pinnacle: number | null;
+  matches_with_predictions: number | null;
+  matches_with_signals: number | null;
+  matches_with_fvectors: number | null;
+  matches_missing_grade: number | null;
+  matches_postponed_today: number | null;
+  // ② Odds
+  odds_snapshots_today: number | null;
+  distinct_bookmakers: number | null;
+  matches_without_pinnacle: number | null;
+  // ③ Bets
+  bets_placed_today: number | null;
+  bets_pending: number | null;
+  bets_settled_today: number | null;
+  pnl_today: number | null;
+  bets_inplay_today: number | null;
+  active_bots: number | null;
+  silent_bots: number | null;
+  duplicate_bets: number | null;
+  // ④ Live
+  live_snapshots_today: number | null;
+  snapshots_with_xg: number | null;
+  snapshots_with_live_odds: number | null;
+  // ⑤ Post-match
+  matches_finished_today: number | null;
+  post_mortem_ran_today: boolean | null;
+  feature_vectors_today: number | null;
+  elo_updates_today: number | null;
+  // ⑥ Enrichment
+  matches_with_h2h: number | null;
+  matches_with_injuries: number | null;
+  matches_with_lineups: number | null;
+  // ⑦ Email
+  digests_sent_today: number | null;
+  value_bet_alerts_today: number | null;
+  previews_generated_today: number | null;
+  news_checker_errors_today: number | null;
+  watchlist_alerts_today: number | null;
+  // ⑧ Backfill
+  backfill_total_done: number | null;
+  backfill_last_run: string | null;
+  // ⑨ API budget
+  af_calls_today: number | null;
+  af_budget_remaining: number | null;
+  // ⑩ Users
+  total_users: number | null;
+  pro_users: number | null;
+  elite_users: number | null;
+  new_signups_today: number | null;
+}
+
+export interface PipelineRun {
+  id: number;
+  job_name: string;
+  run_date: string;
+  status: string;
+  started_at: string;
+  completed_at: string | null;
+  fixtures_count: number | null;
+  records_count: number | null;
+  error_message: string | null;
+}
+
 // ─── Frontend types (same interface as before) ──────────────────────────────
 
 export interface LiveMatch {
@@ -2836,4 +2908,57 @@ export async function getUserBankrollData(userId: string): Promise<BankrollData>
     leagueBreakdown,
     modelComparison,
   };
+}
+
+// ─── Ops Dashboard ──────────────────────────────────────────────────────────
+
+/** Latest pre-computed ops snapshot for today (written by each pipeline job). */
+export async function getOpsSnapshot(date?: string): Promise<OpsSnapshot | null> {
+  const admin = createSupabaseAdmin();
+  const targetDate = date ?? new Date().toISOString().slice(0, 10);
+  const { data } = await admin
+    .from("ops_snapshots")
+    .select("*")
+    .eq("snapshot_date", targetDate)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
+  return data ?? null;
+}
+
+/** Last 50 pipeline runs across all jobs (live query — small table). */
+export async function getRecentPipelineRuns(): Promise<PipelineRun[]> {
+  const admin = createSupabaseAdmin();
+  const { data } = await admin
+    .from("pipeline_runs")
+    .select("id, job_name, run_date, status, started_at, completed_at, fixtures_count, records_count, error_message")
+    .order("started_at", { ascending: false })
+    .limit(50);
+  return (data ?? []) as PipelineRun[];
+}
+
+/** Pending bets older than 4 hours (stale bets alert — live query). */
+export async function getStalePendingBets(): Promise<{ id: string; market: string; pick_time: string; bot_id: string }[]> {
+  const admin = createSupabaseAdmin();
+  const cutoff = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
+  const { data } = await admin
+    .from("simulated_bets")
+    .select("id, market, pick_time, bot_id")
+    .eq("result", "pending")
+    .lt("pick_time", cutoff)
+    .order("pick_time", { ascending: true })
+    .limit(20);
+  return data ?? [];
+}
+
+/** Timestamp of most recent live snapshot (live query — 1 row). */
+export async function getLastLiveSnapshotAge(): Promise<string | null> {
+  const admin = createSupabaseAdmin();
+  const { data } = await admin
+    .from("live_match_snapshots")
+    .select("captured_at")
+    .order("captured_at", { ascending: false })
+    .limit(1)
+    .single();
+  return data?.captured_at ?? null;
 }

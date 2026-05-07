@@ -203,6 +203,19 @@ export function Nav() {
                         <Bot className="h-3.5 w-3.5" />
                         Bot Dashboard
                       </Link>
+                      <Link
+                        href="/admin/ops"
+                        onClick={() => setProfileOpen(false)}
+                        className={cn(
+                          "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
+                          pathname === "/admin/ops"
+                            ? "bg-amber-500/10 text-amber-400"
+                            : "text-amber-500/70 hover:bg-accent hover:text-amber-400"
+                        )}
+                      >
+                        <Bot className="h-3.5 w-3.5" />
+                        Ops Dashboard
+                      </Link>
                     </div>
                   )}
 
@@ -365,6 +378,19 @@ export function Nav() {
                   >
                     <Bot className="h-4 w-4" />
                     Bot Dashboard
+                  </Link>
+                  <Link
+                    href="/admin/ops"
+                    onClick={() => setMobileOpen(false)}
+                    className={cn(
+                      "flex items-center gap-2 border-l-2 rounded-md px-3 py-2.5 text-sm transition-colors",
+                      pathname === "/admin/ops"
+                        ? "border-amber-400 bg-amber-500/10 text-amber-400"
+                        : "border-transparent text-amber-500/70 hover:bg-accent hover:text-amber-400"
+                    )}
+                  >
+                    <Bot className="h-4 w-4" />
+                    Ops Dashboard
                   </Link>
                 </>
               )}
