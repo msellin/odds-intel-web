@@ -226,6 +226,9 @@ export default async function MatchDetailPage({
           bestAway={publicMatch.bestAway}
           homeTeam={publicMatch.homeTeam}
           awayTeam={publicMatch.awayTeam}
+          modelHome={publicMatch.modelHome}
+          modelDraw={publicMatch.modelDraw}
+          modelAway={publicMatch.modelAway}
         />
       )}
 
@@ -405,6 +408,24 @@ export default async function MatchDetailPage({
   // ── CONTEXT TAB — H2H, standings, season stats, notes ──
   const contextContent = (
     <>
+      {/* Venue + Referee info row */}
+      {(publicMatch.venue_name || publicMatch.referee) && (
+        <div className="rounded-xl border border-border/50 bg-card px-4 py-3 flex items-center gap-4 flex-wrap text-xs text-muted-foreground">
+          {publicMatch.venue_name && (
+            <span className="flex items-center gap-1.5">
+              <MapPin className="size-3 shrink-0" />
+              {publicMatch.venue_name}
+            </span>
+          )}
+          {publicMatch.referee && (
+            <span className="flex items-center gap-1.5">
+              <User className="size-3 shrink-0" />
+              Ref: {publicMatch.referee}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* H2H + League Table (from MatchDetailFree, hiding odds + coverage) */}
       <MatchDetailFree
         match={publicMatch}

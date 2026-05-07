@@ -138,6 +138,10 @@ export interface PublicMatch {
   venue_name?: string | null;
   referee?: string | null;
   hasLineups?: boolean;
+  // ensemble model probabilities (0-100) — null if no prediction
+  modelHome?: number | null;
+  modelDraw?: number | null;
+  modelAway?: number | null;
 }
 
 export interface H2HMatch {
@@ -686,16 +690,29 @@ export async function getPublicMatchById(matchId: string): Promise<PublicMatch |
   const predictedHome = afGoals?.home != null ? Math.round(Number(afGoals.home)) : null;
   const predictedAway = afGoals?.away != null ? Math.round(Number(afGoals.away)) : null;
 
-  // Determine data grade from predictions table
+  // Determine data grade + extract ensemble model probabilities
   const { data: predRows } = await supabase
     .from("predictions")
-    .select("source")
+    .select("source, market, model_probability")
     .eq("match_id", matchId);
-  const predSources = new Set((predRows ?? []).map((r: { source: string }) => r.source));
+  type PredRow = { source: string; market: string; model_probability: number };
+  const predSources = new Set((predRows ?? []).map((r: PredRow) => r.source));
   let dataGrade: "A" | "B" | "D" | null = null;
   if (predSources.has("xgboost")) dataGrade = "A";
   else if (predSources.has("poisson")) dataGrade = "B";
   else if (predSources.has("af")) dataGrade = "D";
+
+  // Extract ensemble 1x2 model probabilities (0-100) for MarketImpliedProbabilities comparison
+  let modelHome: number | null = null;
+  let modelDraw: number | null = null;
+  let modelAway: number | null = null;
+  for (const p of (predRows ?? []) as PredRow[]) {
+    if (p.source !== "ensemble") continue;
+    const pct = Math.round(Number(p.model_probability) * 1000) / 10;
+    if (p.market === "1x2_home") modelHome = pct;
+    else if (p.market === "1x2_draw") modelDraw = pct;
+    else if (p.market === "1x2_away") modelAway = pct;
+  }
 
   const bookmakerCount = new Set(
     (oddsRows || []).map((o: { match_id: string; selection: string; odds: number }) => `${o.match_id}`)
@@ -734,6 +751,9 @@ export async function getPublicMatchById(matchId: string): Promise<PublicMatch |
     venue_name: m.venue_name,
     referee: m.referee,
     hasLineups: m.lineups_home != null,
+    modelHome,
+    modelDraw,
+    modelAway,
   };
 }
 
