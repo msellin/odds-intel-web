@@ -8,6 +8,7 @@ interface MarketImpliedProbabilitiesProps {
   modelHome?: number | null;
   modelDraw?: number | null;
   modelAway?: number | null;
+  matchStatus?: string;
 }
 
 function ProbBar({ label, pct, modelPct }: { label: string; pct: number; modelPct?: number | null }) {
@@ -53,8 +54,13 @@ export function MarketImpliedProbabilities({
   modelHome,
   modelDraw,
   modelAway,
+  matchStatus,
 }: MarketImpliedProbabilitiesProps) {
   if (!bestHome || !bestDraw || !bestAway) return null;
+
+  // For live matches, odds are in-play and the pre-match model comparison is meaningless
+  const isLive = matchStatus === "live";
+  const showModel = !isLive && modelHome != null;
 
   // Remove overround to get true implied probabilities
   const rawHome = 1 / bestHome;
@@ -65,27 +71,36 @@ export function MarketImpliedProbabilities({
   const impliedHome = (rawHome / total) * 100;
   const impliedDraw = (rawDraw / total) * 100;
   const impliedAway = (rawAway / total) * 100;
-  const overround = ((total - 1) * 100);
+  const overround = (total - 1) * 100;
 
   return (
     <div className="rounded-xl border border-border/50 bg-card p-4">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-foreground">Market Probabilities</h3>
-        <span className="text-[10px] text-muted-foreground/50 font-mono">
-          {overround.toFixed(1)}% margin
-        </span>
+        {isLive ? (
+          <span className="text-[10px] text-amber-400/70 font-mono">Live odds</span>
+        ) : (
+          <span className="text-[10px] text-muted-foreground/50 font-mono">
+            {overround.toFixed(1)}% margin
+          </span>
+        )}
       </div>
 
       <div className="space-y-3">
-        <ProbBar label={homeTeam} pct={impliedHome} modelPct={modelHome} />
-        <ProbBar label="Draw" pct={impliedDraw} modelPct={modelDraw} />
-        <ProbBar label={awayTeam} pct={impliedAway} modelPct={modelAway} />
+        <ProbBar label={homeTeam} pct={impliedHome} modelPct={showModel ? modelHome : null} />
+        <ProbBar label="Draw" pct={impliedDraw} modelPct={showModel ? modelDraw : null} />
+        <ProbBar label={awayTeam} pct={impliedAway} modelPct={showModel ? modelAway : null} />
       </div>
 
-      {modelHome != null && (
+      {showModel && (
         <p className="text-[10px] text-muted-foreground/40 mt-2 text-center">
           <span className="inline-block w-2 h-0.5 bg-violet-400 mr-1 align-middle rounded" />
           Model estimate
+        </p>
+      )}
+      {isLive && (
+        <p className="text-[10px] text-muted-foreground/40 mt-2 text-center">
+          Pre-match model comparison hidden during live matches
         </p>
       )}
     </div>

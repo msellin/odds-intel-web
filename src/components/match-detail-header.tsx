@@ -49,7 +49,8 @@ interface MatchDetailHeaderProps {
 
 export function MatchDetailHeader({ match, initialSnapshot }: MatchDetailHeaderProps) {
   const hasPrediction = match.predictedHome !== null && match.predictedAway !== null;
-  const hasOdds = match.hasOdds && (match.bestHome > 0 || match.bestDraw > 0 || match.bestAway > 0);
+  const isFinished = match.status === "finished";
+  const hasOdds = !isFinished && match.hasOdds && (match.bestHome > 0 || match.bestDraw > 0 || match.bestAway > 0);
 
   const kickoffDate = new Date(match.kickoff);
   const dateStr = kickoffDate.toLocaleDateString("en-GB", {

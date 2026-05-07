@@ -223,31 +223,7 @@ export default async function MatchDetailPage({
         </div>
       )}
 
-      {/* Signal Delta (SUX-9) — "what changed since last visit" — Pro only */}
-      {isPro && hasSignals && (
-        <SignalDelta
-          matchId={publicMatch.id}
-          signals={matchSignals}
-          homeTeam={publicMatch.homeTeam}
-          awayTeam={publicMatch.awayTeam}
-        />
-      )}
-
-      {/* Market Implied Probabilities — always available when odds exist */}
-      {publicMatch.hasOdds && publicMatch.bestHome > 0 && (
-        <MarketImpliedProbabilities
-          bestHome={publicMatch.bestHome}
-          bestDraw={publicMatch.bestDraw}
-          bestAway={publicMatch.bestAway}
-          homeTeam={publicMatch.homeTeam}
-          awayTeam={publicMatch.awayTeam}
-          modelHome={publicMatch.modelHome}
-          modelDraw={publicMatch.modelDraw}
-          modelAway={publicMatch.modelAway}
-        />
-      )}
-
-      {/* Intelligence Summary (SUX-4/7/10) */}
+      {/* Intelligence Summary (SUX-4/7/10) — most valuable card, shown first */}
       {hasSignals && (
         <MatchSignalSummary
           signals={matchSignals}
@@ -258,6 +234,31 @@ export default async function MatchDetailPage({
           matchStatus={publicMatch.status}
           scoreHome={publicMatch.score_home ?? null}
           scoreAway={publicMatch.score_away ?? null}
+        />
+      )}
+
+      {/* Signal Delta (SUX-9) — "what changed since last visit" — Pro only */}
+      {isPro && hasSignals && (
+        <SignalDelta
+          matchId={publicMatch.id}
+          signals={matchSignals}
+          homeTeam={publicMatch.homeTeam}
+          awayTeam={publicMatch.awayTeam}
+        />
+      )}
+
+      {/* Market Implied Probabilities — pre-match and live only, not finished */}
+      {publicMatch.status !== "finished" && publicMatch.hasOdds && publicMatch.bestHome > 0 && (
+        <MarketImpliedProbabilities
+          bestHome={publicMatch.bestHome}
+          bestDraw={publicMatch.bestDraw}
+          bestAway={publicMatch.bestAway}
+          homeTeam={publicMatch.homeTeam}
+          awayTeam={publicMatch.awayTeam}
+          modelHome={publicMatch.modelHome}
+          modelDraw={publicMatch.modelDraw}
+          modelAway={publicMatch.modelAway}
+          matchStatus={publicMatch.status}
         />
       )}
 
