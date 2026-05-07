@@ -77,7 +77,8 @@ function SignalRow({
 function buildSignalInsights(
   signals: MatchSignalRow[],
   homeTeam: string,
-  awayTeam: string
+  awayTeam: string,
+  limit = 3
 ): { label: SignalLabel; signalName: string }[] {
   const byName: Record<string, number> = {};
   for (const s of signals) byName[s.signal_name] = Number(s.signal_value);
@@ -245,9 +246,9 @@ function buildSignalInsights(
     insights.push({ label: lbl, signalName: "pinnacle_line_move_away", priority: 1 });
   }
 
-  // Sort by priority (lower = more important), keep top 5
   insights.sort((a, b) => a.priority - b.priority);
-  return insights.slice(0, 5).map(({ label, signalName }) => ({ label, signalName }));
+  const capped = limit > 0 ? insights.slice(0, limit) : insights;
+  return capped.map(({ label, signalName }) => ({ label, signalName }));
 }
 
 /** Build a post-match retrospective insight for Free users (SUX-10) */
@@ -336,7 +337,7 @@ export function MatchSignalSummary({
 }: MatchSignalSummaryProps) {
   if (!signals.length) return null;
 
-  const insights = buildSignalInsights(signals, homeTeam, awayTeam);
+  const insights = buildSignalInsights(signals, homeTeam, awayTeam, isElite ? 0 : 3);
 
   // Count how many signals exist
   const totalSignals = new Set(signals.map((s) => s.signal_name)).size;
@@ -448,14 +449,14 @@ export function MatchSignalSummary({
           <div className="flex items-center gap-2 px-4 py-2.5">
             <TrendingUp className="h-3 w-3 text-muted-foreground" />
             <p className="text-[11px] text-muted-foreground">
-              {totalSignals} signals analysed · Top {Math.min(insights.length, 5)} shown
+              {totalSignals} signals analysed · Top {insights.length} shown
             </p>
           </div>
           {/* Elite conversion hook */}
           <div className="flex items-center gap-3 px-4 py-3 border-t border-border/20">
             <Lock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
             <p className="text-xs text-muted-foreground flex-1">
-              Our model analysed all {totalSignals} signals. See the full probability breakdown and edge %.
+              Elite shows all {totalSignals} signals + AI bet explanation
             </p>
             <a
               href="/profile"
@@ -469,7 +470,7 @@ export function MatchSignalSummary({
         <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/10 border-t border-border/30">
           <TrendingUp className="h-3 w-3 text-muted-foreground" />
           <p className="text-[11px] text-muted-foreground">
-            {totalSignals} signals analysed · Top {Math.min(insights.length, 5)} shown
+            {totalSignals} signals analysed · {insights.length === totalSignals ? "All" : `Top ${insights.length}`} shown
           </p>
         </div>
       ) : null}
