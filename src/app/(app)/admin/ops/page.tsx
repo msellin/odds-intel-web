@@ -170,24 +170,35 @@ export default async function OpsDashboardPage() {
           <Stat label="Idle today" value={snapshot?.silent_bots} note="Ran, no qualifying bets found" />
           <Stat label="Duplicate bets" value={snapshot?.duplicate_bets} warn={v => v > 0} note="Same bot × match × market × selection placed twice — should be 0" />
         </Grid>
-        {staleBets.length > 0 && (
-          <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3">
-            <p className="text-sm font-medium text-red-400 mb-2">
-              ⚠ {staleBets.length} pending bet{staleBets.length > 1 ? "s" : ""} on matches that kicked off &gt;2h ago — settlement may have missed these
-            </p>
-            <div className="space-y-1">
-              {staleBets.slice(0, 5).map(b => (
-                <p key={b.id} className="text-xs text-muted-foreground font-mono">
-                  {b.market} — bet {new Date(b.pick_time).toLocaleTimeString()}
-                  {b.match_kickoff && ` · match KO ${new Date(b.match_kickoff).toLocaleTimeString()}`}
-                </p>
-              ))}
-              {staleBets.length > 5 && (
-                <p className="text-xs text-muted-foreground">…and {staleBets.length - 5} more</p>
-              )}
+        {staleBets.length > 0 && (() => {
+          const utcHour = new Date().getUTCHours();
+          // Before 22:00 UTC: amber — expected, 21:00 settlement is the catch-all
+          // After 22:00 UTC: red — main settlement has run and should have caught these
+          const isAlarm = utcHour >= 22;
+          return (
+            <div className={`mt-4 rounded-lg border px-4 py-3 ${isAlarm ? "border-red-500/30 bg-red-500/10" : "border-amber-500/30 bg-amber-500/10"}`}>
+              <p className={`text-sm font-medium mb-1 ${isAlarm ? "text-red-400" : "text-amber-400"}`}>
+                ⚠ {staleBets.length} pending bet{staleBets.length > 1 ? "s" : ""} on matches that kicked off &gt;2h ago
+              </p>
+              <p className="text-xs text-muted-foreground mb-2">
+                {isAlarm
+                  ? "Main settlement (21:00 UTC) has already run — these should have been caught. Check Railway logs."
+                  : "settle_ready sweeps every 15min; 21:00 UTC settlement is the guaranteed catch-all. Normal before 22:00 UTC."}
+              </p>
+              <div className="space-y-1">
+                {staleBets.slice(0, 5).map(b => (
+                  <p key={b.id} className="text-xs text-muted-foreground font-mono">
+                    {b.market} — bet {new Date(b.pick_time).toLocaleTimeString()}
+                    {b.match_kickoff && ` · match KO ${new Date(b.match_kickoff).toLocaleTimeString()}`}
+                  </p>
+                ))}
+                {staleBets.length > 5 && (
+                  <p className="text-xs text-muted-foreground">…and {staleBets.length - 5} more</p>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </Section>
 
       {/* ④ Live Tracker */}
