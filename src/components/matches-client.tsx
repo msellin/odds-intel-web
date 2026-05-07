@@ -15,11 +15,13 @@ interface Props {
 
 type StatusTab = "all" | "live" | "upcoming" | "finished";
 type FilterTab = "all" | "favorites";
+type GradeFilter = "A" | "B" | "C" | null;
 
 export function MatchesClient({ sortedGroups, initialSnapshots, isPro }: Props) {
   const [snapshots, setSnapshots] = useState<Record<string, LiveSnapshot>>(initialSnapshots);
   const [statusTab, setStatusTab] = useState<StatusTab>("all");
   const [filterTab, setFilterTab] = useState<FilterTab>("all");
+  const [gradeFilter, setGradeFilter] = useState<GradeFilter>(null);
   const [leagueSearch, setLeagueSearch] = useState("");
   const [favoriteMatchIds, setFavoriteMatchIds] = useState<Set<string>>(new Set());
   const { user, profile } = useAuth();
@@ -117,6 +119,17 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro }: Props) 
       .filter(([, ms]) => ms.length > 0);
   }, [searchFiltered, statusTab]);
 
+  // Grade filter — applied at match level within each league group
+  const gradeFiltered = useMemo(() => {
+    if (!gradeFilter) return statusFiltered;
+    return statusFiltered
+      .map(([league, matches]) => {
+        const filtered = matches.filter((m) => m.dataGrade === gradeFilter);
+        return [league, filtered] as [string, PublicMatch[]];
+      })
+      .filter(([, ms]) => ms.length > 0);
+  }, [statusFiltered, gradeFilter]);
+
   // Helper: check if a league is in favorites
   const isFavoriteLeague = useCallback(
     (league: string) =>
@@ -126,12 +139,12 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro }: Props) 
 
   // Re-sort: priority leagues → my leagues → rest (preserves server sort within tiers)
   const reorderedGroups = useMemo(() => {
-    if (favoriteLeagues.length === 0) return statusFiltered;
+    if (favoriteLeagues.length === 0) return gradeFiltered;
     const priority: [string, PublicMatch[]][] = [];
     const favorites: [string, PublicMatch[]][] = [];
     const rest: [string, PublicMatch[]][] = [];
 
-    for (const group of statusFiltered) {
+    for (const group of gradeFiltered) {
       const [, matches] = group;
       const hasPriority = matches[0]?.leaguePriority != null;
       if (hasPriority) {
@@ -264,9 +277,9 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro }: Props) 
         </div>
       </div>
 
-      {/* Secondary filter — my games (favorite leagues + followed matches) */}
-      {user && (
-        <div className="flex items-center gap-2">
+      {/* Secondary filter row — my games + grade filter */}
+      <div className="flex flex-wrap items-center gap-2">
+        {user && (
           <button
             onClick={() => setFilterTab(filterTab === "favorites" ? "all" : "favorites")}
             className={`flex items-center gap-1.5 rounded-md border px-3 py-1 text-xs font-bold transition-all ${
@@ -285,8 +298,41 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro }: Props) 
               </span>
             )}
           </button>
-        </div>
-      )}
+        )}
+
+        {/* Grade filter */}
+        {(["A", "B", "C"] as const).map((g) => {
+          const active = gradeFilter === g;
+          const styles = {
+            A: active
+              ? "border-green-500/40 bg-green-500/20 text-green-400"
+              : "border-white/[0.06] bg-muted/20 text-muted-foreground hover:border-green-500/20 hover:text-green-400/70",
+            B: active
+              ? "border-amber-500/40 bg-amber-500/20 text-amber-500"
+              : "border-white/[0.06] bg-muted/20 text-muted-foreground hover:border-amber-500/20 hover:text-amber-500/70",
+            C: active
+              ? "border-white/[0.15] bg-white/[0.08] text-muted-foreground"
+              : "border-white/[0.06] bg-muted/20 text-muted-foreground/50 hover:border-white/[0.10] hover:text-muted-foreground",
+          }[g];
+          return (
+            <button
+              key={g}
+              onClick={() => setGradeFilter(active ? null : g)}
+              className={`rounded-md border px-2.5 py-1 text-xs font-bold transition-all ${styles}`}
+            >
+              {g}
+            </button>
+          );
+        })}
+        {gradeFilter && (
+          <button
+            onClick={() => setGradeFilter(null)}
+            className="flex items-center gap-1 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+          >
+            <X className="size-3" /> clear
+          </button>
+        )}
+      </div>
 
 
       {filterTab === "favorites" && filteredGroups.length === 0 && (
