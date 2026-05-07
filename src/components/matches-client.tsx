@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, use, Suspense } from "react";
 import { Star, Search, X } from "lucide-react";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
 import { useAuth } from "@/components/auth-provider";
@@ -11,13 +11,15 @@ interface Props {
   sortedGroups: [string, PublicMatch[]][];
   initialSnapshots: Record<string, LiveSnapshot>;
   isPro: boolean;
+  counts: { live: number; upcoming: number; finished: number; total: number };
+  finishedGroupsPromise: Promise<[string, PublicMatch[]][]>;
 }
 
 type StatusTab = "all" | "live" | "upcoming" | "finished";
 type FilterTab = "all" | "favorites";
 type GradeFilter = "A" | "B" | "C" | null;
 
-export function MatchesClient({ sortedGroups, initialSnapshots, isPro }: Props) {
+export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, finishedGroupsPromise }: Props) {
   const [snapshots, setSnapshots] = useState<Record<string, LiveSnapshot>>(initialSnapshots);
   const [statusTab, setStatusTab] = useState<StatusTab>("all");
   const [filterTab, setFilterTab] = useState<FilterTab>("all");
@@ -90,11 +92,10 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro }: Props) 
 
   const favoriteLeagues = profile?.preferred_leagues ?? [];
 
-  // Status counts (from all groups, unaffected by search)
-  const allMatches = useMemo(() => sortedGroups.flatMap(([, ms]) => ms), [sortedGroups]);
-  const liveCount = useMemo(() => allMatches.filter((m) => m.status === "live").length, [allMatches]);
-  const finishedCount = useMemo(() => allMatches.filter((m) => m.status === "finished").length, [allMatches]);
-  const upcomingCount = useMemo(() => allMatches.filter((m) => m.status !== "live" && m.status !== "finished").length, [allMatches]);
+  // Counts come from the server — cheap COUNT query, not derived from the serialized match data
+  const liveCount = counts.live;
+  const finishedCount = counts.finished;
+  const upcomingCount = counts.upcoming;
 
   // Client-side league search filter
   const searchFiltered = useMemo(() => {
@@ -103,14 +104,13 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro }: Props) 
     return sortedGroups.filter(([league]) => league.toLowerCase().includes(lower));
   }, [sortedGroups, leagueSearch]);
 
-  // Filter by status tab
+  // Filter by status tab — "finished" is handled by FinishedContent, not here
   const statusFiltered = useMemo(() => {
-    if (statusTab === "all") return searchFiltered;
+    if (statusTab === "all" || statusTab === "finished") return searchFiltered;
     return searchFiltered
       .map(([league, matches]) => {
         const filtered = matches.filter((m) => {
           if (statusTab === "live") return m.status === "live";
-          if (statusTab === "finished") return m.status === "finished";
           if (statusTab === "upcoming") return m.status !== "live" && m.status !== "finished";
           return true;
         });
@@ -335,52 +335,147 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro }: Props) 
       </div>
 
 
-      {filterTab === "favorites" && filteredGroups.length === 0 && (
-        <div className="rounded-xl border border-white/[0.06] bg-card/40 py-10 text-center">
-          <Star className="mx-auto h-8 w-8 text-muted-foreground/30 mb-3" />
-          <p className="text-sm font-medium text-foreground">No saved games today</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Star a league or follow individual matches to see them here, or manage your{" "}
-            <a href="/profile" className="text-primary underline-offset-2 hover:underline">
-              favourite leagues in your profile
-            </a>
-            .
-          </p>
-        </div>
-      )}
+      {statusTab === "finished" ? (
+        <Suspense fallback={
+          <div className="rounded-xl border border-white/[0.06] bg-card/40 py-8 text-center">
+            <p className="text-sm text-muted-foreground">Loading results…</p>
+          </div>
+        }>
+          <FinishedContent
+            promise={finishedGroupsPromise}
+            gradeFilter={gradeFilter}
+            leagueSearch={leagueSearch}
+            filterTab={filterTab}
+            favoriteMatchIds={favoriteMatchIds}
+            favoriteLeagues={favoriteLeagues}
+            isPro={isPro}
+            snapshots={snapshots}
+            onMatchFavoriteToggle={handleMatchFavoriteToggle}
+          />
+        </Suspense>
+      ) : (
+        <>
+          {filterTab === "favorites" && filteredGroups.length === 0 && (
+            <div className="rounded-xl border border-white/[0.06] bg-card/40 py-10 text-center">
+              <Star className="mx-auto h-8 w-8 text-muted-foreground/30 mb-3" />
+              <p className="text-sm font-medium text-foreground">No saved games today</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Star a league or follow individual matches to see them here, or manage your{" "}
+                <a href="/profile" className="text-primary underline-offset-2 hover:underline">
+                  favourite leagues in your profile
+                </a>
+                .
+              </p>
+            </div>
+          )}
 
-      {statusTab !== "all" && filteredGroups.length === 0 && filterTab !== "favorites" && (
-        <div className="rounded-xl border border-white/[0.06] bg-card/40 py-8 text-center">
-          <p className="text-sm text-muted-foreground">
-            {statusTab === "live"
-              ? "No live matches right now."
-              : statusTab === "finished"
-              ? "No finished matches yet today."
-              : "No upcoming matches."}
-          </p>
-        </div>
-      )}
+          {statusTab !== "all" && filteredGroups.length === 0 && filterTab !== "favorites" && (
+            <div className="rounded-xl border border-white/[0.06] bg-card/40 py-8 text-center">
+              <p className="text-sm text-muted-foreground">
+                {statusTab === "live" ? "No live matches right now." : "No upcoming matches."}
+              </p>
+            </div>
+          )}
 
-      {leagueSearch && filteredGroups.length === 0 && (
-        <div className="rounded-xl border border-white/[0.06] bg-card/40 py-8 text-center">
-          <p className="text-sm text-muted-foreground">
-            No leagues matching &ldquo;{leagueSearch}&rdquo;.
-          </p>
-        </div>
-      )}
+          {leagueSearch && filteredGroups.length === 0 && (
+            <div className="rounded-xl border border-white/[0.06] bg-card/40 py-8 text-center">
+              <p className="text-sm text-muted-foreground">
+                No leagues matching &ldquo;{leagueSearch}&rdquo;.
+              </p>
+            </div>
+          )}
 
-      {filteredGroups.map(([league, matches]) => (
+          {filteredGroups.map(([league, matches]) => (
+            <LeagueAccordion
+              key={league}
+              league={league}
+              matches={matches}
+              defaultExpanded={matches.some((m) => m.hasOdds) || statusTab === "live"}
+              liveSnapshots={snapshots}
+              isPro={isPro}
+              favoriteMatchIds={favoriteMatchIds}
+              onMatchFavoriteToggle={handleMatchFavoriteToggle}
+            />
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+function FinishedContent({
+  promise,
+  gradeFilter,
+  leagueSearch,
+  filterTab,
+  favoriteMatchIds,
+  favoriteLeagues,
+  isPro,
+  snapshots,
+  onMatchFavoriteToggle,
+}: {
+  promise: Promise<[string, PublicMatch[]][]>;
+  gradeFilter: GradeFilter;
+  leagueSearch: string;
+  filterTab: FilterTab;
+  favoriteMatchIds: Set<string>;
+  favoriteLeagues: string[];
+  isPro: boolean;
+  snapshots: Record<string, LiveSnapshot>;
+  onMatchFavoriteToggle: (matchId: string, isFavorited: boolean) => void;
+}) {
+  const groups = use(promise);
+
+  const filtered = useMemo(() => {
+    let result = groups;
+
+    if (leagueSearch.trim()) {
+      const lower = leagueSearch.toLowerCase();
+      result = result.filter(([league]) => league.toLowerCase().includes(lower));
+    }
+
+    if (gradeFilter) {
+      result = result
+        .map(([league, matches]) => [league, matches.filter((m) => m.dataGrade === gradeFilter)] as [string, PublicMatch[]])
+        .filter(([, ms]) => ms.length > 0);
+    }
+
+    if (filterTab === "favorites") {
+      result = result
+        .map(([league, matches]) => {
+          const isFavLeague = favoriteLeagues.some((fl) => league.toLowerCase() === fl.toLowerCase());
+          if (isFavLeague) return [league, matches] as [string, PublicMatch[]];
+          const followed = matches.filter((m) => favoriteMatchIds.has(m.id));
+          return followed.length > 0 ? [league, followed] as [string, PublicMatch[]] : null;
+        })
+        .filter((g): g is [string, PublicMatch[]] => g !== null);
+    }
+
+    return result;
+  }, [groups, leagueSearch, gradeFilter, filterTab, favoriteMatchIds, favoriteLeagues]);
+
+  if (filtered.length === 0) {
+    return (
+      <div className="rounded-xl border border-white/[0.06] bg-card/40 py-8 text-center">
+        <p className="text-sm text-muted-foreground">No finished matches yet today.</p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {filtered.map(([league, matches]) => (
         <LeagueAccordion
           key={league}
           league={league}
           matches={matches}
-          defaultExpanded={matches.some((m) => m.hasOdds) || statusTab === "live"}
+          defaultExpanded={false}
           liveSnapshots={snapshots}
           isPro={isPro}
           favoriteMatchIds={favoriteMatchIds}
-          onMatchFavoriteToggle={handleMatchFavoriteToggle}
+          onMatchFavoriteToggle={onMatchFavoriteToggle}
         />
       ))}
-    </div>
+    </>
   );
 }

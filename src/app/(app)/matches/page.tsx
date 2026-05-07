@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { CalendarDays, SearchX, Info } from "lucide-react";
 import Link from "next/link";
-import { getPublicMatches, getLiveSnapshots, getFreeDailyPick, getWhatChangedToday } from "@/lib/engine-data";
+import { getActiveMatches, getFinishedMatches, getMatchCounts, getLiveSnapshots, getFreeDailyPick, getWhatChangedToday } from "@/lib/engine-data";
 import { MatchesClient } from "@/components/matches-client";
 import { DailyValueTeaser } from "@/components/daily-value-teaser";
 import { SignupBanner } from "@/components/signup-banner";
@@ -10,6 +10,32 @@ import { WhatChangedToday } from "@/components/what-changed-today";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { getUserTier } from "@/lib/get-user-tier";
 import type { PublicMatch, LiveSnapshot } from "@/lib/engine-data";
+
+function groupAndSort(matches: PublicMatch[]): [string, PublicMatch[]][] {
+  const grouped = new Map<string, PublicMatch[]>();
+  for (const match of matches) {
+    const existing = grouped.get(match.league) ?? [];
+    existing.push(match);
+    grouped.set(match.league, existing);
+  }
+  for (const ms of grouped.values()) {
+    ms.sort((a, b) => {
+      if (a.hasOdds !== b.hasOdds) return a.hasOdds ? -1 : 1;
+      return a.kickoff.localeCompare(b.kickoff);
+    });
+  }
+  return Array.from(grouped.entries()).sort(([aLeague, aMatches], [bLeague, bMatches]) => {
+    const aPrio = aMatches[0]?.leaguePriority;
+    const bPrio = bMatches[0]?.leaguePriority;
+    if (aPrio != null && bPrio == null) return -1;
+    if (aPrio == null && bPrio != null) return 1;
+    if (aPrio != null && bPrio != null && aPrio !== bPrio) return aPrio - bPrio;
+    const aHasOdds = aMatches.some((m) => m.hasOdds);
+    const bHasOdds = bMatches.some((m) => m.hasOdds);
+    if (aHasOdds !== bHasOdds) return aHasOdds ? -1 : 1;
+    return aLeague.localeCompare(bLeague);
+  });
+}
 
 function formatDate(dayOffset: number): string {
   const d = new Date();
@@ -30,10 +56,12 @@ export default async function MatchesPage({
   const { tab } = await searchParams;
   const dayOffset = tab === "tomorrow" ? 1 : 0;
 
-  // Run all fetches in parallel — daily_unlocks check runs inside the auth IIFE
-  // so it fires in parallel with getUserTier instead of sequentially after.
-  const [allMatches, authResult, { pick: freePick, totalCount: freeTotalCount }, changedItems] = await Promise.all([
-    getPublicMatches(dayOffset),
+  // Active matches + counts fetched in parallel.
+  // Finished matches start fetching immediately but are NOT awaited — they stream
+  // to the client via React 19 use() when the Finished tab is opened.
+  const [activeMatches, counts, authResult, { pick: freePick, totalCount: freeTotalCount }, changedItems] = await Promise.all([
+    getActiveMatches(dayOffset),
+    getMatchCounts(dayOffset),
     (async () => {
       const supabase = await createSupabaseServer();
       const {
@@ -56,46 +84,15 @@ export default async function MatchesPage({
     getWhatChangedToday(),
   ]);
 
+  // Start finished fetch immediately (not awaited) — resolves while user reads live/upcoming.
+  const finishedGroupsPromise = getFinishedMatches(dayOffset).then(groupAndSort);
+
   const { isAuthenticated, isPro, alreadyUnlocked } = authResult;
 
-  // Group by league
-  const grouped = new Map<string, PublicMatch[]>();
-  for (const match of allMatches) {
-    const existing = grouped.get(match.league) ?? [];
-    existing.push(match);
-    grouped.set(match.league, existing);
-  }
-
-  // Sort within each group: odds first, then by kickoff
-  for (const matches of grouped.values()) {
-    matches.sort((a, b) => {
-      if (a.hasOdds !== b.hasOdds) return a.hasOdds ? -1 : 1;
-      return a.kickoff.localeCompare(b.kickoff);
-    });
-  }
-
-  // Sort league groups: priority leagues first (lower number = higher), then alphabetical.
-  // Like FlashScore: featured/important leagues on top, rest in alphabetical order.
-  const sortedGroups = Array.from(grouped.entries()).sort(
-    ([aLeague, aMatches], [bLeague, bMatches]) => {
-      const aPrio = aMatches[0]?.leaguePriority;
-      const bPrio = bMatches[0]?.leaguePriority;
-      // Priority leagues always come before non-priority
-      if (aPrio != null && bPrio == null) return -1;
-      if (aPrio == null && bPrio != null) return 1;
-      // Both have priority: sort by priority number (lower first)
-      if (aPrio != null && bPrio != null && aPrio !== bPrio) return aPrio - bPrio;
-      // Same priority or both null: leagues with odds before leagues without
-      const aHasOdds = aMatches.some((m) => m.hasOdds);
-      const bHasOdds = bMatches.some((m) => m.hasOdds);
-      if (aHasOdds !== bHasOdds) return aHasOdds ? -1 : 1;
-      // Finally: alphabetical by league name
-      return aLeague.localeCompare(bLeague);
-    }
-  );
+  const sortedGroups = groupAndSort(activeMatches);
 
   // Fetch initial live snapshots for live matches
-  const liveMatchIds = allMatches.filter((m) => m.status === "live").map((m) => m.id);
+  const liveMatchIds = activeMatches.filter((m) => m.status === "live").map((m) => m.id);
   const liveSnapshotsArr = await getLiveSnapshots(liveMatchIds);
   const initialSnapshots: Record<string, LiveSnapshot> = {};
   for (const s of liveSnapshotsArr) {
@@ -116,7 +113,7 @@ export default async function MatchesPage({
           </span>
           <span className="text-muted-foreground/40">·</span>
           <span className="text-sm text-muted-foreground">
-            {allMatches.length} fixtures
+            {counts.total} fixtures
           </span>
           {dayOffset === 0 && (
             <span className="group relative flex items-center gap-1 cursor-default">
@@ -190,6 +187,8 @@ export default async function MatchesPage({
         sortedGroups={sortedGroups}
         initialSnapshots={initialSnapshots}
         isPro={isPro}
+        counts={counts}
+        finishedGroupsPromise={finishedGroupsPromise}
       />
     </div>
   );

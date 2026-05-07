@@ -521,21 +521,46 @@ async function batchFetchSignalSummary(
  *   CREATE POLICY "Public read" ON leagues FOR SELECT USING (true);
  *   CREATE POLICY "Public read" ON odds_snapshots FOR SELECT USING (true);
  */
-export async function getPublicMatches(dayOffset = 0): Promise<PublicMatch[]> {
+// Cheap status counts — used for tab badges without fetching full match data
+export async function getMatchCounts(dayOffset = 0): Promise<{ live: number; upcoming: number; finished: number; total: number }> {
   const supabase = createSupabasePublic();
-
   const now = new Date();
-  // Base day: today (dayOffset=0) or tomorrow (dayOffset=1).
-  // todayStart = 00:00 UTC of the target day.
   const todayStart = new Date(now);
   todayStart.setUTCHours(0, 0, 0, 0);
   todayStart.setUTCDate(todayStart.getUTCDate() + dayOffset);
-  // Window end: 03:00 UTC of the following day (+3h overhang for late South American games).
   const todayEnd = new Date(todayStart);
   todayEnd.setUTCDate(todayEnd.getUTCDate() + 1);
   todayEnd.setUTCHours(3, 0, 0, 0);
-  // For "today": also include yesterday's ongoing matches.
-  // For "tomorrow": no yesterday overhang needed (nothing is live yet).
+  const yesterdayStart = new Date(todayStart);
+  yesterdayStart.setUTCDate(yesterdayStart.getUTCDate() - 1);
+
+  const [{ data: todayRows }, { data: yesterdayRows }] = await Promise.all([
+    supabase.from("matches").select("status").eq("league.is_active", true)
+      .gte("date", todayStart.toISOString()).lte("date", todayEnd.toISOString()).limit(500),
+    dayOffset === 0
+      ? supabase.from("matches").select("status").eq("league.is_active", true)
+          .gte("date", yesterdayStart.toISOString()).lt("date", todayStart.toISOString())
+          .neq("status", "finished").limit(50)
+      : Promise.resolve({ data: [] as { status: string }[] | null }),
+  ]);
+
+  const all = [...(yesterdayRows ?? []), ...(todayRows ?? [])];
+  const live = all.filter((r) => r.status === "live").length;
+  const finished = all.filter((r) => r.status === "finished").length;
+  const upcoming = all.length - live - finished;
+  return { live, upcoming, finished, total: all.length };
+}
+
+async function _fetchMatches(dayOffset: number, statusFilter: "all" | "active" | "finished"): Promise<PublicMatch[]> {
+  const supabase = createSupabasePublic();
+
+  const now = new Date();
+  const todayStart = new Date(now);
+  todayStart.setUTCHours(0, 0, 0, 0);
+  todayStart.setUTCDate(todayStart.getUTCDate() + dayOffset);
+  const todayEnd = new Date(todayStart);
+  todayEnd.setUTCDate(todayEnd.getUTCDate() + 1);
+  todayEnd.setUTCHours(3, 0, 0, 0);
   const yesterdayStart = new Date(todayStart);
   yesterdayStart.setUTCDate(yesterdayStart.getUTCDate() - 1);
 
@@ -549,17 +574,23 @@ export async function getPublicMatches(dayOffset = 0): Promise<PublicMatch[]> {
        away_team:away_team_id(id, name, country, logo_url),
        league:league_id!inner(id, name, country, tier, priority)`;
 
+  let todayQuery = supabase
+    .from("matches")
+    .select(selectFields)
+    .eq("league.is_active", true)
+    .gte("date", todayStart.toISOString())
+    .lte("date", todayEnd.toISOString())
+    .order("date", { ascending: true })
+    .limit(500);
+  if (statusFilter === "active") todayQuery = todayQuery.neq("status", "finished") as typeof todayQuery;
+  if (statusFilter === "finished") todayQuery = todayQuery.eq("status", "finished") as typeof todayQuery;
+
+  // Yesterday overhang: only for active/all fetches — finished matches from yesterday aren't needed.
+  const includeYesterday = dayOffset === 0 && statusFilter !== "finished";
+
   const [{ data: todayMatches, error }, { data: yesterdayOngoing }] = await Promise.all([
-    supabase
-      .from("matches")
-      .select(selectFields)
-      .eq("league.is_active", true)
-      .gte("date", todayStart.toISOString())
-      .lte("date", todayEnd.toISOString())
-      .order("date", { ascending: true })
-      .limit(500),
-    // Yesterday overhang: only for today tab (dayOffset=0). Tomorrow has no live matches yet.
-    dayOffset === 0
+    todayQuery,
+    includeYesterday
       ? supabase
           .from("matches")
           .select(selectFields)
@@ -733,6 +764,10 @@ export async function getPublicMatches(dayOffset = 0): Promise<PublicMatch[]> {
 
   return deduped;
 }
+
+export const getPublicMatches = (dayOffset = 0) => _fetchMatches(dayOffset, "all");
+export const getActiveMatches = (dayOffset = 0) => _fetchMatches(dayOffset, "active");
+export const getFinishedMatches = (dayOffset = 0) => _fetchMatches(dayOffset, "finished");
 
 export async function getPublicMatchById(matchId: string): Promise<PublicMatch | null> {
   const supabase = createSupabasePublic();
