@@ -35,6 +35,10 @@ import {
   sharpConsensusLabel,
   playersDoubtfulLabel,
   injuryUncertaintyLabel,
+  restDaysNormLabel,
+  fixtureUrgencyLabel,
+  turfFamiliarityLabel,
+  formVsEloLabel,
   SIGNAL_GROUP_LABELS,
   type SignalSeverity,
 } from "@/lib/signal-labels";
@@ -185,6 +189,22 @@ function buildGroups(
       description: `${homeTeam}: ${Math.round(get("rest_days_home"))} days · ${awayTeam}: ${Math.round(get("rest_days_away"))} days since last match`,
     });
   }
+  if (has("rest_days_norm_home")) {
+    const lh = restDaysNormLabel(get("rest_days_norm_home"));
+    formItems.push({ ...lh, value: fmt(get("rest_days_norm_home"), 2), description: `${homeTeam} rest: ${lh.description}` });
+  }
+  if (has("rest_days_norm_away")) {
+    const la = restDaysNormLabel(get("rest_days_norm_away"));
+    formItems.push({ ...la, value: fmt(get("rest_days_norm_away"), 2), description: `${awayTeam} rest: ${la.description}` });
+  }
+  if (has("form_vs_elo_expectation_home")) {
+    const l = formVsEloLabel(get("form_vs_elo_expectation_home"));
+    formItems.push({ ...l, value: fmt(get("form_vs_elo_expectation_home"), 2), description: `${homeTeam}: ${l.description}` });
+  }
+  if (has("form_vs_elo_expectation_away")) {
+    const l = formVsEloLabel(get("form_vs_elo_expectation_away"));
+    formItems.push({ ...l, value: fmt(get("form_vs_elo_expectation_away"), 2), description: `${awayTeam}: ${l.description}` });
+  }
 
   // ── Context group ───────────────────────────────────────────────────────────
   const contextItems: SignalItem[] = [];
@@ -237,6 +257,27 @@ function buildGroups(
   if (has("league_btts_pct")) {
     const l = leagueBttsPctLabel(get("league_btts_pct"));
     contextItems.push({ ...l, value: pct(get("league_btts_pct")) });
+  }
+  if (has("fixture_urgency_home")) {
+    const l = fixtureUrgencyLabel(get("fixture_urgency_home"));
+    contextItems.push({ ...l, value: fmt(get("fixture_urgency_home"), 2), description: `${homeTeam}: ${l.description}` });
+  }
+  if (has("fixture_urgency_away")) {
+    const l = fixtureUrgencyLabel(get("fixture_urgency_away"));
+    contextItems.push({ ...l, value: fmt(get("fixture_urgency_away"), 2), description: `${awayTeam}: ${l.description}` });
+  }
+  if (has("games_remaining_home") && has("games_remaining_away")) {
+    contextItems.push({
+      label: "Games remaining",
+      icon: "📅",
+      severity: "neutral",
+      value: "",
+      description: `${homeTeam}: ${Math.round(get("games_remaining_home"))} · ${awayTeam}: ${Math.round(get("games_remaining_away"))} games left this season`,
+    });
+  }
+  if (has("away_team_turf_games_ytd")) {
+    const l = turfFamiliarityLabel(Math.round(get("away_team_turf_games_ytd")));
+    contextItems.push({ ...l, value: `${Math.round(get("away_team_turf_games_ytd"))} games`, description: `${awayTeam}: ${l.description}` });
   }
 
   // ── News & Injuries group ───────────────────────────────────────────────────

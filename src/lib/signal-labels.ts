@@ -225,6 +225,57 @@ export function squadDisruptionLabel(arrivals: number): SignalLabel {
   return { label: "Stable squad", icon: "✓", severity: "neutral", description: "No recent transfer activity" }
 }
 
+// ─── Group 2 signal refinements ───────────────────────────────────────────────
+
+export function restDaysNormLabel(logVal: number): SignalLabel {
+  // log(rest_days+1): log(4)≈1.39 (3 days), log(8)≈2.08 (7 days), log(15)≈2.71 (14 days)
+  if (logVal >= 2.3)
+    return { label: "Well rested", icon: "✓", severity: "low", description: "7+ days since last match — fully recovered" }
+  if (logVal >= 1.6)
+    return { label: "Rested", icon: "↑", severity: "low", description: "4–6 days — good recovery time" }
+  if (logVal >= 1.1)
+    return { label: "Normal", icon: "=", severity: "neutral", description: "3 days since last match — standard schedule" }
+  if (logVal >= 0.7)
+    return { label: "Short turnaround", icon: "↓", severity: "medium", description: "2 days since last match — fatigue risk" }
+  return { label: "Quick turnaround", icon: "↓↓", severity: "high", description: "1 day or same day — significant fatigue risk" }
+}
+
+export function fixtureUrgencyLabel(urgency: number): SignalLabel {
+  // Points-gap urgency normalized by games remaining. >1.0 = mathematically dire
+  if (urgency > 1.0)
+    return { label: "Must-win situation", icon: "🔥", severity: "high", description: "Team is in a mathematically desperate position" }
+  if (urgency >= 0.7)
+    return { label: "High pressure", icon: "⚠", severity: "high", description: "Points gap is critical given games remaining" }
+  if (urgency >= 0.4)
+    return { label: "Under pressure", icon: "↑", severity: "medium", description: "Position is uncomfortable with games running out" }
+  if (urgency >= 0.15)
+    return { label: "Some pressure", icon: "−", severity: "low", description: "Some urgency but manageable" }
+  return { label: "Low urgency", icon: "=", severity: "neutral", description: "Comfortable position relative to season stage" }
+}
+
+export function turfFamiliarityLabel(games: number): SignalLabel {
+  if (games >= 5)
+    return { label: "Turf veteran", icon: "✓", severity: "neutral", description: `${games} away games on artificial turf this season — well adapted` }
+  if (games >= 3)
+    return { label: "Some turf exp.", icon: "=", severity: "low", description: `${games} away turf games — familiar with surface` }
+  if (games >= 1)
+    return { label: "Limited turf exp.", icon: "↓", severity: "medium", description: `Only ${games} away turf game(s) — limited experience` }
+  return { label: "No turf exp.", icon: "⚠", severity: "high", description: "No away games on artificial turf this season — potential disadvantage" }
+}
+
+export function formVsEloLabel(residual: number): SignalLabel {
+  // Positive = team performing above ELO expectation (hot streak)
+  if (residual > 0.5)
+    return { label: "Hot streak", icon: "↑↑", severity: "high", description: "Team is significantly outperforming their ELO rating lately" }
+  if (residual > 0.2)
+    return { label: "Above expectation", icon: "↑", severity: "medium", description: "Recent results better than ELO quality suggests" }
+  if (residual > -0.2)
+    return { label: "As expected", icon: "=", severity: "neutral", description: "Recent form matches ELO quality" }
+  if (residual > -0.5)
+    return { label: "Below expectation", icon: "↓", severity: "medium", description: "Recent results below ELO rating — potential regression inbound" }
+  return { label: "Cold streak", icon: "↓↓", severity: "high", description: "Team underperforming their quality by a wide margin" }
+}
+
 // ─── Half-time tendency ───────────────────────────────────────────────────────
 
 export function h1ShotDominanceLabel(ratio: number): SignalLabel {
