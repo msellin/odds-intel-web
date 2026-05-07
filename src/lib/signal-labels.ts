@@ -148,6 +148,39 @@ export function leagueAvgGoalsLabel(avg: number): SignalLabel {
   return { label: "Low scoring", icon: "−", severity: "low", description: "Tight league — goals at a premium" }
 }
 
+// ─── Injury recurrence ────────────────────────────────────────────────────────
+
+export function injuryRecurrenceLabel(avg: number): SignalLabel {
+  if (avg >= 5)
+    return { label: "Injury-prone squad", icon: "🚑", severity: "high", description: "Currently-injured players have a long injury history — chronic issues" }
+  if (avg >= 3)
+    return { label: "Some recurrence", icon: "!", severity: "medium", description: "Injured players have had repeat issues before" }
+  return { label: "Isolated injuries", icon: "−", severity: "neutral", description: "No pattern of repeat injuries" }
+}
+
+// ─── Squad disruption (transfers) ────────────────────────────────────────────
+
+export function squadDisruptionLabel(arrivals: number): SignalLabel {
+  if (arrivals >= 5)
+    return { label: "Heavily rebuilt", icon: "⚠", severity: "high", description: `${arrivals} new arrivals in 60 days — unfamiliar system likely` }
+  if (arrivals >= 3)
+    return { label: "Some new faces", icon: "↕", severity: "medium", description: `${arrivals} recent transfers in — settling-in risk` }
+  if (arrivals >= 1)
+    return { label: "Minor turnover", icon: "−", severity: "low", description: `${arrivals} transfer in last 60 days` }
+  return { label: "Stable squad", icon: "✓", severity: "neutral", description: "No recent transfer activity" }
+}
+
+// ─── Half-time tendency ───────────────────────────────────────────────────────
+
+export function h1ShotDominanceLabel(ratio: number): SignalLabel {
+  // ratio = H1 shots / full-match shots (0.5 = equal halves)
+  if (ratio > 0.62)
+    return { label: "Fast starters", icon: "↑", severity: "medium", description: "Team takes most of their shots in the first half" }
+  if (ratio < 0.38)
+    return { label: "Slow starters", icon: "↓", severity: "medium", description: "Team typically takes over in the second half" }
+  return { label: "Balanced", icon: "=", severity: "neutral", description: "Shot output spread evenly across both halves" }
+}
+
 /**
  * Human-readable signal group names for use in UI headers.
  */

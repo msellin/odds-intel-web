@@ -508,6 +508,11 @@ export function MatchDetailLive({
                               {inj.reason && (
                                 <p className="text-[10px] text-muted-foreground mt-0.5">{inj.reason}</p>
                               )}
+                              {inj.injuryCount != null && inj.injuryCount >= 3 && (
+                                <p className="text-[10px] text-orange-400 mt-0.5" title="Career injury episodes">
+                                  {inj.injuryCount}× injury history
+                                </p>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -674,6 +679,9 @@ export function MatchDetailLive({
                     First Half
                   </p>
                   <StatBar label="Shots" home={matchStats.shots_home_ht} away={matchStats.shots_away_ht} />
+                  {matchStats.shots_on_target_home_ht != null && matchStats.shots_on_target_away_ht != null && (
+                    <StatBar label="Shots on Target" home={matchStats.shots_on_target_home_ht} away={matchStats.shots_on_target_away_ht} />
+                  )}
                   <StatBar
                     label="Possession"
                     home={matchStats.possession_home_ht}
@@ -683,6 +691,12 @@ export function MatchDetailLive({
                   <StatBar label="Corners" home={matchStats.corners_home_ht} away={matchStats.corners_away_ht} />
                   {matchStats.xg_home_ht != null && matchStats.xg_away_ht != null && (
                     <StatBar label="xG" home={matchStats.xg_home_ht} away={matchStats.xg_away_ht} />
+                  )}
+                  {matchStats.fouls_home_ht != null && matchStats.fouls_away_ht != null && (
+                    <StatBar label="Fouls" home={matchStats.fouls_home_ht} away={matchStats.fouls_away_ht} />
+                  )}
+                  {matchStats.yellow_cards_home_ht != null && matchStats.yellow_cards_away_ht != null && (
+                    <StatBar label="Yellow Cards" home={matchStats.yellow_cards_home_ht} away={matchStats.yellow_cards_away_ht} />
                   )}
 
                   {matchStats.shots_home != null && matchStats.shots_away != null && (

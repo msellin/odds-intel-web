@@ -22,6 +22,9 @@ import {
   importanceDiffLabel,
   newsImpactLabel,
   injuryCountLabel,
+  injuryRecurrenceLabel,
+  squadDisruptionLabel,
+  h1ShotDominanceLabel,
   refereeCardsLabel,
   h2hEdgeLabel,
   eloDiffLabel,
@@ -242,6 +245,30 @@ function buildGroups(
       value: `${Math.round(get("players_out_away"))}`,
       description: `${awayTeam}: ${Math.round(get("players_out_away"))} confirmed absences`,
     });
+  }
+  if (has("injury_recurrence_home")) {
+    const l = injuryRecurrenceLabel(get("injury_recurrence_home"));
+    infoItems.push({ ...l, value: fmt(get("injury_recurrence_home"), 1), description: `${homeTeam}: ${l.description}` });
+  }
+  if (has("injury_recurrence_away")) {
+    const l = injuryRecurrenceLabel(get("injury_recurrence_away"));
+    infoItems.push({ ...l, value: fmt(get("injury_recurrence_away"), 1), description: `${awayTeam}: ${l.description}` });
+  }
+  if (has("squad_disruption_home")) {
+    const l = squadDisruptionLabel(get("squad_disruption_home"));
+    infoItems.push({ ...l, value: `${Math.round(get("squad_disruption_home"))}`, description: `${homeTeam}: ${l.description}` });
+  }
+  if (has("squad_disruption_away")) {
+    const l = squadDisruptionLabel(get("squad_disruption_away"));
+    infoItems.push({ ...l, value: `${Math.round(get("squad_disruption_away"))}`, description: `${awayTeam}: ${l.description}` });
+  }
+  if (has("h1_shot_dominance_home")) {
+    const l = h1ShotDominanceLabel(get("h1_shot_dominance_home"));
+    infoItems.push({ ...l, value: `${Math.round(get("h1_shot_dominance_home") * 100)}%`, description: `${homeTeam}: ${l.description}` });
+  }
+  if (has("h1_shot_dominance_away")) {
+    const l = h1ShotDominanceLabel(get("h1_shot_dominance_away"));
+    infoItems.push({ ...l, value: `${Math.round(get("h1_shot_dominance_away") * 100)}%`, description: `${awayTeam}: ${l.description}` });
   }
 
   return [
