@@ -39,7 +39,7 @@ function TeamLogo({ logo, name, size = "lg" }: { logo: string | null; name: stri
 const GRADE_STYLES = {
   A: "bg-green-500/20 text-green-400 border-green-500/30",
   B: "bg-amber-500/20 text-amber-500 border-amber-500/30",
-  D: "bg-white/[0.06] text-muted-foreground/50 border-white/[0.08]",
+  C: "bg-white/[0.06] text-muted-foreground/50 border-white/[0.08]",
 } as const;
 
 interface MatchDetailHeaderProps {
