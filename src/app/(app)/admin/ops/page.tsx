@@ -351,14 +351,37 @@ export default async function OpsDashboardPage() {
         subtitle="Fetches historical match stats from API-Football for past seasons. Runs every 2h in a background slot. Used to build ML training data."
       >
         <Grid>
-          <Stat label="Total matches with stats (all time)" value={snapshot?.backfill_total_done} note="Cumulative — grows with each backfill run" />
+          <Stat
+            label="Matches with stats"
+            value={snapshot?.backfill_total_done}
+            total={snapshot?.backfill_total_finished ?? undefined}
+            note={snapshot?.backfill_total_finished ? `of ${snapshot.backfill_total_finished.toLocaleString()} finished matches in DB` : "Cumulative — grows with each run"}
+          />
           <div className="rounded-lg border border-border bg-card p-3 col-span-2">
-            <p className="text-xs text-muted-foreground mb-1">Last backfill run started</p>
-            <p className="text-sm font-mono text-foreground">
-              {snapshot?.backfill_last_run
-                ? new Date(snapshot.backfill_last_run).toLocaleString()
-                : "—"}
-            </p>
+            {(() => {
+              const done = snapshot?.backfill_total_done;
+              const total = snapshot?.backfill_total_finished;
+              const pct = done != null && total && total > 0 ? (done / total) * 100 : null;
+              return (
+                <>
+                  <p className="text-xs text-muted-foreground mb-1">Backfill progress</p>
+                  {pct !== null ? (
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${pct >= 80 ? "bg-emerald-500" : pct >= 40 ? "bg-amber-500" : "bg-blue-500"}`}
+                          style={{ width: `${Math.min(100, pct).toFixed(1)}%` }}
+                        />
+                      </div>
+                      <span className="text-xs font-mono text-muted-foreground">{pct.toFixed(1)}%</span>
+                    </div>
+                  ) : null}
+                  <p className="text-xs text-muted-foreground">
+                    Last run: {snapshot?.backfill_last_run ? new Date(snapshot.backfill_last_run).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}
+                  </p>
+                </>
+              );
+            })()}
           </div>
         </Grid>
       </Section>

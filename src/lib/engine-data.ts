@@ -67,6 +67,7 @@ export interface OpsSnapshot {
   watchlist_alerts_today: number | null;
   // ⑧ Backfill
   backfill_total_done: number | null;
+  backfill_total_finished: number | null;
   backfill_last_run: string | null;
   // ⑨ API budget
   af_calls_today: number | null;
