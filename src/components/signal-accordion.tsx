@@ -53,6 +53,7 @@ interface SignalGroup {
   id: string;
   title: string;
   icon: string;
+  color: string; // tailwind border-l color class
   items: SignalItem[];
   requiresPro?: boolean;
 }
@@ -244,10 +245,10 @@ function buildGroups(
   }
 
   return [
-    { id: "market", title: SIGNAL_GROUP_LABELS.market, icon: "📊", items: marketItems },
-    { id: "form", title: SIGNAL_GROUP_LABELS.quality, icon: "⚡", items: formItems },
-    { id: "context", title: SIGNAL_GROUP_LABELS.context, icon: "🏟", items: contextItems },
-    { id: "info", title: SIGNAL_GROUP_LABELS.information, icon: "📰", items: infoItems },
+    { id: "market", title: SIGNAL_GROUP_LABELS.market, icon: "📊", color: "border-l-sky-500", items: marketItems },
+    { id: "form", title: SIGNAL_GROUP_LABELS.quality, icon: "⚡", color: "border-l-emerald-500", items: formItems },
+    { id: "context", title: SIGNAL_GROUP_LABELS.context, icon: "🏟", color: "border-l-amber-500", items: contextItems },
+    { id: "info", title: SIGNAL_GROUP_LABELS.information, icon: "📰", color: "border-l-rose-500", items: infoItems },
   ].filter((g) => g.items.length > 0);
 }
 
@@ -267,7 +268,7 @@ function AccordionSection({
   const isLocked = group.requiresPro && !isPro;
 
   return (
-    <div className="rounded-lg border border-border/40 bg-card overflow-hidden">
+    <div className={cn("rounded-lg border border-border/40 bg-card overflow-hidden border-l-2", group.color)}>
       <button
         onClick={onToggle}
         className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/20 transition-colors"

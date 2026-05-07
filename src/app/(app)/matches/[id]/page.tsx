@@ -179,7 +179,7 @@ export default async function MatchDetailPage({
     </div>
   );
 
-  // Auto-generate match context from H2H + standings
+  // Auto-generate match context hook from H2H + standings + top signal
   const contextSentences: string[] = [];
   if (standings.home && standings.away) {
     contextSentences.push(
@@ -193,6 +193,21 @@ export default async function MatchDetailPage({
     if (dominant) {
       const wins = h2h.homeWins > h2h.awayWins ? h2h.homeWins : h2h.awayWins;
       contextSentences.push(`${dominant} lead the H2H ${wins}–${Math.min(h2h.homeWins, h2h.awayWins)} in ${total} meetings.`);
+    }
+  }
+  // Add top signal hook if high-value signal exists
+  if (matchSignals.length > 0) {
+    const byName: Record<string, number> = {};
+    for (const s of matchSignals) byName[s.signal_name] = Number(s.signal_value);
+    const olm = byName["overnight_line_move"];
+    const bdm = byName["bookmaker_disagreement"];
+    const news = byName["news_impact_score"];
+    if (olm !== undefined && Math.abs(olm) > 0.05) {
+      contextSentences.push(`Odds moved ${olm > 0 ? "toward home" : "toward away"} overnight — sharp money signal detected.`);
+    } else if (bdm !== undefined && bdm > 0.08) {
+      contextSentences.push(`High bookmaker disagreement (${(bdm * 100).toFixed(1)}%) — market unsettled on this one.`);
+    } else if (news !== undefined && news > 0.5) {
+      contextSentences.push(`News impact flagged — team news may be affecting the price.`);
     }
   }
 
@@ -485,6 +500,9 @@ export default async function MatchDetailPage({
         contextContent={contextContent}
         hasSignals={hasSignals}
         defaultTab={isLive ? "intel" : "intel"}
+        signalCount={matchSignals.length > 0 ? matchSignals.length : undefined}
+        eventCount={matchEvents.length > 0 ? matchEvents.length : undefined}
+        bookmakerCount={bookmakerCount > 1 ? bookmakerCount : undefined}
       />
     </div>
   );

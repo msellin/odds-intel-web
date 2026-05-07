@@ -1,9 +1,11 @@
 "use client";
 
 import { Lock } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { BotConsensusData } from "@/lib/engine-data";
 
-// Human-readable market labels
+const TOTAL_BOTS = 17;
+
 function marketLabel(market: string, selection: string): string {
   const labels: Record<string, Record<string, string>> = {
     "1x2": { home: "Home Win", draw: "Draw", away: "Away Win" },
@@ -15,6 +17,29 @@ function marketLabel(market: string, selection: string): string {
   return labels[market]?.[selection] ?? `${market} ${selection}`;
 }
 
+function consensusLevel(count: number): { label: string; color: string } {
+  const pct = count / TOTAL_BOTS;
+  if (pct >= 0.5) return { label: "HIGH", color: "text-emerald-400" };
+  if (pct >= 0.25) return { label: "MODERATE", color: "text-amber-400" };
+  return { label: "LOW", color: "text-muted-foreground" };
+}
+
+function ModelPips({ active, total }: { active: number; total: number }) {
+  return (
+    <div className="flex items-center gap-0.5">
+      {Array.from({ length: total }).map((_, i) => (
+        <span
+          key={i}
+          className={cn(
+            "inline-block h-1.5 w-1.5 rounded-full",
+            i < active ? "bg-emerald-400" : "bg-muted-foreground/20"
+          )}
+        />
+      ))}
+    </div>
+  );
+}
+
 interface BotConsensusProps {
   consensus: BotConsensusData;
   isPro: boolean;
@@ -23,11 +48,21 @@ interface BotConsensusProps {
 export function BotConsensus({ consensus, isPro }: BotConsensusProps) {
   if (consensus.totalBets === 0) return null;
 
+  const level = consensusLevel(consensus.totalBets);
+
   return (
     <div className="rounded-xl border border-border/50 bg-card/60 p-4">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-foreground">Model Consensus</h3>
-        <span className="text-xs text-muted-foreground">{consensus.totalBets} model{consensus.totalBets !== 1 ? "s" : ""} backing this match</span>
+        <div className="flex items-center gap-2">
+          <span className={cn("text-[10px] font-bold tracking-wider", level.color)}>{level.label}</span>
+          <span className="text-xs text-muted-foreground font-mono">{consensus.totalBets}/{TOTAL_BOTS}</span>
+        </div>
+      </div>
+
+      {/* Model pips — always visible */}
+      <div className="mb-3">
+        <ModelPips active={consensus.totalBets} total={TOTAL_BOTS} />
       </div>
 
       {!isPro ? (
@@ -53,7 +88,7 @@ export function BotConsensus({ consensus, isPro }: BotConsensusProps) {
             <div key={`${item.market}-${item.selection}`} className="flex items-center justify-between rounded-lg bg-muted/20 px-3 py-2">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-foreground">{marketLabel(item.market, item.selection)}</span>
-                <span className="text-xs text-muted-foreground">{item.count} model{item.count !== 1 ? "s" : ""}</span>
+                <span className="text-xs text-muted-foreground">{item.count}/{TOTAL_BOTS}</span>
               </div>
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <span>~{item.avgProb}% prob</span>

@@ -19,6 +19,18 @@ interface MatchDetailTabsProps {
   hasSignals?: boolean;
   /** Default to "match" tab when match is live */
   defaultTab?: TabId;
+  /** Count badges on tabs */
+  signalCount?: number;
+  eventCount?: number;
+  bookmakerCount?: number;
+}
+
+function CountBadge({ count }: { count: number }) {
+  return (
+    <span className="ml-1 rounded px-1 py-px text-[10px] font-mono font-medium bg-muted/60 text-muted-foreground">
+      {count}
+    </span>
+  );
 }
 
 export function MatchDetailTabs({
@@ -28,6 +40,9 @@ export function MatchDetailTabs({
   contextContent,
   hasSignals,
   defaultTab = "intel",
+  signalCount,
+  eventCount,
+  bookmakerCount,
 }: MatchDetailTabsProps) {
   const [activeTab, setActiveTab] = useState<TabId>(defaultTab);
 
@@ -35,12 +50,25 @@ export function MatchDetailTabs({
     {
       id: "intel",
       label: "Intel",
-      badge: hasSignals ? (
-        <span className="size-1.5 rounded-full bg-green-400" />
-      ) : null,
+      badge: (
+        <>
+          {signalCount ? <CountBadge count={signalCount} /> : null}
+          {hasSignals && !signalCount ? (
+            <span className="size-1.5 rounded-full bg-green-400" />
+          ) : null}
+        </>
+      ),
     },
-    { id: "match", label: "Match" },
-    { id: "odds", label: "Odds" },
+    {
+      id: "match",
+      label: "Match",
+      badge: eventCount ? <CountBadge count={eventCount} /> : null,
+    },
+    {
+      id: "odds",
+      label: "Odds",
+      badge: bookmakerCount ? <CountBadge count={bookmakerCount} /> : null,
+    },
     { id: "context", label: "Context" },
   ];
 
