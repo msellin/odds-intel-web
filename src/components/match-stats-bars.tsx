@@ -67,7 +67,28 @@ export function MatchStatsBars({ stats, homeTeam, awayTeam }: MatchStatsBarsProp
         )}
         <StatBar label="Total Shots" home={stats.shots_home} away={stats.shots_away} />
         <StatBar label="Shots on Target" home={stats.shots_on_target_home} away={stats.shots_on_target_away} />
+        {(stats.blocked_shots_home != null || stats.blocked_shots_away != null) && (
+          <StatBar label="Blocked Shots" home={stats.blocked_shots_home} away={stats.blocked_shots_away} />
+        )}
         <StatBar label="Corners" home={stats.corners_home} away={stats.corners_away} />
+        {(stats.fouls_home != null || stats.fouls_away != null) && (
+          <StatBar label="Fouls" home={stats.fouls_home} away={stats.fouls_away} />
+        )}
+        {(stats.offsides_home != null || stats.offsides_away != null) && (
+          <StatBar label="Offsides" home={stats.offsides_home} away={stats.offsides_away} />
+        )}
+        {(stats.saves_home != null || stats.saves_away != null) && (
+          <StatBar label="Goalkeeper Saves" home={stats.saves_home} away={stats.saves_away} />
+        )}
+        {(stats.pass_accuracy_home != null || stats.pass_accuracy_away != null) && (
+          <StatBar label="Pass Accuracy" home={stats.pass_accuracy_home} away={stats.pass_accuracy_away} isPercentage />
+        )}
+        {(stats.yellow_cards_home != null || stats.yellow_cards_away != null) && (
+          <StatBar label="Yellow Cards" home={stats.yellow_cards_home} away={stats.yellow_cards_away} />
+        )}
+        {(stats.red_cards_home != null || stats.red_cards_away != null) && (
+          <StatBar label="Red Cards" home={stats.red_cards_home} away={stats.red_cards_away} />
+        )}
       </div>
     </div>
   );

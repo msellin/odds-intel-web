@@ -244,6 +244,20 @@ export interface MatchStatsData {
   corners_away: number | null;
   xg_home: number | null;
   xg_away: number | null;
+  fouls_home: number | null;
+  fouls_away: number | null;
+  offsides_home: number | null;
+  offsides_away: number | null;
+  saves_home: number | null;
+  saves_away: number | null;
+  blocked_shots_home: number | null;
+  blocked_shots_away: number | null;
+  pass_accuracy_home: number | null;
+  pass_accuracy_away: number | null;
+  yellow_cards_home: number | null;
+  yellow_cards_away: number | null;
+  red_cards_home: number | null;
+  red_cards_away: number | null;
   // Half-time
   shots_home_ht: number | null;
   shots_away_ht: number | null;
@@ -1333,6 +1347,10 @@ export async function getMatchStats(matchId: string): Promise<MatchStatsData | n
     .select(
       `shots_home, shots_away, shots_on_target_home, shots_on_target_away,
        possession_home, corners_home, corners_away, xg_home, xg_away,
+       fouls_home, fouls_away, offsides_home, offsides_away,
+       saves_home, saves_away, blocked_shots_home, blocked_shots_away,
+       pass_accuracy_home, pass_accuracy_away,
+       yellow_cards_home, yellow_cards_away, red_cards_home, red_cards_away,
        shots_home_ht, shots_away_ht, possession_home_ht,
        corners_home_ht, corners_away_ht, xg_home_ht, xg_away_ht`
     )

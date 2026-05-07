@@ -80,7 +80,7 @@ export function MatchDetailHeader({ match, initialSnapshot }: MatchDetailHeaderP
       <div className="flex items-center justify-center gap-3 sm:gap-6 py-2">
         <div className="flex flex-col items-center gap-1.5 min-w-0 flex-1">
           <TeamLogo logo={match.logoHome} name={match.homeTeam} />
-          <span className="text-[11px] sm:text-sm font-medium text-foreground text-center leading-tight max-w-[110px] sm:max-w-none">
+          <span className="text-[11px] sm:text-sm font-medium text-foreground text-center leading-tight">
             {match.homeTeam}
           </span>
         </div>
