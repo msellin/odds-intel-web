@@ -107,7 +107,7 @@ export default function MatchesPage({
       </div>
 
       {/* Dynamic content — streams when data fetches complete */}
-      <Suspense fallback={<MatchesSkeleton />}>
+      <Suspense fallback={null}>
         <MatchesContent dayOffset={dayOffset} />
       </Suspense>
     </div>
