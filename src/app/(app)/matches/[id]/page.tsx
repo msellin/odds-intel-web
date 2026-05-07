@@ -10,11 +10,16 @@ import {
   getTeamStandings,
   getMatchInjuries,
   getMatchSignals,
+  getMatchEvents,
+  getMatchStats,
   getBotConsensus,
   getMatchPreview,
   getModelMarketUsers,
 } from "@/lib/engine-data";
 import type { MatchSignalRow } from "@/lib/engine-data";
+import { MatchDetailHeader } from "@/components/match-detail-header";
+import { MatchDetailTabs } from "@/components/match-detail-tabs";
+import { MatchEventTimeline } from "@/components/match-event-timeline";
 import { MatchDetailFree } from "@/components/match-detail-free";
 import { MatchScoreDisplay } from "@/components/match-score-display";
 import { MatchSignalSummary } from "@/components/match-signal-summary";
@@ -33,7 +38,9 @@ import { Clock, Calendar, Shield, MapPin, User } from "lucide-react";
 import Link from "next/link";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { getUserTier } from "@/lib/get-user-tier";
-import { MatchProContent } from "./match-pro-content";
+import { MarketImpliedProbabilities } from "@/components/market-implied-probabilities";
+import { MatchStatsBars } from "@/components/match-stats-bars";
+import { MatchProContent, IntelProContent, OddsProContent, ContextProContent } from "./match-pro-content";
 
 // Deduplicate between generateMetadata and page — same request, one DB call
 const getPublicMatchCached = cache(getPublicMatchById);
@@ -85,7 +92,6 @@ export default async function MatchDetailPage({
 }) {
   const { id } = await params;
 
-  // Start supabase client creation in parallel with the match fetch
   const [publicMatch, supabase] = await Promise.all([
     getPublicMatchCached(id),
     createSupabaseServer().catch(() => null),
@@ -118,7 +124,6 @@ export default async function MatchDetailPage({
     );
   }
 
-  // Run auth check AND data queries in parallel — data doesn't depend on auth
   const [
     authResult,
     liveSnapshotsArr,
@@ -126,12 +131,13 @@ export default async function MatchDetailPage({
     standings,
     injuries,
     matchSignals,
+    matchEvents,
+    matchStats,
     bookmakerCount,
     botConsensus,
     matchPreview,
     modelMarketUsers,
   ] = await Promise.all([
-    // Auth check (server-side field stripping — B3)
     (async () => {
       try {
         if (!supabase) return { isAuthenticated: false, isPro: false, isElite: false };
@@ -143,12 +149,13 @@ export default async function MatchDetailPage({
         return { isAuthenticated: false, isPro: false, isElite: false };
       }
     })(),
-    // Data queries — all public, no auth needed
     getLiveSnapshots([id]),
     getMatchH2H(id),
     getTeamStandings(publicMatch.homeTeam, publicMatch.awayTeam),
     getMatchInjuries(id),
     getMatchSignals(id),
+    getMatchEvents(id),
+    getMatchStats(id),
     publicMatch.hasOdds ? getPublicMatchBookmakerCount(id) : Promise.resolve(0),
     getBotConsensus(id),
     getMatchPreview(id),
@@ -156,98 +163,53 @@ export default async function MatchDetailPage({
   ]);
 
   const { isAuthenticated, isPro, isElite } = authResult;
-
   const initialSnapshot = liveSnapshotsArr[0] ?? null;
+  const hasSignals = matchSignals.length > 0;
+  const isLive = publicMatch.status === "live";
 
-  const kickoffDate = new Date(publicMatch.kickoff);
-  const dateStr = kickoffDate.toLocaleDateString("en-GB", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-  // Time formatted in UTC (server-side); client will re-render in local timezone via suppressHydrationWarning
-  const timeStr = kickoffDate.toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "UTC",
-  }) + " UTC";
+  // ── Build tab content ──
 
-  return (
+  const suspenseFallback = (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Link href="/matches" className="hover:text-foreground transition-colors">
-            Matches
-          </Link>
-          <span>/</span>
-          <span className="text-foreground">{publicMatch.homeTeam} vs {publicMatch.awayTeam}</span>
-        </div>
-
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-          <div>
-            {/* Score display — handles live (with polling), finished, and pre-match */}
-            <MatchScoreDisplay
-              matchId={publicMatch.id}
-              status={publicMatch.status}
-              homeTeam={publicMatch.homeTeam}
-              awayTeam={publicMatch.awayTeam}
-              finishedScoreHome={publicMatch.score_home ?? null}
-              finishedScoreAway={publicMatch.score_away ?? null}
-              initialSnapshot={initialSnapshot}
-            />
-            <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-              <Badge
-                variant="outline"
-                className="text-xs border-border gap-1.5"
-              >
-                {publicMatch.league}
-              </Badge>
-              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Calendar className="h-3 w-3" />
-                <span className="font-mono">{dateStr}</span>
-              </span>
-              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Clock className="h-3 w-3" />
-                <span className="font-mono">{timeStr}</span>
-              </span>
-              {publicMatch.venue_name && (
-                <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <MapPin className="h-3 w-3" />
-                  <span>{publicMatch.venue_name}</span>
-                </span>
-              )}
-              {publicMatch.referee && (
-                <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <User className="h-3 w-3" />
-                  <span>{publicMatch.referee}</span>
-                </span>
-              )}
-              <MatchViewingCounter matchId={publicMatch.id} />
-            </div>
-          </div>
-        </div>
+      <div className="rounded-xl border border-border/50 bg-card p-5 space-y-3">
+        <div className="h-4 w-32 animate-pulse rounded bg-muted" />
+        <div className="h-3 w-full animate-pulse rounded bg-muted" />
+        <div className="h-3 w-3/4 animate-pulse rounded bg-muted" />
       </div>
+    </div>
+  );
 
-      <Separator className="bg-border" />
+  // Auto-generate match context from H2H + standings
+  const contextSentences: string[] = [];
+  if (standings.home && standings.away) {
+    contextSentences.push(
+      `${publicMatch.homeTeam} are #${standings.home.rank} (${standings.home.wins}W ${standings.home.draws}D ${standings.home.losses}L), ` +
+      `${publicMatch.awayTeam} are #${standings.away.rank} (${standings.away.wins}W ${standings.away.draws}D ${standings.away.losses}L).`
+    );
+  }
+  if (h2h && (h2h.homeWins + h2h.draws + h2h.awayWins) > 0) {
+    const total = h2h.homeWins + h2h.draws + h2h.awayWins;
+    const dominant = h2h.homeWins > h2h.awayWins ? publicMatch.homeTeam : h2h.awayWins > h2h.homeWins ? publicMatch.awayTeam : null;
+    if (dominant) {
+      const wins = h2h.homeWins > h2h.awayWins ? h2h.homeWins : h2h.awayWins;
+      contextSentences.push(`${dominant} lead the H2H ${wins}–${Math.min(h2h.homeWins, h2h.awayWins)} in ${total} meetings.`);
+    }
+  }
 
-      {/* Free content — always visible, shown first so users see data before CTAs */}
-      <MatchDetailFree
-        match={publicMatch}
-        bookmakerCount={bookmakerCount}
-        h2h={h2h}
-        homeStanding={standings.home}
-        awayStanding={standings.away}
-        hasInjuries={injuries.length > 0}
-        hasLineups={publicMatch.hasLineups}
-        hasStats={publicMatch.status === "finished"}
-        isAuthenticated={isAuthenticated}
-        isPro={isPro}
-      />
+  // ── INTEL TAB — our differentiator, shown first ──
+  const intelContent = (
+    <>
+      {/* Auto-generated match context */}
+      {contextSentences.length > 0 && (
+        <div className="rounded-xl border border-border/50 bg-card p-4">
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            {contextSentences.join(" ")}
+          </p>
+        </div>
+      )}
 
-      {/* Signal Delta (SUX-9) — "what changed since last visit" — Pro only, client-side localStorage */}
-      {isPro && matchSignals.length > 0 && (
+      {/* Signal Delta (SUX-9) — "what changed since last visit" — Pro only */}
+      {isPro && hasSignals && (
         <SignalDelta
           matchId={publicMatch.id}
           signals={matchSignals}
@@ -256,8 +218,19 @@ export default async function MatchDetailPage({
         />
       )}
 
-      {/* Intelligence Summary (SUX-4/7/10) — free gets post-match reveal or teaser, pro/elite get full */}
-      {matchSignals.length > 0 && (
+      {/* Market Implied Probabilities — always available when odds exist */}
+      {publicMatch.hasOdds && publicMatch.bestHome > 0 && (
+        <MarketImpliedProbabilities
+          bestHome={publicMatch.bestHome}
+          bestDraw={publicMatch.bestDraw}
+          bestAway={publicMatch.bestAway}
+          homeTeam={publicMatch.homeTeam}
+          awayTeam={publicMatch.awayTeam}
+        />
+      )}
+
+      {/* Intelligence Summary (SUX-4/7/10) */}
+      {hasSignals && (
         <MatchSignalSummary
           signals={matchSignals}
           isPro={isPro}
@@ -270,23 +243,26 @@ export default async function MatchDetailPage({
         />
       )}
 
-      {/* Signal group accordion (SUX-5) — Pro gets full breakdown, Free gets locked preview */}
-      {matchSignals.length > 0 && (
-        <SignalAccordion
-          signals={matchSignals}
-          isPro={isPro}
-          isElite={isElite}
+      {/* Model vs Market vs Users triangulation (ENG-12) */}
+      {modelMarketUsers && (
+        <ModelMarketUsers
+          data={modelMarketUsers}
           homeTeam={publicMatch.homeTeam}
           awayTeam={publicMatch.awayTeam}
         />
       )}
 
-      {/* AI Match Preview (ENG-3) — Free gets teaser, Pro/Elite get full */}
+      {/* Bot consensus (ENG-6) */}
+      {botConsensus && (
+        <BotConsensus consensus={botConsensus} isPro={isPro} />
+      )}
+
+      {/* AI Match Preview (ENG-3) */}
       {matchPreview && (
         <MatchPreviewCard preview={matchPreview} isPro={isPro} />
       )}
 
-      {/* User pick + community vote + notes — below the data so users see match info first */}
+      {/* Match Pick */}
       <MatchPickButton
         matchId={publicMatch.id}
         homeTeam={publicMatch.homeTeam}
@@ -297,45 +273,66 @@ export default async function MatchDetailPage({
         matchStatus={publicMatch.status}
       />
 
-      <CommunityVote
-        matchId={publicMatch.id}
-        homeTeam={publicMatch.homeTeam}
-        awayTeam={publicMatch.awayTeam}
-        matchStatus={publicMatch.status}
-        isAuthenticated={isAuthenticated}
-      />
-
-      {/* ENG-12: Model vs Market vs Users triangulation */}
-      {modelMarketUsers && (
-        <ModelMarketUsers
-          data={modelMarketUsers}
+      {/* Signal group accordion (SUX-5) */}
+      {hasSignals && (
+        <SignalAccordion
+          signals={matchSignals}
+          isPro={isPro}
+          isElite={isElite}
           homeTeam={publicMatch.homeTeam}
           awayTeam={publicMatch.awayTeam}
         />
       )}
 
-      {/* ENG-6: Bot consensus — free sees count+lock, pro sees full breakdown */}
-      {botConsensus && (
-        <BotConsensus
-          consensus={botConsensus}
-          isPro={isPro}
+      {/* Pro: signal timeline, why this pick, CLV */}
+      {isPro && (
+        <Suspense fallback={suspenseFallback}>
+          <IntelProContent
+            matchId={publicMatch.id}
+            publicMatch={publicMatch}
+            isElite={isElite}
+            matchSignals={matchSignals as MatchSignalRow[]}
+          />
+        </Suspense>
+      )}
+
+      {/* Empty state when truly no intel content */}
+      {!hasSignals && !botConsensus && !matchPreview && !modelMarketUsers && !publicMatch.hasOdds && contextSentences.length === 0 && (
+        <div className="rounded-xl border border-border/50 bg-card p-6 text-center space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Intelligence data is being collected for this match.
+          </p>
+          <p className="text-xs text-muted-foreground/50">
+            Signals, predictions, and model analysis will appear here as data flows in.
+          </p>
+        </div>
+      )}
+    </>
+  );
+
+  // ── MATCH TAB — events, lineups, injuries, stats ──
+  const matchContent = (
+    <>
+      {/* Visual event timeline — shown to all tiers */}
+      {matchEvents.length > 0 && (
+        <MatchEventTimeline
+          events={matchEvents}
+          homeTeam={publicMatch.homeTeam}
+          awayTeam={publicMatch.awayTeam}
         />
       )}
 
-      {/* Match notes — free signed-in feature */}
-      <MatchNotes matchId={publicMatch.id} />
+      {/* Match stats bars — shown to all tiers */}
+      {matchStats && (
+        <MatchStatsBars
+          stats={matchStats}
+          homeTeam={publicMatch.homeTeam}
+          awayTeam={publicMatch.awayTeam}
+        />
+      )}
 
-      {/* Pro content — streamed in after free content renders (B3: server-side field stripping) */}
-      {isPro && (
-        <Suspense fallback={
-          <div className="space-y-4">
-            <div className="rounded-xl border border-border/50 bg-card p-5 space-y-3">
-              <div className="h-4 w-32 animate-pulse rounded bg-muted" />
-              <div className="h-3 w-full animate-pulse rounded bg-muted" />
-              <div className="h-3 w-3/4 animate-pulse rounded bg-muted" />
-            </div>
-          </div>
-        }>
+      {isPro ? (
+        <Suspense fallback={suspenseFallback}>
           <MatchProContent
             matchId={publicMatch.id}
             publicMatch={publicMatch}
@@ -346,7 +343,128 @@ export default async function MatchDetailPage({
             matchSignals={matchSignals as MatchSignalRow[]}
           />
         </Suspense>
+      ) : (
+        <div className="rounded-xl border border-border/50 bg-card p-5 text-center space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Match events, lineups, and stats are available on Pro.
+          </p>
+          {injuries.length > 0 && (
+            <p className="text-xs text-muted-foreground/60">
+              {injuries.length} injuries tracked for this match.
+            </p>
+          )}
+        </div>
       )}
+    </>
+  );
+
+  // ── ODDS TAB — odds display, movement charts ──
+  const oddsContent = (
+    <>
+      {/* Best Available Odds — compact display */}
+      {publicMatch.hasOdds && publicMatch.bestHome > 0 && (
+        <div className="rounded-xl border border-border/50 bg-card p-4">
+          <h3 className="text-sm font-semibold text-foreground mb-3">Best Available Odds</h3>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-lg bg-muted/30 p-3 text-center">
+              <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Home</div>
+              <div className="font-mono text-lg font-bold text-foreground">{publicMatch.bestHome.toFixed(2)}</div>
+            </div>
+            <div className="rounded-lg bg-muted/30 p-3 text-center">
+              <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Draw</div>
+              <div className="font-mono text-lg font-bold text-foreground">{publicMatch.bestDraw.toFixed(2)}</div>
+            </div>
+            <div className="rounded-lg bg-muted/30 p-3 text-center">
+              <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Away</div>
+              <div className="font-mono text-lg font-bold text-foreground">{publicMatch.bestAway.toFixed(2)}</div>
+            </div>
+          </div>
+          {bookmakerCount > 1 && (
+            <p className="text-[10px] text-muted-foreground/60 text-center mt-2">
+              Best prices across {bookmakerCount} bookmakers
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Pro: live odds chart + odds movement */}
+      {isPro ? (
+        <Suspense fallback={suspenseFallback}>
+          <OddsProContent matchId={publicMatch.id} publicMatch={publicMatch} />
+        </Suspense>
+      ) : publicMatch.hasOdds ? (
+        <div className="rounded-xl border border-border/50 bg-card p-5 text-center">
+          <p className="text-sm text-muted-foreground">
+            Odds movement charts and bookmaker comparison available on Pro.
+          </p>
+        </div>
+      ) : null}
+    </>
+  );
+
+  // ── CONTEXT TAB — H2H, standings, season stats, notes ──
+  const contextContent = (
+    <>
+      {/* H2H + League Table (from MatchDetailFree, hiding odds + coverage) */}
+      <MatchDetailFree
+        match={publicMatch}
+        bookmakerCount={0}
+        h2h={h2h}
+        homeStanding={standings.home}
+        awayStanding={standings.away}
+        hasInjuries={false}
+        hasLineups={false}
+        hasStats={false}
+        isAuthenticated={isAuthenticated}
+        isPro={isPro}
+        hideOdds
+        hideCoverage
+      />
+
+      {/* Pro: season stats */}
+      {isPro && (
+        <Suspense fallback={suspenseFallback}>
+          <ContextProContent
+            homeStanding={standings.home}
+            awayStanding={standings.away}
+            publicMatch={publicMatch}
+          />
+        </Suspense>
+      )}
+
+      {/* Community Vote */}
+      <CommunityVote
+        matchId={publicMatch.id}
+        homeTeam={publicMatch.homeTeam}
+        awayTeam={publicMatch.awayTeam}
+        matchStatus={publicMatch.status}
+        isAuthenticated={isAuthenticated}
+      />
+
+      {/* Match notes */}
+      <MatchNotes matchId={publicMatch.id} />
+    </>
+  );
+
+  return (
+    <div className="space-y-3">
+      {/* New compact header with team logos, score, AI prediction, grade, inline odds */}
+      <MatchDetailHeader
+        match={publicMatch}
+        initialSnapshot={initialSnapshot}
+      />
+
+      <Separator className="bg-border" />
+
+      {/* Tabbed content */}
+      <MatchDetailTabs
+        intelContent={intelContent}
+        matchContent={matchContent}
+        oddsContent={oddsContent}
+        contextContent={contextContent}
+        hasSignals={hasSignals}
+        defaultTab={isLive ? "intel" : "intel"}
+      />
     </div>
   );
 }

@@ -193,6 +193,8 @@ interface MatchDetailLiveProps {
   playerStats?: PlayerStat[];
   homeSeasonStats?: TeamSeasonStat | null;
   awaySeasonStats?: TeamSeasonStat | null;
+  /** Hide events section — already shown via MatchEventTimeline */
+  hideEvents?: boolean;
 }
 
 export function MatchDetailLive({
@@ -205,6 +207,7 @@ export function MatchDetailLive({
   playerStats = [],
   homeSeasonStats,
   awaySeasonStats,
+  hideEvents,
 }: MatchDetailLiveProps) {
   const hasOver25 = match.odds.some((o) => o.over25 > 0);
   const hasOver15 = match.odds.some((o) => o.over15 > 0);
@@ -239,8 +242,8 @@ export function MatchDetailLive({
 
   return (
     <div className="space-y-6">
-      {/* ── Match Events Timeline (#12) ──────────────────────────────── */}
-      {freeEvents.length > 0 && (
+      {/* ── Match Events Timeline (#12) — hidden when MatchEventTimeline is used ── */}
+      {!hideEvents && freeEvents.length > 0 && (
         <Card className="border-border bg-card">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">

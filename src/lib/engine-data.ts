@@ -636,9 +636,9 @@ export async function getPublicMatchById(matchId: string): Promise<PublicMatch |
   const { data: match, error } = await supabase
     .from("matches")
     .select(
-      `id, date, status, score_home, score_away, venue_name, referee, lineups_home,
-       home_team:home_team_id(id, name, country),
-       away_team:away_team_id(id, name, country),
+      `id, date, status, score_home, score_away, venue_name, referee, lineups_home, af_prediction,
+       home_team:home_team_id(id, name, country, logo_url),
+       away_team:away_team_id(id, name, country, logo_url),
        league:league_id(id, name, country, tier, priority)`
     )
     .eq("id", matchId)
@@ -646,7 +646,7 @@ export async function getPublicMatchById(matchId: string): Promise<PublicMatch |
 
   if (error || !match) return null;
 
-  type PublicMatchRow = Pick<MatchRow, "id" | "date" | "status" | "score_home" | "score_away" | "venue_name" | "referee" | "home_team" | "away_team" | "league"> & { lineups_home?: unknown };
+  type PublicMatchRow = Pick<MatchRow, "id" | "date" | "status" | "score_home" | "score_away" | "venue_name" | "referee" | "home_team" | "away_team" | "league" | "af_prediction"> & { lineups_home?: unknown };
   const m = match as PublicMatchRow;
 
   const { data: oddsRows } = await supabase
@@ -667,6 +667,26 @@ export async function getPublicMatchById(matchId: string): Promise<PublicMatch |
   const awayTeam = Array.isArray(m.away_team) ? m.away_team[0] : m.away_team;
   const league = Array.isArray(m.league) ? m.league[0] : m.league;
 
+  // Parse predicted score from AF prediction JSONB
+  const afGoals = (m.af_prediction as Record<string, Record<string, string>> | null)?.goals;
+  const predictedHome = afGoals?.home != null ? Math.round(Number(afGoals.home)) : null;
+  const predictedAway = afGoals?.away != null ? Math.round(Number(afGoals.away)) : null;
+
+  // Determine data grade from predictions table
+  const { data: predRows } = await supabase
+    .from("predictions")
+    .select("source")
+    .eq("match_id", matchId);
+  const predSources = new Set((predRows ?? []).map((r: { source: string }) => r.source));
+  let dataGrade: "A" | "B" | "D" | null = null;
+  if (predSources.has("xgboost")) dataGrade = "A";
+  else if (predSources.has("poisson")) dataGrade = "B";
+  else if (predSources.has("af")) dataGrade = "D";
+
+  const bookmakerCount = new Set(
+    (oddsRows || []).map((o: { match_id: string; selection: string; odds: number }) => `${o.match_id}`)
+  ).size > 0 ? odds.home.length + odds.draw.length + odds.away.length : 0;
+
   return {
     id: m.id,
     homeTeam: homeTeam?.name || "TBD",
@@ -680,19 +700,18 @@ export async function getPublicMatchById(matchId: string): Promise<PublicMatch |
     bestHome: odds.home.length ? Math.max(0, ...odds.home) : 0,
     bestDraw: odds.draw.length ? Math.max(0, ...odds.draw) : 0,
     bestAway: odds.away.length ? Math.max(0, ...odds.away) : 0,
-    logoHome: null,
-    logoAway: null,
+    logoHome: homeTeam?.logo_url ?? null,
+    logoAway: awayTeam?.logo_url ?? null,
     formHome: null,
     formAway: null,
-    predictedHome: null,
-    predictedAway: null,
+    predictedHome: predictedHome !== null && !isNaN(predictedHome) ? predictedHome : null,
+    predictedAway: predictedAway !== null && !isNaN(predictedAway) ? predictedAway : null,
     moveHome: null,
     moveDraw: null,
     moveAway: null,
     bookmakerCount: 0,
-    // Signal fields not fetched on detail page (handled by match detail components directly)
     signalCount: 0,
-    dataGrade: null,
+    dataGrade,
     pulse: "routine" as const,
     teasers: [],
     leaguePriority: league?.priority ?? null,

@@ -34,6 +34,10 @@ interface MatchDetailFreeProps {
   hasStats?: boolean;
   isAuthenticated?: boolean;
   isPro?: boolean;
+  /** Hide odds card (when odds are shown elsewhere, e.g. Odds tab) */
+  hideOdds?: boolean;
+  /** Hide data coverage card */
+  hideCoverage?: boolean;
 }
 
 function FormBadge({ form }: { form: string }) {
@@ -69,6 +73,8 @@ export function MatchDetailFree({
   hasStats,
   isAuthenticated,
   isPro,
+  hideOdds,
+  hideCoverage,
 }: MatchDetailFreeProps) {
   const interest = interestScore(match);
   const indicator = interestIndicator(interest);
@@ -76,7 +82,7 @@ export function MatchDetailFree({
   return (
     <div className="space-y-3">
       {/* Best Odds Summary */}
-      {match.hasOdds && match.bestHome > 0 ? (
+      {!hideOdds && match.hasOdds && match.bestHome > 0 ? (
         <Card className="border-border bg-card">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
@@ -124,13 +130,13 @@ export function MatchDetailFree({
             </div>
           </CardContent>
         </Card>
-      ) : (
+      ) : !hideOdds ? (
         <Card className="border-border bg-card">
           <CardContent className="py-5 text-center text-sm text-muted-foreground">
             Odds not yet available for this match.
           </CardContent>
         </Card>
-      )}
+      ) : null}
 
       {/* H2H */}
       {h2h && (h2h.homeWins + h2h.draws + h2h.awayWins) > 0 && (
@@ -257,7 +263,7 @@ export function MatchDetailFree({
       )}
 
       {/* Data Coverage + Pro hints */}
-      <Card className="border-border bg-card">
+      {!hideCoverage && <Card className="border-border bg-card">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center gap-2">
             <BarChart3 className="h-4 w-4" />
@@ -341,7 +347,7 @@ export function MatchDetailFree({
             </div>
           )}
         </CardContent>
-      </Card>
+      </Card>}
 
     </div>
   );

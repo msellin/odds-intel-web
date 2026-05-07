@@ -98,6 +98,9 @@ export function CommunityVote({
 
   if (!loaded) return null;
 
+  // Hide entirely when locked with no votes — empty 0%/0%/0% looks broken
+  if (isLocked && counts.total === 0 && !myVote) return null;
+
   const pct = (v: Vote) =>
     counts.total > 0 ? Math.round((counts[v] / counts.total) * 100) : 0;
 

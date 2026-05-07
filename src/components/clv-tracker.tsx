@@ -71,18 +71,7 @@ export function CLVTracker({ clvData, homeTeam, awayTeam, matchStatus }: CLVTrac
   const hasSettledBets = settledBets.length > 0;
 
   if (!hasPseudoCLV && !hasSettledBets) {
-    if (matchStatus !== "finished") {
-      return (
-        <div className="rounded-xl border border-white/[0.06] bg-card/40 p-4">
-          <div className="mb-2 flex items-center gap-2">
-            <h3 className="text-xs font-black uppercase tracking-widest text-foreground">CLV Tracker</h3>
-            <span className="ml-auto rounded bg-violet-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-400">Elite</span>
-          </div>
-          <p className="text-[11px] text-muted-foreground/50">CLV is calculated at settlement after the match closes.</p>
-        </div>
-      );
-    }
-    return null;
+    return null; // Hide entirely when no data — don't show empty placeholder
   }
 
   const clvValues = [pseudoClvHome, pseudoClvDraw, pseudoClvAway].filter((v): v is number => v != null);

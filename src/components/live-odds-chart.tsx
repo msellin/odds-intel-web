@@ -80,22 +80,7 @@ export function LiveOddsChart({
   }, [matchId, isLive]);
 
   if (!data.length) {
-    if (!isLive) return null; // No live odds and match isn't live
-    return (
-      <Card className="border-border/50 bg-card">
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <Activity className="h-4 w-4 text-red-500 animate-pulse" />
-            Live In-Play Odds
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-xs text-muted-foreground py-4 text-center">
-            Live odds will appear here once the match kicks off and bookmakers update their lines.
-          </p>
-        </CardContent>
-      </Card>
-    );
+    return null; // No data — hide entirely instead of showing placeholder
   }
 
   const chartData = toChartData(data);
