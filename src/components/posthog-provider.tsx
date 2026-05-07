@@ -57,9 +57,12 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
     if (!POSTHOG_KEY || initialized) return;
     posthog.init(POSTHOG_KEY, {
       api_host: POSTHOG_HOST,
-      capture_pageview: false, // we handle this manually above
+      capture_pageview: false,
       capture_pageleave: true,
       persistence: "localStorage",
+      disable_session_recording: true,
+      enable_surveys: false,
+      autocapture: false,
     });
     initialized = true;
   }, []);
