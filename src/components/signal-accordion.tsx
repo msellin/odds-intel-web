@@ -30,6 +30,11 @@ import {
   eloDiffLabel,
   eloStrengthLabel,
   leagueAvgGoalsLabel,
+  leagueOver25PctLabel,
+  leagueBttsPctLabel,
+  sharpConsensusLabel,
+  playersDoubtfulLabel,
+  injuryUncertaintyLabel,
   SIGNAL_GROUP_LABELS,
   type SignalSeverity,
 } from "@/lib/signal-labels";
@@ -120,6 +125,18 @@ function buildGroups(
       description: `Home ${pct(get("market_implied_home"))} / Draw ${pct(get("market_implied_draw"))} / Away ${pct(get("market_implied_away"))}`,
       value: "",
     });
+  }
+  if (has("sharp_consensus_home")) {
+    const l = sharpConsensusLabel(get("sharp_consensus_home"), "home");
+    marketItems.push({ ...l, value: fmt(get("sharp_consensus_home"), 4) });
+  }
+  if (has("sharp_consensus_draw")) {
+    const l = sharpConsensusLabel(get("sharp_consensus_draw"), "draw");
+    marketItems.push({ ...l, value: fmt(get("sharp_consensus_draw"), 4) });
+  }
+  if (has("sharp_consensus_away")) {
+    const l = sharpConsensusLabel(get("sharp_consensus_away"), "away");
+    marketItems.push({ ...l, value: fmt(get("sharp_consensus_away"), 4) });
   }
 
   // ── Form & Strength group ───────────────────────────────────────────────────
@@ -213,6 +230,14 @@ function buildGroups(
     const l = leagueAvgGoalsLabel(get("league_avg_goals"));
     contextItems.push({ ...l, value: `${fmt(get("league_avg_goals"), 2)} goals/match` });
   }
+  if (has("league_over25_pct")) {
+    const l = leagueOver25PctLabel(get("league_over25_pct"));
+    contextItems.push({ ...l, value: pct(get("league_over25_pct")) });
+  }
+  if (has("league_btts_pct")) {
+    const l = leagueBttsPctLabel(get("league_btts_pct"));
+    contextItems.push({ ...l, value: pct(get("league_btts_pct")) });
+  }
 
   // ── News & Injuries group ───────────────────────────────────────────────────
   const infoItems: SignalItem[] = [];
@@ -245,6 +270,22 @@ function buildGroups(
       value: `${Math.round(get("players_out_away"))}`,
       description: `${awayTeam}: ${Math.round(get("players_out_away"))} confirmed absences`,
     });
+  }
+  if (has("players_doubtful_home") && get("players_doubtful_home") > 0) {
+    const l = playersDoubtfulLabel(get("players_doubtful_home"));
+    infoItems.push({ ...l, value: `${Math.round(get("players_doubtful_home"))}`, description: `${homeTeam}: ${l.description}` });
+  }
+  if (has("players_doubtful_away") && get("players_doubtful_away") > 0) {
+    const l = playersDoubtfulLabel(get("players_doubtful_away"));
+    infoItems.push({ ...l, value: `${Math.round(get("players_doubtful_away"))}`, description: `${awayTeam}: ${l.description}` });
+  }
+  if (has("injury_uncertainty_home") && get("injury_uncertainty_home") > 0) {
+    const l = injuryUncertaintyLabel(get("injury_uncertainty_home"));
+    infoItems.push({ ...l, value: `${Math.round(get("injury_uncertainty_home"))}`, description: `${homeTeam}: ${l.description}` });
+  }
+  if (has("injury_uncertainty_away") && get("injury_uncertainty_away") > 0) {
+    const l = injuryUncertaintyLabel(get("injury_uncertainty_away"));
+    infoItems.push({ ...l, value: `${Math.round(get("injury_uncertainty_away"))}`, description: `${awayTeam}: ${l.description}` });
   }
   if (has("injury_recurrence_home")) {
     const l = injuryRecurrenceLabel(get("injury_recurrence_home"));

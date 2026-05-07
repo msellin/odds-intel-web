@@ -138,6 +138,41 @@ export function eloDiffLabel(diff: number): SignalLabel {
   return { label: "Even", icon: "=", severity: "neutral", description: "Teams closely matched by ELO" }
 }
 
+// ─── Sharp consensus ─────────────────────────────────────────────────────────
+
+export function sharpConsensusLabel(val: number, selection: "home" | "draw" | "away" = "home"): SignalLabel {
+  const who = selection === "home" ? "Home" : selection === "draw" ? "Draw" : "Away"
+  if (val > 0.02)
+    return { label: `Sharp on ${who}`, icon: "⚡", severity: "high", description: `Sharp books price ${who} significantly higher than soft books` }
+  if (val > 0.005)
+    return { label: `Slight sharp lean ${who}`, icon: "↑", severity: "medium", description: `Mild sharp-book preference for ${who}` }
+  if (val < -0.02)
+    return { label: `Sharps fade ${who}`, icon: "↓", severity: "high", description: `Sharp books price ${who} lower than soft books — fading signal` }
+  if (val < -0.005)
+    return { label: `Mild fade ${who}`, icon: "↓", severity: "medium", description: `Soft books slightly more bullish on ${who} than sharps` }
+  return { label: "No sharp lean", icon: "=", severity: "neutral", description: "Sharp and soft books broadly agree on this price" }
+}
+
+// ─── Doubtful players ────────────────────────────────────────────────────────
+
+export function playersDoubtfulLabel(count: number): SignalLabel {
+  if (count >= 3)
+    return { label: "Several doubtful", icon: "?", severity: "high", description: `${count} players with uncertain availability — line likely to move on team news` }
+  if (count >= 1)
+    return { label: "Players doubtful", icon: "?", severity: "medium", description: `${count} player(s) listed as doubtful — watch for late team news` }
+  return { label: "None doubtful", icon: "✓", severity: "neutral", description: "No players with uncertain availability" }
+}
+
+// ─── Injury uncertainty ───────────────────────────────────────────────────────
+
+export function injuryUncertaintyLabel(count: number): SignalLabel {
+  if (count >= 3)
+    return { label: "High uncertainty", icon: "⚠", severity: "high", description: `${count} uncertain players — market cannot fully price this squad` }
+  if (count >= 1)
+    return { label: "Some uncertainty", icon: "?", severity: "medium", description: `${count} doubtful player(s) — partial market inefficiency possible` }
+  return { label: "Clear squad", icon: "✓", severity: "neutral", description: "Squad situation clear — low pre-match uncertainty" }
+}
+
 // ─── League stats ─────────────────────────────────────────────────────────────
 
 export function leagueAvgGoalsLabel(avg: number): SignalLabel {
@@ -146,6 +181,26 @@ export function leagueAvgGoalsLabel(avg: number): SignalLabel {
   if (avg > 2.4)
     return { label: "Average goals", icon: "⚽", severity: "neutral", description: "Typical goal rate for this league" }
   return { label: "Low scoring", icon: "−", severity: "low", description: "Tight league — goals at a premium" }
+}
+
+export function leagueOver25PctLabel(pct: number): SignalLabel {
+  if (pct > 0.60)
+    return { label: "Over-heavy league", icon: "⚽⚽", severity: "medium", description: `${Math.round(pct * 100)}% of matches go over 2.5 goals — open league` }
+  if (pct > 0.50)
+    return { label: "Over-friendly", icon: "⚽", severity: "low", description: `${Math.round(pct * 100)}% over 2.5 — slightly above average` }
+  if (pct < 0.40)
+    return { label: "Low-scoring league", icon: "−", severity: "low", description: `Only ${Math.round(pct * 100)}% over 2.5 — defensive league` }
+  return { label: "Balanced scoring", icon: "=", severity: "neutral", description: `${Math.round(pct * 100)}% over 2.5 — average for this league` }
+}
+
+export function leagueBttsPctLabel(pct: number): SignalLabel {
+  if (pct > 0.60)
+    return { label: "BTTS-heavy", icon: "⚽", severity: "medium", description: `${Math.round(pct * 100)}% both teams score — expect goals at both ends` }
+  if (pct > 0.50)
+    return { label: "BTTS-likely", icon: "↑", severity: "low", description: `${Math.round(pct * 100)}% BTTS rate — slightly above average` }
+  if (pct < 0.38)
+    return { label: "One-sided league", icon: "↓", severity: "low", description: `Only ${Math.round(pct * 100)}% BTTS — clean sheets common` }
+  return { label: "Average BTTS", icon: "=", severity: "neutral", description: `${Math.round(pct * 100)}% BTTS rate — typical` }
 }
 
 // ─── Injury recurrence ────────────────────────────────────────────────────────
