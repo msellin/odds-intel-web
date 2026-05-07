@@ -146,11 +146,16 @@ export default async function OpsDashboardPage() {
       <Section
         title="Betting & Bots"
         icon="🤖"
-        subtitle={`${totalBots} bots (paper trading since Apr 27). Each has its own strategy threshold. Bets placed today covers UPCOMING matches (next few days) — not just today's games. "Betting" = placed ≥1 bet. "Idle" = ran but no qualifying bets found.`}
+        subtitle={`${totalBots} bots total: 16 pre-match (run at 06:00 UTC on upcoming games) + 8 live/inplay (run every 30s during live matches). Paper trading since Apr 27.`}
       >
         <Grid>
-          <Stat label="Bets placed today" value={snapshot?.bets_placed_today}
-            note="Across all bots, for any upcoming match. Multiple bets per bot per run is normal." />
+          <Stat label="Pre-match bets today" value={snapshot?.bets_placed_today != null && snapshot?.bets_inplay_today != null ? snapshot.bets_placed_today - snapshot.bets_inplay_today : snapshot?.bets_placed_today}
+            note="Placed at 06:00 UTC on upcoming fixtures. Bets cover next few days, not just today." />
+          <Stat label="Inplay bets today" value={snapshot?.bets_inplay_today}
+            good={v => v > 0}
+            note="Placed during live matches by the 8 inplay strategies. 0 = no strategy triggered OR live O/U odds unavailable." />
+          <Stat label="Inplay bots active" value={snapshot?.inplay_active_bots} total={8}
+            note="How many of the 8 inplay bots placed ≥1 bet today" />
           <Stat
             label="Pending (all time)"
             value={snapshot?.bets_pending}
@@ -159,13 +164,12 @@ export default async function OpsDashboardPage() {
           />
           <Stat label="Settled today" value={snapshot?.bets_settled_today} note="Won or lost, match finished today" />
           <Stat label="P&L today" value={snapshot?.pnl_today} prefix="$" decimals={2} warn={v => v < -50} good={v => v > 0} note="Settled bets only — pending don't count until resolved" />
-          <Stat label="In-play bets today" value={snapshot?.bets_inplay_today} note="Bets placed after kick-off (live betting strategy)" />
           <Stat
-            label="Bots betting today"
-            value={snapshot?.active_bots}
-            total={totalBots}
-            warn={v => v < 10}
-            note={`Out of ${totalBots} total bots. Low count = most bots found no value today (can be normal on quiet days).`}
+            label="Pre-match bots active"
+            value={snapshot?.active_bots != null && snapshot?.inplay_active_bots != null ? snapshot.active_bots - snapshot.inplay_active_bots : snapshot?.active_bots}
+            total={16}
+            warn={v => v < 8}
+            note="How many of the 16 pre-match bots placed ≥1 bet today. Low = most found no value (can be normal)."
           />
           <Stat label="Idle today" value={snapshot?.silent_bots} note="Ran, no qualifying bets found" />
           <Stat label="Duplicate bets" value={snapshot?.duplicate_bets} warn={v => v > 0} note="Same bot × match × market × selection placed twice — should be 0" />
@@ -205,26 +209,30 @@ export default async function OpsDashboardPage() {
       <Section
         title="Live Tracker"
         icon="⚡"
-        subtitle="Polls live games every 30s (score), 60s (events), 5min (odds). Each poll = one snapshot row. High row count is expected — ~300 rows/game/hour."
+        subtitle="Polls live games every 30s (score), 60s (events), 5min (odds). ~300 snapshot rows per game per hour — use game counts below, not raw rows."
       >
         <Grid>
           <Stat
-            label="Live snapshot rows today"
+            label="Games tracked today"
+            value={snapshot?.live_games_tracked}
+            note="Distinct matches with at least one live snapshot today"
+          />
+          <Stat
+            label="Games with xG"
+            value={snapshot?.live_games_with_xg}
+            total={snapshot?.live_games_tracked}
+            note="xG only from top leagues (AF stats endpoint). Others use shot proxy for inplay bot."
+          />
+          <Stat
+            label="Games with live O/U odds"
+            value={snapshot?.live_games_with_odds}
+            total={snapshot?.live_games_tracked}
+            note="live_ou_25_over populated — required for 6 of 8 inplay strategies. Low count = most strategies can't fire."
+          />
+          <Stat
+            label="Snapshot rows today"
             value={snapshot?.live_snapshots_today}
-            note="Total rows across all live games today — not unique games"
-          />
-          <Stat
-            label="Rows with xG data"
-            value={snapshot?.snapshots_with_xg}
-            total={snapshot?.live_snapshots_today}
-            pctDecimals={1}
-            note="xG only populated for leagues that provide it via API-Football. Low % is normal."
-          />
-          <Stat
-            label="Rows with live odds"
-            value={snapshot?.snapshots_with_live_odds}
-            total={snapshot?.live_snapshots_today}
-            note="~5% expected: odds are polled less frequently than score/events"
+            note={`~${snapshot?.live_games_tracked ? Math.round((snapshot.live_snapshots_today ?? 0) / snapshot.live_games_tracked) : "?"} rows/game avg. High is normal — one row every 30s.`}
           />
           <div className="rounded-lg border border-border bg-card p-3">
             <p className="text-xs text-muted-foreground mb-1">Last snapshot</p>

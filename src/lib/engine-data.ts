@@ -45,6 +45,10 @@ export interface OpsSnapshot {
   live_snapshots_today: number | null;
   snapshots_with_xg: number | null;
   snapshots_with_live_odds: number | null;
+  live_games_tracked: number | null;
+  live_games_with_xg: number | null;
+  live_games_with_odds: number | null;
+  inplay_active_bots: number | null;
   // ⑤ Post-match
   matches_finished_today: number | null;
   post_mortem_ran_today: boolean | null;
