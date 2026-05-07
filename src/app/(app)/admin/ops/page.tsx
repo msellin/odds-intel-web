@@ -232,12 +232,12 @@ export default async function OpsDashboardPage() {
         subtitle="Runs at 9pm UTC. Settles bets, updates ELO ratings, and builds ML feature vectors for each finished match."
       >
         <Grid>
-          <Stat label="Finished today" value={snapshot?.matches_finished_today} note="Matches with status = finished in our DB" />
+          <Stat label="Finished today" value={snapshot?.matches_finished_today} note="Live tracker marks matches finished in real-time. Settlement (bet resolution + ML) runs separately at 21:00 UTC." />
           <Stat
             label="ML vectors built"
             value={snapshot?.feature_vectors_today}
             total={snapshot?.matches_finished_today}
-            note="One wide row per finished match (57 features: ELO, form, odds drift, signals…). Used to train and evaluate the model. Only exists after a match finishes."
+            note="Only meaningful after 23:00 UTC — settlement builds these at 21:00. Low count during the day is normal."
           />
           <Stat
             label="ELO updates today"
