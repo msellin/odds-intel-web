@@ -76,7 +76,9 @@ export function MarketImpliedProbabilities({
   return (
     <div className="rounded-xl border border-border/50 bg-card p-4">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-foreground">Market Probabilities</h3>
+        <h3 className="text-sm font-semibold text-foreground">
+          {isLive ? "Market Probabilities" : "Pre-match Probabilities"}
+        </h3>
         {isLive ? (
           <span className="text-[10px] text-amber-400/70 font-mono">Live odds</span>
         ) : (
