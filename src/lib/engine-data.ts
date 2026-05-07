@@ -207,7 +207,7 @@ export interface PublicMatch {
   bookmakerCount: number;
   // Signal intelligence (SUX-1/2/3) — populated by getPublicMatches(), omitted on detail
   signalCount: number;
-  dataGrade: "A" | "B" | "D" | null;
+  dataGrade: "A" | "B" | "C" | null;
   pulse: "routine" | "interesting" | "high-alert";
   teasers: string[];
   // League priority for sorting (lower = more important, null = alphabetical)
@@ -387,7 +387,7 @@ const PULSE_SIGNAL_NAMES = [
 
 interface MatchSignalSummary {
   signalCount: number;
-  dataGrade: "A" | "B" | "D" | null;
+  dataGrade: "A" | "B" | "C" | null;
   pulse: "routine" | "interesting" | "high-alert";
   teasers: string[];
 }
@@ -457,12 +457,12 @@ async function batchFetchSignalSummary(
     const sigs = keySignals[matchId] || {};
     const signalCount = signalCountMap[matchId] ?? 0;
 
-    // Grade: A = XGBoost ran, B = Poisson only, D = AF prediction only
+    // Grade: A = XGBoost ran, B = Poisson only, C = AF prediction only
     const sources = predSources[matchId] ?? new Set<string>();
-    let dataGrade: "A" | "B" | "D" | null = null;
+    let dataGrade: "A" | "B" | "C" | null = null;
     if (sources.has("xgboost")) dataGrade = "A";
     else if (sources.has("poisson")) dataGrade = "B";
-    else if (sources.has("af")) dataGrade = "D";
+    else if (sources.has("af")) dataGrade = "C";
 
     // Pulse: derived from market + context signals available in match_signals
     const bdm = sigs["bookmaker_disagreement"] ?? 0;
@@ -537,7 +537,8 @@ export async function getPublicMatches(dayOffset = 0): Promise<PublicMatch[]> {
   // Step 1a: Fetch today's matches (all statuses).
   // Step 1b: Fetch yesterday's matches that are NOT finished (still live or delayed).
   // Two queries because PostgREST doesn't support OR across date + status in one filter.
-  // The !inner join excludes leagues with show_on_frontend = false.
+  // Filter: is_active = true on the league (programmatic — no manual show_on_frontend toggle needed).
+  // Leagues with neither odds nor predictions coverage are excluded naturally (no rows reach us).
   const selectFields = `id, date, status, score_home, score_away, form_home, form_away, af_prediction,
        home_team:home_team_id(id, name, country, logo_url),
        away_team:away_team_id(id, name, country, logo_url),
@@ -547,7 +548,7 @@ export async function getPublicMatches(dayOffset = 0): Promise<PublicMatch[]> {
     supabase
       .from("matches")
       .select(selectFields)
-      .eq("league.show_on_frontend", true)
+      .eq("league.is_active", true)
       .gte("date", todayStart.toISOString())
       .lte("date", todayEnd.toISOString())
       .order("date", { ascending: true })
@@ -557,7 +558,7 @@ export async function getPublicMatches(dayOffset = 0): Promise<PublicMatch[]> {
       ? supabase
           .from("matches")
           .select(selectFields)
-          .eq("league.show_on_frontend", true)
+          .eq("league.is_active", true)
           .gte("date", yesterdayStart.toISOString())
           .lt("date", todayStart.toISOString())
           .neq("status", "finished")
@@ -777,10 +778,10 @@ export async function getPublicMatchById(matchId: string): Promise<PublicMatch |
     .eq("match_id", matchId);
   type PredRow = { source: string; market: string; model_probability: number };
   const predSources = new Set((predRows ?? []).map((r: PredRow) => r.source));
-  let dataGrade: "A" | "B" | "D" | null = null;
+  let dataGrade: "A" | "B" | "C" | null = null;
   if (predSources.has("xgboost")) dataGrade = "A";
   else if (predSources.has("poisson")) dataGrade = "B";
-  else if (predSources.has("af")) dataGrade = "D";
+  else if (predSources.has("af")) dataGrade = "C";
 
   // Extract ensemble 1x2 model probabilities (0-100) for MarketImpliedProbabilities comparison
   let modelHome: number | null = null;

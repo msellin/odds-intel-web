@@ -132,15 +132,16 @@ export default function HowItWorksPage() {
 
       <Separator className="opacity-30" />
 
-      {/* Section 2: 58 signals */}
+      {/* Section 2: Signal groups */}
       <section className="space-y-4">
         <div className="flex items-center gap-2">
           <Database className="h-5 w-5 text-primary" />
-          <h2 className="text-xl font-semibold">58 Signals Per Match</h2>
+          <h2 className="text-xl font-semibold">Signal Groups</h2>
         </div>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          The model ingests up to 58 signals per match across 6 groups. More signals = higher data grade (A–D).
-          Grade A matches (European top leagues) have the most data; Grade D matches have only basic predictions.
+          Our pipeline collects data across 6 groups throughout the day. Most signals are available for any match
+          with odds; some (lineups, live xG) depend on what the league supports. Data grade reflects which prediction
+          model ran — not how many signals were collected.
         </p>
         <div className="space-y-2">
           {SIGNAL_GROUPS.map((g) => (
@@ -269,19 +270,19 @@ export default function HowItWorksPage() {
             <div className="flex flex-wrap items-start gap-4">
               <div className="flex items-center gap-2">
                 <span className="inline-block rounded bg-green-500/20 px-1.5 text-[10px] font-bold leading-5 text-green-400">A</span>
-                <span className="text-xs text-muted-foreground">Full XGBoost + Poisson ensemble. Best coverage — European top leagues with rich historical data.</span>
+                <span className="text-xs text-muted-foreground">Full model — XGBoost + Poisson ensemble with rich historical data. Highest confidence predictions.</span>
               </div>
             </div>
             <div className="mt-2 flex flex-wrap items-start gap-4">
               <div className="flex items-center gap-2">
                 <span className="inline-block rounded bg-amber-500/20 px-1.5 text-[10px] font-bold leading-5 text-amber-500">B</span>
-                <span className="text-xs text-muted-foreground">Poisson model only. Good predictions but fewer features available for this match.</span>
+                <span className="text-xs text-muted-foreground">Statistical model — Poisson only. Good predictions but less historical depth for this league.</span>
               </div>
             </div>
             <div className="mt-2 flex flex-wrap items-start gap-4">
               <div className="flex items-center gap-2">
-                <span className="inline-block rounded bg-white/[0.06] px-1.5 text-[10px] font-bold leading-5 text-muted-foreground/50">D</span>
-                <span className="text-xs text-muted-foreground">API-Football prediction only. Basic coverage for lesser-known leagues.</span>
+                <span className="inline-block rounded bg-white/[0.06] px-1.5 text-[10px] font-bold leading-5 text-muted-foreground/50">C</span>
+                <span className="text-xs text-muted-foreground">Prediction-based — limited historical data for this league. Uses API-Football probabilities as baseline.</span>
               </div>
             </div>
           </div>

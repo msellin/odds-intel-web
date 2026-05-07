@@ -93,7 +93,7 @@ function FormStrip({ form }: { form: string }) {
 const GRADE_STYLES = {
   A: "bg-green-500/20 text-green-400",
   B: "bg-amber-500/20 text-amber-500",
-  D: "bg-white/[0.06] text-muted-foreground/50",
+  C: "bg-white/[0.06] text-muted-foreground/50",
 } as const;
 
 function MatchRow({
