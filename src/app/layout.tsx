@@ -10,13 +10,13 @@ import { CookieBanner } from "@/components/cookie-banner";
 const inter = Inter({
   variable: "--font-sans",
   subsets: ["latin"],
-  display: "swap",
+  display: "optional",
 });
 
 const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains",
   subsets: ["latin"],
-  display: "swap",
+  display: "optional",
 });
 
 export const metadata: Metadata = {
