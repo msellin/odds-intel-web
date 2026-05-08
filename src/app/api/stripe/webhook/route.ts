@@ -36,6 +36,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
+  // Idempotency: insert event.id before processing.
+  // If already processed (e.g. Stripe retry), the UNIQUE constraint fires and we
+  // return 200 immediately without re-applying side effects.
+  // event.id comes from the verified JSON payload — not the Stripe-Signature header,
+  // which is per-attempt and would NOT deduplicate retries.
+  const { error: dupError } = await supabaseAdmin
+    .from("processed_events")
+    .insert({ event_id: event.id, event_type: event.type });
+
+  if (dupError) {
+    if (dupError.code === "23505") {
+      // Already processed — idempotent success
+      return NextResponse.json({ received: true });
+    }
+    // Unexpected DB error — return 500 so Stripe retries later
+    console.error("processed_events insert failed:", dupError);
+    return NextResponse.json({ error: "DB error" }, { status: 500 });
+  }
+
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session;
