@@ -2072,7 +2072,6 @@ export async function getMatchCLVData(matchId: string): Promise<MatchCLVData> {
 
 export interface TrackRecordStats {
   avgClv: number | null;         // average CLV across settled bets
-  posClvPct: number;             // % of bets with positive CLV
   totalValueBets: number;        // bets with edge > 0
   avgEdge: number;               // average edge %
   settledBets: number;           // total settled
@@ -2106,7 +2105,6 @@ export async function getTrackRecordStats(): Promise<TrackRecordStats> {
     const row = Array.isArray(counts) ? counts[0] : counts;
     return {
       avgClv: cache.avg_clv,
-      posClvPct: cache.avg_clv != null && cache.avg_clv > 0 ? 100 : 0,
       totalValueBets: liveSettledCount,
       avgEdge: 0,
       settledBets: liveSettledCount,
@@ -2140,9 +2138,6 @@ export async function getTrackRecordStats(): Promise<TrackRecordStats> {
   const avgClv = withClv.length > 0
     ? withClv.reduce((sum, b) => sum + Number(b.clv), 0) / withClv.length
     : null;
-  const posClvPct = withClv.length > 0
-    ? (withClv.filter((b) => Number(b.clv) > 0).length / withClv.length) * 100
-    : 0;
   const withEdge = settled.filter((b) => b.edge_percent != null);
   const avgEdge = withEdge.length > 0
     ? withEdge.reduce((sum, b) => sum + Number(b.edge_percent), 0) / withEdge.length
@@ -2150,7 +2145,7 @@ export async function getTrackRecordStats(): Promise<TrackRecordStats> {
   const totalValueBets = withEdge.filter((b) => Number(b.edge_percent) > 0).length;
   const countsRow = Array.isArray(countsResult.data) ? countsResult.data[0] : countsResult.data;
   return {
-    avgClv, posClvPct, totalValueBets, avgEdge,
+    avgClv, totalValueBets, avgEdge,
     settledBets: settled.length,
     leaguesCovered: Number(countsRow?.league_count ?? 0),
     bookmakersCovered: Number(countsRow?.bookmaker_count ?? 0),

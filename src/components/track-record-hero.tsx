@@ -37,9 +37,7 @@ export function TrackRecordHero({ stats }: Props) {
               {clvDisplay}
             </span>
             <p className="text-[10px] text-muted-foreground/60 mt-1">
-              {stats.avgClv != null
-                ? `${stats.posClvPct.toFixed(0)}% of bets beat the closing line`
-                : "CLV appears after bets settle"}
+              {stats.avgClv != null ? "beats the closing line" : "CLV appears after bets settle"}
             </p>
           </CardContent>
         </Card>

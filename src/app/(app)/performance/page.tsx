@@ -14,7 +14,6 @@ import { PerformanceHero } from "@/components/performance-hero";
 import { PerformanceLeaderboard } from "@/components/performance-leaderboard";
 import type { PublicBotStat, SanitizedBotBet } from "@/components/performance-leaderboard";
 import { PerformanceHistory } from "@/components/performance-history";
-import type { FullBetItem } from "@/components/performance-history";
 import { ClvEducation } from "@/components/clv-education";
 import { TrackRecordFooterCta } from "@/components/track-record-footer-cta";
 
@@ -77,31 +76,6 @@ function sanitizeBets(bets: LiveBet[], isPro: boolean, isElite: boolean): Saniti
   }));
 }
 
-function buildFullBetItems(bets: LiveBet[], isElite: boolean): FullBetItem[] {
-  return bets
-    .filter((b) => b.result !== "pending")
-    .map((b) => {
-      const clvSign =
-        b.clv == null ? null : b.clv > 0 ? "positive" : b.clv < 0 ? "negative" : "neutral";
-      return {
-        id: b.id,
-        match: b.match,
-        league: b.league,
-        date: b.kickoff || b.placedAt,
-        market: b.market,
-        selection: b.selection,
-        odds: b.odds,
-        stake: isElite ? b.stake : null,
-        result: b.result,
-        pnl: b.pnl,
-        clvSign: clvSign as FullBetItem["clvSign"],
-        clvExact: isElite ? b.clv : null,
-        closingOdds: isElite ? b.closingOdds : null,
-        botName: b.bot,
-      };
-    });
-}
-
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default async function PerformancePage() {
@@ -124,7 +98,7 @@ export default async function PerformancePage() {
     is_superadmin: boolean;
   };
 
-  // Tier-split fetches: Pro+ gets full history; Free gets last 10 simplified
+  // Pro+ gets all bets for the per-bot modal; Free gets last 10 for the activity strip.
   const [allBetsRaw, botsDB, recentSettled] = await Promise.all([
     isPro ? getAllBets() : Promise.resolve(null),
     isElite ? getAllBotsFromDB() : Promise.resolve(null),
@@ -133,7 +107,6 @@ export default async function PerformancePage() {
 
   const botStats = buildBotStats(cache, botsDB, isPro, isElite);
   const sanitizedBets = allBetsRaw ? sanitizeBets(allBetsRaw, isPro, isElite) : null;
-  const fullBetItems = allBetsRaw ? buildFullBetItems(allBetsRaw, isElite) : null;
 
   return (
     <div className="space-y-8">
@@ -144,12 +117,16 @@ export default async function PerformancePage() {
         isElite={isElite}
         allBets={sanitizedBets}
       />
-      <PerformanceHistory
-        fullBets={fullBetItems}
-        recentSettled={recentSettled}
-        isPro={isPro}
-        isElite={isElite}
-      />
+      {/* Free users: compact recent-results strip as trust signal + upsell.
+          Pro/Elite: full bet history lives inside the per-bot modal. */}
+      {!isPro && (
+        <PerformanceHistory
+          fullBets={null}
+          recentSettled={recentSettled}
+          isPro={false}
+          isElite={false}
+        />
+      )}
       <ClvEducation />
       <TrackRecordFooterCta isPro={isPro} isElite={isElite} />
     </div>

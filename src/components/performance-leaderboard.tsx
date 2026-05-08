@@ -276,7 +276,7 @@ function BotModal({
 export function PerformanceLeaderboard({ bots, isPro, isElite, allBets }: Props) {
   const [selected, setSelected] = useState<PublicBotStat | null>(null);
 
-  const visibleBots = isPro ? bots : bots.filter((b) => b.hasEnoughData);
+  const visibleBots = bots;
 
   return (
     <div className="rounded-xl border border-border/50 bg-card/60 overflow-hidden">
@@ -287,17 +287,9 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets }: Props)
             <p className="text-[11px] text-muted-foreground mt-0.5">
               {isPro
                 ? `${bots.length} bots · click any row for bankroll chart`
-                : `Showing ${visibleBots.length} of ${bots.length} bots with ≥10 settled bets`}
+                : `${bots.length} bots · dimmed = still accumulating · Pro unlocks W/L, P&L, charts`}
             </p>
           </div>
-          {!isPro && (
-            <Link
-              href="/how-it-works"
-              className="shrink-0 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 transition-colors"
-            >
-              Pro — see all {bots.length} bots
-            </Link>
-          )}
         </div>
       </div>
 
@@ -412,16 +404,16 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets }: Props)
         </div>
       )}
 
-      {/* Free upsell — show blurred "locked bots" */}
-      {!isPro && bots.length > visibleBots.length && (
+      {/* Pro upsell — only when there's data to show */}
+      {!isPro && visibleBots.length > 0 && (
         <div className="border-t border-border/20 px-5 py-4 bg-blue-500/5">
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-xs font-medium text-foreground">
-                {bots.length - visibleBots.length} more bots accumulating data
+                Win/loss breakdown, P&amp;L, and bankroll charts
               </p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                Pro shows all 16 bots with W/L breakdown, P&L, and bankroll charts.
+                Pro unlocks full detail for every bot — click any row.
               </p>
             </div>
             <Link
