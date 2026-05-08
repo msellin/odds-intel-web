@@ -3104,25 +3104,42 @@ export async function getLatestJobStatuses(): Promise<PipelineRun[]> {
 export interface BackfillCounts {
   coachesTotal: number;
   coachesDone: number;
+  coachesLastRun: string | null;
+  coachesLastStatus: string | null;
   transfersTotal: number;
   transfersDone: number;
+  transfersLastRun: string | null;
+  transfersLastStatus: string | null;
+  histLastRun: string | null;
+  histLastStatus: string | null;
 }
 
-/** Coaches and transfers backfill progress — team counts. */
+/** Coaches and transfers backfill progress — team counts + last run info. */
 export async function getBackfillCounts(): Promise<BackfillCounts> {
   const admin = createSupabaseAdmin();
-  const [totalRes, coachRes, transferRes] = await Promise.all([
+  const [totalRes, coachRes, transferRes, coachRunRes, transferRunRes, histRunRes] = await Promise.all([
     admin.rpc("count_distinct_team_af_ids"),
     admin.from("team_coaches").select("team_af_id", { count: "exact", head: true }),
     admin.from("team_transfer_cache").select("team_api_id", { count: "exact", head: true }),
+    admin.from("pipeline_runs").select("started_at, status").eq("job_name", "backfill_coaches").order("started_at", { ascending: false }).limit(1),
+    admin.from("pipeline_runs").select("started_at, status").eq("job_name", "backfill_transfers").order("started_at", { ascending: false }).limit(1),
+    admin.from("pipeline_runs").select("started_at, status").eq("job_name", "hist_backfill").order("started_at", { ascending: false }).limit(1),
   ]);
-  // Fallback: if RPC not available, default to 0
   const total = (totalRes.data as number | null) ?? 0;
+  const coachRun = coachRunRes.data?.[0] ?? null;
+  const transferRun = transferRunRes.data?.[0] ?? null;
+  const histRun = histRunRes.data?.[0] ?? null;
   return {
     coachesTotal: total,
     coachesDone: coachRes.count ?? 0,
+    coachesLastRun: coachRun?.started_at ?? null,
+    coachesLastStatus: coachRun?.status ?? null,
     transfersTotal: total,
     transfersDone: transferRes.count ?? 0,
+    transfersLastRun: transferRun?.started_at ?? null,
+    transfersLastStatus: transferRun?.status ?? null,
+    histLastRun: histRun?.started_at ?? null,
+    histLastStatus: histRun?.status ?? null,
   };
 }
 

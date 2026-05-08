@@ -379,21 +379,24 @@ export default async function OpsDashboardPage() {
             note="Historical fixtures/statistics/events for past seasons. Used for ML training data."
             done={snapshot?.backfill_total_done ?? null}
             total={snapshot?.backfill_total_finished ?? null}
-            lastRun={snapshot?.backfill_last_run ?? null}
+            lastRun={backfillCounts.histLastRun}
+            lastStatus={backfillCounts.histLastStatus}
           />
           <BackfillBar
             label="Coach history"
             note="Manager career history per team. Powers manager_change signal."
             done={backfillCounts.coachesDone}
             total={backfillCounts.coachesTotal}
-            lastRun={null}
+            lastRun={backfillCounts.coachesLastRun}
+            lastStatus={backfillCounts.coachesLastStatus}
           />
           <BackfillBar
             label="Transfer history"
             note="Squad arrivals per team. Powers squad_disruption signal."
             done={backfillCounts.transfersDone}
             total={backfillCounts.transfersTotal}
-            lastRun={null}
+            lastRun={backfillCounts.transfersLastRun}
+            lastStatus={backfillCounts.transfersLastStatus}
           />
         </div>
       </Section>
@@ -495,14 +498,17 @@ function BackfillBar({
   done,
   total,
   lastRun,
+  lastStatus,
 }: {
   label: string;
   note: string;
   done: number | null;
   total: number | null;
   lastRun: string | null;
+  lastStatus: string | null;
 }) {
   const pct = done != null && total && total > 0 ? (done / total) * 100 : null;
+  const isFailed = lastStatus === "failed" || lastStatus === "error";
   return (
     <div className="rounded-lg border border-border bg-card p-3">
       <div className="flex items-center justify-between mb-1">
@@ -523,8 +529,9 @@ function BackfillBar({
       </div>
       <p className="text-[10px] text-muted-foreground/60 leading-tight">{note}</p>
       {lastRun && (
-        <p className="text-[10px] text-muted-foreground/50 mt-0.5">
+        <p className={`text-[10px] mt-0.5 ${isFailed ? "text-red-400/80" : "text-muted-foreground/50"}`}>
           Last run: {new Date(lastRun).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+          {lastStatus && <span className={`ml-1 ${isFailed ? "text-red-400" : "text-emerald-500/70"}`}>· {lastStatus}</span>}
         </p>
       )}
     </div>
@@ -556,9 +563,11 @@ function PipelineJobGrid({ jobs, recentRuns }: { jobs: PipelineRun[]; recentRuns
     if (!jobMap.has(j.job_name)) jobMap.set(j.job_name, j);
   }
 
-  // Show known jobs first in defined order, then any unknowns at the bottom
+  const BACKFILL_JOBS = new Set(["hist_backfill", "backfill_coaches", "backfill_transfers"]);
+
+  // Show known jobs first in defined order, then any unknowns at the bottom (backfill jobs excluded — shown in Backfill section)
   const knownOrder = Object.keys(JOB_CONFIG);
-  const unknownJobs = jobs.filter(j => !JOB_CONFIG[j.job_name]);
+  const unknownJobs = jobs.filter(j => !JOB_CONFIG[j.job_name] && !BACKFILL_JOBS.has(j.job_name));
 
   const renderCard = (run: PipelineRun) => {
     const config = JOB_CONFIG[run.job_name];
