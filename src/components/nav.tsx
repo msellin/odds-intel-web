@@ -26,7 +26,7 @@ import { useAuth } from "@/components/auth-provider";
 const primaryLinks = [
   { href: "/matches", label: "Matches", icon: Activity },
   { href: "/value-bets", label: "Value Bets", icon: Target },
-  { href: "/track-record", label: "Track Record", icon: BarChart3 },
+  { href: "/performance", label: "Performance", icon: BarChart3 },
   { href: "/predictions", label: "Predictions", icon: TrendingUp },
 ];
 

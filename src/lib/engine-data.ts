@@ -3082,12 +3082,14 @@ export async function getRecentPipelineRuns(): Promise<PipelineRun[]> {
   return (data ?? []) as PipelineRun[];
 }
 
-/** Returns the single latest run per job_name — used for the per-job status dashboard. */
+/** Returns the single latest run per job_name — used for the per-job status dashboard.
+ *  Excludes micro-batch backfill jobs (run every 5min — they flood the window and are shown in the Backfill section). */
 export async function getLatestJobStatuses(): Promise<PipelineRun[]> {
   const admin = createSupabaseAdmin();
   const { data } = await admin
     .from("pipeline_runs")
     .select("id, job_name, run_date, status, started_at, completed_at, fixtures_count, records_count, error_message")
+    .not("job_name", "in", '("hist_backfill","backfill_coaches","backfill_transfers")')
     .order("started_at", { ascending: false })
     .limit(300);
   const seen = new Set<string>();
