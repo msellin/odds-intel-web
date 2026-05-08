@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, use, Suspense } from "react";
+import { useRouter } from "next/navigation";
 import { Star, Search, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
@@ -29,6 +30,7 @@ type FilterTab = "all" | "favorites";
 type GradeFilter = "A" | "B" | "C" | null;
 
 export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, finishedGroupsPromise, teaserData }: Props) {
+  const router = useRouter();
   const [snapshots, setSnapshots] = useState<Record<string, LiveSnapshot>>(initialSnapshots);
   const [statusTab, setStatusTab] = useState<StatusTab>("all");
   const [filterTab, setFilterTab] = useState<FilterTab>("all");
@@ -98,6 +100,14 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
     const id = setInterval(fetchSnapshots, 60_000);
     return () => clearInterval(id);
   }, [liveMatchIds, fetchSnapshots]);
+
+  // Re-fetch server data every 90s when there are upcoming or live matches,
+  // so scheduled→live and live→finished transitions show without a manual reload.
+  useEffect(() => {
+    if (!counts.upcoming && !counts.live) return;
+    const id = setInterval(() => router.refresh(), 90_000);
+    return () => clearInterval(id);
+  }, [counts.upcoming, counts.live, router]);
 
   const favoriteLeagues = profile?.preferred_leagues ?? [];
 
