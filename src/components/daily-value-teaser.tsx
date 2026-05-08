@@ -52,10 +52,10 @@ export function DailyValueTeaser({
   if (isPro && user) {
     return (
       <div className="relative overflow-hidden rounded-xl border border-amber-500/20 bg-amber-500/[0.04] px-4 py-3">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <Zap className="h-4 w-4 shrink-0 text-amber-400" />
-            <span className="text-sm text-muted-foreground">
+            <span className="text-sm text-muted-foreground truncate">
               <span className="font-medium text-foreground">
                 {totalCount} value {totalCount === 1 ? "opportunity" : "opportunities"}
               </span>{" "}
@@ -64,9 +64,9 @@ export function DailyValueTeaser({
           </div>
           <Link
             href="/value-bets"
-            className="flex items-center justify-center gap-1.5 shrink-0 rounded-md bg-amber-500 px-3 py-1.5 text-xs font-bold text-black transition-colors hover:bg-amber-400"
+            className="flex items-center gap-1 shrink-0 text-xs font-bold text-amber-400 hover:text-amber-300 transition-colors"
           >
-            View all picks
+            View all
             <ArrowRight className="h-3 w-3" />
           </Link>
         </div>
@@ -78,7 +78,7 @@ export function DailyValueTeaser({
   if (!user) {
     return (
       <div className="relative overflow-hidden rounded-xl border border-amber-500/20 bg-amber-500/[0.04] px-4 py-3">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <Zap className="h-4 w-4 shrink-0 text-amber-400" />
             <div className="flex items-center gap-2 min-w-0 text-sm">
@@ -90,28 +90,16 @@ export function DailyValueTeaser({
               <span className="hidden sm:inline font-mono text-xs text-muted-foreground">
                 @ {pick.odds.toFixed(2)}
               </span>
-              <span className="font-mono font-bold text-amber-400">
+              <span className="font-mono font-bold text-amber-400 shrink-0">
                 +{(pick.edge * 100).toFixed(1)}%
-              </span>
-              <span
-                className={cn(
-                  "rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
-                  pick.result === "won"
-                    ? "bg-emerald-500/20 text-emerald-400"
-                    : pick.result === "lost"
-                    ? "bg-red-500/20 text-red-400"
-                    : "bg-amber-500/20 text-amber-400"
-                )}
-              >
-                {pick.result}
               </span>
             </div>
           </div>
           <Link
             href="/signup"
-            className="flex items-center justify-center gap-1.5 shrink-0 rounded-md bg-amber-500 px-3 py-1.5 text-xs font-bold text-black transition-colors hover:bg-amber-400"
+            className="flex items-center gap-1 shrink-0 text-xs font-bold text-amber-400 hover:text-amber-300 transition-colors"
           >
-            Sign up free · 1 pick/day
+            Sign up free
             <ArrowRight className="h-3 w-3" />
           </Link>
         </div>
@@ -123,7 +111,7 @@ export function DailyValueTeaser({
   return (
     <div className="relative overflow-hidden rounded-xl border border-amber-500/20 bg-amber-500/[0.04] px-4 py-3">
       {unlocked ? (
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <Zap className="h-4 w-4 shrink-0 text-amber-400" />
             <div className="flex items-center gap-2 min-w-0 text-sm">
@@ -131,10 +119,10 @@ export function DailyValueTeaser({
               <span className="hidden sm:inline text-muted-foreground">·</span>
               <span className="hidden sm:inline text-xs text-muted-foreground truncate">{pick.selection}</span>
               <span className="hidden sm:inline font-mono text-xs text-muted-foreground">@ {pick.odds.toFixed(2)}</span>
-              <span className="font-mono font-bold text-amber-400">+{(pick.edge * 100).toFixed(1)}%</span>
+              <span className="font-mono font-bold text-amber-400 shrink-0">+{(pick.edge * 100).toFixed(1)}%</span>
               <span
                 className={cn(
-                  "rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                  "hidden sm:inline rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
                   pick.result === "won"
                     ? "bg-emerald-500/20 text-emerald-400"
                     : pick.result === "lost"
@@ -148,9 +136,9 @@ export function DailyValueTeaser({
           </div>
           <Link
             href="/value-bets"
-            className="flex items-center justify-center gap-1.5 shrink-0 rounded-md bg-amber-500 px-3 py-1.5 text-xs font-bold text-black transition-colors hover:bg-amber-400"
+            className="flex items-center gap-1 shrink-0 text-xs font-bold text-amber-400 hover:text-amber-300 transition-colors"
           >
-            All picks on Pro
+            All picks
             <Lock className="h-3 w-3" />
           </Link>
         </div>

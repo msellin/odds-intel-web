@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { Suspense, use } from "react";
-import { SearchX, Info } from "lucide-react";
+import { SearchX } from "lucide-react";
 import Link from "next/link";
 import { getActiveMatches, getFinishedMatches, getMatchCounts, getLiveSnapshots, getFreeDailyPick, getWhatChangedToday } from "@/lib/engine-data";
 import { MatchesClient } from "@/components/matches-client";
@@ -63,35 +63,30 @@ export default function MatchesPage({
   return (
     <div className="space-y-3">
       {/* Static LCP shell — no data needed, renders at TTFB */}
-      <div>
-        <h1 className="text-2xl font-bold text-foreground leading-tight">
-          {dayOffset === 0 ? "Today's Matches" : "Tomorrow's Fixtures"}
-        </h1>
-        <div className="flex items-center gap-2 mt-1.5">
-          <div className="flex gap-1">
-            <Link
-              href="/matches"
-              className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
-                dayOffset === 0
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-            >
-              Today
-            </Link>
-            <Link
-              href="/matches?tab=tomorrow"
-              className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
-                dayOffset === 1
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-            >
-              Tomorrow
-            </Link>
-          </div>
-          <span className="text-xs text-muted-foreground/50">{formatShortDate(dayOffset)}</span>
+      <div className="flex items-center gap-2">
+        <div className="flex gap-1">
+          <Link
+            href="/matches"
+            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${
+              dayOffset === 0
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+            }`}
+          >
+            Today
+          </Link>
+          <Link
+            href="/matches?tab=tomorrow"
+            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${
+              dayOffset === 1
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+            }`}
+          >
+            Tomorrow
+          </Link>
         </div>
+        <span className="text-sm text-muted-foreground/50">{formatShortDate(dayOffset)}</span>
       </div>
 
       {/* Streams in after fast queries resolve */}
@@ -134,19 +129,6 @@ async function AboveFoldContent({ dayOffset }: { dayOffset: number }) {
 
   return (
     <>
-      {/* Fixture count */}
-      <div className="flex flex-wrap items-center gap-3 -mt-2">
-        <span className="text-sm text-muted-foreground">{counts.total} fixtures</span>
-        {dayOffset === 0 && (
-          <span className="group relative flex items-center gap-1 cursor-default">
-            <Info className="size-3.5 text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors" />
-            <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-60 -translate-x-1/2 rounded-lg border border-border/60 bg-popover p-2.5 text-xs text-muted-foreground opacity-0 shadow-xl transition-opacity group-hover:opacity-100">
-              Includes today&apos;s fixtures plus yesterday&apos;s ongoing matches. Use the <strong className="text-foreground/80">Finished</strong> tab to filter.
-            </span>
-          </span>
-        )}
-      </div>
-
       {!isAuthenticated && <SignupBanner />}
 
       {dayOffset === 0 && changedItems.length > 0 && (

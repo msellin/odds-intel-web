@@ -102,6 +102,7 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
   const favoriteLeagues = profile?.preferred_leagues ?? [];
 
   // Counts come from the server — cheap COUNT query, not derived from the serialized match data
+  const totalCount = counts.total;
   const liveCount = counts.live;
   const finishedCount = counts.finished;
   const upcomingCount = counts.upcoming;
@@ -212,6 +213,13 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
             }`}
           >
             All
+            {totalCount > 0 && (
+              <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                statusTab === "all" ? "bg-white/[0.08] text-muted-foreground/70" : "bg-white/[0.06] text-muted-foreground/60"
+              }`}>
+                {totalCount}
+              </span>
+            )}
           </button>
           <button
             onClick={() => setStatusTab("live")}
