@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
 import type { LiveSnapshot } from "@/lib/engine-data";
 
@@ -29,23 +29,24 @@ export function MatchScoreDisplay({
   const [snapshot, setSnapshot] = useState<LiveSnapshot | null>(initialSnapshot);
   const isLive = status === "live";
 
-  const fetchSnapshot = useCallback(async () => {
-    const supabase = createSupabaseBrowser();
-    const { data } = await supabase
-      .from("live_match_snapshots")
-      .select("match_id, score_home, score_away, minute, captured_at")
-      .eq("match_id", matchId)
-      .order("captured_at", { ascending: false })
-      .limit(1)
-      .single();
-    if (data) setSnapshot(data as LiveSnapshot);
-  }, [matchId]);
-
   useEffect(() => {
     if (!isLive) return;
-    const id = setInterval(fetchSnapshot, 60_000);
-    return () => clearInterval(id);
-  }, [isLive, fetchSnapshot]);
+    const supabase = createSupabaseBrowser();
+    const channel = supabase
+      .channel(`score-${matchId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "live_match_snapshots",
+          filter: `match_id=eq.${matchId}`,
+        },
+        (payload) => setSnapshot(payload.new as LiveSnapshot)
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [matchId, isLive]);
 
   // ── Compact mode: score + status badge only ──
   if (compact) {

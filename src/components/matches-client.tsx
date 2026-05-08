@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, use, Suspense } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, use, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { Star, Search, X } from "lucide-react";
 import dynamic from "next/dynamic";
@@ -73,40 +73,58 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
     [sortedGroups]
   );
 
-  const fetchSnapshots = useCallback(async () => {
-    if (!liveMatchIds.length) return;
-    const supabase = createSupabaseBrowser();
-    const { data } = await supabase
-      .from("live_match_snapshots")
-      .select("match_id, score_home, score_away, minute, captured_at")
-      .in("match_id", liveMatchIds)
-      .order("captured_at", { ascending: false });
+  // Refs so Realtime callbacks can read current values without re-subscribing
+  const liveMatchIdsRef = useRef<string[]>(liveMatchIds);
+  useEffect(() => { liveMatchIdsRef.current = liveMatchIds; }, [liveMatchIds]);
 
-    if (data) {
-      const seen = new Set<string>();
-      const latest: Record<string, LiveSnapshot> = {};
-      for (const row of data as LiveSnapshot[]) {
-        if (!seen.has(row.match_id)) {
-          seen.add(row.match_id);
-          latest[row.match_id] = row;
-        }
-      }
-      setSnapshots((prev) => ({ ...prev, ...latest }));
-    }
-  }, [liveMatchIds]);
-
+  const allMatchIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (!liveMatchIds.length) return;
-    const id = setInterval(fetchSnapshots, 60_000);
-    return () => clearInterval(id);
-  }, [liveMatchIds, fetchSnapshots]);
+    allMatchIdsRef.current = new Set(sortedGroups.flatMap(([, ms]) => ms).map((m) => m.id));
+  }, [sortedGroups]);
 
-  // Re-fetch server data every 90s when there are upcoming or live matches,
-  // so scheduled→live and live→finished transitions show without a manual reload.
+  // Realtime: live snapshot inserts → update score/minute overlays (replaces 60s poll)
+  useEffect(() => {
+    const supabase = createSupabaseBrowser();
+    const channel = supabase
+      .channel("match-list-snapshots")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "live_match_snapshots" },
+        (payload) => {
+          const row = payload.new as LiveSnapshot;
+          if (liveMatchIdsRef.current.includes(row.match_id)) {
+            setSnapshots((prev) => ({ ...prev, [row.match_id]: row }));
+          }
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
+  // Realtime: match status changes → re-fetch server component (replaces 90s router.refresh() poll)
   useEffect(() => {
     if (!counts.upcoming && !counts.live) return;
-    const id = setInterval(() => router.refresh(), 90_000);
-    return () => clearInterval(id);
+    const supabase = createSupabaseBrowser();
+    let refreshTimer: ReturnType<typeof setTimeout>;
+    const channel = supabase
+      .channel("match-list-status")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "matches" },
+        (payload) => {
+          const newStatus = (payload.new as Record<string, unknown>).status as string;
+          if (!allMatchIdsRef.current.has((payload.new as Record<string, unknown>).id as string)) return;
+          if (newStatus === "live" || newStatus === "finished") {
+            clearTimeout(refreshTimer);
+            refreshTimer = setTimeout(() => router.refresh(), 500);
+          }
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+      clearTimeout(refreshTimer);
+    };
   }, [counts.upcoming, counts.live, router]);
 
   const favoriteLeagues = profile?.preferred_leagues ?? [];

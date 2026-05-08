@@ -6,7 +6,8 @@
  * Pro tier feature — polled every 5 minutes via client-side refetch.
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { createSupabaseBrowser } from "@/lib/supabase-browser";
 import {
   ResponsiveContainer,
   LineChart,
@@ -57,27 +58,39 @@ export function LiveOddsChart({
     initialData.length > 0 ? new Date() : null
   );
 
-  // Poll every 5 minutes during live matches
+  const fetchLive = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/live-odds?matchId=${matchId}`);
+      if (!res.ok) return;
+      const json = (await res.json()) as LiveOddsSnapshot[];
+      if (json.length > 0) {
+        setData(json);
+        setLastUpdated(new Date());
+      }
+    } catch {
+      // silently ignore — stale data is fine
+    }
+  }, [matchId]);
+
+  // Realtime: new snapshot inserted → refresh odds chart (replaces 5 min poll)
   useEffect(() => {
     if (!isLive) return;
-
-    const fetchLive = async () => {
-      try {
-        const res = await fetch(`/api/live-odds?matchId=${matchId}`);
-        if (!res.ok) return;
-        const json = (await res.json()) as LiveOddsSnapshot[];
-        if (json.length > 0) {
-          setData(json);
-          setLastUpdated(new Date());
-        }
-      } catch {
-        // silently ignore — stale data is fine
-      }
-    };
-
-    const interval = setInterval(fetchLive, 5 * 60 * 1000); // 5 min
-    return () => clearInterval(interval);
-  }, [matchId, isLive]);
+    const supabase = createSupabaseBrowser();
+    const channel = supabase
+      .channel(`odds-chart-${matchId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "live_match_snapshots",
+          filter: `match_id=eq.${matchId}`,
+        },
+        () => { fetchLive(); }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [matchId, isLive, fetchLive]);
 
   if (!data.length) {
     return null; // No data — hide entirely instead of showing placeholder
