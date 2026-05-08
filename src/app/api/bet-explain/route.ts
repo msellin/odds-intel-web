@@ -3,6 +3,9 @@ import { createSupabaseServer } from "@/lib/supabase-server";
 import { getUserTier } from "@/lib/get-user-tier";
 import { createClient } from "@supabase/supabase-js";
 import * as Sentry from "@sentry/nextjs";
+import { checkRateLimit } from "@/lib/rate-limit";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = "gemini-2.5-flash-lite";
@@ -23,7 +26,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const betId = searchParams.get("betId");
 
-  if (!betId) {
+  if (!betId || !UUID_RE.test(betId)) {
     return NextResponse.json({ error: "betId required" }, { status: 400 });
   }
 
@@ -32,6 +35,7 @@ export async function GET(req: Request) {
   }
 
   // Auth + Elite tier check
+  let userId: string;
   try {
     const supabase = await createSupabaseServer();
     const {
@@ -42,8 +46,19 @@ export async function GET(req: Request) {
     const { isElite } = await getUserTier(user.id, supabase);
     if (!isElite)
       return NextResponse.json({ error: "Elite required" }, { status: 403 });
+
+    userId = user.id;
   } catch {
     return NextResponse.json({ error: "Auth error" }, { status: 500 });
+  }
+
+  // Rate limit: 10 requests/hour per user — Gemini calls are expensive even with caching
+  const rl = checkRateLimit(`bet-explain:${userId}`, 10, 60 * 60 * 1000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded — please wait before requesting more explanations." },
+      { status: 429 }
+    );
   }
 
   // Use service role for all DB operations (RLS on simulated_bets blocks anon)

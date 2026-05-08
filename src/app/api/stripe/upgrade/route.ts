@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServer } from "@/lib/supabase-server";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
@@ -16,6 +17,12 @@ export async function POST(req: NextRequest) {
   const supabase = await createSupabaseServer();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Rate limit: 5 requests/hour per user — prevents hammering Stripe API
+  const rl = checkRateLimit(`stripe-upgrade:${user.id}`, 5, 60 * 60 * 1000);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "Too many requests — please try again later." }, { status: 429 });
+  }
 
   const { data: profile } = await supabase
     .from("profiles")
