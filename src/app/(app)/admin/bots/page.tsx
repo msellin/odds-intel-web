@@ -88,28 +88,31 @@ export default async function BotDashboardPage() {
   const allPnl = allSettled.reduce((s, b) => s + b.pnl, 0);
   const allStaked = allSettled.reduce((s, b) => s + b.stake, 0);
 
-  // ── Market breakdown ────────────────────────────────────────────────────────
-  const marketMap: Record<
-    string,
-    { total: number; settled: number; won: number; pnl: number }
-  > = {};
-  for (const bet of bets) {
-    const key = bet.market || "unknown";
-    if (!marketMap[key]) marketMap[key] = { total: 0, settled: 0, won: 0, pnl: 0 };
-    marketMap[key].total++;
-    if (bet.result !== "pending" && bet.result !== "void") {
-      marketMap[key].settled++;
-      marketMap[key].pnl += bet.pnl;
-      if (bet.result === "won") marketMap[key].won++;
+  // ── Market breakdown — split by prematch vs live (inplay_* bot prefix) ─────
+  const buildMarketStats = (subset: LiveBet[]) => {
+    const map: Record<string, { total: number; settled: number; won: number; pnl: number }> = {};
+    for (const bet of subset) {
+      const key = bet.market || "unknown";
+      if (!map[key]) map[key] = { total: 0, settled: 0, won: 0, pnl: 0 };
+      map[key].total++;
+      if (bet.result !== "pending" && bet.result !== "void") {
+        map[key].settled++;
+        map[key].pnl += bet.pnl;
+        if (bet.result === "won") map[key].won++;
+      }
     }
-  }
-  const marketStats = Object.entries(marketMap)
-    .map(([market, s]) => ({
-      market,
-      ...s,
-      hitRate: s.settled > 0 ? (s.won / s.settled) * 100 : null,
-    }))
-    .sort((a, b) => b.total - a.total);
+    return Object.entries(map)
+      .map(([market, s]) => ({
+        market,
+        ...s,
+        hitRate: s.settled > 0 ? (s.won / s.settled) * 100 : null,
+      }))
+      .sort((a, b) => b.total - a.total);
+  };
+
+  const isLive = (botName: string) => botName.startsWith("inplay_");
+  const prematchMarketStats = buildMarketStats(bets.filter((b) => !isLive(b.bot)));
+  const liveMarketStats = buildMarketStats(bets.filter((b) => isLive(b.bot)));
 
   return (
     <div className="space-y-8">
@@ -118,7 +121,8 @@ export default async function BotDashboardPage() {
         activeBots={activeBots}
         pendingBots={pendingBots}
         inactiveBots={inactiveBots}
-        marketStats={marketStats}
+        prematchMarketStats={prematchMarketStats}
+        liveMarketStats={liveMarketStats}
         summary={{
           totalBots: allBotsDB.length,
           totalBets,

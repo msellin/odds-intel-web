@@ -71,7 +71,8 @@ interface Props {
   activeBots: BotStat[];
   pendingBots: BotStat[];
   inactiveBots: BotStat[];
-  marketStats: MarketStat[];
+  prematchMarketStats: MarketStat[];
+  liveMarketStats: MarketStat[];
   summary: Summary;
 }
 
@@ -351,7 +352,8 @@ export function BotDashboardClient({
   activeBots,
   pendingBots,
   inactiveBots,
-  marketStats,
+  prematchMarketStats,
+  liveMarketStats,
   summary,
 }: Props) {
   const [selectedBot, setSelectedBot] = useState<BotStat | null>(null);
@@ -476,10 +478,10 @@ export function BotDashboardClient({
         </CardContent>
       </Card>
 
-      {/* Market breakdown */}
+      {/* Market breakdown — Prematch */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Market Breakdown</CardTitle>
+          <CardTitle className="text-base">Market Breakdown — Prematch</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
@@ -493,17 +495,66 @@ export function BotDashboardClient({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {marketStats.map((m) => (
-                <TableRow key={m.market}>
-                  <TableCell className="font-mono text-xs uppercase">{m.market}</TableCell>
-                  <TableCell className="text-right text-sm">{m.total}</TableCell>
-                  <TableCell className="text-right text-sm">{m.settled}</TableCell>
-                  <TableCell className="text-right text-sm">{fmtPct(m.hitRate)}</TableCell>
-                  <TableCell className={`text-right text-sm ${pnlClass(m.pnl)}`}>
-                    {m.settled > 0 ? fmt(m.pnl) : "—"}
+              {prematchMarketStats.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-6">
+                    No prematch bets yet.
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                prematchMarketStats.map((m) => (
+                  <TableRow key={m.market}>
+                    <TableCell className="font-mono text-xs uppercase">{m.market}</TableCell>
+                    <TableCell className="text-right text-sm">{m.total}</TableCell>
+                    <TableCell className="text-right text-sm">{m.settled}</TableCell>
+                    <TableCell className="text-right text-sm">{fmtPct(m.hitRate)}</TableCell>
+                    <TableCell className={`text-right text-sm ${pnlClass(m.pnl)}`}>
+                      {m.settled > 0 ? fmt(m.pnl) : "—"}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Market breakdown — Live (in-play) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Market Breakdown — Live</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Market</TableHead>
+                <TableHead className="text-right">Total Bets</TableHead>
+                <TableHead className="text-right">Settled</TableHead>
+                <TableHead className="text-right">Hit Rate</TableHead>
+                <TableHead className="text-right">P&L (€)</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {liveMarketStats.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-6">
+                    No live bets yet.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                liveMarketStats.map((m) => (
+                  <TableRow key={m.market}>
+                    <TableCell className="font-mono text-xs uppercase">{m.market}</TableCell>
+                    <TableCell className="text-right text-sm">{m.total}</TableCell>
+                    <TableCell className="text-right text-sm">{m.settled}</TableCell>
+                    <TableCell className="text-right text-sm">{fmtPct(m.hitRate)}</TableCell>
+                    <TableCell className={`text-right text-sm ${pnlClass(m.pnl)}`}>
+                      {m.settled > 0 ? fmt(m.pnl) : "—"}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>
