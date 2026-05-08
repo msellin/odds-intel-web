@@ -22,7 +22,7 @@ export function PerformanceHero({ stats, cache }: Props) {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Performance</h1>
         <p className="text-sm text-muted-foreground">
-          16 paper-trading bots · Running since April 27, 2026 · Every pick logged · No cherry-picking.
+          {cache?.bot_breakdown?.length ?? 16} paper-trading bots · Running since April 27, 2026 · Every pick logged · No cherry-picking.
         </p>
       </div>
 
@@ -96,7 +96,7 @@ export function PerformanceHero({ stats, cache }: Props) {
             </CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-3 pt-0">
-            <span className="font-mono text-2xl font-bold tabular-nums text-foreground">16</span>
+            <span className="font-mono text-2xl font-bold tabular-nums text-foreground">{cache?.bot_breakdown?.length ?? "—"}</span>
             <p className="text-[10px] text-muted-foreground/60 mt-1">
               strategies running
             </p>

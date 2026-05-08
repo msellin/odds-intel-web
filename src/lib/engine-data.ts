@@ -2250,7 +2250,6 @@ export interface DashboardCache {
   avg_clv: number | null;
   bot_breakdown: Array<{
     name: string;
-    timing_cohort: string | null;
     settled: number;
     won: number;
     total_pnl: number;
