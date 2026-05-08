@@ -36,6 +36,7 @@ const countryFlags: Record<string, string> = {
   Iceland: "\uD83C\uDDEE\uD83C\uDDF8",
   Ireland: "\uD83C\uDDEE\uD83C\uDDEA",
   Wales: "\uD83C\uDFF4\uDB40\uDC67\uDB40\uDC62\uDB40\uDC77\uDB40\uDC6C\uDB40\uDC73\uDB40\uDC7F",
+  Europe: "\uD83C\uDDEA\uD83C\uDDFA",
 };
 
 /**
