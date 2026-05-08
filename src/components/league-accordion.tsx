@@ -307,19 +307,6 @@ function MatchRow({
         </div>
       )}
 
-      {/* Desktop form strips */}
-      {hasForm && (
-        <div className="hidden sm:flex items-center gap-2 pl-8 pb-1">
-          <div className="flex flex-1 items-center justify-end gap-1.5">
-            <span className="text-[9px] text-muted-foreground/40 uppercase tracking-wide">form</span>
-            <FormStrip form={match.formHome!} />
-          </div>
-          <div className="w-[2.5rem] shrink-0" />
-          <div className="flex flex-1 items-center gap-1.5">
-            <FormStrip form={match.formAway!} />
-          </div>
-        </div>
-      )}
     </Link>
   );
 }

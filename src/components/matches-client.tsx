@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, use, Suspense, Fragment } from "react";
+import { useState, useEffect, useCallback, useMemo, use, Suspense } from "react";
 import { Star, Search, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
@@ -199,8 +199,8 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
 
   return (
     <div className="space-y-1 sm:space-y-3">
-      {/* Top row: status tabs + league search */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      {/* Top row: status tabs */}
+      <div>
         {/* ML-5: Status tabs — primary navigation */}
         <div className="flex rounded-lg border border-white/[0.06] bg-muted/20 p-1 w-fit">
           <button
@@ -264,29 +264,9 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
             )}
           </button>
         </div>
-
-        {/* Client-side league search */}
-        <div className="relative w-full sm:w-56">
-          <Search className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/50" />
-          <input
-            type="text"
-            value={leagueSearch}
-            onChange={(e) => setLeagueSearch(e.target.value)}
-            placeholder="Filter by league..."
-            className="w-full rounded-lg border border-white/[0.06] bg-muted/20 py-1.5 pl-9 pr-8 text-xs text-foreground placeholder:text-muted-foreground/50 focus:border-green-500/40 focus:outline-none transition-colors"
-          />
-          {leagueSearch && (
-            <button
-              onClick={() => setLeagueSearch("")}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
-            >
-              <X className="size-3.5" />
-            </button>
-          )}
-        </div>
       </div>
 
-      {/* Secondary filter row — my games + grade filter */}
+      {/* Secondary filter row — my games + grade filter + search */}
       <div className="flex flex-wrap items-center gap-2">
         {user && (
           <button
@@ -341,6 +321,26 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
             <X className="size-3" /> clear
           </button>
         )}
+
+        {/* League search — right-aligned, inline with grade filter on both mobile and desktop */}
+        <div className="relative ml-auto flex-1 min-w-[8rem] sm:flex-none sm:w-56">
+          <Search className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/50" />
+          <input
+            type="text"
+            value={leagueSearch}
+            onChange={(e) => setLeagueSearch(e.target.value)}
+            placeholder="Filter by league..."
+            className="w-full rounded-lg border border-white/[0.06] bg-muted/20 py-1.5 pl-9 pr-8 text-xs text-foreground placeholder:text-muted-foreground/50 focus:border-green-500/40 focus:outline-none transition-colors"
+          />
+          {leagueSearch && (
+            <button
+              onClick={() => setLeagueSearch("")}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+            >
+              <X className="size-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
 
@@ -394,27 +394,27 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
             </div>
           )}
 
+          {teaserData.pick && (
+            <DailyValueTeaser
+              pick={teaserData.pick}
+              totalCount={teaserData.totalCount}
+              alreadyUnlocked={teaserData.alreadyUnlocked}
+              isPro={teaserData.isPro}
+            />
+          )}
+
           {filteredGroups.map(([league, matches], i) => (
-            <Fragment key={league}>
-              <LeagueAccordion
-                league={league}
-                matches={matches}
-                defaultExpanded={matches.some((m) => m.hasOdds) || statusTab === "live"}
-                liveSnapshots={snapshots}
-                isPro={isPro}
-                favoriteMatchIds={favoriteMatchIds}
-                onMatchFavoriteToggle={handleMatchFavoriteToggle}
-                prioritizeFirstLogos={i === 0}
-              />
-              {i === 0 && teaserData.pick && (
-                <DailyValueTeaser
-                  pick={teaserData.pick}
-                  totalCount={teaserData.totalCount}
-                  alreadyUnlocked={teaserData.alreadyUnlocked}
-                  isPro={teaserData.isPro}
-                />
-              )}
-            </Fragment>
+            <LeagueAccordion
+              key={league}
+              league={league}
+              matches={matches}
+              defaultExpanded={matches.some((m) => m.hasOdds) || statusTab === "live"}
+              liveSnapshots={snapshots}
+              isPro={isPro}
+              favoriteMatchIds={favoriteMatchIds}
+              onMatchFavoriteToggle={handleMatchFavoriteToggle}
+              prioritizeFirstLogos={i === 0}
+            />
           ))}
         </>
       )}
