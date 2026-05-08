@@ -55,6 +55,9 @@ import {
   fixtureUrgencyLabel,
   turfFamiliarityLabel,
   formVsEloLabel,
+  bookmakerCountLabel,
+  leagueEloVarianceLabel,
+  leagueEloRangeLabel,
   SIGNAL_GROUP_LABELS,
   type SignalSeverity,
 } from "@/lib/signal-labels";
@@ -127,6 +130,11 @@ function buildGroups(
 
   // ── Market group ────────────────────────────────────────────────────────────
   const marketItems: SignalItem[] = [];
+  if (has("bookmaker_count_active")) {
+    const cnt = Math.round(get("bookmaker_count_active"));
+    const l = bookmakerCountLabel(cnt);
+    marketItems.push({ ...l, value: `${cnt} bookmakers` });
+  }
   if (has("bookmaker_disagreement")) {
     const l = bookmakerDisagreementLabel(get("bookmaker_disagreement"));
     marketItems.push({ ...l, value: fmt(get("bookmaker_disagreement"), 3) });
@@ -366,6 +374,14 @@ function buildGroups(
   if (has("league_btts_pct")) {
     const l = leagueBttsPctLabel(get("league_btts_pct"));
     contextItems.push({ ...l, value: pct(get("league_btts_pct")) });
+  }
+  if (has("league_elo_variance")) {
+    const l = leagueEloVarianceLabel(get("league_elo_variance"));
+    contextItems.push({ ...l, value: `±${fmt(get("league_elo_variance"), 0)}` });
+  }
+  if (has("league_elo_range")) {
+    const l = leagueEloRangeLabel(get("league_elo_range"));
+    contextItems.push({ ...l, value: `${fmt(get("league_elo_range"), 0)} pts range` });
   }
   if (has("fixture_urgency_home")) {
     const l = fixtureUrgencyLabel(get("fixture_urgency_home"));

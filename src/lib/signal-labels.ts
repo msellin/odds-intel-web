@@ -225,6 +225,36 @@ export function squadDisruptionLabel(arrivals: number): SignalLabel {
   return { label: "Stable squad", icon: "✓", severity: "neutral", description: "No recent transfer activity" }
 }
 
+// ─── Bookmaker coverage ───────────────────────────────────────────────────────
+
+export function bookmakerCountLabel(count: number): SignalLabel {
+  if (count >= 10)
+    return { label: "Heavily covered", icon: "📚", severity: "neutral", description: `${count} bookmakers pricing this match — very liquid, inefficiencies get arbitraged quickly` }
+  if (count >= 6)
+    return { label: "Well covered", icon: "📖", severity: "neutral", description: `${count} bookmakers active — good market coverage` }
+  if (count >= 3)
+    return { label: "Limited coverage", icon: "📄", severity: "low", description: `Only ${count} bookmakers covering this match — thinner market` }
+  return { label: "Thin market", icon: "⚠", severity: "medium", description: `Only ${count} bookmaker${count === 1 ? "" : "s"} — low liquidity, inefficiencies may persist longer` }
+}
+
+// ─── League ELO structure ─────────────────────────────────────────────────────
+
+export function leagueEloVarianceLabel(stdev: number): SignalLabel {
+  if (stdev > 150)
+    return { label: "Clear hierarchy", icon: "↑↑", severity: "medium", description: `ELO stdev ${stdev.toFixed(0)} — strong quality gap between top and bottom teams, favourites usually win` }
+  if (stdev > 80)
+    return { label: "Some spread", icon: "↕", severity: "neutral", description: `ELO stdev ${stdev.toFixed(0)} — moderate quality variation across the league` }
+  return { label: "Parity league", icon: "=", severity: "low", description: `ELO stdev ${stdev.toFixed(0)} — teams closely matched, home advantage dominates over quality edge` }
+}
+
+export function leagueEloRangeLabel(range: number): SignalLabel {
+  if (range > 400)
+    return { label: "Wide ELO spread", icon: "↑↑", severity: "medium", description: `${range.toFixed(0)}-point ELO gap between strongest and weakest team — predictable league` }
+  if (range > 200)
+    return { label: "Moderate spread", icon: "↕", severity: "neutral", description: `${range.toFixed(0)}-point ELO range — some quality difference between teams` }
+  return { label: "Tight ELO range", icon: "=", severity: "low", description: `Only ${range.toFixed(0)} ELO points separate top and bottom — competitive league` }
+}
+
 // ─── Group 2 signal refinements ───────────────────────────────────────────────
 
 export function restDaysNormLabel(logVal: number): SignalLabel {
