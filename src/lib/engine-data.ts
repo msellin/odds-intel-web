@@ -2375,6 +2375,30 @@ export const PREDICTION_LEAGUES = [
 
 export type PredictionLeagueSlug = (typeof PREDICTION_LEAGUES)[number]["slug"];
 
+/** Per-league fixture counts for the next 21 days, keyed by leagueId.
+ * Used by the predictions index — page is ISR-cached, so this runs at most once per revalidate window. */
+export async function getPredictionLeagueCounts(): Promise<Record<string, number>> {
+  const admin = createSupabaseAdmin();
+  const leagueIds = PREDICTION_LEAGUES.map((l) => l.leagueId);
+  const now = new Date();
+  const start = now.toISOString().split("T")[0];
+  const end = new Date(now.getTime() + 21 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
+  const { data } = await admin
+    .from("matches")
+    .select("league_id")
+    .in("league_id", leagueIds)
+    .gte("date", start)
+    .lte("date", end)
+    .in("status", ["scheduled", "live"]);
+
+  const counts: Record<string, number> = {};
+  for (const row of (data ?? []) as Array<{ league_id: string }>) {
+    counts[row.league_id] = (counts[row.league_id] ?? 0) + 1;
+  }
+  return counts;
+}
+
 export async function getLeaguePredictions(
   leagueSlug: string
 ): Promise<LeaguePredictionPage | null> {
