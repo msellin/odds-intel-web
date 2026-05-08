@@ -3061,7 +3061,7 @@ export async function getRecentPipelineRuns(): Promise<PipelineRun[]> {
   const { data } = await admin
     .from("pipeline_runs")
     .select("id, job_name, run_date, status, started_at, completed_at, fixtures_count, records_count, error_message")
-    .not("job_name", "in", '("hist_backfill","backfill_coaches","backfill_transfers")')
+    .not("job_name", "in", '("hist_backfill","backfill_coaches","backfill_transfers","write_ops_snapshot")')
     .order("started_at", { ascending: false })
     .limit(50);
   return (data ?? []) as PipelineRun[];
