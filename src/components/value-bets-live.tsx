@@ -90,7 +90,7 @@ function formatBot(bot: string): string {
   return bot.replace("bot_", "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-// Mobile card — used for free pick highlight and pro/elite mobile list
+// Mobile card — Pro sees exact edge %; selection/odds/extras still gated
 function BetCard({
   bet,
   isPro,
@@ -102,8 +102,6 @@ function BetCard({
   isElite: boolean;
   isFreeHighlight?: boolean;
 }) {
-  const { label, color } = edgeLabel(bet.edge);
-
   return (
     <div className={cn(
       "px-4 py-3",
@@ -133,7 +131,7 @@ function BetCard({
         <ResultBadge result={bet.result} />
       </div>
 
-      {/* Market + selection + edge */}
+      {/* Market + selection + edge — Pro sees exact edge % */}
       <div className="flex items-center gap-2 mt-2 flex-wrap">
         <Badge variant="outline" className="text-[10px] shrink-0">{bet.market}</Badge>
         {isElite || isFreeHighlight ? (
@@ -141,14 +139,8 @@ function BetCard({
         ) : (
           <LockedCell tier="elite" />
         )}
-        <span className="ml-auto">
-          {isElite || isFreeHighlight ? (
-            <span className={cn("font-mono font-bold text-xs", edgeColor(bet.edge))}>
-              +{formatEdge(bet.edge)}%
-            </span>
-          ) : (
-            <span className={cn("font-semibold text-xs", color)}>{label}</span>
-          )}
+        <span className={cn("font-mono font-bold text-xs ml-auto", edgeColor(bet.edge))}>
+          +{formatEdge(bet.edge)}%
         </span>
       </div>
 
@@ -285,40 +277,97 @@ export function ValueBetsLive({ bets, totalCount, userTier }: ValueBetsLiveProps
           </p>
         </div>
       ) : userTier === "free" ? (
-        /* Free: single pick card + blurred placeholders + upgrade CTA */
         <div className="rounded-xl border border-border/50 bg-card/60 overflow-hidden">
-          {topBet && <BetCard bet={topBet} isPro={false} isElite={false} isFreeHighlight />}
-
-          {Array.from({ length: Math.min(lockedCount, 3) }).map((_, i) => (
-            <div key={i} className="px-4 py-3 border-t border-border/20 blur-[3px] opacity-40 pointer-events-none select-none" aria-hidden>
-              <div className="flex justify-between mb-2">
-                <div className="h-3.5 w-44 rounded bg-muted-foreground/20" />
-                <div className="h-4 w-14 rounded bg-muted-foreground/20" />
+          {/* Mobile: card + blurred cards */}
+          <div className="sm:hidden">
+            {topBet && <BetCard bet={topBet} isPro={false} isElite={false} isFreeHighlight />}
+            {Array.from({ length: Math.min(lockedCount, 3) }).map((_, i) => (
+              <div key={i} className="px-4 py-3 border-t border-border/20 blur-[3px] opacity-40 pointer-events-none select-none" aria-hidden>
+                <div className="flex justify-between mb-2">
+                  <div className="h-3.5 w-44 rounded bg-muted-foreground/20" />
+                  <div className="h-4 w-14 rounded bg-muted-foreground/20" />
+                </div>
+                <div className="h-2.5 w-28 rounded bg-muted-foreground/10 mb-2" />
+                <div className="flex gap-2">
+                  <div className="h-4 w-10 rounded bg-muted-foreground/20" />
+                  <div className="h-4 w-16 rounded bg-muted-foreground/20" />
+                  <div className="h-4 w-12 rounded bg-muted-foreground/20 ml-auto" />
+                </div>
               </div>
-              <div className="h-2.5 w-28 rounded bg-muted-foreground/10 mb-2" />
-              <div className="flex gap-2">
-                <div className="h-4 w-10 rounded bg-muted-foreground/20" />
-                <div className="h-4 w-16 rounded bg-muted-foreground/20" />
-                <div className="h-4 w-12 rounded bg-muted-foreground/20 ml-auto" />
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
 
-          <div className="border-t border-border/30 bg-card/30 px-4 py-3 space-y-2">
+          {/* Desktop: proper table with 1 real row + blurred rows */}
+          <div className="hidden sm:block overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-border/30 bg-card/40">
+                  <th className="py-2 pl-4 pr-2 text-left font-medium uppercase tracking-wider text-muted-foreground text-[10px]">Match</th>
+                  <th className="py-2 px-2 text-center font-medium uppercase tracking-wider text-muted-foreground text-[10px]">Market</th>
+                  <th className="py-2 px-2 text-center font-medium uppercase tracking-wider text-muted-foreground text-[10px]">Selection</th>
+                  <th className="py-2 px-2 text-center font-medium uppercase tracking-wider text-muted-foreground text-[10px]">Edge</th>
+                  <th className="py-2 px-2 text-center font-medium uppercase tracking-wider text-muted-foreground text-[10px]">Odds</th>
+                  <th className="py-2 pl-2 pr-4 text-center font-medium uppercase tracking-wider text-muted-foreground text-[10px]">Result</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/20">
+                {topBet && (
+                  <tr className="bg-emerald-500/[0.03] ring-1 ring-inset ring-emerald-500/20">
+                    <td className="py-3 pl-4 pr-2">
+                      <span className="mb-1 inline-block rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-bold text-emerald-400 uppercase tracking-wide">
+                        Free pick
+                      </span>
+                      <p className="font-medium text-foreground/90 truncate max-w-[240px]">{topBet.match}</p>
+                      <p className="text-[10px] text-muted-foreground/60">{topBet.league}</p>
+                    </td>
+                    <td className="py-3 px-2 text-center">
+                      <Badge variant="outline" className="text-[10px]">{topBet.market}</Badge>
+                    </td>
+                    <td className="py-3 px-2 text-center">
+                      <span className="rounded bg-white/[0.06] px-2 py-0.5 font-medium">{topBet.selection}</span>
+                    </td>
+                    <td className="py-3 px-2 text-center">
+                      <span className={cn("font-mono font-bold", edgeColor(topBet.edge))}>
+                        +{formatEdge(topBet.edge)}%
+                      </span>
+                    </td>
+                    <td className="py-3 px-2 text-center font-mono font-bold">{topBet.odds.toFixed(2)}</td>
+                    <td className="py-3 pl-2 pr-4 text-center"><ResultBadge result={topBet.result} /></td>
+                  </tr>
+                )}
+                {Array.from({ length: Math.min(lockedCount, 4) }).map((_, i) => (
+                  <tr key={i} className="pointer-events-none select-none blur-[3px] opacity-50" aria-hidden>
+                    <td className="py-3 pl-4 pr-2">
+                      <div className="h-3 w-36 rounded bg-muted-foreground/20 mb-1" />
+                      <div className="h-2 w-24 rounded bg-muted-foreground/10" />
+                    </td>
+                    <td className="py-3 px-2 text-center"><div className="mx-auto h-4 w-10 rounded bg-muted-foreground/20" /></td>
+                    <td className="py-3 px-2 text-center"><div className="mx-auto h-4 w-14 rounded bg-muted-foreground/20" /></td>
+                    <td className="py-3 px-2 text-center"><div className="mx-auto h-4 w-12 rounded bg-muted-foreground/20" /></td>
+                    <td className="py-3 px-2 text-center"><div className="mx-auto h-4 w-10 rounded bg-muted-foreground/20" /></td>
+                    <td className="py-3 pl-2 pr-4 text-center"><div className="mx-auto h-4 w-12 rounded bg-muted-foreground/20" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Upgrade footer */}
+          <div className="flex flex-col gap-2 border-t border-border/30 bg-card/30 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-[11px] text-muted-foreground">
               <Lock className="inline h-3 w-3 mr-1 text-muted-foreground/50" />
               {lockedCount} more bets today — Pro unlocks all picks by match and market. Elite adds exact selections, odds, model probabilities, and Kelly sizing.
             </p>
             <a
               href="/profile"
-              className="block rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors text-center"
+              className="shrink-0 rounded-md bg-primary px-4 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors text-center"
             >
               Upgrade to Pro — €4.99/mo
             </a>
           </div>
         </div>
       ) : (
-        /* Pro/Elite: cards on mobile, table on desktop */
+        /* Pro/Elite: mobile cards + desktop table */
         <div className="rounded-xl border border-border/50 bg-card/60 overflow-hidden">
           {/* Mobile card list */}
           <div className="sm:hidden divide-y divide-border/20">
@@ -327,9 +376,9 @@ export function ValueBetsLive({ bets, totalCount, userTier }: ValueBetsLiveProps
             ))}
           </div>
 
-          {/* Desktop table */}
+          {/* Desktop table — Pro: 6 cols; Elite: 9 cols */}
           <div className="hidden sm:block overflow-x-auto">
-            <table className="w-full min-w-[640px] text-xs">
+            <table className="w-full min-w-[520px] text-xs">
               <thead>
                 <tr className="border-b border-border/30 bg-card/40">
                   <th className="py-2 pl-4 pr-2 text-left font-medium uppercase tracking-wider text-muted-foreground text-[10px]">Match</th>
@@ -357,34 +406,21 @@ export function ValueBetsLive({ bets, totalCount, userTier }: ValueBetsLiveProps
                       </span>
                     )}
                   </th>
-                  <th className="py-2 px-2 text-center font-medium uppercase tracking-wider text-[10px]">
-                    {isElite ? (
-                      <span className="flex items-center justify-center gap-1 text-muted-foreground cursor-default group relative">
-                        Model prob
-                        <Info className="h-3 w-3 text-muted-foreground/40" />
-                        <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 z-50 mb-2 w-56 rounded-lg border border-border/60 bg-popover p-3 text-left text-xs text-muted-foreground font-normal opacity-0 shadow-xl transition-opacity group-hover:opacity-100">
-                          Our model&apos;s estimated probability for this outcome.
+                  {/* Model prob + stake — Elite only columns */}
+                  {isElite && (
+                    <>
+                      <th className="py-2 px-2 text-center font-medium uppercase tracking-wider text-[10px]">
+                        <span className="flex items-center justify-center gap-1 text-muted-foreground cursor-default group relative">
+                          Model prob
+                          <Info className="h-3 w-3 text-muted-foreground/40" />
+                          <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 z-50 mb-2 w-56 rounded-lg border border-border/60 bg-popover p-3 text-left text-xs text-muted-foreground font-normal opacity-0 shadow-xl transition-opacity group-hover:opacity-100">
+                            Our model&apos;s estimated probability for this outcome.
+                          </span>
                         </span>
-                      </span>
-                    ) : (
-                      <span className="flex items-center justify-center gap-1 text-amber-400/70">
-                        <Lock className="h-2.5 w-2.5" />
-                        Model prob
-                        <TierBadge tier="elite" />
-                      </span>
-                    )}
-                  </th>
-                  <th className="py-2 px-2 text-center font-medium uppercase tracking-wider text-[10px]">
-                    {isElite ? (
-                      <span className="text-muted-foreground">Stake</span>
-                    ) : (
-                      <span className="flex items-center justify-center gap-1 text-amber-400/70">
-                        <Lock className="h-2.5 w-2.5" />
-                        Stake
-                        <TierBadge tier="elite" />
-                      </span>
-                    )}
-                  </th>
+                      </th>
+                      <th className="py-2 px-2 text-center font-medium uppercase tracking-wider text-muted-foreground text-[10px]">Stake</th>
+                    </>
+                  )}
                   <th className="py-2 pl-2 pr-4 text-center font-medium uppercase tracking-wider text-muted-foreground text-[10px]">Result</th>
                   {isElite && <th className="py-2 pl-2 pr-4 text-[10px]" />}
                 </tr>
@@ -420,7 +456,7 @@ export function ValueBetsLive({ bets, totalCount, userTier }: ValueBetsLiveProps
   );
 }
 
-// Desktop table row — Pro/Elite only
+// Desktop table row — Pro sees exact edge %; Elite-only columns conditional
 function BetRow({
   bet,
   isPro,
@@ -430,8 +466,6 @@ function BetRow({
   isPro: boolean;
   isElite: boolean;
 }) {
-  const { label, color } = edgeLabel(bet.edge);
-
   return (
     <tr className={cn(
       "hover:bg-muted/5 transition-colors",
@@ -439,13 +473,11 @@ function BetRow({
     )}>
       <td className="py-3 pl-4 pr-2">
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5">
-            {isElite && bet.botCount > 1 && (
-              <span className="shrink-0 rounded border border-blue-500/30 bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-bold text-blue-400">
-                {bet.botCount} bots
-              </span>
-            )}
-          </div>
+          {isElite && bet.botCount > 1 && (
+            <span className="shrink-0 rounded border border-blue-500/30 bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-bold text-blue-400">
+              {bet.botCount} bots
+            </span>
+          )}
           <div>
             <p className="font-medium text-foreground/90 truncate max-w-[200px]">{bet.match}</p>
             <p className="text-[10px] text-muted-foreground/60 truncate">{bet.league}</p>
@@ -462,14 +494,11 @@ function BetRow({
           <LockedCell tier="elite" />
         )}
       </td>
+      {/* Edge — exact % for both Pro and Elite */}
       <td className="py-3 px-2 text-center">
-        {isElite ? (
-          <span className={cn("font-mono font-bold", edgeColor(bet.edge))}>
-            +{formatEdge(bet.edge)}%
-          </span>
-        ) : (
-          <span className={cn("font-semibold text-xs", color)}>{label}</span>
-        )}
+        <span className={cn("font-mono font-bold", edgeColor(bet.edge))}>
+          +{formatEdge(bet.edge)}%
+        </span>
       </td>
       <td className="py-3 px-2 text-center">
         {isElite ? (
@@ -478,20 +507,13 @@ function BetRow({
           <LockedCell tier="elite" />
         )}
       </td>
-      <td className="py-3 px-2 text-center">
-        {isElite ? (
-          <span className="font-mono">{(bet.modelProb * 100).toFixed(1)}%</span>
-        ) : (
-          <LockedCell tier="elite" />
-        )}
-      </td>
-      <td className="py-3 px-2 text-center">
-        {isElite ? (
-          <span className="font-mono">{bet.stake.toFixed(1)}</span>
-        ) : (
-          <LockedCell tier="elite" />
-        )}
-      </td>
+      {/* Model prob + stake — Elite only */}
+      {isElite && (
+        <>
+          <td className="py-3 px-2 text-center font-mono">{(bet.modelProb * 100).toFixed(1)}%</td>
+          <td className="py-3 px-2 text-center font-mono">{bet.stake.toFixed(1)}</td>
+        </>
+      )}
       <td className="py-3 pl-2 pr-4 text-center">
         <ResultBadge result={bet.result} />
       </td>
