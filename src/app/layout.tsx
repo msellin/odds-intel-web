@@ -6,6 +6,7 @@ import { PostHogProvider } from "@/components/posthog-provider";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { CookieBanner } from "@/components/cookie-banner";
+import { MetaPixel } from "@/components/meta-pixel";
 
 const inter = Inter({
   variable: "--font-sans",
@@ -108,6 +109,9 @@ export default function RootLayout({
           <PostHogProvider>{children}</PostHogProvider>
         </AuthProvider>
         <CookieBanner />
+        {process.env.NEXT_PUBLIC_META_PIXEL_ID && (
+          <MetaPixel pixelId={process.env.NEXT_PUBLIC_META_PIXEL_ID} />
+        )}
         <Analytics />
         <SpeedInsights />
       </body>
