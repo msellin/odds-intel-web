@@ -2081,33 +2081,23 @@ export interface TrackRecordStats {
 
 export async function getTrackRecordStats(): Promise<TrackRecordStats> {
   // Fast path: read from dashboard_cache (written by settlement at 21:00 UTC).
-  // Cache is stale throughout the day, so always do a live COUNT for settledBets
-  // using the admin client (RLS blocks simulated_bets for the public key).
-  const admin = createSupabaseAdmin();
-  const [cache, liveCountRes] = await Promise.all([
+  // Use cache.settled_bets for the hero total so it stays in sync with the
+  // per-bot breakdown (both from the same snapshot).
+  const [cache, supabaseCounts] = await Promise.all([
     getDashboardCache(),
-    admin
-      .from("simulated_bets")
-      .select("id", { count: "exact", head: true })
-      .neq("result", "pending")
-      .neq("result", "void"),
-  ]);
-  const liveSettledCount = liveCountRes.count ?? 0;
-
-  if (cache) {
-    // Use COUNT(DISTINCT ...) RPCs — replaces fetching 500 + 2000 rows and
-    // counting in JS. Returns two integers.
-    const supabase = createSupabasePublic();
-    const { data: counts } = await supabase.rpc("get_coverage_counts", {
+    createSupabasePublic().rpc("get_coverage_counts", {
       p_odds_since_hours: 24,
       p_matches_since_days: 7,
-    });
-    const row = Array.isArray(counts) ? counts[0] : counts;
+    }),
+  ]);
+
+  if (cache) {
+    const row = Array.isArray(supabaseCounts.data) ? supabaseCounts.data[0] : supabaseCounts.data;
     return {
       avgClv: cache.avg_clv,
-      totalValueBets: liveSettledCount,
+      totalValueBets: cache.settled_bets,
       avgEdge: 0,
-      settledBets: liveSettledCount,
+      settledBets: cache.settled_bets,
       leaguesCovered: Number(row?.league_count ?? 0),
       bookmakersCovered: Number(row?.bookmaker_count ?? 0),
     };
