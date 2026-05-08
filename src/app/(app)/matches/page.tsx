@@ -1,16 +1,16 @@
 export const dynamic = 'force-dynamic';
 
 import { Suspense, use } from "react";
-import { CalendarDays, SearchX, Info } from "lucide-react";
+import { SearchX, Info } from "lucide-react";
 import Link from "next/link";
 import { getActiveMatches, getFinishedMatches, getMatchCounts, getLiveSnapshots, getFreeDailyPick, getWhatChangedToday } from "@/lib/engine-data";
 import { MatchesClient } from "@/components/matches-client";
-import { DailyValueTeaser } from "@/components/daily-value-teaser";
 import { SignupBanner } from "@/components/signup-banner";
 import { WhatChangedToday } from "@/components/what-changed-today";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { getUserTier } from "@/lib/get-user-tier";
 import type { PublicMatch, LiveSnapshot } from "@/lib/engine-data";
+import type { FreePick } from "@/components/daily-value-teaser";
 
 function groupAndSort(matches: PublicMatch[]): [string, PublicMatch[]][] {
   const grouped = new Map<string, PublicMatch[]>();
@@ -38,18 +38,20 @@ function groupAndSort(matches: PublicMatch[]): [string, PublicMatch[]][] {
   });
 }
 
-function formatDate(dayOffset: number): string {
+function formatShortDate(dayOffset: number): string {
   const d = new Date();
   d.setDate(d.getDate() + dayOffset);
-  return d.toLocaleDateString("en-US", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
 
-// Sync page — renders the date + tab toggle immediately at TTFB.
+export interface TeaserData {
+  pick: FreePick | null;
+  totalCount: number;
+  alreadyUnlocked: boolean;
+  isPro: boolean;
+}
+
+// Sync page — renders the heading + tab toggle immediately at TTFB. LCP candidate.
 export default function MatchesPage({
   searchParams,
 }: {
@@ -60,39 +62,39 @@ export default function MatchesPage({
 
   return (
     <div className="space-y-3">
-      {/* Static shell — no data needed, streams in first bytes */}
+      {/* Static LCP shell — no data needed, renders at TTFB */}
       <div>
-        <div className="flex flex-wrap items-center gap-3 mb-3">
-          <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <CalendarDays className="size-3.5" />
-            {formatDate(dayOffset)}
-          </span>
-        </div>
-        <div className="flex gap-1">
-          <Link
-            href="/matches"
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-              dayOffset === 0
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted"
-            }`}
-          >
-            Today
-          </Link>
-          <Link
-            href="/matches?tab=tomorrow"
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-              dayOffset === 1
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted"
-            }`}
-          >
-            Tomorrow
-          </Link>
+        <h1 className="text-2xl font-bold text-foreground leading-tight">
+          {dayOffset === 0 ? "Today's Matches" : "Tomorrow's Fixtures"}
+        </h1>
+        <div className="flex items-center gap-2 mt-1.5">
+          <div className="flex gap-1">
+            <Link
+              href="/matches"
+              className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
+                dayOffset === 0
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+            >
+              Today
+            </Link>
+            <Link
+              href="/matches?tab=tomorrow"
+              className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
+                dayOffset === 1
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+            >
+              Tomorrow
+            </Link>
+          </div>
+          <span className="text-xs text-muted-foreground/50">{formatShortDate(dayOffset)}</span>
         </div>
       </div>
 
-      {/* Tier 1: fast queries — auth, counts, pick, changed items. LCP element is here. */}
+      {/* Streams in after fast queries resolve */}
       <Suspense fallback={null}>
         <AboveFoldContent dayOffset={dayOffset} />
       </Suspense>
@@ -100,7 +102,7 @@ export default function MatchesPage({
   );
 }
 
-// Awaits only fast queries. Renders above-fold content and kicks off match list in nested Suspense.
+// Awaits fast queries (counts, auth, pick). Renders above-fold chrome and kicks off match list.
 async function AboveFoldContent({ dayOffset }: { dayOffset: number }) {
   const [counts, authResult, { pick: freePick, totalCount: freeTotalCount }, changedItems] = await Promise.all([
     getMatchCounts(dayOffset),
@@ -121,6 +123,14 @@ async function AboveFoldContent({ dayOffset }: { dayOffset: number }) {
   ]);
 
   const { isAuthenticated, isPro, alreadyUnlocked } = authResult;
+
+  // Serialisable — passed to MatchesClient for lazy (ssr:false) rendering below the fold.
+  const teaserData: TeaserData = {
+    pick: freePick,
+    totalCount: freeTotalCount,
+    alreadyUnlocked,
+    isPro,
+  };
 
   return (
     <>
@@ -143,31 +153,25 @@ async function AboveFoldContent({ dayOffset }: { dayOffset: number }) {
         <WhatChangedToday items={changedItems} isPro={isPro} />
       )}
 
-      {/* LCP element — renders as soon as this component resolves */}
-      <DailyValueTeaser
-        pick={freePick}
-        totalCount={freeTotalCount}
-        alreadyUnlocked={alreadyUnlocked}
-        isPro={isPro}
-      />
-
-      {/* Tier 2: heavy match data streams in after above-fold is painted */}
+      {/* DailyValueTeaser is injected lazily inside MatchesClient (ssr:false) — not LCP. */}
       <Suspense fallback={null}>
-        <MatchListContent dayOffset={dayOffset} isPro={isPro} counts={counts} />
+        <MatchListContent dayOffset={dayOffset} isPro={isPro} counts={counts} teaserData={teaserData} />
       </Suspense>
     </>
   );
 }
 
-// Awaits the heavy fetches (500+ match rows + live snapshots). Streams in after AboveFoldContent.
+// Awaits the heavy match fetches (500+ rows). Streams in after AboveFoldContent.
 async function MatchListContent({
   dayOffset,
   isPro,
   counts,
+  teaserData,
 }: {
   dayOffset: number;
   isPro: boolean;
   counts: { live: number; upcoming: number; finished: number; total: number };
+  teaserData: TeaserData;
 }) {
   const finishedGroupsPromise = getFinishedMatches(dayOffset).then(groupAndSort);
   const activeMatches = await getActiveMatches(dayOffset);
@@ -201,6 +205,7 @@ async function MatchListContent({
       isPro={isPro}
       counts={counts}
       finishedGroupsPromise={finishedGroupsPromise}
+      teaserData={teaserData}
     />
   );
 }

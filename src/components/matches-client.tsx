@@ -1,11 +1,19 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, use, Suspense } from "react";
+import { useState, useEffect, useCallback, useMemo, use, Suspense, Fragment } from "react";
 import { Star, Search, X } from "lucide-react";
+import dynamic from "next/dynamic";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
 import { useAuth } from "@/components/auth-provider";
 import type { PublicMatch, LiveSnapshot } from "@/lib/engine-data";
 import { LeagueAccordion } from "./league-accordion";
+import type { TeaserData } from "@/app/(app)/matches/page";
+
+// Lazy — not included in server HTML, so it can never be the LCP element.
+const DailyValueTeaser = dynamic(
+  () => import("@/components/daily-value-teaser").then((m) => ({ default: m.DailyValueTeaser })),
+  { ssr: false, loading: () => <div className="h-[52px]" /> }
+);
 
 interface Props {
   sortedGroups: [string, PublicMatch[]][];
@@ -13,13 +21,14 @@ interface Props {
   isPro: boolean;
   counts: { live: number; upcoming: number; finished: number; total: number };
   finishedGroupsPromise: Promise<[string, PublicMatch[]][]>;
+  teaserData: TeaserData;
 }
 
 type StatusTab = "all" | "live" | "upcoming" | "finished";
 type FilterTab = "all" | "favorites";
 type GradeFilter = "A" | "B" | "C" | null;
 
-export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, finishedGroupsPromise }: Props) {
+export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, finishedGroupsPromise, teaserData }: Props) {
   const [snapshots, setSnapshots] = useState<Record<string, LiveSnapshot>>(initialSnapshots);
   const [statusTab, setStatusTab] = useState<StatusTab>("all");
   const [filterTab, setFilterTab] = useState<FilterTab>("all");
@@ -386,17 +395,26 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
           )}
 
           {filteredGroups.map(([league, matches], i) => (
-            <LeagueAccordion
-              key={league}
-              league={league}
-              matches={matches}
-              defaultExpanded={matches.some((m) => m.hasOdds) || statusTab === "live"}
-              liveSnapshots={snapshots}
-              isPro={isPro}
-              favoriteMatchIds={favoriteMatchIds}
-              onMatchFavoriteToggle={handleMatchFavoriteToggle}
-              prioritizeFirstLogos={i === 0}
-            />
+            <Fragment key={league}>
+              <LeagueAccordion
+                league={league}
+                matches={matches}
+                defaultExpanded={matches.some((m) => m.hasOdds) || statusTab === "live"}
+                liveSnapshots={snapshots}
+                isPro={isPro}
+                favoriteMatchIds={favoriteMatchIds}
+                onMatchFavoriteToggle={handleMatchFavoriteToggle}
+                prioritizeFirstLogos={i === 0}
+              />
+              {i === 0 && teaserData.pick && (
+                <DailyValueTeaser
+                  pick={teaserData.pick}
+                  totalCount={teaserData.totalCount}
+                  alreadyUnlocked={teaserData.alreadyUnlocked}
+                  isPro={teaserData.isPro}
+                />
+              )}
+            </Fragment>
           ))}
         </>
       )}

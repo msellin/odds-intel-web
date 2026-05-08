@@ -188,13 +188,6 @@ function MatchRow({
               </span>
             )}
           </div>
-          {/* Form strips below team names */}
-          {hasForm && (
-            <div className="flex items-center gap-4 mt-0.5">
-              <FormStrip form={match.formHome!} />
-              <FormStrip form={match.formAway!} />
-            </div>
-          )}
         </div>
 
         {/* Right: odds columns */}
