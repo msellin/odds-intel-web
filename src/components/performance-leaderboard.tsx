@@ -295,7 +295,7 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets }: Props)
 
       {visibleBots.length === 0 ? (
         <div className="px-5 py-10 text-center text-sm text-muted-foreground">
-          Bots are accumulating data — results appear after 10 settled bets.
+          Bots are accumulating data — results appear after 5 settled bets.
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -340,7 +340,9 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets }: Props)
                       )}
                     </td>
                     <td className="py-3 px-2 text-right text-sm tabular-nums">
-                      {isMaturing ? <span className="text-muted-foreground text-xs">—</span> : bot.settled}
+                      {bot.settled > 0
+                        ? <span className={isMaturing ? "text-muted-foreground text-xs" : ""}>{bot.settled}</span>
+                        : <span className="text-muted-foreground text-xs">—</span>}
                     </td>
                     {isPro && (
                       <td className="py-3 px-2 text-right text-sm whitespace-nowrap">

@@ -44,7 +44,7 @@ function buildBotStats(
       clvDirection: clvDir as PublicBotStat["clvDirection"],
       avgClv: isElite ? b.avg_clv : null,
       currentBankroll: isElite ? (bankrollMap.get(b.name) ?? null) : null,
-      hasEnoughData: b.settled >= 10,
+      hasEnoughData: b.settled >= 5,
     };
   });
 
