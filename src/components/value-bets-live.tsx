@@ -140,7 +140,7 @@ export function ValueBetsLive({ bets, totalCount, userTier }: ValueBetsLiveProps
           {isElite
             ? "Today's picks ranked by edge — placed by the engine when it finds value."
             : isPro
-            ? "Today's directional picks. Upgrade to Elite for exact odds, model probabilities, and stake sizing."
+            ? "Today's picks by match and market. Upgrade to Elite for exact selections, odds, model probabilities, and stake sizing."
             : "AI-identified value bets placed by the engine today. Free accounts see 1 pick per day."}
         </p>
       </div>
@@ -213,7 +213,17 @@ export function ValueBetsLive({ bets, totalCount, userTier }: ValueBetsLiveProps
                 <tr className="border-b border-border/30 bg-card/40">
                   <th className="py-2 pl-4 pr-2 text-left font-medium uppercase tracking-wider text-muted-foreground text-[10px]">Match</th>
                   <th className="py-2 px-2 text-center font-medium uppercase tracking-wider text-muted-foreground text-[10px]">Market</th>
-                  <th className="py-2 px-2 text-center font-medium uppercase tracking-wider text-muted-foreground text-[10px]">Selection</th>
+                  <th className="py-2 px-2 text-center font-medium uppercase tracking-wider text-[10px]">
+                    {isElite || !isPro ? (
+                      <span className="text-muted-foreground">Selection</span>
+                    ) : (
+                      <span className="flex items-center justify-center gap-1 text-amber-400/70">
+                        <Lock className="h-2.5 w-2.5" />
+                        Selection
+                        <TierBadge tier="elite" />
+                      </span>
+                    )}
+                  </th>
                   <th className="py-2 px-2 text-center font-medium uppercase tracking-wider text-muted-foreground text-[10px]">Edge</th>
                   {/* Odds — Pro locked for free, Elite locked for pro */}
                   <th className="py-2 px-2 text-center font-medium uppercase tracking-wider text-[10px]">
@@ -309,7 +319,7 @@ export function ValueBetsLive({ bets, totalCount, userTier }: ValueBetsLiveProps
               <>
                 <p className="text-[11px] text-muted-foreground">
                   <Lock className="inline h-3 w-3 mr-1 text-muted-foreground/50" />
-                  {lockedCount} more bet{lockedCount !== 1 ? "s" : ""} today — Pro unlocks all picks with direction and edge tier. Elite adds exact odds, model probabilities, and Kelly sizing.
+                  {lockedCount} more bet{lockedCount !== 1 ? "s" : ""} today — Pro unlocks all picks by match and market. Elite adds exact selections, odds, model probabilities, and Kelly sizing.
                 </p>
                 <a
                   href="/profile"
@@ -321,7 +331,7 @@ export function ValueBetsLive({ bets, totalCount, userTier }: ValueBetsLiveProps
             ) : !isElite ? (
               <>
                 <p className="text-[11px] text-muted-foreground">
-                  Elite unlocks exact odds, model probabilities, and Kelly stake sizing for every pick.
+                  Elite unlocks exact selections, odds, model probabilities, and Kelly stake sizing for every pick.
                 </p>
                 <span className="shrink-0 rounded-md border border-amber-500/20 px-3 py-1.5 text-[11px] font-medium text-amber-400/50 cursor-default">
                   Elite — Coming Soon
@@ -387,9 +397,13 @@ function BetRow({
         <Badge variant="outline" className="text-[10px]">{bet.market}</Badge>
       </td>
 
-      {/* Selection */}
+      {/* Selection — Elite only (Pro sees market but not what to bet) */}
       <td className="py-3 px-2 text-center">
-        <span className="rounded bg-white/[0.06] px-2 py-0.5 font-medium">{bet.selection}</span>
+        {isElite || isFreeHighlight ? (
+          <span className="rounded bg-white/[0.06] px-2 py-0.5 font-medium">{bet.selection}</span>
+        ) : (
+          <LockedCell tier="elite" />
+        )}
       </td>
 
       {/* Edge — exact % for elite and free pick; label only for pro rows */}

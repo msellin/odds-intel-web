@@ -53,6 +53,7 @@ function sanitizeBets(
   if (isPro) {
     const stripped = deduped.map((b) => ({
       ...b,
+      selection: "",   // Elite only — Pro sees match + market but not what to bet
       odds: 0,
       modelProb: 0,
       impliedProb: 0,
