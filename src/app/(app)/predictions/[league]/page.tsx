@@ -3,7 +3,6 @@
 export const revalidate = 3600;
 
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft, TrendingUp, Calendar } from "lucide-react";
@@ -12,6 +11,7 @@ import {
   PREDICTION_LEAGUES,
 } from "@/lib/engine-data";
 import { getCountryFlag } from "@/lib/country-flags";
+import { TeamCrest } from "@/components/team-crest";
 import type { LeaguePredictionMatch } from "@/lib/engine-data";
 
 export async function generateStaticParams() {
@@ -51,27 +51,6 @@ function ModelCallBadge({ call, confidence }: { call: "home" | "draw" | "away"; 
   );
 }
 
-function TeamCrest({ logo, name }: { logo: string | null; name: string }) {
-  if (logo) {
-    return (
-      <div className="relative size-6 shrink-0 overflow-hidden rounded-full bg-white/[0.06]">
-        <Image
-          src={logo}
-          alt={name}
-          fill
-          sizes="24px"
-          className="object-contain p-0.5"
-          unoptimized
-        />
-      </div>
-    );
-  }
-  return (
-    <div className="size-6 shrink-0 rounded-full bg-white/[0.08] flex items-center justify-center">
-      <span className="text-[10px] font-bold text-muted-foreground">{name.charAt(0).toUpperCase()}</span>
-    </div>
-  );
-}
 
 function MatchCard({ match }: { match: LeaguePredictionMatch }) {
   const kickoff = new Date(match.kickoff);
