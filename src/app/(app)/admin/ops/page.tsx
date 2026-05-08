@@ -9,8 +9,9 @@ import {
   getLatestJobStatuses,
   getStalePendingBets,
   getLastLiveSnapshotAge,
+  getBackfillCounts,
 } from "@/lib/engine-data";
-import type { OpsSnapshot, PipelineRun } from "@/lib/engine-data";
+import type { OpsSnapshot, PipelineRun, BackfillCounts } from "@/lib/engine-data";
 
 export default async function OpsDashboardPage() {
   const supabase = await createSupabaseServer();
@@ -30,12 +31,13 @@ export default async function OpsDashboardPage() {
     return <div className="flex items-center justify-center py-24 text-muted-foreground">Superadmin only.</div>;
   }
 
-  const [snapshot, runs, jobStatuses, staleBets, lastLiveAt] = await Promise.all([
+  const [snapshot, runs, jobStatuses, staleBets, lastLiveAt, backfillCounts] = await Promise.all([
     getOpsSnapshot(),
     getRecentPipelineRuns(),
     getLatestJobStatuses(),
     getStalePendingBets(),
     getLastLiveSnapshotAge(),
+    getBackfillCounts(),
   ]);
 
   const today = new Date().toISOString().slice(0, 10);
@@ -369,42 +371,31 @@ export default async function OpsDashboardPage() {
       <Section
         title="Backfill"
         icon="🗄️"
-        subtitle="Fetches historical match stats from API-Football for past seasons. Runs every 2h in a background slot. Used to build ML training data."
+        subtitle="Three micro-batch jobs run every 5 min, picking up small chunks of work. Each is idempotent — safe to re-run, resumes where it left off."
       >
-        <Grid>
-          <Stat
-            label="Matches with stats"
-            value={snapshot?.backfill_total_done}
-            total={snapshot?.backfill_total_finished ?? undefined}
-            note={snapshot?.backfill_total_finished ? `of ${snapshot.backfill_total_finished.toLocaleString()} finished matches in DB` : "Cumulative — grows with each run"}
+        <div className="space-y-4">
+          <BackfillBar
+            label="Match stats & events"
+            note="Historical fixtures/statistics/events for past seasons. Used for ML training data."
+            done={snapshot?.backfill_total_done ?? null}
+            total={snapshot?.backfill_total_finished ?? null}
+            lastRun={snapshot?.backfill_last_run ?? null}
           />
-          <div className="rounded-lg border border-border bg-card p-3 col-span-2">
-            {(() => {
-              const done = snapshot?.backfill_total_done;
-              const total = snapshot?.backfill_total_finished;
-              const pct = done != null && total && total > 0 ? (done / total) * 100 : null;
-              return (
-                <>
-                  <p className="text-xs text-muted-foreground mb-1">Backfill progress</p>
-                  {pct !== null ? (
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${pct >= 80 ? "bg-emerald-500" : pct >= 40 ? "bg-amber-500" : "bg-blue-500"}`}
-                          style={{ width: `${Math.min(100, pct).toFixed(1)}%` }}
-                        />
-                      </div>
-                      <span className="text-xs font-mono text-muted-foreground">{pct.toFixed(1)}%</span>
-                    </div>
-                  ) : null}
-                  <p className="text-xs text-muted-foreground">
-                    Last run: {snapshot?.backfill_last_run ? new Date(snapshot.backfill_last_run).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}
-                  </p>
-                </>
-              );
-            })()}
-          </div>
-        </Grid>
+          <BackfillBar
+            label="Coach history"
+            note="Manager career history per team. Powers manager_change signal."
+            done={backfillCounts.coachesDone}
+            total={backfillCounts.coachesTotal}
+            lastRun={null}
+          />
+          <BackfillBar
+            label="Transfer history"
+            note="Squad arrivals per team. Powers squad_disruption signal."
+            done={backfillCounts.transfersDone}
+            total={backfillCounts.transfersTotal}
+            lastRun={null}
+          />
+        </div>
       </Section>
     </div>
   );
@@ -498,6 +489,48 @@ function Stat({
   );
 }
 
+function BackfillBar({
+  label,
+  note,
+  done,
+  total,
+  lastRun,
+}: {
+  label: string;
+  note: string;
+  done: number | null;
+  total: number | null;
+  lastRun: string | null;
+}) {
+  const pct = done != null && total && total > 0 ? (done / total) * 100 : null;
+  return (
+    <div className="rounded-lg border border-border bg-card p-3">
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-xs font-medium text-foreground">{label}</p>
+        <p className="text-xs font-mono text-muted-foreground tabular-nums">
+          {done != null ? done.toLocaleString() : "—"}
+          {total ? ` / ${total.toLocaleString()}` : ""}
+          {pct !== null ? ` (${pct.toFixed(1)}%)` : ""}
+        </p>
+      </div>
+      <div className="h-1.5 rounded-full bg-muted overflow-hidden mb-1.5">
+        {pct !== null && (
+          <div
+            className={`h-full rounded-full ${pct >= 80 ? "bg-emerald-500" : pct >= 40 ? "bg-amber-500" : "bg-blue-500"}`}
+            style={{ width: `${Math.min(100, pct).toFixed(1)}%` }}
+          />
+        )}
+      </div>
+      <p className="text-[10px] text-muted-foreground/60 leading-tight">{note}</p>
+      {lastRun && (
+        <p className="text-[10px] text-muted-foreground/50 mt-0.5">
+          Last run: {new Date(lastRun).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+        </p>
+      )}
+    </div>
+  );
+}
+
 // Per-job schedule: max expected gap in hours before flagging as stale (amber)
 // These are generous — account for time-of-day windows (e.g. settlement only runs at 9pm)
 const JOB_CONFIG: Record<string, { label: string; schedule: string; maxGapHours: number }> = {
@@ -511,7 +544,6 @@ const JOB_CONFIG: Record<string, { label: string; schedule: string; maxGapHours:
   live_poller:       { label: "Live Poller",          schedule: "Continuous 10–23 UTC",      maxGapHours: 4  },
   live_tracker:      { label: "Live Tracker",         schedule: "Continuous 10–23 UTC",      maxGapHours: 4  },
   news_checker:      { label: "News Checker",         schedule: "09:00 / 12:30 / 16:30 / 19:30 UTC", maxGapHours: 10 },
-  hist_backfill:     { label: "Hist Backfill",        schedule: "Every 2h background",       maxGapHours: 4  },
   write_ops_snapshot:{ label: "Ops Snapshot",         schedule: "Hourly",                    maxGapHours: 2  },
 };
 
@@ -630,7 +662,7 @@ function PipelineJobGrid({ jobs, recentRuns }: { jobs: PipelineRun[]; recentRuns
                 </tr>
               </thead>
               <tbody>
-                {recentRuns.slice(0, 30).map(run => {
+                {recentRuns.filter(r => !r.job_name.startsWith("backfill") && r.job_name !== "hist_backfill").slice(0, 30).map(run => {
                   const isError = run.status === "failed" || run.status === "error";
                   return (
                     <tr key={run.id} className={`border-b border-border/40 ${isError ? "bg-red-500/5" : ""}`}>

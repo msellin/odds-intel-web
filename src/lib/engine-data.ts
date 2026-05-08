@@ -2275,7 +2275,7 @@ export interface DashboardCache {
   alignment_settled_count: number;
 }
 
-async function getDashboardCache(): Promise<DashboardCache | null> {
+export async function getDashboardCache(): Promise<DashboardCache | null> {
   const supabase = createSupabasePublic();
   const { data, error } = await supabase
     .from("dashboard_cache")
@@ -2286,6 +2286,42 @@ async function getDashboardCache(): Promise<DashboardCache | null> {
 
   if (error || !data) return null;
   return data as DashboardCache;
+}
+
+export interface SimpleSettledBet {
+  id: string;
+  match: string;
+  date: string;
+  market: string;
+  selection: string;
+  result: string;
+}
+
+export async function getRecentSettledBets(limit = 10): Promise<SimpleSettledBet[]> {
+  const admin = createSupabaseAdmin();
+  const { data } = await admin
+    .from("simulated_bets")
+    .select(`id, market, selection, result, pick_time, match:match_id(date, home_team:home_team_id(name), away_team:away_team_id(name))`)
+    .neq("result", "pending")
+    .neq("result", "void")
+    .order("pick_time", { ascending: false })
+    .limit(limit);
+
+  if (!data) return [];
+
+  return (data as Array<Record<string, unknown>>).map((row) => {
+    const m = Array.isArray(row.match) ? row.match[0] : row.match as Record<string, unknown> | null;
+    const home = m?.home_team ? (Array.isArray(m.home_team) ? m.home_team[0] : m.home_team) as { name: string } : null;
+    const away = m?.away_team ? (Array.isArray(m.away_team) ? m.away_team[0] : m.away_team) as { name: string } : null;
+    return {
+      id: row.id as string,
+      match: home && away ? `${home.name} vs ${away.name}` : "Unknown",
+      date: (m?.date ?? row.pick_time) as string,
+      market: row.market as string,
+      selection: row.selection as string,
+      result: row.result as string,
+    };
+  });
 }
 
 export async function getBotConsensus(matchId: string): Promise<BotConsensusData | null> {
@@ -3063,6 +3099,31 @@ export async function getLatestJobStatuses(): Promise<PipelineRun[]> {
     }
   }
   return latest;
+}
+
+export interface BackfillCounts {
+  coachesTotal: number;
+  coachesDone: number;
+  transfersTotal: number;
+  transfersDone: number;
+}
+
+/** Coaches and transfers backfill progress — team counts. */
+export async function getBackfillCounts(): Promise<BackfillCounts> {
+  const admin = createSupabaseAdmin();
+  const [totalRes, coachRes, transferRes] = await Promise.all([
+    admin.rpc("count_distinct_team_af_ids"),
+    admin.from("team_coaches").select("team_af_id", { count: "exact", head: true }),
+    admin.from("team_transfer_cache").select("team_api_id", { count: "exact", head: true }),
+  ]);
+  // Fallback: if RPC not available, default to 0
+  const total = (totalRes.data as number | null) ?? 0;
+  return {
+    coachesTotal: total,
+    coachesDone: coachRes.count ?? 0,
+    transfersTotal: total,
+    transfersDone: transferRes.count ?? 0,
+  };
 }
 
 /** Pending bets where the match has already kicked off >2h ago (truly overdue).
