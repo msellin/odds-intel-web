@@ -1028,6 +1028,9 @@ export async function getTodayBets(): Promise<LiveBet[]> {
   const todayStart = new Date(now);
   todayStart.setHours(0, 0, 0, 0);
 
+  // INPLAY-HIDE-VALUEBETS: prematch-only on /value-bets while inplay bots are
+  // being tuned. xg_source IS NULL ⇒ prematch bot. Inplay bets still appear on
+  // /performance (historical record) where the `live` badge differentiates them.
   const { data, error } = await supabase
     .from("simulated_bets")
     .select(
@@ -1042,6 +1045,7 @@ export async function getTodayBets(): Promise<LiveBet[]> {
        )`
     )
     .gte("pick_time", todayStart.toISOString())
+    .is("xg_source", null)
     .order("pick_time", { ascending: false });
 
   if (error || !data) return [];
@@ -1069,6 +1073,9 @@ export async function getFreeDailyPick(): Promise<{ pick: FreePick | null; total
   todayStart.setHours(0, 0, 0, 0);
   const todayStartStr = todayStart.toISOString();
 
+  // INPLAY-HIDE-VALUEBETS: keep the free teaser prematch-only too — same
+  // reasoning as getTodayBets. Without this filter the teaser could surface a
+  // mid-match inplay bet on a finished game (highest-edge sort wins).
   const [pickRes, allBetsRes] = await Promise.all([
     supabase
       .from("simulated_bets")
@@ -1081,13 +1088,15 @@ export async function getFreeDailyPick(): Promise<{ pick: FreePick | null; total
          )`
       )
       .gte("pick_time", todayStartStr)
+      .is("xg_source", null)
       .order("edge_percent", { ascending: false })
       .limit(1),
     // Fetch match_id+market+selection to deduplicate — same logic as value bets page
     supabase
       .from("simulated_bets")
       .select("match_id, market, selection")
-      .gte("pick_time", todayStartStr),
+      .gte("pick_time", todayStartStr)
+      .is("xg_source", null),
   ]);
 
   // Deduplicate by match+market+selection to match value bets page count
