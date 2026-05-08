@@ -61,7 +61,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.7,
     },
     {
-      url: `${base}/track-record`,
+      url: `${base}/performance`,
       lastModified: new Date(),
       changeFrequency: "daily",
       priority: 0.8,
