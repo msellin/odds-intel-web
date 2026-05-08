@@ -2337,6 +2337,8 @@ export interface LeaguePredictionMatch {
   kickoff: string;
   homeTeam: string;
   awayTeam: string;
+  homeLogo: string | null;
+  awayLogo: string | null;
   leagueName: string;
   leagueCountry: string;
   modelCall: "home" | "draw" | "away" | null;
@@ -2443,8 +2445,8 @@ export async function getLeaguePredictions(
     .from("matches")
     .select(`
       id, date,
-      home_team:home_team_id(name),
-      away_team:away_team_id(name)
+      home_team:home_team_id(name, logo_url),
+      away_team:away_team_id(name, logo_url)
     `)
     .in("league_id", leagueIds)
     .gte("date", weekStart)
@@ -2533,6 +2535,8 @@ export async function getLeaguePredictions(
       kickoff: m.date as string,
       homeTeam: (ht as Record<string, string>)?.name ?? "Home",
       awayTeam: (at as Record<string, string>)?.name ?? "Away",
+      homeLogo: ((ht as Record<string, string | null>)?.logo_url as string | null) ?? null,
+      awayLogo: ((at as Record<string, string | null>)?.logo_url as string | null) ?? null,
       leagueName: meta?.name ?? primaryLeague.name,
       leagueCountry: meta?.country ?? primaryLeague.country,
       modelCall,
