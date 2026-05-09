@@ -3115,7 +3115,7 @@ export async function getBackfillCounts(): Promise<BackfillCounts> {
   const admin = createSupabaseAdmin();
   const [totalRes, coachRes, transferRes, coachRunRes, transferRunRes, histRunRes] = await Promise.all([
     admin.rpc("count_distinct_team_af_ids"),
-    admin.from("team_coaches").select("team_af_id", { count: "exact", head: true }),
+    admin.rpc("count_distinct_coached_teams"),
     admin.from("team_transfer_cache").select("team_api_id", { count: "exact", head: true }),
     admin.from("pipeline_runs").select("started_at, status").eq("job_name", "backfill_coaches").order("started_at", { ascending: false }).limit(1),
     admin.from("pipeline_runs").select("started_at, status").eq("job_name", "backfill_transfers").order("started_at", { ascending: false }).limit(1),
@@ -3127,7 +3127,7 @@ export async function getBackfillCounts(): Promise<BackfillCounts> {
   const histRun = histRunRes.data?.[0] ?? null;
   return {
     coachesTotal: total,
-    coachesDone: coachRes.count ?? 0,
+    coachesDone: (coachRes.data as number | null) ?? 0,
     coachesLastRun: coachRun?.started_at ?? null,
     coachesLastStatus: coachRun?.status ?? null,
     transfersTotal: total,
