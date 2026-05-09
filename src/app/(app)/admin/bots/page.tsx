@@ -66,8 +66,11 @@ export default async function BotDashboardPage() {
           ? (totalPnl / totalStaked) * 100
           : null,
       currentBankroll: dbBot.currentBankroll,
+      isRetired: Boolean(dbBot.retiredAt),
     };
   }).sort((a, b) => {
+    // Retired bots last regardless of P&L — they're hidden by default in the UI
+    if (a.isRetired !== b.isRetired) return a.isRetired ? 1 : -1;
     // Bots with settled bets first (by P&L), then pending-only, then zero-bet bots last
     if (a.settled > 0 && b.settled === 0) return -1;
     if (a.settled === 0 && b.settled > 0) return 1;
@@ -77,9 +80,13 @@ export default async function BotDashboardPage() {
     return a.name.localeCompare(b.name);
   });
 
-  const activeBots = botStats.filter((b) => b.settled > 0);
-  const pendingBots = botStats.filter((b) => b.settled === 0 && b.total > 0);
-  const inactiveBots = botStats.filter((b) => b.total === 0);
+  // Retired bots get their own bucket — the dashboard client renders them
+  // behind a "Show retired" toggle (default off) so the main view stays clean.
+  const liveBots = botStats.filter((b) => !b.isRetired);
+  const retiredBots = botStats.filter((b) => b.isRetired);
+  const activeBots = liveBots.filter((b) => b.settled > 0);
+  const pendingBots = liveBots.filter((b) => b.settled === 0 && b.total > 0);
+  const inactiveBots = liveBots.filter((b) => b.total === 0);
 
   // ── Summary numbers ─────────────────────────────────────────────────────────
   const totalBets = bets.length;
@@ -121,6 +128,7 @@ export default async function BotDashboardPage() {
         activeBots={activeBots}
         pendingBots={pendingBots}
         inactiveBots={inactiveBots}
+        retiredBots={retiredBots}
         prematchMarketStats={prematchMarketStats}
         liveMarketStats={liveMarketStats}
         summary={{

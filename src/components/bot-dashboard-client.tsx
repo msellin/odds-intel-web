@@ -44,6 +44,7 @@ export interface BotStat {
   totalStaked: number;
   roi: number | null;
   currentBankroll: number;
+  isRetired?: boolean;
 }
 
 export interface MarketStat {
@@ -71,6 +72,7 @@ interface Props {
   activeBots: BotStat[];
   pendingBots: BotStat[];
   inactiveBots: BotStat[];
+  retiredBots?: BotStat[];
   prematchMarketStats: MarketStat[];
   liveMarketStats: MarketStat[];
   summary: Summary;
@@ -352,11 +354,13 @@ export function BotDashboardClient({
   activeBots,
   pendingBots,
   inactiveBots,
+  retiredBots = [],
   prematchMarketStats,
   liveMarketStats,
   summary,
 }: Props) {
   const [selectedBot, setSelectedBot] = useState<BotStat | null>(null);
+  const [showRetired, setShowRetired] = useState(false);
 
   return (
     <>
@@ -469,6 +473,25 @@ export function BotDashboardClient({
                     </TableCell>
                   </TableRow>
                   {inactiveBots.map((bot) => (
+                    <BotRow key={bot.name} bot={bot} dimmed={true} onClick={() => setSelectedBot(bot)} />
+                  ))}
+                </>
+              )}
+              {retiredBots.length > 0 && (
+                <>
+                  <TableRow>
+                    <TableCell colSpan={9} className="py-1 px-4">
+                      <button
+                        type="button"
+                        onClick={() => setShowRetired((v) => !v)}
+                        className="text-[10px] text-muted-foreground uppercase tracking-widest hover:text-foreground transition-colors"
+                      >
+                        {showRetired ? "▼" : "▶"} {retiredBots.length} retired
+                        {showRetired ? " (hide)" : " (show)"}
+                      </button>
+                    </TableCell>
+                  </TableRow>
+                  {showRetired && retiredBots.map((bot) => (
                     <BotRow key={bot.name} bot={bot} dimmed={true} onClick={() => setSelectedBot(bot)} />
                   ))}
                 </>
