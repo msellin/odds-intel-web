@@ -377,8 +377,8 @@ export default async function OpsDashboardPage() {
           <BackfillBar
             label="Match stats & events"
             note="Historical fixtures/statistics/events for past seasons. Used for ML training data."
-            done={snapshot?.backfill_total_done ?? null}
-            total={snapshot?.backfill_total_finished ?? null}
+            done={backfillCounts.histDone}
+            total={backfillCounts.histTotal}
             lastRun={backfillCounts.histLastRun}
             lastStatus={backfillCounts.histLastStatus}
           />

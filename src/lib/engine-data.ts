@@ -3118,18 +3118,30 @@ export interface BackfillCounts {
   transfersLastStatus: string | null;
   histLastRun: string | null;
   histLastStatus: string | null;
+  histDone: number;
+  histTotal: number;
 }
 
-/** Coaches and transfers backfill progress — team counts + last run info. */
+/** Coaches and transfers backfill progress — team counts + last run info.
+ *  Hist (Match stats & events) counts come from live SQL — match_stats has
+ *  match_id as PK so COUNT(*) === COUNT(DISTINCT match_id). The previous path
+ *  through write_ops_snapshot was hours stale (and sometimes failed entirely),
+ *  so the dashboard lagged backfill runs by a full snapshot cycle. */
 export async function getBackfillCounts(): Promise<BackfillCounts> {
   const admin = createSupabaseAdmin();
-  const [totalRes, coachRes, transferRes, coachRunRes, transferRunRes, histRunRes] = await Promise.all([
+  const [
+    totalRes, coachRes, transferRes,
+    coachRunRes, transferRunRes, histRunRes,
+    histDoneRes, histTotalRes,
+  ] = await Promise.all([
     admin.rpc("count_distinct_team_af_ids"),
     admin.rpc("count_distinct_coached_teams"),
     admin.from("team_transfer_cache").select("team_api_id", { count: "exact", head: true }),
     admin.from("pipeline_runs").select("started_at, status").eq("job_name", "backfill_coaches").order("started_at", { ascending: false }).limit(1),
     admin.from("pipeline_runs").select("started_at, status").eq("job_name", "backfill_transfers").order("started_at", { ascending: false }).limit(1),
     admin.from("pipeline_runs").select("started_at, status").eq("job_name", "hist_backfill").order("started_at", { ascending: false }).limit(1),
+    admin.from("match_stats").select("match_id", { count: "exact", head: true }),
+    admin.from("matches").select("id", { count: "exact", head: true }).eq("status", "finished").not("api_football_id", "is", null),
   ]);
   const total = (totalRes.data as number | null) ?? 0;
   const coachRun = coachRunRes.data?.[0] ?? null;
@@ -3146,6 +3158,8 @@ export async function getBackfillCounts(): Promise<BackfillCounts> {
     transfersLastStatus: transferRun?.status ?? null,
     histLastRun: histRun?.started_at ?? null,
     histLastStatus: histRun?.status ?? null,
+    histDone: histDoneRes.count ?? 0,
+    histTotal: histTotalRes.count ?? 0,
   };
 }
 
