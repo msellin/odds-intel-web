@@ -46,6 +46,8 @@ export default async function BotDashboardPage() {
   // Build stats for ALL bots from DB (not just those with bets)
   const botStats = allBotsDB.map((dbBot) => {
     const botBets = betsByBot[dbBot.name] || [];
+    // Voids never count toward the bot's bet count — they're cancelled bets, not history.
+    const counted = botBets.filter((b) => b.result !== "void");
     const settled = botBets.filter((b) => b.result !== "pending" && b.result !== "void");
     const won = settled.filter((b) => b.result === "won").length;
     const totalPnl = settled.reduce((s, b) => s + b.pnl, 0);
@@ -53,7 +55,7 @@ export default async function BotDashboardPage() {
     return {
       name: dbBot.name,
       description: dbBot.strategy || "",
-      total: botBets.length,
+      total: counted.length,
       pending: botBets.filter((b) => b.result === "pending").length,
       settled: settled.length,
       won,
@@ -89,7 +91,7 @@ export default async function BotDashboardPage() {
   const inactiveBots = liveBots.filter((b) => b.total === 0);
 
   // ── Summary numbers ─────────────────────────────────────────────────────────
-  const totalBets = bets.length;
+  const totalBets = bets.filter((b) => b.result !== "void").length;
   const allSettled = bets.filter((b) => b.result !== "pending" && b.result !== "void");
   const allWon = allSettled.filter((b) => b.result === "won").length;
   const allPnl = allSettled.reduce((s, b) => s + b.pnl, 0);
