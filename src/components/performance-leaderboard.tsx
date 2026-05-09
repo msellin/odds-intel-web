@@ -98,7 +98,10 @@ function buildChartData(bets: SanitizedBotBet[]) {
   const hasBankroll = settled.some((b) => b.bankrollAfter != null);
   let running = 1000;
 
-  return settled.map((b, i) => {
+  // Prepend a synthetic origin so the line visibly starts at the bot's
+  // 1000€ starting bankroll instead of jumping straight to the first bet's
+  // outcome (e.g. 990 or 1010 with no reference).
+  const series = settled.map((b, i) => {
     const bankroll = hasBankroll && b.bankrollAfter != null
       ? b.bankrollAfter
       : (running += b.pnl, running);
@@ -106,9 +109,13 @@ function buildChartData(bets: SanitizedBotBet[]) {
       idx: i + 1,
       bankroll: Math.round(bankroll * 100) / 100,
       date: new Date(b.placedAt).toLocaleDateString("en-GB", { month: "short", day: "numeric" }),
-      result: b.result,
+      result: b.result as "won" | "lost" | "origin",
     };
   });
+  return [
+    { idx: 0, bankroll: 1000, date: "Start", result: "origin" as const },
+    ...series,
+  ];
 }
 
 // ── Bot detail modal (Pro+) ───────────────────────────────────────────────────
@@ -174,8 +181,11 @@ function BotModal({
                   contentStyle={{ background: "#1a1a1a", border: "1px solid #333", fontSize: 12 }}
                   formatter={(v) => [`€${Number(v).toFixed(2)}`, "Bankroll"]}
                   labelFormatter={(label) => {
-                    const d = chartData[Number(label) - 1];
-                    return d ? `Bet #${label} · ${d.date}` : `Bet #${label}`;
+                    const idx = Number(label);
+                    const d = chartData.find((x) => x.idx === idx);
+                    if (!d) return `Bet #${label}`;
+                    if (d.result === "origin") return "Starting bankroll";
+                    return `Bet #${idx} · ${d.date}`;
                   }}
                 />
                 <ReferenceLine y={1000} stroke="#555" strokeDasharray="4 4" />
@@ -186,13 +196,18 @@ function BotModal({
                   strokeWidth={2}
                   dot={(props) => {
                     const { cx, cy, payload } = props;
+                    const fill = payload.result === "won"
+                      ? "#22c55e"
+                      : payload.result === "lost"
+                        ? "#ef4444"
+                        : "#666";
                     return (
                       <circle
                         key={`dot-${props.index}`}
                         cx={cx}
                         cy={cy}
                         r={3.5}
-                        fill={payload.result === "won" ? "#22c55e" : "#ef4444"}
+                        fill={fill}
                         stroke="none"
                       />
                     );

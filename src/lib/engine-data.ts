@@ -2964,12 +2964,20 @@ export async function getUserBankrollData(userId: string): Promise<BankrollData>
 
   const settled = picks.filter((p) => p.result !== "pending");
 
-  // Cumulative units over time (settled picks only, chronological)
+  // Cumulative units over time (settled picks only, chronological).
+  // Prepend a 0u origin point one day before the first settled pick so the
+  // chart visibly starts at 0 instead of jumping straight to the first bet's
+  // delta — otherwise the line "starts" at e.g. -1u with no reference.
   let running = 0;
   const cumulativeSeries: { date: string; units: number }[] = settled.map((p) => {
     running += p.units;
     return { date: p.date.slice(0, 10), units: Math.round(running * 100) / 100 };
   });
+  if (cumulativeSeries.length > 0) {
+    const firstDate = new Date(settled[0].date);
+    firstDate.setUTCDate(firstDate.getUTCDate() - 1);
+    cumulativeSeries.unshift({ date: firstDate.toISOString().slice(0, 10), units: 0 });
+  }
 
   // Max drawdown
   let peak = 0;
