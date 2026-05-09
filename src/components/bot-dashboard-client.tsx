@@ -153,7 +153,7 @@ function BotDetailModal({
   onClose: () => void;
 }) {
   const botBets = bets
-    .filter((b) => b.bot === bot.name)
+    .filter((b) => b.bot === bot.name && b.result !== "void")
     .sort((a, b) => new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime());
 
   const chartData = buildBankrollData(botBets);
