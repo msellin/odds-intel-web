@@ -311,24 +311,24 @@ export default async function OpsDashboardPage() {
       <Section
         title="AF API Budget"
         icon="💳"
-        subtitle="API-Football Ultra plan: 75,000 calls/day. Resets at midnight UTC."
+        subtitle="API-Football Mega plan: 150,000 calls/day. Resets at midnight UTC."
       >
         <Grid>
           <Stat label="Calls today" value={snapshot?.af_calls_today} note="Across all pipeline jobs" />
           <Stat
             label="Remaining today"
             value={snapshot?.af_budget_remaining}
-            warn={v => v < 5000}
-            good={v => v > 50000}
-            note="<5,000 = amber. Budget resets at midnight UTC."
+            warn={v => v < 10000}
+            good={v => v > 100000}
+            note="<10,000 = amber. Budget resets at midnight UTC."
           />
           {(() => {
             const calls = snapshot?.af_calls_today;
             if (calls == null) return null;
-            const pct = (calls / 75000) * 100;
+            const pct = (calls / 150000) * 100;
             return (
               <div className="rounded-lg border border-border bg-card p-3 col-span-2">
-                <p className="text-xs text-muted-foreground mb-1">Usage (75k/day limit)</p>
+                <p className="text-xs text-muted-foreground mb-1">Usage (150k/day limit)</p>
                 <div className="flex items-center gap-2">
                   <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
                     <div
