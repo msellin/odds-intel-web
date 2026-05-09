@@ -59,6 +59,7 @@ function TeamLogo({ logo, name, priority = false }: { logo: string | null; name:
           sizes="20px"
           className="object-contain p-0.5"
           priority={priority}
+          unoptimized
           onError={() => setFailed(true)}
         />
       </div>

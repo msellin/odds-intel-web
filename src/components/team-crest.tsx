@@ -17,6 +17,7 @@ export function TeamCrest({ logo, name, size = 6 }: { logo: string | null; name:
           fill
           sizes={`${size * 4}px`}
           className="object-contain p-0.5"
+          unoptimized
           onError={() => setFailed(true)}
         />
       </div>

@@ -22,6 +22,7 @@ function TeamLogo({ logo, name, size = "lg" }: { logo: string | null; name: stri
           sizes={size === "lg" ? "48px" : "24px"}
           className="object-contain p-0.5"
           loading="eager"
+          unoptimized
           onError={() => setFailed(true)}
         />
       </div>
