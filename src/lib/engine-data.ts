@@ -1240,6 +1240,214 @@ function toBet(row: SimBetRow): LiveBet {
   };
 }
 
+// ── SELF-USE-VALIDATION: placement candidates + real bets ────────────────────
+
+export interface PlaceableBet {
+  betId: string;            // simulated_bets.id (the paper bet)
+  bot: string;
+  botId: string;
+  match: string;
+  matchId: string;
+  league: string;
+  kickoff: string;
+  market: string;
+  selection: string;
+  botOdds: number;          // odds_at_pick from paper bet
+  unibetOdds: number | null;  // Coolbet proxy
+  bet365Odds: number | null;
+  pinnacleOdds: number | null;
+  edge: number | null;
+  modelProb: number | null;
+  stake: number | null;     // suggested €1-3, manually picked
+}
+
+/** Map paper-bet (market, selection) to odds_snapshots (market, selection). */
+function _mapPaperToSnapshotKey(market: string, selection: string): { market: string; selection: string } | null {
+  const m = (market || "").toLowerCase();
+  const s = (selection || "").toLowerCase().trim();
+  if (m === "1x2") {
+    if (["home", "draw", "away"].includes(s)) return { market: "1x2", selection: s };
+  }
+  if (m === "btts") {
+    if (s === "yes" || s === "no") return { market: "btts", selection: s };
+  }
+  if (m === "o/u") {
+    for (const line of ["0.5", "1.5", "2.5", "3.5", "4.5"]) {
+      if (s.startsWith(`over ${line}`)) {
+        return { market: `over_under_${line.replace(".", "")}`, selection: "over" };
+      }
+      if (s.startsWith(`under ${line}`)) {
+        return { market: `over_under_${line.replace(".", "")}`, selection: "under" };
+      }
+    }
+  }
+  return null;
+}
+
+/** All pending paper bets on matches that haven't kicked off yet, with
+ *  Unibet (Coolbet proxy) + Bet365 + Pinnacle odds joined at pick time.
+ *  Used by /admin/place. */
+export async function getPlaceableBets(): Promise<PlaceableBet[]> {
+  const admin = createSupabaseAdmin();
+  const nowIso = new Date().toISOString();
+
+  // 1) pending paper bets on upcoming matches
+  const { data: bets } = await admin
+    .from("simulated_bets")
+    .select(
+      `id, match_id, market, selection, odds_at_pick, pick_time, stake,
+       model_probability, edge_percent,
+       bot:bot_id(id, name),
+       match:match_id(id, date,
+         home_team:home_team_id(name),
+         away_team:away_team_id(name),
+         league:league_id(name, country))`
+    )
+    .eq("result", "pending")
+    .gt("match.date", nowIso)
+    .order("pick_time", { ascending: false })
+    .range(0, 999);
+
+  if (!bets || bets.length === 0) return [];
+
+  // Filter to those whose match really is in the future (the .gt filter on
+  // an embedded relation doesn't always behave the way we want via PostgREST).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows = bets as any[];
+  const upcoming = rows.filter((b) => {
+    const m = Array.isArray(b.match) ? b.match[0] : b.match;
+    return m && new Date(m.date) > new Date();
+  });
+
+  if (upcoming.length === 0) return [];
+
+  // 2) one round-trip for all relevant odds_snapshots — Unibet, Bet365, Pinnacle
+  const matchIds = Array.from(new Set(upcoming.map((b) => b.match_id)));
+  const { data: snaps } = await admin
+    .from("odds_snapshots")
+    .select("match_id, market, selection, bookmaker, odds, timestamp")
+    .in("match_id", matchIds)
+    .in("bookmaker", ["Unibet", "Bet365", "Pinnacle"])
+    .order("timestamp", { ascending: false })
+    .range(0, 9999);
+
+  // Index snaps by match_id|market|selection|bookmaker → most-recent odds
+  const snapKey = (m: string, mk: string, sel: string, bm: string) => `${m}|${mk}|${sel}|${bm}`;
+  const snapMap = new Map<string, number>();
+  for (const s of (snaps ?? []) as Array<{ match_id: string; market: string; selection: string; bookmaker: string; odds: number }>) {
+    const k = snapKey(s.match_id, s.market, s.selection, s.bookmaker);
+    if (!snapMap.has(k)) snapMap.set(k, Number(s.odds));  // first-seen = most recent
+  }
+
+  // 3) build PlaceableBet rows
+  const out: PlaceableBet[] = [];
+  for (const b of upcoming) {
+    const k = _mapPaperToSnapshotKey(b.market, b.selection);
+    if (!k) continue;
+    const m = Array.isArray(b.match) ? b.match[0] : b.match;
+    if (!m) continue;
+    const ht = m.home_team ? (Array.isArray(m.home_team) ? m.home_team[0] : m.home_team) : null;
+    const at = m.away_team ? (Array.isArray(m.away_team) ? m.away_team[0] : m.away_team) : null;
+    const lg = m.league ? (Array.isArray(m.league) ? m.league[0] : m.league) : null;
+    const bot = b.bot ? (Array.isArray(b.bot) ? b.bot[0] : b.bot) : null;
+
+    out.push({
+      betId: b.id,
+      bot: bot?.name || "unknown",
+      botId: bot?.id || "",
+      match: ht && at ? `${ht.name} vs ${at.name}` : "Unknown",
+      matchId: b.match_id,
+      league: lg ? `${lg.country} / ${lg.name}` : "Unknown",
+      kickoff: m.date,
+      market: b.market,
+      selection: b.selection,
+      botOdds: Number(b.odds_at_pick),
+      unibetOdds: snapMap.get(snapKey(b.match_id, k.market, k.selection, "Unibet")) ?? null,
+      bet365Odds: snapMap.get(snapKey(b.match_id, k.market, k.selection, "Bet365")) ?? null,
+      pinnacleOdds: snapMap.get(snapKey(b.match_id, k.market, k.selection, "Pinnacle")) ?? null,
+      edge: b.edge_percent != null ? Number(b.edge_percent) : null,
+      modelProb: b.model_probability != null ? Number(b.model_probability) : null,
+      stake: b.stake != null ? Number(b.stake) : null,
+    });
+  }
+
+  // Sort by kickoff ASC, then by edge DESC
+  out.sort((a, b) => {
+    const k = new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime();
+    if (k !== 0) return k;
+    return (b.edge ?? 0) - (a.edge ?? 0);
+  });
+
+  return out;
+}
+
+export interface RealBet {
+  id: string;
+  matchId: string;
+  match: string;
+  league: string;
+  bot: string | null;
+  market: string;
+  selection: string;
+  bookmaker: string;
+  capturedOdds: number | null;
+  actualOdds: number;
+  slippagePct: number | null;
+  stake: number;
+  placedAt: string;
+  result: string;
+  pnl: number | null;
+  resolvedAt: string | null;
+  notes: string | null;
+}
+
+/** All real bets, newest first. Used by /admin/real-bets dashboard. */
+export async function getRealBets(): Promise<RealBet[]> {
+  const admin = createSupabaseAdmin();
+  const { data } = await admin
+    .from("real_bets")
+    .select(
+      `id, match_id, market, selection, bookmaker, captured_odds, actual_odds,
+       slippage_pct, stake, placed_at, result, pnl, resolved_at, notes,
+       bot:bot_id(name),
+       match:match_id(date,
+         home_team:home_team_id(name),
+         away_team:away_team_id(name),
+         league:league_id(name, country))`
+    )
+    .order("placed_at", { ascending: false })
+    .range(0, 999);
+  if (!data) return [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows = data as any[];
+  return rows.map((r) => {
+    const bot = r.bot ? (Array.isArray(r.bot) ? r.bot[0] : r.bot) : null;
+    const m = Array.isArray(r.match) ? r.match[0] : r.match;
+    const ht = m?.home_team ? (Array.isArray(m.home_team) ? m.home_team[0] : m.home_team) : null;
+    const at = m?.away_team ? (Array.isArray(m.away_team) ? m.away_team[0] : m.away_team) : null;
+    const lg = m?.league ? (Array.isArray(m.league) ? m.league[0] : m.league) : null;
+    return {
+      id: r.id,
+      matchId: r.match_id,
+      match: ht && at ? `${ht.name} vs ${at.name}` : "Unknown",
+      league: lg ? `${lg.country} / ${lg.name}` : "Unknown",
+      bot: bot?.name ?? null,
+      market: r.market,
+      selection: r.selection,
+      bookmaker: r.bookmaker,
+      capturedOdds: r.captured_odds != null ? Number(r.captured_odds) : null,
+      actualOdds: Number(r.actual_odds),
+      slippagePct: r.slippage_pct != null ? Number(r.slippage_pct) : null,
+      stake: Number(r.stake),
+      placedAt: r.placed_at,
+      result: r.result,
+      pnl: r.pnl != null ? Number(r.pnl) : null,
+      resolvedAt: r.resolved_at,
+      notes: r.notes,
+    };
+  });
+}
+
 // ── Model accuracy (public) ─────────────────────────────────────────────────
 // For each finished match that has 1x2 predictions, determine what the model
 // called (highest probability among home/draw/away) and whether it was correct.
