@@ -3179,11 +3179,12 @@ export async function getBackfillCounts(): Promise<BackfillCounts> {
   };
 }
 
-/** Pending bets where the match has already kicked off >2h ago (truly overdue).
- *  Joins to matches so pre-kickoff morning bets don't trigger false alarms. */
+/** Pending bets where the match has already kicked off >2.5h ago (truly overdue).
+ *  fix_stale_live_matches uses a 130-min cutoff (90 min match + 40 min buffer),
+ *  so we only alarm at 150 min to avoid racing the cleanup sweep itself. */
 export async function getStalePendingBets(): Promise<{ id: string; market: string; pick_time: string; bot_id: string; match_kickoff: string | null }[]> {
   const admin = createSupabaseAdmin();
-  const kickoffCutoff = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+  const kickoffCutoff = new Date(Date.now() - 2.5 * 60 * 60 * 1000).toISOString();
   const { data } = await admin
     .from("simulated_bets")
     .select("id, market, pick_time, bot_id, match:match_id(date)")

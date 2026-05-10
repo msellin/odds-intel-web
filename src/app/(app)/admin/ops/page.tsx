@@ -186,7 +186,7 @@ export default async function OpsDashboardPage() {
           return (
             <div className={`mt-4 rounded-lg border px-4 py-3 ${isAlarm ? "border-red-500/30 bg-red-500/10" : "border-amber-500/30 bg-amber-500/10"}`}>
               <p className={`text-sm font-medium mb-1 ${isAlarm ? "text-red-400" : "text-amber-400"}`}>
-                ⚠ {staleBets.length} pending bet{staleBets.length > 1 ? "s" : ""} on matches that kicked off &gt;2h ago
+                ⚠ {staleBets.length} pending bet{staleBets.length > 1 ? "s" : ""} on matches that kicked off &gt;2.5h ago
               </p>
               <p className="text-xs text-muted-foreground mb-2">
                 {isAlarm
