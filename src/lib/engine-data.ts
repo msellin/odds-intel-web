@@ -1156,6 +1156,15 @@ export async function getAllBotsFromDB(): Promise<BotRecord[]> {
   }));
 }
 
+// Hard ceiling on bet rows returned. The previous .limit(500) silently truncated
+// the per-bot aggregate tables once total bets exceeded 500, making
+// /admin/bots and the per-bot modal disagree with /performance leaderboard
+// (which reads pre-aggregated dashboard_cache.bot_breakdown). Range goes via
+// the PostgREST `Range` header so it bypasses Supabase's default db-max-rows
+// of 1000. If we ever hit the ceiling, the warn below fires — switch to
+// reading aggregates from dashboard_cache (see PRIORITY_QUEUE: BOT-AGGREGATES-SSOT).
+const ALL_BETS_CEILING = 20000;
+
 export async function getAllBets(): Promise<LiveBet[]> {
   const supabase = await createSupabaseServer();
 
@@ -1173,9 +1182,16 @@ export async function getAllBets(): Promise<LiveBet[]> {
        )`
     )
     .order("pick_time", { ascending: false })
-    .limit(500);
+    .range(0, ALL_BETS_CEILING - 1);
 
   if (error || !data) return [];
+
+  if (data.length >= ALL_BETS_CEILING) {
+    console.warn(
+      `[getAllBets] Hit ${ALL_BETS_CEILING}-row ceiling — per-bot aggregates ` +
+      `may be truncated. Time to ship BOT-AGGREGATES-SSOT (read from dashboard_cache).`
+    );
+  }
 
   return (data as SimBetRow[]).map(toBet);
 }
