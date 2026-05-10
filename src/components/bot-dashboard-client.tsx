@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { LiveBet } from "@/lib/engine-data";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -156,6 +156,26 @@ function BotDetailModal({
     .filter((b) => b.bot === bot.name && b.result !== "void")
     .sort((a, b) => new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime());
 
+  // SELF-USE-VALIDATION Phase 2.5: lazy-fetch Unibet (Coolbet proxy) + Bet365
+  // odds for this bot's bets, so the user can compare bot-recorded odds
+  // vs what they'd actually have gotten at Coolbet/Bet365.
+  const [bookOdds, setBookOdds] = useState<Record<string, { unibet: number | null; bet365: number | null }>>({});
+  useEffect(() => {
+    let cancelled = false;
+    if (botBets.length === 0) return;
+    const ids = botBets.map((b) => b.id);
+    fetch("/api/admin/bot-book-odds", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ betIds: ids }),
+    })
+      .then((r) => r.ok ? r.json() : {})
+      .then((j) => { if (!cancelled) setBookOdds(j ?? {}); })
+      .catch(() => { /* non-critical */ });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bot.name]);
+
   const chartData = buildBankrollData(botBets);
   const startLine = 1000;
   const bankrollValues = chartData.map((d) => d.bankroll);
@@ -260,7 +280,9 @@ function BotDetailModal({
                     <TableHead className="text-xs">Match</TableHead>
                     <TableHead className="text-xs">League</TableHead>
                     <TableHead className="text-xs">Market · Selection</TableHead>
-                    <TableHead className="text-xs text-right">Odds</TableHead>
+                    <TableHead className="text-xs text-right">Bot</TableHead>
+                    <TableHead className="text-xs text-right text-emerald-400" title="Unibet odds — Coolbet runs on the same Kambi platform, so this is a strong proxy">Coolbet*</TableHead>
+                    <TableHead className="text-xs text-right text-blue-300">Bet365</TableHead>
                     <TableHead className="text-xs text-right">Stake</TableHead>
                     <TableHead className="text-xs text-right">Model%</TableHead>
                     <TableHead className="text-xs text-center">Result</TableHead>
@@ -287,6 +309,12 @@ function BotDetailModal({
                         {bet.market} · {bet.selection}
                       </TableCell>
                       <TableCell className="text-right tabular-nums py-2">{bet.odds.toFixed(2)}</TableCell>
+                      <TableCell className="text-right tabular-nums py-2 text-emerald-400">
+                        {bookOdds[bet.id]?.unibet != null ? bookOdds[bet.id]!.unibet!.toFixed(2) : "—"}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums py-2 text-blue-300">
+                        {bookOdds[bet.id]?.bet365 != null ? bookOdds[bet.id]!.bet365!.toFixed(2) : "—"}
+                      </TableCell>
                       <TableCell className="text-right tabular-nums py-2 whitespace-nowrap">€{bet.stake.toFixed(2)}</TableCell>
                       <TableCell className="text-right tabular-nums py-2 text-muted-foreground">
                         {(bet.modelProb * 100).toFixed(1)}%
@@ -303,6 +331,10 @@ function BotDetailModal({
                 </TableBody>
               </Table>
             </div>
+            <p className="text-[10px] text-muted-foreground mt-1">
+              *Coolbet column = Unibet odds. Both run on the Kambi platform — strong proxy.
+              Will be replaced with direct Coolbet feed in Phase 1 if proxy quality is insufficient.
+            </p>
           </div>
         )}
       </DialogContent>
