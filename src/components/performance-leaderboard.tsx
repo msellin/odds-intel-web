@@ -131,8 +131,12 @@ function BotModal({
   isElite: boolean;
   onClose: () => void;
 }) {
+  // MATCH-DUPES-CLEANUP: hide voided bets from the per-bot history. They fire when the
+  // OU/odds-quality cleanup (or future audits) retroactively invalidates a settled bet —
+  // pnl=0 by definition, but the row at original odds_at_pick was misleading users into
+  // thinking the bot had taken e.g. Over 1.5 at 3.42 (it did, but the price was garbage).
   const botBets = bets
-    .filter((b) => b.bot === bot.name)
+    .filter((b) => b.bot === bot.name && b.result !== "void")
     .sort((a, b) => new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime());
 
   const chartData = buildChartData(botBets);

@@ -85,7 +85,7 @@ export default async function OpsDashboardPage() {
         icon="📋"
         subtitle={
           lastFixturesFetch
-            ? `Last fixtures fetch pulled ${lastFixturesFetch.records_count ?? "?"} upcoming matches from API-Football (all monitored leagues, ~14 day window). Of those, ${snapshot?.matches_today ?? "?"} play today.`
+            ? `Latest fetch_fixtures stored ${lastFixturesFetch.records_count ?? "?"} fixtures (today's date only). matches_today below counts every match in DB whose kickoff falls today UTC — equal to fetch count once dedup catches up.`
             : `Fixtures pipeline fetches all upcoming matches across monitored leagues. Matches without odds are still tracked for signals and modelling.`
         }
       >
