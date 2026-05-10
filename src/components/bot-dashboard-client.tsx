@@ -152,9 +152,14 @@ function BotDetailModal({
   bets: LiveBet[];
   onClose: () => void;
 }) {
-  const botBets = bets
-    .filter((b) => b.bot === bot.name && b.result !== "void")
+  const [showVoids, setShowVoids] = useState(false);
+
+  const allBotBets = bets
+    .filter((b) => b.bot === bot.name)
     .sort((a, b) => new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime());
+
+  const voidCount = allBotBets.filter((b) => b.result === "void").length;
+  const botBets = showVoids ? allBotBets : allBotBets.filter((b) => b.result !== "void");
 
   // SELF-USE-VALIDATION Phase 2.5: lazy-fetch Unibet (Coolbet proxy) + Bet365
   // odds for this bot's bets, so the user can compare bot-recorded odds
@@ -269,9 +274,23 @@ function BotDetailModal({
         {/* Bets table */}
         {botBets.length > 0 && (
           <div className="mt-4">
-            <p className="text-xs text-muted-foreground mb-2">
-              All bets ({botBets.length} total, newest first)
-            </p>
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">
+                {showVoids
+                  ? `All bets (${botBets.length} total — including ${voidCount} void)`
+                  : `Settled & pending (${botBets.length} shown${voidCount > 0 ? ` · ${voidCount} void hidden` : ""})`}
+                , newest first
+              </p>
+              {voidCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowVoids((v) => !v)}
+                  className="text-[11px] text-muted-foreground underline-offset-2 hover:underline"
+                >
+                  {showVoids ? "Hide voided" : `Show ${voidCount} voided`}
+                </button>
+              )}
+            </div>
             <div className="rounded-md border border-white/[0.08] overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -409,7 +428,13 @@ export function BotDashboardClient({
             Paper trading · Started 2026-04-27 · €1,000/bot starting bankroll · {summary.totalBots} bots configured
           </p>
         </div>
-        <span className="text-xs text-muted-foreground">{bets.length} bets loaded</span>
+        <span className="text-xs text-muted-foreground">
+          {bets.filter((b) => b.result !== "void").length} bets loaded
+          {(() => {
+            const v = bets.filter((b) => b.result === "void").length;
+            return v > 0 ? ` · ${v} void hidden` : "";
+          })()}
+        </span>
       </div>
 
       {/* Summary cards */}
