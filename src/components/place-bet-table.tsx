@@ -71,6 +71,7 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
               <th className="text-right p-2 text-blue-300">Bet365</th>
               <th className="text-right p-2">Pin</th>
               <th className="text-right p-2">Edge</th>
+              <th className="text-right p-2" title="Bot's Kelly-based recommended stake (assuming €1000 bankroll)">Stake</th>
               <th className="text-right p-2">Place</th>
             </tr>
           </thead>
@@ -94,6 +95,7 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
                   <td className="p-2 text-right font-mono text-blue-300">{fmtOdds(c.bet365Odds)}</td>
                   <td className="p-2 text-right font-mono text-muted-foreground">{fmtOdds(c.pinnacleOdds)}</td>
                   <td className="p-2 text-right font-mono">{fmtPct(c.edge)}</td>
+                  <td className="p-2 text-right font-mono text-amber-300">{c.stake != null ? `€${c.stake.toFixed(2)}` : "—"}</td>
                   <td className="p-2 text-right">
                     <button
                       onClick={() => setOpenModal(c)}
@@ -125,7 +127,11 @@ function PlaceBetModal({ candidate, onClose }: { candidate: PlaceableBet; onClos
   const defaultOdds = candidate.unibetOdds ?? candidate.bet365Odds ?? candidate.botOdds;
   const [bookmaker, setBookmaker] = useState<string>(defaultBook);
   const [actualOdds, setActualOdds] = useState<string>(defaultOdds.toFixed(2));
-  const [stake, setStake] = useState<string>("2.00");
+  // Default to the bot's Kelly-recommended stake. Fall back to €2 if missing.
+  const defaultStake = candidate.stake != null && candidate.stake > 0
+    ? candidate.stake.toFixed(2)
+    : "2.00";
+  const [stake, setStake] = useState<string>(defaultStake);
   const [notes, setNotes] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -221,6 +227,12 @@ function PlaceBetModal({ candidate, onClose }: { candidate: PlaceableBet; onClos
             onChange={(e) => setStake(e.target.value)}
             className="w-full mt-1 bg-background border border-border rounded px-2 py-1.5 font-mono"
           />
+          {candidate.stake != null && candidate.stake > 0 && (
+            <span className="text-xs text-muted-foreground">
+              Bot recommends €{candidate.stake.toFixed(2)} (Kelly × tier × €1000 bankroll).
+              Override freely — paper-validation, no real money.
+            </span>
+          )}
         </label>
 
         <label className="block text-sm">
