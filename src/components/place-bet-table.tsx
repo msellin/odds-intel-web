@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { PlaceableBet } from "@/lib/engine-data";
 
-const ACCESSIBLE_BOOKS = ["Coolbet", "Bet365"] as const;
+const ACCESSIBLE_BOOKS = ["Coolbet", "Bet365", "Pinnacle", "Betano", "Unibet", "Marathonbet"] as const;
 
 function fmtOdds(o: number | null | undefined) {
   return o == null ? "—" : o.toFixed(2);
@@ -18,12 +18,15 @@ function fmtKickoff(iso: string) {
 }
 
 export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
-  const [filter, setFilter] = useState<"all" | "edge" | "available">("all");
+  const [filter, setFilter] = useState<"all" | "edge" | "available" | "placed">("all");
   const [openModal, setOpenModal] = useState<PlaceableBet | null>(null);
+
+  const placedCount = candidates.filter((c) => c.alreadyPlaced).length;
 
   const filtered = candidates.filter((c) => {
     if (filter === "edge" && (c.edge ?? 0) < 0.05) return false;
     if (filter === "available" && c.unibetOdds == null && c.bet365Odds == null) return false;
+    if (filter === "placed" && !c.alreadyPlaced) return false;
     return true;
   });
 
@@ -37,7 +40,7 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
 
   return (
     <>
-      <div className="flex gap-2 mb-3 text-xs">
+      <div className="flex gap-2 mb-3 text-xs flex-wrap">
         <button
           onClick={() => setFilter("all")}
           className={`px-2 py-1 rounded ${filter === "all" ? "bg-primary text-primary-foreground" : "bg-muted"}`}
@@ -56,6 +59,14 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
         >
           Has Coolbet/Bet365 odds
         </button>
+        {placedCount > 0 && (
+          <button
+            onClick={() => setFilter("placed")}
+            className={`px-2 py-1 rounded ${filter === "placed" ? "bg-emerald-700 text-white" : "bg-emerald-900/40 text-emerald-400"}`}
+          >
+            ✓ Already placed ({placedCount})
+          </button>
+        )}
       </div>
 
       <div className="rounded-lg border border-border bg-card overflow-x-auto">
@@ -77,12 +88,17 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
           </thead>
           <tbody>
             {filtered.map((c) => {
-              const placeable = c.unibetOdds != null || c.bet365Odds != null;
+              const hasBookOdds = c.unibetOdds != null || c.bet365Odds != null;
               return (
-                <tr key={c.betId} className={`border-t border-border ${placeable ? "" : "opacity-60"}`}>
+                <tr key={c.betId} className={`border-t border-border ${hasBookOdds ? "" : "opacity-70"} ${c.alreadyPlaced ? "bg-emerald-950/30" : ""}`}>
                   <td className="p-2 whitespace-nowrap">{fmtKickoff(c.kickoff)}</td>
                   <td className="p-2">
-                    <div className="font-medium">{c.match}</div>
+                    <div className="font-medium flex items-center gap-1.5">
+                      {c.match}
+                      {c.alreadyPlaced && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-800 text-emerald-200 font-normal">✓ Placed</span>
+                      )}
+                    </div>
                     <div className="text-xs text-muted-foreground">{c.league}</div>
                   </td>
                   <td className="p-2 text-xs">{c.bot}</td>
@@ -99,8 +115,7 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
                   <td className="p-2 text-right">
                     <button
                       onClick={() => setOpenModal(c)}
-                      disabled={!placeable}
-                      className="px-2 py-1 text-xs rounded bg-emerald-600 hover:bg-emerald-500 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed"
+                      className="px-2 py-1 text-xs rounded bg-emerald-600 hover:bg-emerald-500"
                     >
                       Place
                     </button>
@@ -123,8 +138,11 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
 
 function PlaceBetModal({ candidate, onClose }: { candidate: PlaceableBet; onClose: () => void }) {
   const router = useRouter();
-  const defaultBook = candidate.unibetOdds != null ? "Coolbet" : "Bet365";
-  const defaultOdds = candidate.unibetOdds ?? candidate.bet365Odds ?? candidate.botOdds;
+  const defaultBook = candidate.unibetOdds != null ? "Coolbet"
+    : candidate.bet365Odds != null ? "Bet365"
+    : candidate.pinnacleOdds != null ? "Pinnacle"
+    : "Bet365";
+  const defaultOdds = candidate.unibetOdds ?? candidate.bet365Odds ?? candidate.pinnacleOdds ?? candidate.botOdds;
   const [bookmaker, setBookmaker] = useState<string>(defaultBook);
   const [actualOdds, setActualOdds] = useState<string>(defaultOdds.toFixed(2));
   // Default to the bot's Kelly-recommended stake. Fall back to €2 if missing.
@@ -137,7 +155,10 @@ function PlaceBetModal({ candidate, onClose }: { candidate: PlaceableBet; onClos
   const [error, setError] = useState<string | null>(null);
 
   const capturedOdds =
-    bookmaker === "Coolbet" ? candidate.unibetOdds : candidate.bet365Odds;
+    bookmaker === "Coolbet" ? candidate.unibetOdds
+    : bookmaker === "Bet365" ? candidate.bet365Odds
+    : bookmaker === "Pinnacle" ? candidate.pinnacleOdds
+    : null;
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

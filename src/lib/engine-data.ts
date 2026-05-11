@@ -1263,6 +1263,7 @@ export interface PlaceableBet {
   edge: number | null;
   modelProb: number | null;
   stake: number | null;     // suggested €1-3, manually picked
+  alreadyPlaced: boolean;   // true if real_bets already has a bet on this match today
 }
 
 /** Map paper-bet (market, selection) to odds_snapshots (market, selection). */
@@ -1327,6 +1328,18 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
 
   // 2) one round-trip for all relevant odds_snapshots — Unibet, Bet365, Pinnacle
   const matchIds = Array.from(new Set(upcoming.map((b) => b.match_id)));
+
+  // 2b) check which matches already have a real bet placed today (UTC)
+  const todayUtc = new Date();
+  todayUtc.setUTCHours(0, 0, 0, 0);
+  const { data: placedToday } = await admin
+    .from("real_bets")
+    .select("match_id")
+    .in("match_id", matchIds)
+    .gte("placed_at", todayUtc.toISOString());
+  const placedMatchIds = new Set(
+    ((placedToday ?? []) as Array<{ match_id: string }>).map((r) => r.match_id)
+  );
   const { data: snaps } = await admin
     .from("odds_snapshots")
     .select("match_id, market, selection, bookmaker, odds, timestamp")
@@ -1347,7 +1360,7 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
   const out: PlaceableBet[] = [];
   for (const b of upcoming) {
     const k = _mapPaperToSnapshotKey(b.market, b.selection);
-    if (!k) continue;
+    // k is null for asian_handicap (no odds_snapshots mapping) — include anyway
     const m = Array.isArray(b.match) ? b.match[0] : b.match;
     if (!m) continue;
     const ht = m.home_team ? (Array.isArray(m.home_team) ? m.home_team[0] : m.home_team) : null;
@@ -1366,12 +1379,13 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
       market: b.market,
       selection: b.selection,
       botOdds: Number(b.odds_at_pick),
-      unibetOdds: snapMap.get(snapKey(b.match_id, k.market, k.selection, "Unibet")) ?? null,
-      bet365Odds: snapMap.get(snapKey(b.match_id, k.market, k.selection, "Bet365")) ?? null,
-      pinnacleOdds: snapMap.get(snapKey(b.match_id, k.market, k.selection, "Pinnacle")) ?? null,
+      unibetOdds: k ? (snapMap.get(snapKey(b.match_id, k.market, k.selection, "Unibet")) ?? null) : null,
+      bet365Odds: k ? (snapMap.get(snapKey(b.match_id, k.market, k.selection, "Bet365")) ?? null) : null,
+      pinnacleOdds: k ? (snapMap.get(snapKey(b.match_id, k.market, k.selection, "Pinnacle")) ?? null) : null,
       edge: b.edge_percent != null ? Number(b.edge_percent) : null,
       modelProb: b.model_probability != null ? Number(b.model_probability) : null,
       stake: b.stake != null ? Number(b.stake) : null,
+      alreadyPlaced: placedMatchIds.has(b.match_id),
     });
   }
 
