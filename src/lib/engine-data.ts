@@ -1334,16 +1334,18 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
   // 2) one round-trip for all relevant odds_snapshots — Unibet, Bet365, Pinnacle
   const matchIds = Array.from(new Set(upcoming.map((b) => b.match_id)));
 
-  // 2b) check which matches already have a real bet placed today (UTC)
+  // 2b) check which simulated bets already have a real bet placed today (UTC)
   const todayUtc = new Date();
   todayUtc.setUTCHours(0, 0, 0, 0);
   const { data: placedToday } = await admin
     .from("real_bets")
-    .select("match_id")
+    .select("simulated_bet_id")
     .in("match_id", matchIds)
     .gte("placed_at", todayUtc.toISOString());
-  const placedMatchIds = new Set(
-    ((placedToday ?? []) as Array<{ match_id: string }>).map((r) => r.match_id)
+  const placedSimBetIds = new Set(
+    ((placedToday ?? []) as Array<{ simulated_bet_id: string | null }>)
+      .filter((r) => r.simulated_bet_id != null)
+      .map((r) => r.simulated_bet_id as string)
   );
   const { data: snaps } = await admin
     .from("odds_snapshots")
@@ -1418,7 +1420,7 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
       edge: b.edge_percent != null ? Number(b.edge_percent) : null,
       modelProb: b.model_probability != null ? Number(b.model_probability) : null,
       stake: b.stake != null ? Number(b.stake) : null,
-      alreadyPlaced: placedMatchIds.has(b.match_id),
+      alreadyPlaced: placedSimBetIds.has(b.id),
     });
   }
 
