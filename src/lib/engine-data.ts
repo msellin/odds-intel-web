@@ -1286,6 +1286,11 @@ function _mapPaperToSnapshotKey(market: string, selection: string): { market: st
       }
     }
   }
+  if (m === "double_chance") {
+    // selections stored as "1x", "x2", "12" in odds_snapshots (lowercase)
+    const dc = s.replace(/\s+/g, "");  // "1X" → "1x", "X2" → "x2", "12" → "12"
+    if (["1x", "x2", "12"].includes(dc)) return { market: "double_chance", selection: dc };
+  }
   return null;
 }
 
@@ -1342,31 +1347,59 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
   );
   const { data: snaps } = await admin
     .from("odds_snapshots")
-    .select("match_id, market, selection, bookmaker, odds, timestamp")
+    .select("match_id, market, selection, bookmaker, odds, handicap_line, timestamp")
     .in("match_id", matchIds)
     .in("bookmaker", ["Unibet", "Bet365", "Pinnacle"])
     .order("timestamp", { ascending: false })
     .range(0, 9999);
 
-  // Index snaps by match_id|market|selection|bookmaker → most-recent odds
+  type SnapRow = { match_id: string; market: string; selection: string; bookmaker: string; odds: number; handicap_line: number | null };
+  // Standard markets: match_id|market|selection|bookmaker → most-recent odds
   const snapKey = (m: string, mk: string, sel: string, bm: string) => `${m}|${mk}|${sel}|${bm}`;
   const snapMap = new Map<string, number>();
-  for (const s of (snaps ?? []) as Array<{ match_id: string; market: string; selection: string; bookmaker: string; odds: number }>) {
-    const k = snapKey(s.match_id, s.market, s.selection, s.bookmaker);
-    if (!snapMap.has(k)) snapMap.set(k, Number(s.odds));  // first-seen = most recent
+  // AH: match_id|selection|handicap_line|bookmaker → most-recent odds (5-part key)
+  const ahSnapKey = (m: string, sel: string, hl: number, bm: string) => `${m}|${sel}|${hl}|${bm}`;
+  const ahSnapMap = new Map<string, number>();
+  for (const s of (snaps ?? []) as SnapRow[]) {
+    if (s.market === "asian_handicap" && s.handicap_line != null) {
+      const k = ahSnapKey(s.match_id, s.selection, s.handicap_line, s.bookmaker);
+      if (!ahSnapMap.has(k)) ahSnapMap.set(k, Number(s.odds));
+    } else {
+      const k = snapKey(s.match_id, s.market, s.selection, s.bookmaker);
+      if (!snapMap.has(k)) snapMap.set(k, Number(s.odds));  // first-seen = most recent
+    }
   }
 
   // 3) build PlaceableBet rows
   const out: PlaceableBet[] = [];
   for (const b of upcoming) {
     const k = _mapPaperToSnapshotKey(b.market, b.selection);
-    // k is null for asian_handicap (no odds_snapshots mapping) — include anyway
+    // k is null for asian_handicap — use ahSnapMap with parsed handicap_line instead
     const m = Array.isArray(b.match) ? b.match[0] : b.match;
     if (!m) continue;
     const ht = m.home_team ? (Array.isArray(m.home_team) ? m.home_team[0] : m.home_team) : null;
     const at = m.away_team ? (Array.isArray(m.away_team) ? m.away_team[0] : m.away_team) : null;
     const lg = m.league ? (Array.isArray(m.league) ? m.league[0] : m.league) : null;
     const bot = b.bot ? (Array.isArray(b.bot) ? b.bot[0] : b.bot) : null;
+
+    // AH odds: selection is "Home -1.25" → parse to (sel="home", hl=-1.25) for ahSnapMap
+    let unibetOdds: number | null = null;
+    let bet365Odds: number | null = null;
+    let pinnacleOdds: number | null = null;
+    if (k) {
+      unibetOdds = snapMap.get(snapKey(b.match_id, k.market, k.selection, "Unibet")) ?? null;
+      bet365Odds = snapMap.get(snapKey(b.match_id, k.market, k.selection, "Bet365")) ?? null;
+      pinnacleOdds = snapMap.get(snapKey(b.match_id, k.market, k.selection, "Pinnacle")) ?? null;
+    } else if ((b.market || "").toLowerCase() === "asian_handicap") {
+      const ahMatch = (b.selection || "").toLowerCase().trim().match(/^(home|away)\s+([+-]?\d+\.?\d*)$/);
+      if (ahMatch) {
+        const ahSel = ahMatch[1];
+        const ahHl = parseFloat(ahMatch[2]);
+        unibetOdds = ahSnapMap.get(ahSnapKey(b.match_id, ahSel, ahHl, "Unibet")) ?? null;
+        bet365Odds = ahSnapMap.get(ahSnapKey(b.match_id, ahSel, ahHl, "Bet365")) ?? null;
+        pinnacleOdds = ahSnapMap.get(ahSnapKey(b.match_id, ahSel, ahHl, "Pinnacle")) ?? null;
+      }
+    }
 
     out.push({
       betId: b.id,
@@ -1379,9 +1412,9 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
       market: b.market,
       selection: b.selection,
       botOdds: Number(b.odds_at_pick),
-      unibetOdds: k ? (snapMap.get(snapKey(b.match_id, k.market, k.selection, "Unibet")) ?? null) : null,
-      bet365Odds: k ? (snapMap.get(snapKey(b.match_id, k.market, k.selection, "Bet365")) ?? null) : null,
-      pinnacleOdds: k ? (snapMap.get(snapKey(b.match_id, k.market, k.selection, "Pinnacle")) ?? null) : null,
+      unibetOdds,
+      bet365Odds,
+      pinnacleOdds,
       edge: b.edge_percent != null ? Number(b.edge_percent) : null,
       modelProb: b.model_probability != null ? Number(b.model_probability) : null,
       stake: b.stake != null ? Number(b.stake) : null,
