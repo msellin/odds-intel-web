@@ -1037,7 +1037,7 @@ export async function getTodayBets(): Promise<LiveBet[]> {
     .from("simulated_bets")
     .select(
       `id, match_id, market, selection, odds_at_pick, pick_time, stake,
-       model_probability, edge_percent, closing_odds, clv, result, pnl,
+       model_probability, calibrated_prob, edge_percent, closing_odds, clv, result, pnl,
        bankroll_after, news_triggered, reasoning, recommended_bookmaker,
        bot:bot_id(id, name, strategy),
        match:match_id(id, date,
@@ -1174,7 +1174,7 @@ export async function getAllBets(): Promise<LiveBet[]> {
     .from("simulated_bets")
     .select(
       `id, match_id, market, selection, odds_at_pick, pick_time, stake,
-       model_probability, edge_percent, closing_odds, clv, result, pnl,
+       model_probability, calibrated_prob, edge_percent, closing_odds, clv, result, pnl,
        bankroll_after, news_triggered, reasoning,
        bot:bot_id(id, name, strategy),
        match:match_id(id, date,
@@ -1229,7 +1229,7 @@ function toBet(row: SimBetRow): LiveBet {
     market: row.market,
     selection: row.selection,
     odds: Number(row.odds_at_pick),
-    modelProb: Number(row.model_probability),
+    modelProb: Number(row.calibrated_prob ?? row.model_probability),
     impliedProb: row.odds_at_pick > 0 ? 1 / Number(row.odds_at_pick) : 0,
     edge: Number(row.edge_percent), // DB stores as decimal (0.10 = 10%)
     stake: Number(row.stake),
@@ -1306,7 +1306,7 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
     .from("simulated_bets")
     .select(
       `id, match_id, market, selection, odds_at_pick, pick_time, stake,
-       model_probability, edge_percent,
+       model_probability, calibrated_prob, edge_percent,
        bot:bot_id(id, name),
        match:match_id(id, date,
          home_team:home_team_id(name),
@@ -1418,7 +1418,7 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
       bet365Odds,
       pinnacleOdds,
       edge: b.edge_percent != null ? Number(b.edge_percent) : null,
-      modelProb: b.model_probability != null ? Number(b.model_probability) : null,
+      modelProb: b.calibrated_prob != null ? Number(b.calibrated_prob) : (b.model_probability != null ? Number(b.model_probability) : null),
       stake: b.stake != null ? Number(b.stake) : null,
       alreadyPlaced: placedSimBetIds.has(b.id),
     });
