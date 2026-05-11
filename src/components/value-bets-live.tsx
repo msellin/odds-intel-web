@@ -12,12 +12,14 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { LiveBet } from "@/lib/engine-data";
+import type { LiveBet, BookOddsEntry } from "@/lib/engine-data";
 
 interface ValueBetsLiveProps {
   bets: (LiveBet & { botCount: number })[];
   totalCount: number;
   userTier: "free" | "pro" | "elite";
+  oddsVerifiedAt?: string | null;
+  bookOdds?: Record<string, BookOddsEntry>;
 }
 
 const ALL = "__all__";
@@ -96,11 +98,13 @@ function BetCard({
   isPro,
   isElite,
   isFreeHighlight = false,
+  bookOddsEntry,
 }: {
   bet: LiveBet & { botCount: number };
   isPro: boolean;
   isElite: boolean;
   isFreeHighlight?: boolean;
+  bookOddsEntry?: BookOddsEntry;
 }) {
   return (
     <div className={cn(
@@ -146,22 +150,25 @@ function BetCard({
 
       {/* Elite: odds + model prob + stake + explain */}
       {isElite && (
-        <div className="flex items-center gap-3 mt-2 text-[11px] text-muted-foreground">
-          <span>
-            <span className="opacity-50 mr-0.5">@</span>
-            <span className="font-mono font-semibold text-foreground/80">{bet.odds.toFixed(2)}</span>
-          </span>
-          <span>
-            <span className="opacity-50 mr-0.5">p=</span>
-            <span className="font-mono text-foreground/80">{(bet.modelProb * 100).toFixed(0)}%</span>
-          </span>
-          <span>
-            <span className="opacity-50 mr-0.5">stake</span>
-            <span className="font-mono text-foreground/80">{bet.stake.toFixed(1)}</span>
-          </span>
-          <div className="ml-auto">
-            <BetExplainButton betId={bet.id} />
+        <div className="mt-2">
+          <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+            <span>
+              <span className="opacity-50 mr-0.5">@</span>
+              <span className="font-mono font-semibold text-foreground/80">{bet.odds.toFixed(2)}</span>
+            </span>
+            <span>
+              <span className="opacity-50 mr-0.5">p=</span>
+              <span className="font-mono text-foreground/80">{(bet.modelProb * 100).toFixed(0)}%</span>
+            </span>
+            <span>
+              <span className="opacity-50 mr-0.5">stake</span>
+              <span className="font-mono text-foreground/80">{bet.stake.toFixed(1)}</span>
+            </span>
+            <div className="ml-auto">
+              <BetExplainButton betId={bet.id} />
+            </div>
           </div>
+          {bookOddsEntry && <BookOddsLine entry={bookOddsEntry} />}
         </div>
       )}
 
@@ -176,7 +183,48 @@ function BetCard({
   );
 }
 
-export function ValueBetsLive({ bets, totalCount, userTier }: ValueBetsLiveProps) {
+function FreshnessChip({ verifiedAt }: { verifiedAt: string }) {
+  const ageMs = Date.now() - new Date(verifiedAt).getTime();
+  const ageMin = Math.floor(ageMs / 60000);
+  let label: string;
+  let cls: string;
+  if (ageMin < 45) {
+    label = `${ageMin}m ago`;
+    cls = "text-emerald-500 border-emerald-500/20 bg-emerald-500/10";
+  } else if (ageMin < 90) {
+    const h = Math.floor(ageMin / 60);
+    const m = ageMin % 60;
+    label = h > 0 ? `${h}h ${m}m ago` : `${ageMin}m ago`;
+    cls = "text-amber-500 border-amber-500/20 bg-amber-500/10";
+  } else {
+    const h = Math.floor(ageMin / 60);
+    label = `${h}h ago — check`;
+    cls = "text-red-500 border-red-500/20 bg-red-500/10";
+  }
+  return (
+    <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-medium", cls)}>
+      Odds verified {label}
+    </span>
+  );
+}
+
+function BookOddsLine({ entry }: { entry: BookOddsEntry }) {
+  const parts: string[] = [];
+  if (entry.bet365 != null) parts.push(`Bet365: ${entry.bet365.toFixed(2)}`);
+  if (entry.unibet != null) parts.push(`Unibet: ${entry.unibet.toFixed(2)}`);
+  if (parts.length === 0) return null;
+  const best = entry.bet365 != null && entry.unibet != null
+    ? entry.bet365 >= entry.unibet ? "Bet365" : "Unibet"
+    : null;
+  return (
+    <p className="text-[10px] text-muted-foreground/70 mt-0.5">
+      {parts.join(" · ")}
+      {best && <span className="text-emerald-500/80 ml-1">← {best}</span>}
+    </p>
+  );
+}
+
+export function ValueBetsLive({ bets, totalCount, userTier, oddsVerifiedAt, bookOdds }: ValueBetsLiveProps) {
   const [league, setLeague] = useState(ALL);
   const [bot, setBot] = useState(ALL);
 
@@ -211,12 +259,13 @@ export function ValueBetsLive({ bets, totalCount, userTier }: ValueBetsLiveProps
   return (
     <div className="space-y-4">
       {/* Compact header */}
-      <div className="flex items-center gap-2.5">
+      <div className="flex flex-wrap items-center gap-2.5">
         <Target className="h-4 w-4 text-primary shrink-0" />
         <h1 className="font-mono text-lg font-bold tracking-tight">Value Bets</h1>
         <Badge variant="secondary" className="font-mono text-xs">
           {userTier === "free" ? `1 of ${totalCount}` : filtered.length}
         </Badge>
+        {oddsVerifiedAt && <FreshnessChip verifiedAt={oddsVerifiedAt} />}
       </div>
 
       {/* Compact stats row — pro/elite only */}
@@ -372,7 +421,7 @@ export function ValueBetsLive({ bets, totalCount, userTier }: ValueBetsLiveProps
           {/* Mobile card list */}
           <div className="sm:hidden divide-y divide-border/20">
             {filtered.map((bet) => (
-              <BetCard key={bet.id} bet={bet} isPro={isPro} isElite={isElite} />
+              <BetCard key={bet.id} bet={bet} isPro={isPro} isElite={isElite} bookOddsEntry={bookOdds?.[bet.id]} />
             ))}
           </div>
 
@@ -427,7 +476,7 @@ export function ValueBetsLive({ bets, totalCount, userTier }: ValueBetsLiveProps
               </thead>
               <tbody className="divide-y divide-border/20">
                 {filtered.map((bet) => (
-                  <BetRow key={bet.id} bet={bet} isPro={isPro} isElite={isElite} />
+                  <BetRow key={bet.id} bet={bet} isPro={isPro} isElite={isElite} bookOddsEntry={bookOdds?.[bet.id]} />
                 ))}
               </tbody>
             </table>
@@ -461,10 +510,12 @@ function BetRow({
   bet,
   isPro,
   isElite,
+  bookOddsEntry,
 }: {
   bet: LiveBet & { botCount: number };
   isPro: boolean;
   isElite: boolean;
+  bookOddsEntry?: BookOddsEntry;
 }) {
   return (
     <tr className={cn(
@@ -481,6 +532,7 @@ function BetRow({
           <div>
             <p className="font-medium text-foreground/90 truncate max-w-[200px]">{bet.match}</p>
             <p className="text-[10px] text-muted-foreground/60 truncate">{bet.league}</p>
+            {isElite && bookOddsEntry && <BookOddsLine entry={bookOddsEntry} />}
           </div>
         </div>
       </td>

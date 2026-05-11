@@ -128,6 +128,7 @@ export interface LiveMatch {
 
 export interface LiveBet {
   id: string;
+  matchId: string;
   bot: string;
   match: string;
   league: string;
@@ -146,6 +147,7 @@ export interface LiveBet {
   bankrollAfter: number | null;
   closingOdds: number | null;
   clv: number | null;
+  recommendedBookmaker: string | null;
 }
 
 // ─── Supabase row types ─────────────────────────────────────────────────────
@@ -1036,7 +1038,7 @@ export async function getTodayBets(): Promise<LiveBet[]> {
     .select(
       `id, match_id, market, selection, odds_at_pick, pick_time, stake,
        model_probability, edge_percent, closing_odds, clv, result, pnl,
-       bankroll_after, news_triggered, reasoning,
+       bankroll_after, news_triggered, reasoning, recommended_bookmaker,
        bot:bot_id(id, name, strategy),
        match:match_id(id, date,
          home_team:home_team_id(name),
@@ -1219,6 +1221,7 @@ function toBet(row: SimBetRow): LiveBet {
 
   return {
     id: row.id,
+    matchId: row.match_id || "",
     bot: bot?.name || "unknown",
     match: matchName,
     league: leagueName,
@@ -1237,6 +1240,7 @@ function toBet(row: SimBetRow): LiveBet {
     bankrollAfter: row.bankroll_after != null ? Number(row.bankroll_after) : null,
     closingOdds: row.closing_odds != null ? Number(row.closing_odds) : null,
     clv: row.clv != null ? Number(row.clv) : null,
+    recommendedBookmaker: row.recommended_bookmaker ?? null,
   };
 }
 
@@ -3426,4 +3430,63 @@ export async function getLastLiveSnapshotAge(): Promise<string | null> {
     .limit(1)
     .single();
   return data?.captured_at ?? null;
+}
+
+/** Most recent odds_snapshots.timestamp across the given match IDs.
+ *  Used by the value-bets page to show "Verified Xm ago". */
+export async function getOddsVerifiedAt(matchIds: string[]): Promise<string | null> {
+  if (matchIds.length === 0) return null;
+  const admin = createSupabaseAdmin();
+  const { data } = await admin
+    .from("odds_snapshots")
+    .select("timestamp")
+    .in("match_id", matchIds)
+    .order("timestamp", { ascending: false })
+    .limit(1)
+    .single();
+  return (data as { timestamp: string } | null)?.timestamp ?? null;
+}
+
+export interface BookOddsEntry {
+  unibet: number | null;
+  bet365: number | null;
+}
+
+/** Per-bet Unibet + Bet365 odds for value-bets bookmaker display (Elite only).
+ *  Returns a map keyed by bet ID. */
+export async function getValueBetBookOdds(
+  bets: Array<{ id: string; matchId: string; market: string; selection: string }>
+): Promise<Record<string, BookOddsEntry>> {
+  if (bets.length === 0) return {};
+  const admin = createSupabaseAdmin();
+  const matchIds = Array.from(new Set(bets.map((b) => b.matchId)));
+
+  const { data: snaps } = await admin
+    .from("odds_snapshots")
+    .select("match_id, market, selection, bookmaker, odds, timestamp")
+    .in("match_id", matchIds)
+    .in("bookmaker", ["Unibet", "Bet365"])
+    .order("timestamp", { ascending: false })
+    .range(0, 9999);
+
+  const snapKey = (m: string, mk: string, sel: string, bm: string) => `${m}|${mk}|${sel}|${bm}`;
+  const snapMap = new Map<string, number>();
+  for (const s of (snaps ?? []) as Array<{ match_id: string; market: string; selection: string; bookmaker: string; odds: number }>) {
+    const k = snapKey(s.match_id, s.market, s.selection, s.bookmaker);
+    if (!snapMap.has(k)) snapMap.set(k, Number(s.odds));
+  }
+
+  const out: Record<string, BookOddsEntry> = {};
+  for (const b of bets) {
+    const k = _mapPaperToSnapshotKey(b.market, b.selection);
+    if (!k) {
+      out[b.id] = { unibet: null, bet365: null };
+      continue;
+    }
+    out[b.id] = {
+      unibet: snapMap.get(snapKey(b.matchId, k.market, k.selection, "Unibet")) ?? null,
+      bet365: snapMap.get(snapKey(b.matchId, k.market, k.selection, "Bet365")) ?? null,
+    };
+  }
+  return out;
 }

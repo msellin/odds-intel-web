@@ -1,7 +1,14 @@
 export const dynamic = 'force-dynamic';
 
 import { createSupabaseServer } from "@/lib/supabase-server";
-import { getTodayBets, getTodayPicks, type LiveBet } from "@/lib/engine-data";
+import {
+  getTodayBets,
+  getTodayPicks,
+  getOddsVerifiedAt,
+  getValueBetBookOdds,
+  type LiveBet,
+  type BookOddsEntry,
+} from "@/lib/engine-data";
 import { ValueBetsLive } from "@/components/value-bets-live";
 import { ValueBetsGate } from "@/components/value-bets-gate";
 import { TodayPicksPreview } from "@/components/today-picks-preview";
@@ -89,10 +96,24 @@ export default async function ValueBetsPage() {
   const sorted = [...allBets].sort((a, b) => b.edge - a.edge);
   const { bets, totalCount } = sanitizeBets(sorted, isPro, isElite);
 
+  const matchIds = Array.from(new Set(bets.map((b) => b.matchId).filter(Boolean)));
+  const [oddsVerifiedAt, bookOdds] = isElite && matchIds.length > 0
+    ? await Promise.all([
+        getOddsVerifiedAt(matchIds),
+        getValueBetBookOdds(bets.map((b) => ({ id: b.id, matchId: b.matchId, market: b.market, selection: b.selection }))),
+      ])
+    : [null, {} as Record<string, BookOddsEntry>];
+
   return (
     <div className="space-y-6">
       <TodayPicksPreview picks={todayPicks} isPro={isPro} isElite={isElite} />
-      <ValueBetsLive bets={bets} totalCount={totalCount} userTier={userTier} />
+      <ValueBetsLive
+        bets={bets}
+        totalCount={totalCount}
+        userTier={userTier}
+        oddsVerifiedAt={oddsVerifiedAt}
+        bookOdds={bookOdds}
+      />
     </div>
   );
 }
