@@ -3499,6 +3499,7 @@ export async function getOddsVerifiedAt(matchIds: string[]): Promise<string | nu
 export interface BookOddsEntry {
   unibet: number | null;
   bet365: number | null;
+  pinnacle: number | null;
 }
 
 /** Per-bet Unibet + Bet365 odds for value-bets bookmaker display (Elite only).
@@ -3514,7 +3515,7 @@ export async function getValueBetBookOdds(
     .from("odds_snapshots")
     .select("match_id, market, selection, bookmaker, odds, timestamp")
     .in("match_id", matchIds)
-    .in("bookmaker", ["Unibet", "Bet365"])
+    .in("bookmaker", ["Unibet", "Bet365", "Pinnacle"])
     .order("timestamp", { ascending: false })
     .range(0, 9999);
 
@@ -3529,12 +3530,13 @@ export async function getValueBetBookOdds(
   for (const b of bets) {
     const k = _mapPaperToSnapshotKey(b.market, b.selection);
     if (!k) {
-      out[b.id] = { unibet: null, bet365: null };
+      out[b.id] = { unibet: null, bet365: null, pinnacle: null };
       continue;
     }
     out[b.id] = {
       unibet: snapMap.get(snapKey(b.matchId, k.market, k.selection, "Unibet")) ?? null,
       bet365: snapMap.get(snapKey(b.matchId, k.market, k.selection, "Bet365")) ?? null,
+      pinnacle: snapMap.get(snapKey(b.matchId, k.market, k.selection, "Pinnacle")) ?? null,
     };
   }
   return out;

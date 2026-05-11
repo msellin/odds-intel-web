@@ -106,11 +106,13 @@ function BetCard({
   isFreeHighlight?: boolean;
   bookOddsEntry?: BookOddsEntry;
 }) {
+  const stale = !isFreeHighlight && !!bookOddsEntry && isEdgeStale(bookOddsEntry, bet.modelProb, bet.kickoff, bet.result);
   return (
     <div className={cn(
       "px-4 py-3",
       bet.edge * 100 >= 10 && "bg-emerald-500/[0.03]",
-      isFreeHighlight && "ring-1 ring-inset ring-emerald-500/20"
+      isFreeHighlight && "ring-1 ring-inset ring-emerald-500/20",
+      stale && "opacity-50",
     )}>
       {/* Match + result */}
       <div className="flex items-start justify-between gap-2">
@@ -168,7 +170,7 @@ function BetCard({
               <BetExplainButton betId={bet.id} />
             </div>
           </div>
-          {bookOddsEntry && <BookOddsLine entry={bookOddsEntry} />}
+          {bookOddsEntry && <BookOddsLine entry={bookOddsEntry} modelProb={bet.modelProb} />}
         </div>
       )}
 
@@ -208,19 +210,53 @@ function FreshnessChip({ verifiedAt }: { verifiedAt: string }) {
   );
 }
 
-function BookOddsLine({ entry }: { entry: BookOddsEntry }) {
-  const parts: string[] = [];
-  if (entry.bet365 != null) parts.push(`Bet365: ${entry.bet365.toFixed(2)}`);
-  if (entry.unibet != null) parts.push(`Unibet: ${entry.unibet.toFixed(2)}`);
-  if (parts.length === 0) return null;
-  const best = entry.bet365 != null && entry.unibet != null
-    ? entry.bet365 >= entry.unibet ? "Bet365" : "Unibet"
-    : null;
+function getBestNow(entry: BookOddsEntry): { name: string; odds: number } | null {
+  const candidates = [
+    entry.bet365 != null ? { name: "Bet365", odds: entry.bet365 } : null,
+    entry.unibet != null ? { name: "Unibet", odds: entry.unibet } : null,
+    entry.pinnacle != null ? { name: "Pinnacle", odds: entry.pinnacle } : null,
+  ].filter((c): c is { name: string; odds: number } => c !== null);
+  if (candidates.length === 0) return null;
+  return candidates.reduce((a, b) => (a.odds >= b.odds ? a : b));
+}
+
+function isEdgeStale(entry: BookOddsEntry, modelProb: number, kickoff: string, result: string): boolean {
+  if (result !== "pending") return false;
+  const minsToKickoff = (new Date(kickoff).getTime() - Date.now()) / 60000;
+  if (minsToKickoff > 0 && minsToKickoff < 45) return true;
+  const best = getBestNow(entry);
+  if (best && best.odds * modelProb - 1 < 0.02) return true;
+  return false;
+}
+
+function BookOddsLine({ entry, modelProb }: { entry: BookOddsEntry; modelProb: number }) {
+  const best = getBestNow(entry);
+  if (!best) return null;
+  const currEdgePct = (best.odds * modelProb - 1) * 100;
+  const edgeCls =
+    currEdgePct >= 5 ? "text-emerald-500" :
+    currEdgePct >= 2 ? "text-amber-500" :
+    "text-red-400";
+
+  const allParts = [
+    entry.bet365 != null ? `Bet365 ${entry.bet365.toFixed(2)}` : null,
+    entry.unibet != null ? `Unibet ${entry.unibet.toFixed(2)}` : null,
+    entry.pinnacle != null ? `Pinnacle ${entry.pinnacle.toFixed(2)}` : null,
+  ].filter(Boolean) as string[];
+
   return (
-    <p className="text-[10px] text-muted-foreground/70 mt-0.5">
-      {parts.join(" · ")}
-      {best && <span className="text-emerald-500/80 ml-1">← {best}</span>}
-    </p>
+    <div className="mt-1 space-y-0.5">
+      <p className="text-[10px]">
+        <span className="text-muted-foreground/50">Best now </span>
+        <span className="font-medium text-foreground/75">{best.name} {best.odds.toFixed(2)}</span>
+        <span className={cn("ml-1.5 font-mono font-semibold", edgeCls)}>
+          {currEdgePct >= 0 ? "+" : ""}{currEdgePct.toFixed(1)}% live
+        </span>
+      </p>
+      {allParts.length > 0 && (
+        <p className="text-[10px] text-muted-foreground/45">{allParts.join(" · ")}</p>
+      )}
+    </div>
   );
 }
 
@@ -517,10 +553,12 @@ function BetRow({
   isElite: boolean;
   bookOddsEntry?: BookOddsEntry;
 }) {
+  const stale = !!bookOddsEntry && isEdgeStale(bookOddsEntry, bet.modelProb, bet.kickoff, bet.result);
   return (
     <tr className={cn(
       "hover:bg-muted/5 transition-colors",
       bet.edge * 100 >= 10 && "bg-emerald-500/5",
+      stale && "opacity-50",
     )}>
       <td className="py-3 pl-4 pr-2">
         <div className="flex items-center gap-2">
@@ -532,7 +570,7 @@ function BetRow({
           <div>
             <p className="font-medium text-foreground/90 truncate max-w-[200px]">{bet.match}</p>
             <p className="text-[10px] text-muted-foreground/60 truncate">{bet.league}</p>
-            {isElite && bookOddsEntry && <BookOddsLine entry={bookOddsEntry} />}
+            {isElite && bookOddsEntry && <BookOddsLine entry={bookOddsEntry} modelProb={bet.modelProb} />}
           </div>
         </div>
       </td>
