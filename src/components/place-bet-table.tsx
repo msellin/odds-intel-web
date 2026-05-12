@@ -6,6 +6,17 @@ import type { PlaceableBet } from "@/lib/engine-data";
 
 const ACCESSIBLE_BOOKS = ["Coolbet", "Bet365", "Pinnacle", "Betano", "Unibet", "Marathonbet"] as const;
 
+function fmtAHSelection(selection: string): string {
+  const m = selection.match(/^(home|away)\s+([+-]?\d+(?:\.\d+)?)$/i);
+  if (!m) return selection;
+  const team = m[1].charAt(0).toUpperCase() + m[1].slice(1);
+  const hl = parseFloat(m[2]);
+  const homeStart = hl > 0 ? hl : 0;
+  const awayStart = hl < 0 ? -hl : 0;
+  const fmt = (n: number) => n % 1 === 0 ? String(Math.round(n)) : String(n);
+  return `${team} · ${fmt(homeStart)}-${fmt(awayStart)}`;
+}
+
 function fmtOdds(o: number | null | undefined) {
   return o == null ? "—" : o.toFixed(2);
 }
@@ -104,7 +115,7 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
                   <td className="p-2 text-xs">{c.bot}</td>
                   <td className="p-2 text-xs">
                     <div>{c.market}</div>
-                    <div className="text-muted-foreground">{c.selection}</div>
+                    <div className="text-muted-foreground">{fmtAHSelection(c.selection)}</div>
                   </td>
                   <td className="p-2 text-right font-mono">{fmtOdds(c.botOdds)}</td>
                   <td className="p-2 text-right font-mono text-emerald-400">{fmtOdds(c.unibetOdds)}</td>
@@ -203,7 +214,7 @@ function PlaceBetModal({ candidate, onClose }: { candidate: PlaceableBet; onClos
       >
         <h2 className="text-lg font-bold">Log real bet</h2>
         <div className="text-xs text-muted-foreground">
-          {candidate.match} · {candidate.market} {candidate.selection} · bot {candidate.bot}
+          {candidate.match} · {candidate.market} {fmtAHSelection(candidate.selection)} · bot {candidate.bot}
         </div>
 
         <label className="block text-sm">
