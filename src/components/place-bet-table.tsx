@@ -169,7 +169,8 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
                     <div className="text-xs text-muted-foreground">{fmtKickoff(c.kickoff)} · {c.bot}</div>
                   </td>
                   <td className="p-2 text-xs">
-                    {fmtSelShort(c.market, c.selection)}
+                    <div>{c.market}</div>
+                    <div className="text-muted-foreground">{fmtAHSelection(c.selection)}</div>
                   </td>
                   <td className="p-2 text-right font-mono text-emerald-400">{fmtOdds(c.unibetOdds)}</td>
                   <td className="p-2 text-right font-mono text-blue-300">{fmtOdds(c.bet365Odds)}</td>
