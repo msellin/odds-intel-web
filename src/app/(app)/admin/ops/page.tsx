@@ -85,7 +85,7 @@ export default async function OpsDashboardPage() {
         icon="📋"
         subtitle={
           lastFixturesFetch
-            ? `Latest fetch_fixtures stored ${lastFixturesFetch.records_count ?? "?"} fixtures (today's date only). matches_today below counts every match in DB whose kickoff falls today UTC — equal to fetch count once dedup catches up.`
+            ? `Latest fetch_fixtures stored ${lastFixturesFetch.records_count ?? "?"} fixtures (today's date only). matches_today counts every match whose kickoff falls today UTC. The Matches page may show 1–5 more: yesterday's unfinished games stay visible until settled.`
             : `Fixtures pipeline fetches all upcoming matches across monitored leagues. Matches without odds are still tracked for signals and modelling.`
         }
       >
@@ -130,7 +130,7 @@ export default async function OpsDashboardPage() {
       <Section
         title="Odds Pipeline"
         icon="📊"
-        subtitle="Pre-match odds only (not live). Polls all today's matches every 30min from 7am–10pm UTC. Each poll row = one bookmaker × one market × one selection. Multiple markets per match are stored."
+        subtitle="Pre-match odds only (not live). Polls every 30min from 7am–10pm UTC. Low % early morning is normal — bookmakers open lines gradually. Typical full-day coverage: ~75–80% of matches. Remaining ~20% are youth leagues, reserves, or obscure competitions that bookmakers never price."
       >
         <Grid>
           <Stat label="Total rows today" value={snapshot?.odds_snapshots_today}

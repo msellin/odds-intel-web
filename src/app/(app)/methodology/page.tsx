@@ -225,7 +225,7 @@ export default function MethodologyPage() {
             ["No survivor bias", "The track record includes every bet placed. We do not remove underperforming bots or retroactively adjust strategy based on results."],
             ["No selective publishing", "Predictions are generated and stored before kickoff. They cannot be modified after the result is known."],
             ["No guarantee of profit", "Expected value betting is long-run positive, but variance over short samples is high. Any 50-bet sample can be negative even with a genuine edge."],
-            ["No single-source data", "We cross-validate API-Football with Kambi odds and flag discrepancies. No single data source failure breaks the pipeline."],
+            ["No single-source data", "Odds are sourced from 13 bookmakers via API-Football. Settlement results are cross-checked against ESPN as a backup. No single data source failure breaks the pipeline."],
           ].map(([label, desc]) => (
             <div key={label} className="rounded-lg border border-amber-500/15 bg-amber-500/5 px-4 py-3">
               <p className="font-semibold text-foreground/80 mb-0.5">{label}</p>

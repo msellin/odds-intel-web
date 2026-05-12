@@ -21,7 +21,8 @@ export function SuperadminTierBarClient({
       body: JSON.stringify({ tier }),
     });
     router.refresh();
-    setLoading(false);
+    // Keep loading=true — the component remounts with fresh props after refresh,
+    // resetting state to false. Avoids double-click races during the RSC re-render.
   }
 
   return (
