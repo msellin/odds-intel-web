@@ -28,7 +28,7 @@ function fmtSelShort(market: string, selection: string): string {
   const ah = selection.match(/^(home|away)\s+([+-]?\d+(?:\.\d+)?)$/i);
   if (ah) {
     const side = ah[1].toLowerCase() === "home" ? "H" : "A";
-    return `AH ${side}${ah[2]}`;
+    return `AH ${side} ${ah[2]}`;
   }
   const ou = selection.match(/^(over|under)\s+([\d.]+)$/i);
   if (ou) return `${ou[1].toLowerCase() === "over" ? "O" : "U"}${ou[2]}`;
@@ -118,18 +118,19 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
                   <span className="flex-shrink-0 text-xs px-1.5 py-0.5 rounded bg-emerald-800 text-emerald-200">✓</span>
                 )}
               </div>
-              <div className="flex items-center gap-2 mt-2">
-                <span className="text-xs font-medium flex-shrink-0">{fmtSelShort(c.market, c.selection)}</span>
-                <span className="font-mono text-xs text-muted-foreground flex-shrink-0">{fmtOdds(c.botOdds)}</span>
-                <span className="font-mono text-emerald-400 font-semibold text-sm flex-shrink-0">{fmtOdds(c.unibetOdds)}</span>
-                <span className="font-mono text-xs text-muted-foreground flex-shrink-0">{fmtPct(c.edge)}</span>
-                <div className="flex-1" />
-                <button
-                  onClick={() => setOpenModal(c)}
-                  className="flex-shrink-0 px-3 py-1.5 text-sm font-medium rounded bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700"
-                >
-                  Place
-                </button>
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-xs font-medium">{fmtSelShort(c.market, c.selection)}</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs text-muted-foreground">{fmtOdds(c.botOdds)}</span>
+                  <span className="font-mono text-emerald-400 font-semibold">{fmtOdds(c.unibetOdds)}</span>
+                  <span className="font-mono text-xs text-muted-foreground">{fmtPct(c.edge)}</span>
+                  <button
+                    onClick={() => setOpenModal(c)}
+                    className="px-3 py-1.5 text-sm font-medium rounded bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700"
+                  >
+                    Place
+                  </button>
+                </div>
               </div>
             </div>
           );
