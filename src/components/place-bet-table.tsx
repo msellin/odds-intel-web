@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { PlaceableBet } from "@/lib/engine-data";
 
-const ACCESSIBLE_BOOKS = ["Coolbet", "Bet365", "Pinnacle", "Betano", "Unibet", "Marathonbet"] as const;
 
 function fmtAHSelection(selection: string): string {
   const m = selection.match(/^(home|away)\s+([+-]?\d+(?:\.\d+)?)$/i);
@@ -149,12 +148,8 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
 
 function PlaceBetModal({ candidate, onClose }: { candidate: PlaceableBet; onClose: () => void }) {
   const router = useRouter();
-  const defaultBook = candidate.unibetOdds != null ? "Coolbet"
-    : candidate.bet365Odds != null ? "Bet365"
-    : candidate.pinnacleOdds != null ? "Pinnacle"
-    : "Bet365";
   const defaultOdds = candidate.unibetOdds ?? candidate.bet365Odds ?? candidate.pinnacleOdds ?? candidate.botOdds;
-  const [bookmaker, setBookmaker] = useState<string>(defaultBook);
+  const bookmaker = "Coolbet";
   const [actualOdds, setActualOdds] = useState<string>(defaultOdds.toFixed(2));
   // Default to the bot's Kelly-recommended stake. Fall back to €2 if missing.
   const defaultStake = candidate.stake != null && candidate.stake > 0
@@ -165,11 +160,7 @@ function PlaceBetModal({ candidate, onClose }: { candidate: PlaceableBet; onClos
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const capturedOdds =
-    bookmaker === "Coolbet" ? candidate.unibetOdds
-    : bookmaker === "Bet365" ? candidate.bet365Odds
-    : bookmaker === "Pinnacle" ? candidate.pinnacleOdds
-    : null;
+  const capturedOdds = candidate.unibetOdds;
 
   const parsedOdds = parseFloat(actualOdds);
   const liveEdge =
@@ -223,18 +214,12 @@ function PlaceBetModal({ candidate, onClose }: { candidate: PlaceableBet; onClos
           {candidate.match} · {candidate.market} {fmtAHSelection(candidate.selection)} · bot {candidate.bot}
         </div>
 
-        <label className="block text-sm">
+        <div className="block text-sm">
           Bookmaker
-          <select
-            value={bookmaker}
-            onChange={(e) => setBookmaker(e.target.value)}
-            className="w-full mt-1 bg-background border border-border rounded px-2 py-1.5"
-          >
-            {ACCESSIBLE_BOOKS.map((b) => (
-              <option key={b} value={b}>{b}</option>
-            ))}
-          </select>
-        </label>
+          <div className="w-full mt-1 bg-background border border-border rounded px-2 py-1.5 text-muted-foreground">
+            Coolbet
+          </div>
+        </div>
 
         <label className="block text-sm">
           Actual odds taken
