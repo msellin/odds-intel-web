@@ -119,31 +119,39 @@ function BetCard({
   isFreeHighlight?: boolean;
   bookOddsEntry?: BookOddsEntry;
 }) {
-  const stale = !isFreeHighlight && !!bookOddsEntry && isEdgeStale(bookOddsEntry, bet.modelProb, bet.kickoff, bet.result);
+  const kickoffSoon = !isFreeHighlight && isKickoffSoon(bet.kickoff, bet.result);
+  const oddsMoved = !isFreeHighlight && !!bookOddsEntry && isOddsMoved(bookOddsEntry, bet.modelProb, bet.result);
   return (
     <div className={cn(
       "px-4 py-3",
       bet.edge * 100 >= 10 && "bg-emerald-500/[0.03]",
       isFreeHighlight && "ring-1 ring-inset ring-emerald-500/20",
-      stale && "opacity-50",
     )}>
       {/* Match + result */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          {(isFreeHighlight || (isElite && bet.botCount > 1)) && (
-            <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-              {isFreeHighlight && (
-                <span className="rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-bold text-emerald-400 uppercase tracking-wide">
-                  Free pick
-                </span>
-              )}
-              {isElite && bet.botCount > 1 && (
-                <span className="rounded border border-blue-500/30 bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-bold text-blue-400">
-                  {bet.botCount} bots
-                </span>
-              )}
-            </div>
-          )}
+          <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+            {isFreeHighlight && (
+              <span className="rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-bold text-emerald-400 uppercase tracking-wide">
+                Free pick
+              </span>
+            )}
+            {isElite && bet.botCount > 1 && (
+              <span className="rounded border border-blue-500/30 bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-bold text-blue-400">
+                {bet.botCount} bots
+              </span>
+            )}
+            {kickoffSoon && (
+              <span className="rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-amber-400">
+                KO soon
+              </span>
+            )}
+            {oddsMoved && !kickoffSoon && (
+              <span className="rounded border border-border/40 bg-muted/30 px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground">
+                Odds moved
+              </span>
+            )}
+          </div>
           <p className="font-medium text-sm text-foreground/90 truncate">{bet.match}</p>
           <p className="text-[10px] text-muted-foreground/60">{bet.league}</p>
         </div>
@@ -233,13 +241,16 @@ function getBestNow(entry: BookOddsEntry): { name: string; odds: number } | null
   return candidates.reduce((a, b) => (a.odds >= b.odds ? a : b));
 }
 
-function isEdgeStale(entry: BookOddsEntry, modelProb: number, kickoff: string, result: string): boolean {
+function isKickoffSoon(kickoff: string, result: string): boolean {
   if (result !== "pending") return false;
   const minsToKickoff = (new Date(kickoff).getTime() - Date.now()) / 60000;
-  if (minsToKickoff > 0 && minsToKickoff < 45) return true;
+  return minsToKickoff > 0 && minsToKickoff < 45;
+}
+
+function isOddsMoved(entry: BookOddsEntry, modelProb: number, result: string): boolean {
+  if (result !== "pending") return false;
   const best = getBestNow(entry);
-  if (best && modelProb - 1 / best.odds < 0.02) return true;
-  return false;
+  return !!best && modelProb - 1 / best.odds < 0.02;
 }
 
 function BookOddsLine({ entry, modelProb }: { entry: BookOddsEntry; modelProb: number }) {
@@ -365,6 +376,15 @@ export function ValueBetsLive({ bets, totalCount, userTier, oddsVerifiedAt, book
             </span>
           )}
         </div>
+      )}
+
+      {/* Legend */}
+      {isPro && bets.length > 0 && (
+        <p className="text-[10px] text-muted-foreground/50">
+          Edge % = model probability minus book-implied probability.{" "}
+          <span className="text-amber-400/70 font-medium">KO soon</span> = kicks off in &lt;45 min.{" "}
+          <span className="text-muted-foreground font-medium">Odds moved</span> = live edge dropped below 2pp since placement.
+        </p>
       )}
 
       {/* Main content */}
@@ -566,12 +586,12 @@ function BetRow({
   isElite: boolean;
   bookOddsEntry?: BookOddsEntry;
 }) {
-  const stale = !!bookOddsEntry && isEdgeStale(bookOddsEntry, bet.modelProb, bet.kickoff, bet.result);
+  const kickoffSoon = isKickoffSoon(bet.kickoff, bet.result);
+  const oddsMoved = !!bookOddsEntry && isOddsMoved(bookOddsEntry, bet.modelProb, bet.result);
   return (
     <tr className={cn(
       "hover:bg-muted/5 transition-colors",
       bet.edge * 100 >= 10 && "bg-emerald-500/5",
-      stale && "opacity-50",
     )}>
       <td className="py-3 pl-4 pr-2">
         <div className="flex items-center gap-2">
@@ -581,7 +601,19 @@ function BetRow({
             </span>
           )}
           <div>
-            <p className="font-medium text-foreground/90 truncate max-w-[200px]">{bet.match}</p>
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <p className="font-medium text-foreground/90 truncate max-w-[200px]">{bet.match}</p>
+              {kickoffSoon && (
+                <span className="shrink-0 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-amber-400">
+                  KO soon
+                </span>
+              )}
+              {oddsMoved && !kickoffSoon && (
+                <span className="shrink-0 rounded border border-border/40 bg-muted/30 px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground">
+                  Odds moved
+                </span>
+              )}
+            </div>
             <p className="text-[10px] text-muted-foreground/60 truncate">{bet.league}</p>
             {isElite && bookOddsEntry && <BookOddsLine entry={bookOddsEntry} modelProb={bet.modelProb} />}
           </div>
