@@ -11,13 +11,13 @@ import { MetaPixel } from "@/components/meta-pixel";
 const inter = Inter({
   variable: "--font-sans",
   subsets: ["latin"],
-  display: "optional",
+  display: "swap",
 });
 
 const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains",
   subsets: ["latin"],
-  display: "optional",
+  display: "swap",
 });
 
 export const metadata: Metadata = {

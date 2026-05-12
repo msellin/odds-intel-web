@@ -1,5 +1,3 @@
-"use client";
-
 import type { PublicMatch, MatchH2H, TeamStanding } from "@/lib/engine-data";
 import { interestScore, interestIndicator } from "@/lib/match-utils";
 import {

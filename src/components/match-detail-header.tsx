@@ -1,40 +1,7 @@
-"use client";
-
-import { useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import type { PublicMatch, LiveSnapshot } from "@/lib/engine-data";
 import { MatchScoreDisplay } from "@/components/match-score-display";
-
-function TeamLogo({ logo, name, size = "lg" }: { logo: string | null; name: string; size?: "sm" | "lg" }) {
-  const [failed, setFailed] = useState(false);
-  const initial = name.charAt(0).toUpperCase();
-  const px = size === "lg" ? "size-10 sm:size-12" : "size-6";
-  const textSize = size === "lg" ? "text-sm" : "text-[8px]";
-
-  if (logo && !failed) {
-    return (
-      <div className={`relative ${px} shrink-0 overflow-hidden rounded-full bg-white/[0.06]`}>
-        <Image
-          src={logo}
-          alt={name}
-          fill
-          sizes={size === "lg" ? "48px" : "24px"}
-          className="object-contain p-0.5"
-          loading="eager"
-          unoptimized
-          onError={() => setFailed(true)}
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div className={`${px} shrink-0 rounded-full bg-white/[0.08] flex items-center justify-center`}>
-      <span className={`${textSize} font-bold text-muted-foreground`}>{initial}</span>
-    </div>
-  );
-}
+import { TeamLogoHeader } from "@/components/team-logo-header";
 
 const GRADE_STYLES = {
   A: "bg-green-500/20 text-green-400 border-green-500/30",
@@ -80,7 +47,7 @@ export function MatchDetailHeader({ match, initialSnapshot }: MatchDetailHeaderP
       {/* Score hero */}
       <div className="flex items-center justify-center gap-3 sm:gap-6 py-2">
         <div className="flex flex-col items-center gap-1.5 min-w-0 flex-1">
-          <TeamLogo logo={match.logoHome} name={match.homeTeam} />
+          <TeamLogoHeader logo={match.logoHome} name={match.homeTeam} />
           <span className="text-[11px] sm:text-sm font-medium text-foreground text-center leading-tight">
             {match.homeTeam}
           </span>
@@ -106,7 +73,7 @@ export function MatchDetailHeader({ match, initialSnapshot }: MatchDetailHeaderP
         </div>
 
         <div className="flex flex-col items-center gap-1.5 min-w-0 flex-1">
-          <TeamLogo logo={match.logoAway} name={match.awayTeam} />
+          <TeamLogoHeader logo={match.logoAway} name={match.awayTeam} />
           <span className="text-[11px] sm:text-sm font-medium text-foreground text-center leading-tight max-w-[110px] sm:max-w-none">
             {match.awayTeam}
           </span>

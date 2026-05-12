@@ -1,5 +1,3 @@
-"use client";
-
 import type { ModelMarketUsersData } from "@/lib/engine-data";
 
 interface Props {
