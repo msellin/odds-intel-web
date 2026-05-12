@@ -171,6 +171,12 @@ function PlaceBetModal({ candidate, onClose }: { candidate: PlaceableBet; onClos
     : bookmaker === "Pinnacle" ? candidate.pinnacleOdds
     : null;
 
+  const parsedOdds = parseFloat(actualOdds);
+  const liveEdge =
+    candidate.modelProb != null && !isNaN(parsedOdds) && parsedOdds > 1
+      ? candidate.modelProb - 1 / parsedOdds
+      : null;
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -241,10 +247,21 @@ function PlaceBetModal({ candidate, onClose }: { candidate: PlaceableBet; onClos
             onChange={(e) => setActualOdds(e.target.value)}
             className="w-full mt-1 bg-background border border-border rounded px-2 py-1.5 font-mono"
           />
-          {capturedOdds != null && (
-            <span className="text-xs text-muted-foreground">
-              We showed {capturedOdds.toFixed(2)} — slippage logged automatically.
-            </span>
+          {candidate.modelProb != null && (
+            <div className="mt-2 rounded border border-border bg-muted/30 px-3 py-2 text-xs space-y-1">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Original edge (bot odds {fmtOdds(candidate.botOdds)})</span>
+                <span className={`font-mono font-semibold ${(candidate.edge ?? 0) > 0 ? "text-emerald-400" : "text-red-400"}`}>
+                  {candidate.edge != null ? `${candidate.edge > 0 ? "+" : ""}${(candidate.edge * 100).toFixed(1)}%` : "—"}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Edge at your odds</span>
+                <span className={`font-mono font-semibold ${liveEdge == null ? "text-muted-foreground" : liveEdge > 0 ? "text-emerald-400" : "text-red-400"}`}>
+                  {liveEdge == null ? "—" : `${liveEdge > 0 ? "+" : ""}${(liveEdge * 100).toFixed(1)}%${liveEdge <= 0 ? " ✗ skip" : ""}`}
+                </span>
+              </div>
+            </div>
           )}
         </label>
 
