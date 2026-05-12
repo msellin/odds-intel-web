@@ -243,7 +243,7 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
             All
             {totalCount > 0 && (
               <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                statusTab === "all" ? "bg-white/[0.08] text-muted-foreground/70" : "bg-white/[0.06] text-muted-foreground/80"
+                statusTab === "all" ? "bg-white/[0.08] text-muted-foreground/80" : "bg-white/[0.06] text-muted-foreground/80"
               }`}>
                 {totalCount}
               </span>

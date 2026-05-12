@@ -92,6 +92,7 @@ export default async function ValueBetsPage() {
 function ValueBetsSkeleton() {
   return (
     <div className="space-y-4 animate-pulse">
+      <p className="text-sm text-muted-foreground px-1">Loading today&apos;s value bets…</p>
       <div className="h-28 rounded-xl border border-white/[0.06] bg-card/40" />
       <div className="h-10 w-64 rounded-lg bg-muted/30" />
       {Array.from({ length: 4 }).map((_, i) => (

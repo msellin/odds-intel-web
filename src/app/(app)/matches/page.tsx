@@ -153,6 +153,8 @@ async function AboveFoldContent({ dayOffset }: { dayOffset: number }) {
 function MatchListSkeleton() {
   return (
     <div className="space-y-3">
+      {/* Text node so browser has an LCP candidate before the real list streams in */}
+      <p className="text-sm text-muted-foreground px-1">Loading today&apos;s matches…</p>
       {Array.from({ length: 5 }).map((_, i) => (
         <div key={i} className="overflow-hidden rounded-xl border border-white/[0.06] bg-card/40 animate-pulse">
           <div className="h-10 sm:h-12 w-full bg-muted/30" />
