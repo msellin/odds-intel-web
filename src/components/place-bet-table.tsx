@@ -79,18 +79,58 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
         )}
       </div>
 
-      <div className="rounded-lg border border-border bg-card overflow-x-auto">
+      {/* Mobile: card list */}
+      <div className="sm:hidden space-y-2">
+        {filtered.map((c) => {
+          const hasBookOdds = c.unibetOdds != null || c.bet365Odds != null;
+          return (
+            <div
+              key={c.betId}
+              className={`rounded-lg border bg-card p-3 ${c.alreadyPlaced ? "border-emerald-700/50 bg-emerald-950/30" : "border-border"} ${hasBookOdds ? "" : "opacity-60"}`}
+            >
+              <div className="flex items-start justify-between gap-2 mb-1">
+                <div className="min-w-0">
+                  <div className="font-semibold text-sm leading-tight">{c.match}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    {c.league} · {fmtKickoff(c.kickoff)}
+                  </div>
+                </div>
+                {c.alreadyPlaced && (
+                  <span className="flex-shrink-0 text-xs px-1.5 py-0.5 rounded bg-emerald-800 text-emerald-200">✓</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <div className="flex-1 min-w-0">
+                  <span className="text-xs text-muted-foreground">{c.market} </span>
+                  <span className="text-xs font-medium">{fmtAHSelection(c.selection)}</span>
+                </div>
+                <span className="font-mono text-emerald-400 font-semibold text-sm">{fmtOdds(c.unibetOdds)}</span>
+                <span className="font-mono text-xs text-muted-foreground">{fmtPct(c.edge)}</span>
+                <button
+                  onClick={() => setOpenModal(c)}
+                  className="flex-shrink-0 px-3 py-1.5 text-sm font-medium rounded bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700"
+                >
+                  Place
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Desktop: table */}
+      <div className="hidden sm:block rounded-lg border border-border bg-card overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
               <th className="text-left p-2">Match</th>
               <th className="text-left p-2">Sel</th>
               <th className="text-right p-2 text-emerald-400">Coolbet*</th>
-              <th className="text-right p-2 hidden sm:table-cell">Bet365</th>
-              <th className="text-right p-2 hidden sm:table-cell">Pin</th>
-              <th className="text-right p-2 hidden sm:table-cell">Bot</th>
+              <th className="text-right p-2">Bet365</th>
+              <th className="text-right p-2">Pin</th>
+              <th className="text-right p-2">Bot</th>
               <th className="text-right p-2">Edge</th>
-              <th className="text-right p-2 hidden sm:table-cell" title="Bot's Kelly-based recommended stake (assuming €1000 bankroll)">Stake</th>
+              <th className="text-right p-2" title="Bot's Kelly-based recommended stake (assuming €1000 bankroll)">Stake</th>
               <th className="text-right p-2">Place</th>
             </tr>
           </thead>
@@ -100,25 +140,25 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
               return (
                 <tr key={c.betId} className={`border-t border-border ${hasBookOdds ? "" : "opacity-70"} ${c.alreadyPlaced ? "bg-emerald-950/30" : ""}`}>
                   <td className="p-2">
-                    <div className="font-medium flex items-center gap-1.5 flex-wrap">
+                    <div className="font-medium flex items-center gap-1.5">
                       {c.match}
                       {c.alreadyPlaced && (
                         <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-800 text-emerald-200 font-normal">✓ Placed</span>
                       )}
                     </div>
                     <div className="text-xs text-muted-foreground">{c.league}</div>
-                    <div className="text-xs text-muted-foreground sm:hidden">{fmtKickoff(c.kickoff)} · {c.bot}</div>
+                    <div className="text-xs text-muted-foreground">{fmtKickoff(c.kickoff)} · {c.bot}</div>
                   </td>
                   <td className="p-2 text-xs">
                     <div>{c.market}</div>
                     <div className="text-muted-foreground">{fmtAHSelection(c.selection)}</div>
                   </td>
                   <td className="p-2 text-right font-mono text-emerald-400">{fmtOdds(c.unibetOdds)}</td>
-                  <td className="p-2 text-right font-mono text-blue-300 hidden sm:table-cell">{fmtOdds(c.bet365Odds)}</td>
-                  <td className="p-2 text-right font-mono text-muted-foreground hidden sm:table-cell">{fmtOdds(c.pinnacleOdds)}</td>
-                  <td className="p-2 text-right font-mono hidden sm:table-cell">{fmtOdds(c.botOdds)}</td>
+                  <td className="p-2 text-right font-mono text-blue-300">{fmtOdds(c.bet365Odds)}</td>
+                  <td className="p-2 text-right font-mono text-muted-foreground">{fmtOdds(c.pinnacleOdds)}</td>
+                  <td className="p-2 text-right font-mono">{fmtOdds(c.botOdds)}</td>
                   <td className="p-2 text-right font-mono">{fmtPct(c.edge)}</td>
-                  <td className="p-2 text-right font-mono text-amber-300 hidden sm:table-cell">{c.stake != null ? `€${c.stake.toFixed(2)}` : "—"}</td>
+                  <td className="p-2 text-right font-mono text-amber-300">{c.stake != null ? `€${c.stake.toFixed(2)}` : "—"}</td>
                   <td className="p-2 text-right">
                     <button
                       onClick={() => setOpenModal(c)}
@@ -134,8 +174,7 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
         </table>
       </div>
       <p className="text-xs text-muted-foreground mt-2">
-        *Coolbet column shows Unibet odds (proxy — both run on Kambi). Replaced with direct Coolbet
-        feed in Phase 1 if proxy quality is insufficient.
+        *Coolbet column shows Unibet odds (proxy — both run on Kambi).
       </p>
 
       {openModal && <PlaceBetModal candidate={openModal} onClose={() => setOpenModal(null)} />}
