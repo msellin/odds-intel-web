@@ -92,6 +92,19 @@ function formatBot(bot: string): string {
   return bot.replace("bot_", "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+// API-Football stores AH handicap_line from the HOME team's perspective for both sides.
+// "Away -2" stored internally means home gives 2 (away receives 2 = "Away +2" in standard AH).
+// Flip the sign on the numeric part for away selections so the label matches standard notation.
+function formatSelection(market: string, selection: string): string {
+  if (market !== "asian_handicap") return selection;
+  const m = selection.match(/^(away)\s+([+-]?\d+\.?\d*)$/i);
+  if (!m) return selection;
+  const num = parseFloat(m[2]);
+  if (num === 0) return selection;
+  const flipped = num > 0 ? `-${num}` : `+${Math.abs(num)}`;
+  return `Away ${flipped}`;
+}
+
 // Mobile card — Pro sees exact edge %; selection/odds/extras still gated
 function BetCard({
   bet,
@@ -141,7 +154,7 @@ function BetCard({
       <div className="flex items-center gap-2 mt-2 flex-wrap">
         <Badge variant="outline" className="text-[10px] shrink-0">{bet.market}</Badge>
         {isElite || isFreeHighlight ? (
-          <span className="rounded bg-white/[0.06] px-2 py-0.5 text-xs font-medium">{bet.selection}</span>
+          <span className="rounded bg-white/[0.06] px-2 py-0.5 text-xs font-medium">{formatSelection(bet.market, bet.selection)}</span>
         ) : (
           <LockedCell tier="elite" />
         )}
@@ -409,7 +422,7 @@ export function ValueBetsLive({ bets, totalCount, userTier, oddsVerifiedAt, book
                       <Badge variant="outline" className="text-[10px]">{topBet.market}</Badge>
                     </td>
                     <td className="py-3 px-2 text-center">
-                      <span className="rounded bg-white/[0.06] px-2 py-0.5 font-medium">{topBet.selection}</span>
+                      <span className="rounded bg-white/[0.06] px-2 py-0.5 font-medium">{formatSelection(topBet.market, topBet.selection)}</span>
                     </td>
                     <td className="py-3 px-2 text-center">
                       <span className={cn("font-mono font-bold", edgeColor(topBet.edge))}>
@@ -579,7 +592,7 @@ function BetRow({
       </td>
       <td className="py-3 px-2 text-center">
         {isElite ? (
-          <span className="rounded bg-white/[0.06] px-2 py-0.5 font-medium">{bet.selection}</span>
+          <span className="rounded bg-white/[0.06] px-2 py-0.5 font-medium">{formatSelection(bet.market, bet.selection)}</span>
         ) : (
           <LockedCell tier="elite" />
         )}
