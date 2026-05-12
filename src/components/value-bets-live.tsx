@@ -238,14 +238,14 @@ function isEdgeStale(entry: BookOddsEntry, modelProb: number, kickoff: string, r
   const minsToKickoff = (new Date(kickoff).getTime() - Date.now()) / 60000;
   if (minsToKickoff > 0 && minsToKickoff < 45) return true;
   const best = getBestNow(entry);
-  if (best && best.odds * modelProb - 1 < 0.02) return true;
+  if (best && modelProb - 1 / best.odds < 0.02) return true;
   return false;
 }
 
 function BookOddsLine({ entry, modelProb }: { entry: BookOddsEntry; modelProb: number }) {
   const best = getBestNow(entry);
   if (!best) return null;
-  const currEdgePct = (best.odds * modelProb - 1) * 100;
+  const currEdgePct = (modelProb - 1 / best.odds) * 100;
   const edgeCls =
     currEdgePct >= 5 ? "text-emerald-500" :
     currEdgePct >= 2 ? "text-amber-500" :
