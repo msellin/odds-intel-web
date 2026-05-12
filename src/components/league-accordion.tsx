@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { ChevronDown, ChevronRight, TrendingUp, TrendingDown } from "lucide-react";
 import type { PublicMatch, LiveSnapshot } from "@/lib/engine-data";
 import { getCountryFlag } from "@/lib/country-flags";
@@ -48,18 +47,18 @@ function OddsCell({
 function TeamLogo({ logo, name, priority = false }: { logo: string | null; name: string; priority?: boolean }) {
   const [failed, setFailed] = useState(false);
   const initial = name.charAt(0).toUpperCase();
+  const src = logo ? `/api/logo?url=${encodeURIComponent(logo)}&w=20` : null;
 
-  if (logo && !failed) {
+  if (src && !failed) {
     return (
-      <div className="relative size-4 sm:size-5 shrink-0 overflow-hidden rounded-full bg-white/[0.06]">
-        <Image
-          src={logo}
+      <div className="size-4 sm:size-5 shrink-0 overflow-hidden rounded-full bg-white/[0.06]">
+        <img
+          src={src}
           alt={name}
-          fill
-          sizes="20px"
-          className="object-contain p-0.5"
-          priority={priority}
-          unoptimized
+          width={20}
+          height={20}
+          loading={priority ? "eager" : "lazy"}
+          className="size-full object-contain p-0.5"
           onError={() => setFailed(true)}
         />
       </div>
