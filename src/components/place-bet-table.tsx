@@ -16,6 +16,25 @@ function fmtAHSelection(selection: string): string {
   return `${team} · ${fmt(homeStart)}-${fmt(awayStart)}`;
 }
 
+function fmtSelShort(market: string, selection: string): string {
+  const s = selection.toLowerCase().trim();
+  const mkt = market.toUpperCase().trim();
+  if (mkt === "1X2" || mkt === "MATCH_WINNER") {
+    if (s === "home") return "1X2 H";
+    if (s === "away") return "1X2 A";
+    if (s === "draw") return "1X2 D";
+  }
+  if (mkt === "BTTS") return s === "yes" ? "BTTS Y" : "BTTS N";
+  const ah = selection.match(/^(home|away)\s+([+-]?\d+(?:\.\d+)?)$/i);
+  if (ah) {
+    const side = ah[1].toLowerCase() === "home" ? "H" : "A";
+    return `AH ${side}${ah[2]}`;
+  }
+  const ou = selection.match(/^(over|under)\s+([\d.]+)$/i);
+  if (ou) return `${ou[1].toLowerCase() === "over" ? "O" : "U"}${ou[2]}`;
+  return `${market} ${selection}`;
+}
+
 function fmtOdds(o: number | null | undefined) {
   return o == null ? "—" : o.toFixed(2);
 }
@@ -100,12 +119,11 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
                 )}
               </div>
               <div className="flex items-center gap-2 mt-2">
-                <div className="flex-1 min-w-0">
-                  <span className="text-xs text-muted-foreground">{c.market} </span>
-                  <span className="text-xs font-medium">{fmtAHSelection(c.selection)}</span>
-                </div>
-                <span className="font-mono text-emerald-400 font-semibold text-sm">{fmtOdds(c.unibetOdds)}</span>
-                <span className="font-mono text-xs text-muted-foreground">{fmtPct(c.edge)}</span>
+                <span className="text-xs font-medium flex-shrink-0">{fmtSelShort(c.market, c.selection)}</span>
+                <span className="font-mono text-xs text-muted-foreground flex-shrink-0">{fmtOdds(c.botOdds)}</span>
+                <span className="font-mono text-emerald-400 font-semibold text-sm flex-shrink-0">{fmtOdds(c.unibetOdds)}</span>
+                <span className="font-mono text-xs text-muted-foreground flex-shrink-0">{fmtPct(c.edge)}</span>
+                <div className="flex-1" />
                 <button
                   onClick={() => setOpenModal(c)}
                   className="flex-shrink-0 px-3 py-1.5 text-sm font-medium rounded bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700"
