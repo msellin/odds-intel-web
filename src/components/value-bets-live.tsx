@@ -153,7 +153,7 @@ function BetCard({
             )}
           </div>
           <p className="font-medium text-sm text-foreground/90 truncate">{bet.match}</p>
-          <p className="text-[10px] text-muted-foreground/60">{bet.league}</p>
+          <p className="text-[10px] text-muted-foreground/80">{bet.league}</p>
         </div>
         <ResultBadge result={bet.result} />
       </div>
@@ -176,15 +176,15 @@ function BetCard({
         <div className="mt-2">
           <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
             <span>
-              <span className="opacity-50 mr-0.5">@</span>
+              <span className="opacity-70 mr-0.5">@</span>
               <span className="font-mono font-semibold text-foreground/80">{bet.odds.toFixed(2)}</span>
             </span>
             <span>
-              <span className="opacity-50 mr-0.5">p=</span>
+              <span className="opacity-70 mr-0.5">p=</span>
               <span className="font-mono text-foreground/80">{(bet.modelProb * 100).toFixed(0)}%</span>
             </span>
             <span>
-              <span className="opacity-50 mr-0.5">stake</span>
+              <span className="opacity-70 mr-0.5">stake</span>
               <span className="font-mono text-foreground/80">{bet.stake.toFixed(1)}</span>
             </span>
             <div className="ml-auto">
@@ -198,7 +198,7 @@ function BetCard({
       {/* Free pick: show odds */}
       {isFreeHighlight && (
         <div className="mt-2 text-[11px] text-muted-foreground">
-          <span className="opacity-50 mr-0.5">@</span>
+          <span className="opacity-70 mr-0.5">@</span>
           <span className="font-mono font-semibold text-foreground/80">{bet.odds.toFixed(2)}</span>
         </div>
       )}
@@ -271,7 +271,7 @@ function BookOddsLine({ entry, modelProb }: { entry: BookOddsEntry; modelProb: n
   return (
     <div className="mt-1 space-y-0.5">
       <p className="text-[10px]">
-        <span className="text-muted-foreground/50">Best now </span>
+        <span className="text-muted-foreground/80">Best now </span>
         <span className="font-medium text-foreground/75">{best.name} {best.odds.toFixed(2)}</span>
         <span className={cn("ml-1.5 font-mono font-semibold", edgeCls)}>
           {currEdgePct >= 0 ? "+" : ""}{currEdgePct.toFixed(1)}% live
@@ -380,7 +380,7 @@ export function ValueBetsLive({ bets, totalCount, userTier, oddsVerifiedAt, book
 
       {/* Legend */}
       {isPro && bets.length > 0 && (
-        <p className="text-[10px] text-muted-foreground/50">
+        <p className="text-[10px] text-muted-foreground/80">
           Edge % = model probability minus book-implied probability.{" "}
           <span className="text-amber-400/70 font-medium">KO soon</span> = kicks off in &lt;45 min.{" "}
           <span className="text-muted-foreground font-medium">Odds moved</span> = live edge dropped below 2pp since placement.
@@ -436,7 +436,7 @@ export function ValueBetsLive({ bets, totalCount, userTier, oddsVerifiedAt, book
                         Free pick
                       </span>
                       <p className="font-medium text-foreground/90 truncate max-w-[240px]">{topBet.match}</p>
-                      <p className="text-[10px] text-muted-foreground/60">{topBet.league}</p>
+                      <p className="text-[10px] text-muted-foreground/80">{topBet.league}</p>
                     </td>
                     <td className="py-3 px-2 text-center">
                       <Badge variant="outline" className="text-[10px]">{topBet.market}</Badge>
@@ -473,7 +473,7 @@ export function ValueBetsLive({ bets, totalCount, userTier, oddsVerifiedAt, book
           {/* Upgrade footer */}
           <div className="flex flex-col gap-2 border-t border-border/30 bg-card/30 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-[11px] text-muted-foreground">
-              <Lock className="inline h-3 w-3 mr-1 text-muted-foreground/50" />
+              <Lock className="inline h-3 w-3 mr-1 text-muted-foreground/80" />
               {lockedCount} more bets today — Pro unlocks all picks by match and market. Elite adds exact selections, odds, model probabilities, and Kelly sizing.
             </p>
             <a
@@ -614,7 +614,7 @@ function BetRow({
                 </span>
               )}
             </div>
-            <p className="text-[10px] text-muted-foreground/60 truncate">{bet.league}</p>
+            <p className="text-[10px] text-muted-foreground/80 truncate">{bet.league}</p>
             {isElite && bookOddsEntry && <BookOddsLine entry={bookOddsEntry} modelProb={bet.modelProb} />}
           </div>
         </div>

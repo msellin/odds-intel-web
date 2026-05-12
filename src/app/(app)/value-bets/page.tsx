@@ -1,13 +1,8 @@
 export const dynamic = 'force-dynamic';
 
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { createSupabaseServer } from "@/lib/supabase-server";
-
-export const metadata: Metadata = {
-  title: "Value Bets Today — OddsIntel",
-  description: "AI-powered value bets for today's football matches. Real edge calculated by 17 paper trading bots across 280+ leagues.",
-  alternates: { canonical: "https://oddsintel.app/value-bets" },
-};
 import {
   getTodayBets,
   getTodayPicks,
@@ -21,17 +16,17 @@ import { ValueBetsGate } from "@/components/value-bets-gate";
 import { TodayPicksPreview } from "@/components/today-picks-preview";
 import { getUserTier } from "@/lib/get-user-tier";
 
-// Strip common club prefixes so "FK Septemvri Sofia" and "Septemvri Sofia"
-// hash to the same key. Covers the most frequent Kambi vs AF-Football name mismatches.
+export const metadata: Metadata = {
+  title: "Value Bets Today — OddsIntel",
+  description: "AI-powered value bets for today's football matches. Real edge calculated by 17 paper trading bots across 280+ leagues.",
+  alternates: { canonical: "https://oddsintel.app/value-bets" },
+};
+
 const CLUB_PREFIX_RE = /^(FK|FC|AC|AS|SC|RC|CD|CF|BK|SK|NK|GK|SV|TSV|BSC|SG|RB|SpVgg)\s+/i;
 function normalizeTeam(name: string): string {
   return name.replace(CLUB_PREFIX_RE, "").toLowerCase().trim();
 }
 
-// Deduplicate bets by kickoff+team names (normalised)+market+selection.
-// Multiple bots place the same pick independently, and the same fixture can
-// appear under two league records when Kambi uses a different league/team name
-// than API-Football. We keep the highest-edge instance and track bot count for Elite.
 function deduplicateBets(bets: LiveBet[]): (LiveBet & { botCount: number })[] {
   const seen = new Map<string, LiveBet & { botCount: number }>();
   for (const bet of bets) {
@@ -42,7 +37,6 @@ function deduplicateBets(bets: LiveBet[]): (LiveBet & { botCount: number })[] {
       seen.set(key, { ...bet, botCount: 1 });
     } else {
       existing.botCount += 1;
-      // Keep highest-edge row's data
       if (bet.edge > existing.edge) {
         seen.set(key, { ...bet, botCount: existing.botCount });
       }
@@ -51,9 +45,6 @@ function deduplicateBets(bets: LiveBet[]): (LiveBet & { botCount: number })[] {
   return Array.from(seen.values());
 }
 
-// Strip fields that a given tier should never receive.
-// This runs server-side — the result is what gets serialized into the RSC
-// payload, so anything not included here never reaches the browser.
 function sanitizeBets(
   bets: LiveBet[],
   isPro: boolean,
@@ -67,7 +58,7 @@ function sanitizeBets(
   if (isPro) {
     const stripped = deduped.map((b) => ({
       ...b,
-      selection: "",   // Elite only — Pro sees match + market but not what to bet
+      selection: "",
       odds: 0,
       modelProb: 0,
       impliedProb: 0,
@@ -80,21 +71,39 @@ function sanitizeBets(
     return { bets: stripped, totalCount };
   }
 
-  // Free: only the top bet. Blurred placeholder rows in the UI are fake.
   return { bets: deduped.slice(0, 1), totalCount };
 }
 
 export default async function ValueBetsPage() {
   const supabase = await createSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {
     return <ValueBetsGate />;
   }
 
-  const { tier: userTier, isPro, isElite } = await getUserTier(user.id, supabase);
+  return (
+    <Suspense fallback={<ValueBetsSkeleton />}>
+      <ValueBetsContent userId={user.id} />
+    </Suspense>
+  );
+}
+
+function ValueBetsSkeleton() {
+  return (
+    <div className="space-y-4 animate-pulse">
+      <div className="h-28 rounded-xl border border-white/[0.06] bg-card/40" />
+      <div className="h-10 w-64 rounded-lg bg-muted/30" />
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div key={i} className="h-24 rounded-xl border border-white/[0.06] bg-card/40" />
+      ))}
+    </div>
+  );
+}
+
+async function ValueBetsContent({ userId }: { userId: string }) {
+  const supabase = await createSupabaseServer();
+  const { tier: userTier, isPro, isElite } = await getUserTier(userId, supabase);
 
   const [allBets, todayPicks] = await Promise.all([
     getTodayBets(),

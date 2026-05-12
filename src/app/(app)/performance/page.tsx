@@ -1,6 +1,13 @@
 export const dynamic = "force-dynamic";
 
+import type { Metadata } from "next";
 import { createSupabaseServer } from "@/lib/supabase-server";
+
+export const metadata: Metadata = {
+  title: "Model Performance — OddsIntel",
+  description: "Live track record for OddsIntel's AI prediction models. Every bet logged, no cherry-picking — ROI, CLV, and win rate across 16 paper-trading bots.",
+  alternates: { canonical: "https://oddsintel.app/performance" },
+};
 import { getUserTier } from "@/lib/get-user-tier";
 import {
   getTrackRecordStats,

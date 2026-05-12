@@ -41,7 +41,7 @@ export function PerformanceHero({ stats, cache }: Props) {
             }`}>
               {clvDisplay}
             </span>
-            <p className="text-[10px] text-muted-foreground/60 mt-1">
+            <p className="text-[10px] text-muted-foreground/80 mt-1">
               {stats.avgClv != null
                 ? "beats the closing line"
                 : "appears after bets settle"}
@@ -61,7 +61,7 @@ export function PerformanceHero({ stats, cache }: Props) {
             <span className="font-mono text-2xl font-bold tabular-nums text-foreground">
               {stats.settledBets}
             </span>
-            <p className="text-[10px] text-muted-foreground/60 mt-1">
+            <p className="text-[10px] text-muted-foreground/80 mt-1">
               results confirmed
             </p>
           </CardContent>
@@ -81,7 +81,7 @@ export function PerformanceHero({ stats, cache }: Props) {
             }`}>
               {roiDisplay}
             </span>
-            <p className="text-[10px] text-muted-foreground/60 mt-1">
+            <p className="text-[10px] text-muted-foreground/80 mt-1">
               on all settled stakes
             </p>
           </CardContent>
@@ -97,7 +97,7 @@ export function PerformanceHero({ stats, cache }: Props) {
           </CardHeader>
           <CardContent className="px-4 pb-3 pt-0">
             <span className="font-mono text-2xl font-bold tabular-nums text-foreground">{cache?.bot_breakdown?.length ?? "—"}</span>
-            <p className="text-[10px] text-muted-foreground/60 mt-1">
+            <p className="text-[10px] text-muted-foreground/80 mt-1">
               strategies running
             </p>
           </CardContent>

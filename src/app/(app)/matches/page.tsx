@@ -1,6 +1,13 @@
 export const dynamic = 'force-dynamic';
 
+import type { Metadata } from "next";
 import { Suspense, use } from "react";
+
+export const metadata: Metadata = {
+  title: "Football Matches Today — OddsIntel",
+  description: "Today's football fixtures with AI predictions, odds comparison, injuries, and H2H records — free across 280+ leagues.",
+  alternates: { canonical: "https://oddsintel.app/matches" },
+};
 import { SearchX } from "lucide-react";
 import Link from "next/link";
 import { getActiveMatches, getFinishedMatches, getMatchCounts, getLiveSnapshots, getFreeDailyPick, getWhatChangedToday } from "@/lib/engine-data";
@@ -86,7 +93,7 @@ export default function MatchesPage({
             Tomorrow
           </Link>
         </div>
-        <span className="text-sm text-muted-foreground/70">{formatShortDate(dayOffset)}</span>
+        <span className="text-sm text-muted-foreground/80">{formatShortDate(dayOffset)}</span>
       </div>
 
       {/* Streams in after fast queries resolve */}

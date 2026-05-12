@@ -321,15 +321,15 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets }: Props)
           <table className="w-full min-w-[480px]">
             <thead>
               <tr className="border-b border-border/20 text-left text-[10px] uppercase tracking-wider text-muted-foreground">
-                <th className="py-2.5 pl-5 pr-2">Bot</th>
-                <th className="py-2.5 px-2 text-right">Settled</th>
-                {isPro && <th className="py-2.5 px-2 text-right">W / L</th>}
-                <th className="py-2.5 px-2 text-right">ROI</th>
-                {isPro && <th className="py-2.5 px-2 text-right">P&L (€)</th>}
-                {isElite && <th className="py-2.5 px-2 text-right">Avg CLV</th>}
-                {isElite && <th className="py-2.5 px-2 text-right">Bankroll</th>}
-                <th className="py-2.5 px-2 text-center">CLV</th>
-                {isPro && <th className="py-2.5 pr-4 w-6" />}
+                <th scope="col" className="py-2.5 pl-5 pr-2">Bot</th>
+                <th scope="col" className="py-2.5 px-2 text-right">Settled</th>
+                {isPro && <th scope="col" className="py-2.5 px-2 text-right">W / L</th>}
+                <th scope="col" className="py-2.5 px-2 text-right">ROI</th>
+                {isPro && <th scope="col" className="py-2.5 px-2 text-right">P&L (€)</th>}
+                {isElite && <th scope="col" className="py-2.5 px-2 text-right">Avg CLV</th>}
+                {isElite && <th scope="col" className="py-2.5 px-2 text-right">Bankroll</th>}
+                <th scope="col" className="py-2.5 px-2 text-center">CLV</th>
+                {isPro && <th scope="col" className="py-2.5 pr-4 w-6" />}
               </tr>
             </thead>
             <tbody className="divide-y divide-border/10">
@@ -353,7 +353,7 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets }: Props)
                         )}
                       </div>
                       {isMaturing && (
-                        <p className="text-[10px] text-muted-foreground/50 mt-0.5">
+                        <p className="text-[10px] text-muted-foreground/80 mt-0.5">
                           {bot.settled > 0 ? `${bot.settled} settled — accumulating data` : "Active · no settled bets yet"}
                         </p>
                       )}

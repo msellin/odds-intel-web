@@ -243,7 +243,7 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
             All
             {totalCount > 0 && (
               <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                statusTab === "all" ? "bg-white/[0.08] text-muted-foreground/70" : "bg-white/[0.06] text-muted-foreground/75"
+                statusTab === "all" ? "bg-white/[0.08] text-muted-foreground/70" : "bg-white/[0.06] text-muted-foreground/80"
               }`}>
                 {totalCount}
               </span>
@@ -279,7 +279,7 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
           >
             Upcoming
             {upcomingCount > 0 && statusTab !== "upcoming" && (
-              <span className="ml-1.5 rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground/75">
+              <span className="ml-1.5 rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground/80">
                 {upcomingCount}
               </span>
             )}
@@ -294,7 +294,7 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
           >
             Finished
             {finishedCount > 0 && statusTab !== "finished" && (
-              <span className="ml-1.5 rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground/75">
+              <span className="ml-1.5 rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground/80">
                 {finishedCount}
               </span>
             )}
@@ -317,7 +317,7 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
             My Games
             {favoriteMatchCount > 0 && (
               <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                filterTab === "favorites" ? "bg-amber-400/20 text-amber-400" : "bg-white/[0.06] text-muted-foreground/75"
+                filterTab === "favorites" ? "bg-amber-400/20 text-amber-400" : "bg-white/[0.06] text-muted-foreground/80"
               }`}>
                 {favoriteMatchCount}
               </span>
