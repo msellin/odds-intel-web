@@ -9,9 +9,8 @@ import {
   getLatestJobStatuses,
   getStalePendingBets,
   getLastLiveSnapshotAge,
-  getBackfillCounts,
 } from "@/lib/engine-data";
-import type { OpsSnapshot, PipelineRun, BackfillCounts } from "@/lib/engine-data";
+import type { OpsSnapshot, PipelineRun } from "@/lib/engine-data";
 
 export default async function OpsDashboardPage() {
   const supabase = await createSupabaseServer();
@@ -31,13 +30,12 @@ export default async function OpsDashboardPage() {
     return <div className="flex items-center justify-center py-24 text-muted-foreground">Superadmin only.</div>;
   }
 
-  const [snapshot, runs, jobStatuses, staleBets, lastLiveAt, backfillCounts] = await Promise.all([
+  const [snapshot, runs, jobStatuses, staleBets, lastLiveAt] = await Promise.all([
     getOpsSnapshot(),
     getRecentPipelineRuns(),
     getLatestJobStatuses(),
     getStalePendingBets(),
     getLastLiveSnapshotAge(),
-    getBackfillCounts(),
   ]);
 
   const today = new Date().toISOString().slice(0, 10);
@@ -48,9 +46,7 @@ export default async function OpsDashboardPage() {
     ? Math.round((Date.now() - new Date(lastLiveAt).getTime()) / 60000)
     : null;
 
-  // Pull context from recent pipeline runs
   const lastFixturesFetch = runs.find(r => r.job_name === "fetch_fixtures");
-  const lastOddsFetch = runs.find(r => r.job_name === "fetch_odds");
   const totalBots = (snapshot?.active_bots ?? 0) + (snapshot?.silent_bots ?? 0);
 
   return (
@@ -364,42 +360,9 @@ export default async function OpsDashboardPage() {
         icon="🔁"
         subtitle="Per-job status. Green = ran on schedule and passed. Amber = passed but older than expected. Red = last run failed. Timestamps are UTC."
       >
-        <PipelineJobGrid jobs={jobStatuses} recentRuns={runs} />
+        <PipelineJobGrid jobs={jobStatuses} />
       </Section>
 
-      {/* ⑪ Backfill */}
-      <Section
-        title="Backfill"
-        icon="🗄️"
-        subtitle="Three micro-batch jobs run every 5 min, picking up small chunks of work. Each is idempotent — safe to re-run, resumes where it left off."
-      >
-        <div className="space-y-4">
-          <BackfillBar
-            label="Match stats & events"
-            note="Historical fixtures/statistics/events for past seasons. Used for ML training data."
-            done={backfillCounts.histDone}
-            total={backfillCounts.histTotal}
-            lastRun={backfillCounts.histLastRun}
-            lastStatus={backfillCounts.histLastStatus}
-          />
-          <BackfillBar
-            label="Coach history"
-            note="Manager career history per team. Powers manager_change signal."
-            done={backfillCounts.coachesDone}
-            total={backfillCounts.coachesTotal}
-            lastRun={backfillCounts.coachesLastRun}
-            lastStatus={backfillCounts.coachesLastStatus}
-          />
-          <BackfillBar
-            label="Transfer history"
-            note="Squad arrivals per team. Powers squad_disruption signal."
-            done={backfillCounts.transfersDone}
-            total={backfillCounts.transfersTotal}
-            lastRun={backfillCounts.transfersLastRun}
-            lastStatus={backfillCounts.transfersLastStatus}
-          />
-        </div>
-      </Section>
     </div>
   );
 }
@@ -492,52 +455,6 @@ function Stat({
   );
 }
 
-function BackfillBar({
-  label,
-  note,
-  done,
-  total,
-  lastRun,
-  lastStatus,
-}: {
-  label: string;
-  note: string;
-  done: number | null;
-  total: number | null;
-  lastRun: string | null;
-  lastStatus: string | null;
-}) {
-  const pct = done != null && total && total > 0 ? (done / total) * 100 : null;
-  const isFailed = lastStatus === "failed" || lastStatus === "error";
-  return (
-    <div className="rounded-lg border border-border bg-card p-3">
-      <div className="flex items-center justify-between mb-1">
-        <p className="text-xs font-medium text-foreground">{label}</p>
-        <p className="text-xs font-mono text-muted-foreground tabular-nums">
-          {done != null ? done.toLocaleString() : "—"}
-          {total ? ` / ${total.toLocaleString()}` : ""}
-          {pct !== null ? ` (${pct.toFixed(1)}%)` : ""}
-        </p>
-      </div>
-      <div className="h-1.5 rounded-full bg-muted overflow-hidden mb-1.5">
-        {pct !== null && (
-          <div
-            className={`h-full rounded-full ${pct >= 80 ? "bg-emerald-500" : pct >= 40 ? "bg-amber-500" : "bg-blue-500"}`}
-            style={{ width: `${Math.min(100, pct).toFixed(1)}%` }}
-          />
-        )}
-      </div>
-      <p className="text-[10px] text-muted-foreground/60 leading-tight">{note}</p>
-      {lastRun && (
-        <p className={`text-[10px] mt-0.5 ${isFailed ? "text-red-400/80" : "text-muted-foreground/50"}`}>
-          Last run: {new Date(lastRun).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-          {lastStatus && <span className={`ml-1 ${isFailed ? "text-red-400" : "text-emerald-500/70"}`}>· {lastStatus}</span>}
-        </p>
-      )}
-    </div>
-  );
-}
-
 // Per-job schedule: max expected gap in hours before flagging as stale (amber)
 // These are generous — account for time-of-day windows (e.g. settlement only runs at 9pm)
 const JOB_CONFIG: Record<string, { label: string; schedule: string; maxGapHours: number }> = {
@@ -554,7 +471,7 @@ const JOB_CONFIG: Record<string, { label: string; schedule: string; maxGapHours:
   write_ops_snapshot:{ label: "Ops Snapshot",         schedule: "Hourly",                    maxGapHours: 2  },
 };
 
-function PipelineJobGrid({ jobs, recentRuns }: { jobs: PipelineRun[]; recentRuns: PipelineRun[] }) {
+function PipelineJobGrid({ jobs }: { jobs: PipelineRun[] }) {
   const now = Date.now();
 
   // Build a map of job_name → latest run from jobStatuses
@@ -632,7 +549,7 @@ function PipelineJobGrid({ jobs, recentRuns }: { jobs: PipelineRun[]; recentRuns
           </p>
         )}
         {isFailed && run.error_message && (
-          <p className="text-[10px] text-red-400/80 leading-tight break-words">{run.error_message.slice(0, 100)}</p>
+          <p className="text-[10px] text-red-400/80 leading-tight break-all font-mono">{run.error_message.slice(0, 300)}</p>
         )}
       </div>
     );
@@ -650,43 +567,9 @@ function PipelineJobGrid({ jobs, recentRuns }: { jobs: PipelineRun[]; recentRuns
   }
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-        {knownCards}
-        {unknownCards}
-      </div>
-      {recentRuns.length > 0 && (
-        <details className="text-xs">
-          <summary className="cursor-pointer text-muted-foreground/60 hover:text-muted-foreground select-none">
-            Recent run log ({recentRuns.length} entries)
-          </summary>
-          <div className="mt-2 overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="text-muted-foreground border-b border-border">
-                  <th className="text-left py-1.5 pr-4 font-medium">Job</th>
-                  <th className="text-left py-1.5 pr-4 font-medium">Status</th>
-                  <th className="text-left py-1.5 pr-4 font-medium">Started</th>
-                  <th className="text-right py-1.5 font-medium">Records</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentRuns.filter(r => !r.job_name.startsWith("backfill") && r.job_name !== "hist_backfill").slice(0, 30).map(run => {
-                  const isError = run.status === "failed" || run.status === "error";
-                  return (
-                    <tr key={run.id} className={`border-b border-border/40 ${isError ? "bg-red-500/5" : ""}`}>
-                      <td className="py-1.5 pr-4 font-mono text-foreground">{run.job_name}</td>
-                      <td className={`py-1.5 pr-4 ${isError ? "text-red-400" : "text-emerald-500"}`}>{run.status}</td>
-                      <td className="py-1.5 pr-4 text-muted-foreground">{new Date(run.started_at).toLocaleString([], { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</td>
-                      <td className="py-1.5 text-right text-muted-foreground">{run.records_count ?? "—"}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </details>
-      )}
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+      {knownCards}
+      {unknownCards}
     </div>
   );
 }

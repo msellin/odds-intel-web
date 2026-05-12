@@ -418,6 +418,32 @@ export function Nav() {
                     <Bot className="h-4 w-4" />
                     Ops Dashboard
                   </Link>
+                  <Link
+                    href="/admin/place"
+                    onClick={() => setMobileOpen(false)}
+                    className={cn(
+                      "flex items-center gap-2 border-l-2 rounded-md px-3 py-2.5 text-sm transition-colors",
+                      pathname === "/admin/place"
+                        ? "border-amber-400 bg-amber-500/10 text-amber-400"
+                        : "border-transparent text-amber-500/70 hover:bg-accent hover:text-amber-400"
+                    )}
+                  >
+                    <Bot className="h-4 w-4" />
+                    Place Bet
+                  </Link>
+                  <Link
+                    href="/admin/real-bets"
+                    onClick={() => setMobileOpen(false)}
+                    className={cn(
+                      "flex items-center gap-2 border-l-2 rounded-md px-3 py-2.5 text-sm transition-colors",
+                      pathname === "/admin/real-bets"
+                        ? "border-amber-400 bg-amber-500/10 text-amber-400"
+                        : "border-transparent text-amber-500/70 hover:bg-accent hover:text-amber-400"
+                    )}
+                  >
+                    <Bot className="h-4 w-4" />
+                    Real Bets
+                  </Link>
                 </>
               )}
               <div className="my-2 h-px bg-border/50" />

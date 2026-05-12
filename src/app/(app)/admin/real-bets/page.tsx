@@ -98,12 +98,12 @@ export default async function RealBetsPage() {
             <tr>
               <th className="text-left p-2">Placed</th>
               <th className="text-left p-2">Match</th>
-              <th className="text-left p-2">Bot</th>
+              <th className="text-left p-2 hidden sm:table-cell">Bot</th>
               <th className="text-left p-2">Sel</th>
-              <th className="text-left p-2">Book</th>
-              <th className="text-right p-2">Captured</th>
-              <th className="text-right p-2">Actual</th>
-              <th className="text-right p-2">Slip</th>
+              <th className="text-left p-2 hidden sm:table-cell">Book</th>
+              <th className="text-right p-2 hidden sm:table-cell">Captured</th>
+              <th className="text-right p-2">Odds</th>
+              <th className="text-right p-2 hidden sm:table-cell">Slip</th>
               <th className="text-right p-2">Stake</th>
               <th className="text-left p-2">Result</th>
               <th className="text-right p-2">PnL</th>
@@ -117,12 +117,12 @@ export default async function RealBetsPage() {
               <tr key={b.id} className="border-t border-border">
                 <td className="p-2 whitespace-nowrap text-xs">{new Date(b.placedAt).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}</td>
                 <td className="p-2"><div>{b.match}</div><div className="text-xs text-muted-foreground">{b.league}</div></td>
-                <td className="p-2 text-xs">{b.bot ?? "—"}</td>
+                <td className="p-2 text-xs hidden sm:table-cell">{b.bot ?? "—"}</td>
                 <td className="p-2 text-xs"><div>{b.market}</div><div className="text-muted-foreground">{b.selection}</div></td>
-                <td className="p-2">{b.bookmaker}</td>
-                <td className="p-2 text-right font-mono">{b.capturedOdds?.toFixed(2) ?? "—"}</td>
+                <td className="p-2 hidden sm:table-cell">{b.bookmaker}</td>
+                <td className="p-2 text-right font-mono hidden sm:table-cell">{b.capturedOdds?.toFixed(2) ?? "—"}</td>
                 <td className="p-2 text-right font-mono">{b.actualOdds.toFixed(2)}</td>
-                <td className={`p-2 text-right font-mono ${b.slippagePct != null && b.slippagePct < -1 ? "text-red-400" : b.slippagePct != null && b.slippagePct > 1 ? "text-emerald-400" : ""}`}>{b.slippagePct != null ? `${b.slippagePct.toFixed(2)}%` : "—"}</td>
+                <td className={`p-2 text-right font-mono hidden sm:table-cell ${b.slippagePct != null && b.slippagePct < -1 ? "text-red-400" : b.slippagePct != null && b.slippagePct > 1 ? "text-emerald-400" : ""}`}>{b.slippagePct != null ? `${b.slippagePct.toFixed(2)}%` : "—"}</td>
                 <td className="p-2 text-right">€{b.stake.toFixed(2)}</td>
                 <td className="p-2">
                   <span className={

@@ -83,16 +83,14 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
         <table className="w-full text-sm">
           <thead className="bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
-              <th className="text-left p-2">Kickoff</th>
               <th className="text-left p-2">Match</th>
-              <th className="text-left p-2">Bot</th>
               <th className="text-left p-2">Sel</th>
-              <th className="text-right p-2">Bot</th>
               <th className="text-right p-2 text-emerald-400">Coolbet*</th>
-              <th className="text-right p-2 text-blue-300">Bet365</th>
-              <th className="text-right p-2">Pin</th>
+              <th className="text-right p-2 hidden sm:table-cell">Bet365</th>
+              <th className="text-right p-2 hidden sm:table-cell">Pin</th>
+              <th className="text-right p-2 hidden sm:table-cell">Bot</th>
               <th className="text-right p-2">Edge</th>
-              <th className="text-right p-2" title="Bot's Kelly-based recommended stake (assuming €1000 bankroll)">Stake</th>
+              <th className="text-right p-2 hidden sm:table-cell" title="Bot's Kelly-based recommended stake (assuming €1000 bankroll)">Stake</th>
               <th className="text-right p-2">Place</th>
             </tr>
           </thead>
@@ -101,27 +99,26 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
               const hasBookOdds = c.unibetOdds != null || c.bet365Odds != null;
               return (
                 <tr key={c.betId} className={`border-t border-border ${hasBookOdds ? "" : "opacity-70"} ${c.alreadyPlaced ? "bg-emerald-950/30" : ""}`}>
-                  <td className="p-2 whitespace-nowrap">{fmtKickoff(c.kickoff)}</td>
                   <td className="p-2">
-                    <div className="font-medium flex items-center gap-1.5">
+                    <div className="font-medium flex items-center gap-1.5 flex-wrap">
                       {c.match}
                       {c.alreadyPlaced && (
                         <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-800 text-emerald-200 font-normal">✓ Placed</span>
                       )}
                     </div>
                     <div className="text-xs text-muted-foreground">{c.league}</div>
+                    <div className="text-xs text-muted-foreground sm:hidden">{fmtKickoff(c.kickoff)} · {c.bot}</div>
                   </td>
-                  <td className="p-2 text-xs">{c.bot}</td>
                   <td className="p-2 text-xs">
                     <div>{c.market}</div>
                     <div className="text-muted-foreground">{fmtAHSelection(c.selection)}</div>
                   </td>
-                  <td className="p-2 text-right font-mono">{fmtOdds(c.botOdds)}</td>
                   <td className="p-2 text-right font-mono text-emerald-400">{fmtOdds(c.unibetOdds)}</td>
-                  <td className="p-2 text-right font-mono text-blue-300">{fmtOdds(c.bet365Odds)}</td>
-                  <td className="p-2 text-right font-mono text-muted-foreground">{fmtOdds(c.pinnacleOdds)}</td>
+                  <td className="p-2 text-right font-mono text-blue-300 hidden sm:table-cell">{fmtOdds(c.bet365Odds)}</td>
+                  <td className="p-2 text-right font-mono text-muted-foreground hidden sm:table-cell">{fmtOdds(c.pinnacleOdds)}</td>
+                  <td className="p-2 text-right font-mono hidden sm:table-cell">{fmtOdds(c.botOdds)}</td>
                   <td className="p-2 text-right font-mono">{fmtPct(c.edge)}</td>
-                  <td className="p-2 text-right font-mono text-amber-300">{c.stake != null ? `€${c.stake.toFixed(2)}` : "—"}</td>
+                  <td className="p-2 text-right font-mono text-amber-300 hidden sm:table-cell">{c.stake != null ? `€${c.stake.toFixed(2)}` : "—"}</td>
                   <td className="p-2 text-right">
                     <button
                       onClick={() => setOpenModal(c)}
