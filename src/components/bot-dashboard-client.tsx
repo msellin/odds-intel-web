@@ -128,7 +128,7 @@ function buildBankrollData(bets: LiveBet[]) {
   const hasBankrollData = settled.some((b) => b.bankrollAfter != null);
   let running = 1000;
 
-  return settled.map((b, i) => {
+  const series = settled.map((b, i) => {
     const bankroll = hasBankrollData && b.bankrollAfter != null
       ? b.bankrollAfter
       : (running += b.pnl, running);
@@ -136,9 +136,14 @@ function buildBankrollData(bets: LiveBet[]) {
       idx: i + 1,
       bankroll: Math.round(bankroll * 100) / 100,
       date: new Date(b.placedAt).toLocaleDateString("en-GB", { month: "short", day: "numeric" }),
-      result: b.result,
+      result: b.result as string,
     };
   });
+
+  return [
+    { idx: 0, bankroll: 1000, date: "Start", result: "origin" },
+    ...series,
+  ];
 }
 
 // ── Bot detail modal ─────────────────────────────────────────────────────────
@@ -218,7 +223,7 @@ function BotDetailModal({
         {/* Bankroll chart */}
         {chartData.length > 1 ? (
           <div className="mt-2">
-            <p className="text-xs text-muted-foreground mb-2">Bankroll progression (€) — {chartData.length} settled bets</p>
+            <p className="text-xs text-muted-foreground mb-2">Bankroll progression (€) — {chartData.length - 1} settled bets</p>
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#333" />
@@ -239,8 +244,11 @@ function BotDetailModal({
                   contentStyle={{ background: "#1a1a1a", border: "1px solid #333", fontSize: 12 }}
                   formatter={(value) => [`€${Number(value).toFixed(2)}`, "Bankroll"]}
                   labelFormatter={(label) => {
-                    const d = chartData[Number(label) - 1];
-                    return d ? `Bet #${label} · ${d.date}` : `Bet #${label}`;
+                    const idx = Number(label);
+                    const d = chartData.find((x) => x.idx === idx);
+                    if (!d) return `Bet #${label}`;
+                    if (d.result === "origin") return "Starting bankroll";
+                    return `Bet #${idx} · ${d.date}`;
                   }}
                 />
                 <ReferenceLine y={startLine} stroke="#555" strokeDasharray="4 4" label={{ value: "€1,000 start", fontSize: 10, fill: "#666" }} />
@@ -251,7 +259,11 @@ function BotDetailModal({
                   strokeWidth={2}
                   dot={(props) => {
                     const { cx, cy, payload } = props;
-                    const color = payload.result === "won" ? "#22c55e" : "#ef4444";
+                    const color = payload.result === "won"
+                      ? "#22c55e"
+                      : payload.result === "lost"
+                        ? "#ef4444"
+                        : "#666";
                     return <circle key={`dot-${props.index}`} cx={cx} cy={cy} r={3.5} fill={color} stroke="none" />;
                   }}
                   activeDot={{ r: 5 }}
