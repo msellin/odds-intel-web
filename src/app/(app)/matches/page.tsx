@@ -86,7 +86,7 @@ export default function MatchesPage({
             Tomorrow
           </Link>
         </div>
-        <span className="text-sm text-muted-foreground/50">{formatShortDate(dayOffset)}</span>
+        <span className="text-sm text-muted-foreground/70">{formatShortDate(dayOffset)}</span>
       </div>
 
       {/* Streams in after fast queries resolve */}
@@ -136,10 +136,29 @@ async function AboveFoldContent({ dayOffset }: { dayOffset: number }) {
       )}
 
       {/* DailyValueTeaser is injected lazily inside MatchesClient (ssr:false) — not LCP. */}
-      <Suspense fallback={null}>
+      <Suspense fallback={<MatchListSkeleton />}>
         <MatchListContent dayOffset={dayOffset} isPro={isPro} counts={counts} teaserData={teaserData} />
       </Suspense>
     </>
+  );
+}
+
+function MatchListSkeleton() {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <div key={i} className="overflow-hidden rounded-xl border border-white/[0.06] bg-card/40 animate-pulse">
+          <div className="h-10 sm:h-12 w-full bg-muted/30" />
+          {Array.from({ length: 3 }).map((_, j) => (
+            <div key={j} className="flex items-center gap-3 border-t border-white/[0.06] px-4 py-3">
+              <div className="h-2 w-10 rounded bg-muted/40" />
+              <div className="h-2 flex-1 rounded bg-muted/30" />
+              <div className="h-2 w-16 rounded bg-muted/40" />
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
   );
 }
 

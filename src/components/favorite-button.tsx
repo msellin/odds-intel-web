@@ -43,7 +43,7 @@ export function FavoriteButton({ value, className }: FavoriteButtonProps) {
     <button
       onClick={handleToggle}
       className={cn(
-        "inline-flex items-center justify-center rounded p-1 transition-colors hover:bg-white/10",
+        "inline-flex items-center justify-center rounded p-1.5 transition-colors hover:bg-white/10",
         className
       )}
       title={isFavorited ? `Remove from favourites` : `Add to favourites`}

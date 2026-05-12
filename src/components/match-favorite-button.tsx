@@ -54,7 +54,7 @@ export function MatchFavoriteButton({
       onClick={handleToggle}
       disabled={loading}
       className={cn(
-        "inline-flex items-center justify-center rounded p-0.5 transition-colors hover:bg-white/10 disabled:opacity-50",
+        "inline-flex items-center justify-center rounded p-1.5 transition-colors hover:bg-white/10 disabled:opacity-50",
         className
       )}
       title={isFavorited ? "Unfollow this match" : "Follow this match"}

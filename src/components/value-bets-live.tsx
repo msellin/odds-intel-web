@@ -347,7 +347,7 @@ export function ValueBetsLive({ bets, totalCount, userTier, oddsVerifiedAt, book
       {isPro && (
         <div className="flex flex-wrap items-center gap-3">
           <Select value={league} onValueChange={(v) => setLeague(v ?? ALL)}>
-            <SelectTrigger className="h-8 w-[200px] text-xs">
+            <SelectTrigger className="h-8 w-[200px] text-xs" aria-label="Filter by league">
               <SelectValue>{league === ALL ? "All leagues" : league}</SelectValue>
             </SelectTrigger>
             <SelectContent>
@@ -359,7 +359,7 @@ export function ValueBetsLive({ bets, totalCount, userTier, oddsVerifiedAt, book
           </Select>
           {isElite && (
             <Select value={bot} onValueChange={(v) => setBot(v ?? ALL)}>
-              <SelectTrigger className="h-8 w-[180px] text-xs">
+              <SelectTrigger className="h-8 w-[180px] text-xs" aria-label="Filter by strategy">
                 <SelectValue>{bot === ALL ? "All strategies" : formatBot(bot)}</SelectValue>
               </SelectTrigger>
               <SelectContent>

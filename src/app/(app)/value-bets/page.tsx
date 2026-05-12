@@ -1,6 +1,13 @@
 export const dynamic = 'force-dynamic';
 
+import type { Metadata } from "next";
 import { createSupabaseServer } from "@/lib/supabase-server";
+
+export const metadata: Metadata = {
+  title: "Value Bets Today — OddsIntel",
+  description: "AI-powered value bets for today's football matches. Real edge calculated by 17 paper trading bots across 280+ leagues.",
+  alternates: { canonical: "https://oddsintel.app/value-bets" },
+};
 import {
   getTodayBets,
   getTodayPicks,

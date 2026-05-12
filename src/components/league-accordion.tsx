@@ -207,7 +207,7 @@ function MatchRow({
       {hasTeasers && (
         <div className="flex sm:hidden gap-3 px-1 pb-1.5 pl-12">
           {match.teasers.map((teaser, i) => (
-            <span key={i} className="text-[10px] italic text-muted-foreground/50">{teaser}</span>
+            <span key={i} className="text-[10px] italic text-muted-foreground/70">{teaser}</span>
           ))}
         </div>
       )}
@@ -303,7 +303,7 @@ function MatchRow({
       {hasTeasers && (
         <div className="hidden sm:flex gap-3 pl-8 pb-1">
           {match.teasers.map((teaser, i) => (
-            <span key={i} className="text-[10px] italic text-muted-foreground/50">{teaser}</span>
+            <span key={i} className="text-[10px] italic text-muted-foreground/70">{teaser}</span>
           ))}
         </div>
       )}

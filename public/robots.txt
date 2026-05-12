@@ -1,7 +1,6 @@
 User-agent: *
 Allow: /
 Disallow: /my-picks
-Disallow: /value-bets
 Disallow: /track-record
 Disallow: /profile
 Disallow: /welcome
