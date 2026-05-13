@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import type { PlaceableBet } from "@/lib/engine-data";
 
@@ -46,18 +46,75 @@ function fmtKickoff(iso: string) {
   return d.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
 }
 
+function ConsensusBadge({ size, recommended }: { size: number; recommended: boolean }) {
+  if (size < 2) return null;
+  if (recommended) {
+    return (
+      <span
+        className="text-[10px] px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-300 font-medium"
+        title={`${size} bots picked this same bet — this row has the highest edge, follow this one`}
+      >
+        ★ best of {size}
+      </span>
+    );
+  }
+  return (
+    <span
+      className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground"
+      title={`${size} bots picked this same bet — a different bot has higher edge, prefer that one`}
+    >
+      {size} bots
+    </span>
+  );
+}
+
 export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
-  const [filter, setFilter] = useState<"all" | "edge" | "available" | "placed">("all");
+  const [filter, setFilter] = useState<"all" | "edge" | "available" | "placed" | "consensus">("all");
   const [openModal, setOpenModal] = useState<PlaceableBet | null>(null);
 
   const placedCount = candidates.filter((c) => c.alreadyPlaced).length;
+
+  // Group identical bets across bots: (match, market, selection).
+  // Within a group, mark the recommended row: already-placed wins, otherwise highest edge,
+  // tiebreak alphabetical bot name. Computed off `candidates` so the consensus reflects
+  // the full picture regardless of the active filter.
+  const { recommendedByBetId, groupSizeByBetId } = useMemo(() => {
+    const groups = new Map<string, PlaceableBet[]>();
+    for (const c of candidates) {
+      const key = `${c.matchId}|${c.market}|${c.selection}`;
+      const arr = groups.get(key);
+      if (arr) arr.push(c);
+      else groups.set(key, [c]);
+    }
+    const recommended = new Set<string>();
+    const sizes = new Map<string, number>();
+    for (const bets of groups.values()) {
+      for (const b of bets) sizes.set(b.betId, bets.length);
+      if (bets.length < 2) continue;
+      const sorted = [...bets].sort((a, b) => {
+        if (a.alreadyPlaced !== b.alreadyPlaced) return a.alreadyPlaced ? -1 : 1;
+        const ea = a.edge ?? -Infinity;
+        const eb = b.edge ?? -Infinity;
+        if (eb !== ea) return eb - ea;
+        return a.bot.localeCompare(b.bot);
+      });
+      recommended.add(sorted[0].betId);
+    }
+    return { recommendedByBetId: recommended, groupSizeByBetId: sizes };
+  }, [candidates]);
 
   const filtered = candidates.filter((c) => {
     if (filter === "edge" && (c.edge ?? 0) < 0.05) return false;
     if (filter === "available" && c.unibetOdds == null && c.bet365Odds == null) return false;
     if (filter === "placed" && !c.alreadyPlaced) return false;
+    if (filter === "consensus" && (groupSizeByBetId.get(c.betId) ?? 1) < 2) return false;
+    if (filter === "consensus" && !recommendedByBetId.has(c.betId)) return false;
     return true;
   });
+
+  const consensusCount = candidates.filter(
+    (c) => (groupSizeByBetId.get(c.betId) ?? 1) >= 2 && recommendedByBetId.has(c.betId)
+  ).length;
 
   if (candidates.length === 0) {
     return (
@@ -88,6 +145,15 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
         >
           Has Coolbet/Bet365 odds
         </button>
+        {consensusCount > 0 && (
+          <button
+            onClick={() => setFilter("consensus")}
+            title="Show only the recommended bot row for each bet that 2+ bots picked"
+            className={`px-2 py-1 rounded ${filter === "consensus" ? "bg-amber-700 text-amber-50" : "bg-amber-900/40 text-amber-300"}`}
+          >
+            ★ Consensus picks ({consensusCount})
+          </button>
+        )}
         {placedCount > 0 && (
           <button
             onClick={() => setFilter("placed")}
@@ -101,11 +167,10 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
       {/* Mobile: card list */}
       <div className="sm:hidden space-y-2">
         {filtered.map((c) => {
-          const hasBookOdds = c.unibetOdds != null || c.bet365Odds != null;
           return (
             <div
               key={c.betId}
-              className={`rounded-lg border bg-card p-3 ${c.alreadyPlaced ? "border-emerald-700/50 bg-emerald-950/30" : "border-border"} ${hasBookOdds ? "" : "opacity-60"}`}
+              className={`rounded-lg border bg-card p-3 ${c.alreadyPlaced ? "border-emerald-700/50 bg-emerald-950/30" : "border-border"}`}
             >
               <div className="flex items-start justify-between gap-2 mb-1">
                 <div className="min-w-0">
@@ -119,7 +184,14 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
                 )}
               </div>
               <div className="flex items-center justify-between mt-2">
-                <span className="text-xs font-medium">{fmtSelShort(c.market, c.selection)}</span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-xs font-medium">{fmtSelShort(c.market, c.selection)}</span>
+                  <span className="text-[10px] text-muted-foreground">· {c.bot}</span>
+                  <ConsensusBadge
+                    size={groupSizeByBetId.get(c.betId) ?? 1}
+                    recommended={recommendedByBetId.has(c.betId)}
+                  />
+                </div>
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs text-muted-foreground">{fmtOdds(c.botOdds)}</span>
                   <span className="font-mono text-emerald-400 font-semibold">{fmtOdds(c.unibetOdds)}</span>
@@ -155,9 +227,8 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
           </thead>
           <tbody>
             {filtered.map((c) => {
-              const hasBookOdds = c.unibetOdds != null || c.bet365Odds != null;
               return (
-                <tr key={c.betId} className={`border-t border-border ${hasBookOdds ? "" : "opacity-70"} ${c.alreadyPlaced ? "bg-emerald-950/30" : ""}`}>
+                <tr key={c.betId} className={`border-t border-border ${c.alreadyPlaced ? "bg-emerald-950/30" : ""}`}>
                   <td className="p-2">
                     <div className="font-medium flex items-center gap-1.5">
                       {c.match}
@@ -166,7 +237,13 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
                       )}
                     </div>
                     <div className="text-xs text-muted-foreground">{c.league}</div>
-                    <div className="text-xs text-muted-foreground">{fmtKickoff(c.kickoff)} · {c.bot}</div>
+                    <div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
+                      <span>{fmtKickoff(c.kickoff)} · {c.bot}</span>
+                      <ConsensusBadge
+                        size={groupSizeByBetId.get(c.betId) ?? 1}
+                        recommended={recommendedByBetId.has(c.betId)}
+                      />
+                    </div>
                   </td>
                   <td className="p-2 text-xs">
                     <div>{c.market}</div>
