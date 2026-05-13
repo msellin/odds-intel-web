@@ -125,12 +125,12 @@ export function buildBotStats(bets: LiveBet[], botsDB: BotDbRow[]): BotStat[] {
       };
     })
     .sort((a, b) => {
-      // Retired bots last regardless of P&L — they're hidden by default in the UI
+      // Retired bots last regardless of ROI — they're hidden by default in the UI
       if (a.isRetired !== b.isRetired) return a.isRetired ? 1 : -1;
-      // Bots with settled bets first (by P&L), then pending-only, then zero-bet bots last
+      // Bots with settled bets first (by ROI — stake-normalised, fair across inplay/pre-match), then pending-only, then zero-bet bots last
       if (a.settled > 0 && b.settled === 0) return -1;
       if (a.settled === 0 && b.settled > 0) return 1;
-      if (a.settled > 0 && b.settled > 0) return b.totalPnl - a.totalPnl;
+      if (a.settled > 0 && b.settled > 0) return (b.roi ?? -999) - (a.roi ?? -999);
       if (a.total > 0 && b.total === 0) return -1;
       if (a.total === 0 && b.total > 0) return 1;
       return a.name.localeCompare(b.name);
