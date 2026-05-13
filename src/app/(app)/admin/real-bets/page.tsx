@@ -50,6 +50,21 @@ export default async function RealBetsPage() {
     byBook[b.bookmaker].pnl += b.pnl ?? 0;
   }
 
+  // Per-bot breakdown — covers all bets (including pending) so coverage is visible
+  const byBot: Record<string, { n: number; pending: number; staked: number; pnl: number }> = {};
+  for (const b of bets) {
+    const key = b.bot ?? "(none)";
+    if (!byBot[key]) byBot[key] = { n: 0, pending: 0, staked: 0, pnl: 0 };
+    if (b.result === "pending") {
+      byBot[key].pending += 1;
+    } else {
+      byBot[key].n += 1;
+      byBot[key].staked += b.stake;
+      byBot[key].pnl += b.pnl ?? 0;
+    }
+  }
+  const byBotSorted = Object.entries(byBot).sort((a, b) => (b[1].n + b[1].pending) - (a[1].n + a[1].pending));
+
   return (
     <div className="container mx-auto py-8 px-4 max-w-7xl">
       <div className="mb-6">
@@ -67,29 +82,56 @@ export default async function RealBetsPage() {
         <Stat label="ROI" value={fmtPct(roi)} sub={`Mean slippage ${withSlip.length > 0 ? fmtPct(meanSlip) : "—"}`} good={roi > 0} bad={roi < 0} />
       </div>
 
-      {Object.keys(byBook).length > 0 && (
-        <div className="mb-6">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">Per-book</h2>
-          <div className="rounded-lg border border-border bg-card overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
-                <tr><th className="text-left p-2">Book</th><th className="text-right p-2">Bets</th><th className="text-right p-2">Staked</th><th className="text-right p-2">P&amp;L</th><th className="text-right p-2">ROI</th></tr>
-              </thead>
-              <tbody>
-                {Object.entries(byBook).map(([book, s]) => (
-                  <tr key={book} className="border-t border-border">
-                    <td className="p-2 font-medium">{book}</td>
-                    <td className="p-2 text-right">{s.n}</td>
-                    <td className="p-2 text-right">€{s.staked.toFixed(2)}</td>
-                    <td className={`p-2 text-right ${s.pnl > 0 ? "text-emerald-400" : s.pnl < 0 ? "text-red-400" : ""}`}>{fmtMoney(s.pnl)}</td>
-                    <td className="p-2 text-right">{s.staked > 0 ? fmtPct((s.pnl / s.staked) * 100) : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <div className="grid md:grid-cols-2 gap-4 mb-6">
+        {Object.keys(byBook).length > 0 && (
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">Per-book</h2>
+            <div className="rounded-lg border border-border bg-card overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
+                  <tr><th className="text-left p-2">Book</th><th className="text-right p-2">Bets</th><th className="text-right p-2">Staked</th><th className="text-right p-2">P&amp;L</th><th className="text-right p-2">ROI</th></tr>
+                </thead>
+                <tbody>
+                  {Object.entries(byBook).map(([book, s]) => (
+                    <tr key={book} className="border-t border-border">
+                      <td className="p-2 font-medium">{book}</td>
+                      <td className="p-2 text-right">{s.n}</td>
+                      <td className="p-2 text-right">€{s.staked.toFixed(2)}</td>
+                      <td className={`p-2 text-right ${s.pnl > 0 ? "text-emerald-400" : s.pnl < 0 ? "text-red-400" : ""}`}>{fmtMoney(s.pnl)}</td>
+                      <td className="p-2 text-right">{s.staked > 0 ? fmtPct((s.pnl / s.staked) * 100) : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {byBotSorted.length > 0 && (
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">Per-bot</h2>
+            <div className="rounded-lg border border-border bg-card overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
+                  <tr><th className="text-left p-2">Bot</th><th className="text-right p-2">Settled</th><th className="text-right p-2">Pending</th><th className="text-right p-2">Staked</th><th className="text-right p-2">P&amp;L</th><th className="text-right p-2">ROI</th></tr>
+                </thead>
+                <tbody>
+                  {byBotSorted.map(([bot, s]) => (
+                    <tr key={bot} className="border-t border-border">
+                      <td className="p-2 font-medium">{bot}</td>
+                      <td className="p-2 text-right">{s.n}</td>
+                      <td className="p-2 text-right text-amber-400">{s.pending > 0 ? s.pending : "—"}</td>
+                      <td className="p-2 text-right">€{s.staked.toFixed(2)}</td>
+                      <td className={`p-2 text-right ${s.pnl > 0 ? "text-emerald-400" : s.pnl < 0 ? "text-red-400" : ""}`}>{s.n > 0 ? fmtMoney(s.pnl) : "—"}</td>
+                      <td className="p-2 text-right">{s.staked > 0 ? fmtPct((s.pnl / s.staked) * 100) : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
 
       <div className="rounded-lg border border-border bg-card overflow-x-auto">
         <h2 className="text-sm font-semibold p-3 border-b border-border">Bet log (newest first)</h2>
