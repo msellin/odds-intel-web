@@ -17,16 +17,16 @@ import {
   getRecentSettledBets,
 } from "@/lib/engine-data";
 import type { LiveBet } from "@/lib/engine-data";
-import { PerformanceHero } from "@/components/performance-hero";
-import { PerformanceLeaderboard } from "@/components/performance-leaderboard";
+import { PerformanceClient } from "@/components/performance-client";
 import type { PublicBotStat, SanitizedBotBet } from "@/components/performance-leaderboard";
 import { PerformanceHistory } from "@/components/performance-history";
 import { ClvEducation } from "@/components/clv-education";
 import { TrackRecordFooterCta } from "@/components/track-record-footer-cta";
 
-// ── Server-side sanitization helpers ─────────────────────────────────────────
+// ── Server-side cache → public stats fallback ────────────────────────────────
+// Used when toggle is off or for Free users (who don't get aggregateBets).
 
-function buildBotStats(
+function buildCachedBotStats(
   cache: Awaited<ReturnType<typeof getDashboardCache>>,
   botsDB: Awaited<ReturnType<typeof getAllBotsFromDB>> | null,
   isPro: boolean,
@@ -55,7 +55,6 @@ function buildBotStats(
     };
   });
 
-  // Sort: enough data (by ROI desc) → accumulating (some settled) → no bets
   return stats.sort((a, b) => {
     if (a.hasEnoughData !== b.hasEnoughData) return a.hasEnoughData ? -1 : 1;
     if (a.hasEnoughData) return (b.roi ?? -999) - (a.roi ?? -999);
@@ -64,7 +63,7 @@ function buildBotStats(
   });
 }
 
-function sanitizeBets(bets: LiveBet[], isPro: boolean, isElite: boolean): SanitizedBotBet[] {
+function sanitizeBets(bets: LiveBet[], isElite: boolean): SanitizedBotBet[] {
   return bets.map((b) => ({
     id: b.id,
     match: b.match,
@@ -78,7 +77,7 @@ function sanitizeBets(bets: LiveBet[], isPro: boolean, isElite: boolean): Saniti
     pnl: b.pnl,
     bankrollAfter: isElite ? b.bankrollAfter : null,
     modelProb: b.modelProb,
-    clv: b.clv,  // Pro sees direction in modal; exact % shown only if isElite (modal checks)
+    clv: b.clv,
     bot: b.bot,
   }));
 }
@@ -105,25 +104,30 @@ export default async function PerformancePage() {
     is_superadmin: boolean;
   };
 
-  // Pro+ gets all bets for the per-bot modal; Free gets last 10 for the activity strip.
+  // Pro+ gets raw bets for the toggle to recompute aggregates client-side
+  // (BOT-QUAL-FILTER-DUAL). Free gets last 10 settled for the activity strip.
   const [allBetsRaw, botsDB, recentSettled] = await Promise.all([
     isPro ? getAllBets() : Promise.resolve(null),
-    isElite ? getAllBotsFromDB() : Promise.resolve(null),
+    isPro ? getAllBotsFromDB() : Promise.resolve(null),
     !isPro ? getRecentSettledBets(10) : Promise.resolve(null),
   ]);
 
-  const botStats = buildBotStats(cache, botsDB, isPro, isElite);
-  const sanitizedBets = allBetsRaw ? sanitizeBets(allBetsRaw, isPro, isElite) : null;
+  const cachedBots = buildCachedBotStats(cache, botsDB, isPro, isElite);
+  const sanitizedBets = allBetsRaw ? sanitizeBets(allBetsRaw, isElite) : null;
 
   return (
-    <div className="space-y-8">
-      <PerformanceHero stats={trackStats} cache={cache} />
-      <PerformanceLeaderboard
-        bots={botStats}
+    <>
+      <PerformanceClient
+        trackStats={trackStats}
+        cache={cache}
+        cachedBots={cachedBots}
         isPro={isPro}
         isElite={isElite}
         allBets={sanitizedBets}
+        aggregateBets={allBetsRaw}
+        botsDB={botsDB}
       />
+
       {/* Free users: compact recent-results strip as trust signal + upsell.
           Pro/Elite: full bet history lives inside the per-bot modal. */}
       {!isPro && (
@@ -136,6 +140,6 @@ export default async function PerformancePage() {
       )}
       <ClvEducation />
       <TrackRecordFooterCta isPro={isPro} isElite={isElite} />
-    </div>
+    </>
   );
 }

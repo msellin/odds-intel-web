@@ -1,7 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useMemo, useState, useEffect } from "react";
 import type { LiveBet } from "@/lib/engine-data";
+import {
+  QUALITY_CUTOFF,
+  filterQuality,
+  buildBotStats,
+  buildSummary,
+  buildMarketStats,
+  isLiveBot,
+} from "@/lib/bot-aggregates";
+import type { BotStat, MarketStat, Summary } from "@/lib/bot-aggregates";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -30,52 +39,21 @@ import {
 } from "recharts";
 
 // ── Types ────────────────────────────────────────────────────────────────────
+// BotStat / MarketStat / Summary live in src/lib/bot-aggregates.ts so both
+// /admin/bots and /performance share the same shapes. Re-export for any
+// callers that imported these types from here historically.
+export type { BotStat, MarketStat, Summary };
 
-export interface BotStat {
+interface BotDbRow {
   name: string;
-  description: string;
-  total: number;
-  pending: number;
-  settled: number;
-  won: number;
-  lost: number;
-  hitRate: number | null;
-  totalPnl: number;
-  totalStaked: number;
-  roi: number | null;
+  strategy?: string | null;
   currentBankroll: number;
-  isRetired?: boolean;
-}
-
-export interface MarketStat {
-  market: string;
-  total: number;
-  settled: number;
-  won: number;
-  pnl: number;
-  hitRate: number | null;
-}
-
-export interface Summary {
-  totalBots: number;
-  totalBets: number;
-  settledCount: number;
-  wonCount: number;
-  allPnl: number;
-  allStaked: number;
-  hitRate: number | null;
-  roi: number | null;
+  retiredAt?: string | null;
 }
 
 interface Props {
   bets: LiveBet[];
-  activeBots: BotStat[];
-  pendingBots: BotStat[];
-  inactiveBots: BotStat[];
-  retiredBots?: BotStat[];
-  prematchMarketStats: MarketStat[];
-  liveMarketStats: MarketStat[];
-  summary: Summary;
+  allBotsDB: BotDbRow[];
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -412,18 +390,42 @@ function BotRow({
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function BotDashboardClient({
-  bets,
-  activeBots,
-  pendingBots,
-  inactiveBots,
-  retiredBots = [],
-  prematchMarketStats,
-  liveMarketStats,
-  summary,
-}: Props) {
+export function BotDashboardClient({ bets, allBotsDB }: Props) {
   const [selectedBot, setSelectedBot] = useState<BotStat | null>(null);
   const [showRetired, setShowRetired] = useState(false);
+  // BOT-QUAL-FILTER-DUAL — admin default OFF (full transparency for diagnosis).
+  const [qualityOnly, setQualityOnly] = useState(false);
+
+  // Filter once per toggle change; every aggregate downstream recomputes.
+  const filteredBets = useMemo(() => filterQuality(bets, qualityOnly), [bets, qualityOnly]);
+  const legacyCount = useMemo(
+    () => bets.filter((b) => b.placedAt < QUALITY_CUTOFF && b.result !== "void").length,
+    [bets],
+  );
+
+  // Per-bot stats — bot list and ordering recompute under the toggle.
+  const botStats = useMemo(() => buildBotStats(filteredBets, allBotsDB), [filteredBets, allBotsDB]);
+  const liveBots = useMemo(() => botStats.filter((b) => !b.isRetired), [botStats]);
+  const retiredBots = useMemo(() => botStats.filter((b) => b.isRetired), [botStats]);
+  const activeBots = useMemo(() => liveBots.filter((b) => b.settled > 0), [liveBots]);
+  const pendingBots = useMemo(() => liveBots.filter((b) => b.settled === 0 && b.total > 0), [liveBots]);
+  const inactiveBots = useMemo(() => liveBots.filter((b) => b.total === 0), [liveBots]);
+
+  // Headline summary (ROI/PnL/hit rate).
+  const summary = useMemo(
+    () => buildSummary(filteredBets, allBotsDB.length),
+    [filteredBets, allBotsDB.length],
+  );
+
+  // Per-market splits.
+  const prematchMarketStats = useMemo(
+    () => buildMarketStats(filteredBets, (b) => !isLiveBot(b.bot)),
+    [filteredBets],
+  );
+  const liveMarketStats = useMemo(
+    () => buildMarketStats(filteredBets, (b) => isLiveBot(b.bot)),
+    [filteredBets],
+  );
 
   return (
     <>
@@ -440,13 +442,31 @@ export function BotDashboardClient({
             Paper trading · Started 2026-04-27 · €1,000/bot starting bankroll · {summary.totalBots} bots configured
           </p>
         </div>
-        <span className="text-xs text-muted-foreground">
-          {bets.filter((b) => b.result !== "void").length} bets loaded
-          {(() => {
-            const v = bets.filter((b) => b.result === "void").length;
-            return v > 0 ? ` · ${v} void hidden` : "";
-          })()}
-        </span>
+        <div className="flex flex-col items-end gap-1">
+          {/* BOT-QUAL-FILTER-DUAL toggle — applies to every metric on this page */}
+          <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={qualityOnly}
+              onChange={(e) => setQualityOnly(e.target.checked)}
+              className="h-3.5 w-3.5"
+              data-testid="quality-only-toggle"
+            />
+            <span className="text-muted-foreground">
+              Quality only (post-{QUALITY_CUTOFF})
+              {legacyCount > 0 && (
+                <span className="ml-1">— {qualityOnly ? `excludes ${legacyCount} legacy` : `${legacyCount} legacy included`}</span>
+              )}
+            </span>
+          </label>
+          <span className="text-xs text-muted-foreground">
+            {filteredBets.filter((b) => b.result !== "void").length} bets loaded
+            {(() => {
+              const v = filteredBets.filter((b) => b.result === "void").length;
+              return v > 0 ? ` · ${v} void hidden` : "";
+            })()}
+          </span>
+        </div>
       </div>
 
       {/* Summary cards */}
@@ -661,7 +681,7 @@ export function BotDashboardClient({
       {selectedBot && (
         <BotDetailModal
           bot={selectedBot}
-          bets={bets}
+          bets={filteredBets}
           onClose={() => setSelectedBot(null)}
         />
       )}

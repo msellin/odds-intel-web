@@ -3,7 +3,11 @@ export const dynamic = 'force-dynamic';
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { getAllBets, getAllBotsFromDB } from "@/lib/engine-data";
 import { BotDashboardClient } from "@/components/bot-dashboard-client";
-import type { LiveBet } from "@/lib/engine-data";
+
+// BOT-QUAL-FILTER-DUAL — server now ships raw bets + DB bot rows only.
+// Aggregation (botStats, summary, marketStats) happens inside
+// BotDashboardClient via useMemo so the "Quality only" toggle updates
+// every metric on the page at once. See src/lib/bot-aggregates.ts.
 
 export default async function BotDashboardPage() {
   const supabase = await createSupabaseServer();
@@ -33,117 +37,11 @@ export default async function BotDashboardPage() {
     );
   }
 
-  // Fetch both in parallel — bots table is the authoritative list of all 16 bots
   const [bets, allBotsDB] = await Promise.all([getAllBets(), getAllBotsFromDB()]);
-
-  // ── Aggregate per-bot stats ─────────────────────────────────────────────────
-  const betsByBot: Record<string, LiveBet[]> = {};
-  for (const bet of bets) {
-    if (!betsByBot[bet.bot]) betsByBot[bet.bot] = [];
-    betsByBot[bet.bot].push(bet);
-  }
-
-  // Build stats for ALL bots from DB (not just those with bets)
-  const botStats = allBotsDB.map((dbBot) => {
-    const botBets = betsByBot[dbBot.name] || [];
-    // Voids never count toward the bot's bet count — they're cancelled bets, not history.
-    const counted = botBets.filter((b) => b.result !== "void");
-    const settled = botBets.filter((b) => b.result !== "pending" && b.result !== "void");
-    const won = settled.filter((b) => b.result === "won").length;
-    const totalPnl = settled.reduce((s, b) => s + b.pnl, 0);
-    const totalStaked = settled.reduce((s, b) => s + b.stake, 0);
-    return {
-      name: dbBot.name,
-      description: dbBot.strategy || "",
-      total: counted.length,
-      pending: botBets.filter((b) => b.result === "pending").length,
-      settled: settled.length,
-      won,
-      lost: settled.length - won,
-      hitRate: settled.length > 0 ? (won / settled.length) * 100 : null,
-      totalPnl,
-      totalStaked,
-      roi:
-        totalStaked > 0 && settled.length > 0
-          ? (totalPnl / totalStaked) * 100
-          : null,
-      currentBankroll: dbBot.currentBankroll,
-      isRetired: Boolean(dbBot.retiredAt),
-    };
-  }).sort((a, b) => {
-    // Retired bots last regardless of P&L — they're hidden by default in the UI
-    if (a.isRetired !== b.isRetired) return a.isRetired ? 1 : -1;
-    // Bots with settled bets first (by P&L), then pending-only, then zero-bet bots last
-    if (a.settled > 0 && b.settled === 0) return -1;
-    if (a.settled === 0 && b.settled > 0) return 1;
-    if (a.settled > 0 && b.settled > 0) return b.totalPnl - a.totalPnl;
-    if (a.total > 0 && b.total === 0) return -1;
-    if (a.total === 0 && b.total > 0) return 1;
-    return a.name.localeCompare(b.name);
-  });
-
-  // Retired bots get their own bucket — the dashboard client renders them
-  // behind a "Show retired" toggle (default off) so the main view stays clean.
-  const liveBots = botStats.filter((b) => !b.isRetired);
-  const retiredBots = botStats.filter((b) => b.isRetired);
-  const activeBots = liveBots.filter((b) => b.settled > 0);
-  const pendingBots = liveBots.filter((b) => b.settled === 0 && b.total > 0);
-  const inactiveBots = liveBots.filter((b) => b.total === 0);
-
-  // ── Summary numbers ─────────────────────────────────────────────────────────
-  const totalBets = bets.filter((b) => b.result !== "void").length;
-  const allSettled = bets.filter((b) => b.result !== "pending" && b.result !== "void");
-  const allWon = allSettled.filter((b) => b.result === "won").length;
-  const allPnl = allSettled.reduce((s, b) => s + b.pnl, 0);
-  const allStaked = allSettled.reduce((s, b) => s + b.stake, 0);
-
-  // ── Market breakdown — split by prematch vs live (inplay_* bot prefix) ─────
-  const buildMarketStats = (subset: LiveBet[]) => {
-    const map: Record<string, { total: number; settled: number; won: number; pnl: number }> = {};
-    for (const bet of subset) {
-      const key = bet.market || "unknown";
-      if (!map[key]) map[key] = { total: 0, settled: 0, won: 0, pnl: 0 };
-      map[key].total++;
-      if (bet.result !== "pending" && bet.result !== "void") {
-        map[key].settled++;
-        map[key].pnl += bet.pnl;
-        if (bet.result === "won") map[key].won++;
-      }
-    }
-    return Object.entries(map)
-      .map(([market, s]) => ({
-        market,
-        ...s,
-        hitRate: s.settled > 0 ? (s.won / s.settled) * 100 : null,
-      }))
-      .sort((a, b) => b.total - a.total);
-  };
-
-  const isLive = (botName: string) => botName.startsWith("inplay_");
-  const prematchMarketStats = buildMarketStats(bets.filter((b) => !isLive(b.bot)));
-  const liveMarketStats = buildMarketStats(bets.filter((b) => isLive(b.bot)));
 
   return (
     <div className="space-y-8">
-      <BotDashboardClient
-        bets={bets}
-        activeBots={activeBots}
-        pendingBots={pendingBots}
-        inactiveBots={inactiveBots}
-        retiredBots={retiredBots}
-        prematchMarketStats={prematchMarketStats}
-        liveMarketStats={liveMarketStats}
-        summary={{
-          totalBots: allBotsDB.length,
-          totalBets,
-          settledCount: allSettled.length,
-          wonCount: allWon,
-          allPnl,
-          allStaked,
-          hitRate: allSettled.length > 0 ? (allWon / allSettled.length) * 100 : null,
-          roi: allStaked > 0 ? (allPnl / allStaked) * 100 : null,
-        }}
-      />
+      <BotDashboardClient bets={bets} allBotsDB={allBotsDB} />
     </div>
   );
 }
