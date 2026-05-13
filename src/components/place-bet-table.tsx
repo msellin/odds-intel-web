@@ -103,14 +103,28 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
     return { recommendedByBetId: recommended, groupSizeByBetId: sizes };
   }, [candidates]);
 
-  const filtered = candidates.filter((c) => {
-    if (filter === "edge" && (c.edge ?? 0) < 0.05) return false;
-    if (filter === "available" && c.unibetOdds == null && c.bet365Odds == null) return false;
-    if (filter === "placed" && !c.alreadyPlaced) return false;
-    if (filter === "consensus" && (groupSizeByBetId.get(c.betId) ?? 1) < 2) return false;
-    if (filter === "consensus" && !recommendedByBetId.has(c.betId)) return false;
-    return true;
-  });
+  const filtered = candidates
+    .filter((c) => {
+      if (filter === "edge" && (c.edge ?? 0) < 0.05) return false;
+      if (filter === "available" && c.unibetOdds == null && c.bet365Odds == null) return false;
+      if (filter === "placed" && !c.alreadyPlaced) return false;
+      if (filter === "consensus" && (groupSizeByBetId.get(c.betId) ?? 1) < 2) return false;
+      if (filter === "consensus" && !recommendedByBetId.has(c.betId)) return false;
+      return true;
+    })
+    // Keep duplicate-bet rows adjacent so the amber stripe reads as one bar.
+    // Preserves kickoff ASC (engine-data's primary order), then groups by
+    // (matchId, market, selection), edge DESC within the group.
+    .sort((a, b) => {
+      const ka = new Date(a.kickoff).getTime();
+      const kb = new Date(b.kickoff).getTime();
+      if (ka !== kb) return ka - kb;
+      if (a.matchId !== b.matchId) return a.matchId.localeCompare(b.matchId);
+      const ga = `${a.market}|${a.selection}`;
+      const gb = `${b.market}|${b.selection}`;
+      if (ga !== gb) return ga.localeCompare(gb);
+      return (b.edge ?? 0) - (a.edge ?? 0);
+    });
 
   const consensusCount = candidates.filter(
     (c) => (groupSizeByBetId.get(c.betId) ?? 1) >= 2 && recommendedByBetId.has(c.betId)
@@ -167,10 +181,11 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
       {/* Mobile: card list */}
       <div className="sm:hidden space-y-2">
         {filtered.map((c) => {
+          const grouped = (groupSizeByBetId.get(c.betId) ?? 1) >= 2;
           return (
             <div
               key={c.betId}
-              className={`rounded-lg border bg-card p-3 ${c.alreadyPlaced ? "border-emerald-700/50 bg-emerald-950/30" : "border-border"}`}
+              className={`rounded-lg border bg-card p-3 ${c.alreadyPlaced ? "border-emerald-700/50 bg-emerald-950/30" : "border-border"} ${grouped ? "border-l-2 border-l-amber-500/60" : ""}`}
             >
               <div className="flex items-start justify-between gap-2 mb-1">
                 <div className="min-w-0">
@@ -227,8 +242,9 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
           </thead>
           <tbody>
             {filtered.map((c) => {
+              const grouped = (groupSizeByBetId.get(c.betId) ?? 1) >= 2;
               return (
-                <tr key={c.betId} className={`border-t border-border ${c.alreadyPlaced ? "bg-emerald-950/30" : ""}`}>
+                <tr key={c.betId} className={`border-t border-border ${c.alreadyPlaced ? "bg-emerald-950/30" : ""} ${grouped ? "border-l-2 border-l-amber-500/60" : ""}`}>
                   <td className="p-2">
                     <div className="font-medium flex items-center gap-1.5">
                       {c.match}
