@@ -594,29 +594,27 @@ function BetRow({
       bet.edge * 100 >= 10 && "bg-emerald-500/5",
     )}>
       <td className="py-3 pl-4 pr-2">
-        <div className="flex items-center gap-2">
-          {isElite && bet.botCount > 1 && (
-            <span className="shrink-0 rounded border border-blue-500/30 bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-bold text-blue-400">
-              {bet.botCount} bots
-            </span>
-          )}
-          <div>
-            <div className="flex items-center gap-1.5 mb-0.5">
-              <p className="font-medium text-foreground/90 truncate max-w-[200px]">{bet.match}</p>
-              {kickoffSoon && (
-                <span className="shrink-0 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-amber-400">
-                  KO soon
-                </span>
-              )}
-              {oddsMoved && !kickoffSoon && (
-                <span className="shrink-0 rounded border border-border/40 bg-muted/30 px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground">
-                  Odds moved
-                </span>
-              )}
-            </div>
-            <p className="text-[10px] text-muted-foreground/80 truncate">{bet.league}</p>
-            {isElite && bookOddsEntry && <BookOddsLine entry={bookOddsEntry} modelProb={bet.modelProb} />}
+        <div>
+          <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+            <p className="font-medium text-foreground/90 truncate max-w-[200px]">{bet.match}</p>
+            {isElite && bet.botCount > 1 && (
+              <span className="shrink-0 rounded border border-blue-500/30 bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-bold text-blue-400">
+                {bet.botCount} bots
+              </span>
+            )}
+            {kickoffSoon && (
+              <span className="shrink-0 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-amber-400">
+                KO soon
+              </span>
+            )}
+            {oddsMoved && !kickoffSoon && (
+              <span className="shrink-0 rounded border border-border/40 bg-muted/30 px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground">
+                Odds moved
+              </span>
+            )}
           </div>
+          <p className="text-[10px] text-muted-foreground/80 truncate">{bet.league}</p>
+          {isElite && bookOddsEntry && <BookOddsLine entry={bookOddsEntry} modelProb={bet.modelProb} />}
         </div>
       </td>
       <td className="py-3 px-2 text-center">
