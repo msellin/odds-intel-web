@@ -18,8 +18,15 @@ export function RetiredStrategiesSection({ retired }: Props) {
   const [open, setOpen] = useState(false);
   if (!retired || retired.length === 0) return null;
 
+  // PERF-RETIRED-CLEANUP (2026-05-17): skip rows that have nothing to show —
+  // 0 settled bets AND no retire reason means there's no story to tell. Keeps
+  // bots like bot_conservative visible (0 bets but a reason that IS the story:
+  // "criteria too tight, never fired").
+  const visible = retired.filter((b) => b.settled > 0 || !!b.retired_reason);
+  if (visible.length === 0) return null;
+
   // Sort: most-recently-retired first, ties broken by abs P&L (bigger story first).
-  const sorted = [...retired].sort((a, b) => {
+  const sorted = [...visible].sort((a, b) => {
     const aDate = a.retired_at ? new Date(a.retired_at).getTime() : 0;
     const bDate = b.retired_at ? new Date(b.retired_at).getTime() : 0;
     if (bDate !== aDate) return bDate - aDate;
