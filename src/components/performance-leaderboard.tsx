@@ -31,6 +31,11 @@ export interface PublicBotStat {
   clvDirection: "positive" | "negative" | "neutral" | null;
   avgClv: number | null;
   currentBankroll: number | null;
+  // PERF-CHART-STARTING-BANKROLL (2026-05-17): per-bot starting bankroll so the
+  // chart's synthetic origin matches reality. Was hardcoded €1000, which broke
+  // for bot_aggressive_v2 (€10k start) — the line jumped from 1000 to 10000+
+  // on the first bet, looking like the chart "started from the first bet."
+  startingBankroll: number | null;
   hasEnoughData: boolean;
 }
 
@@ -88,19 +93,21 @@ function resultBadge(r: string) {
 
 // ── Bankroll chart ────────────────────────────────────────────────────────────
 
-function buildChartData(bets: SanitizedBotBet[]) {
+function buildChartData(bets: SanitizedBotBet[], startingBankroll: number | null) {
   const settled = [...bets]
     .filter((b) => b.result === "won" || b.result === "lost")
     .sort((a, b) => new Date(a.placedAt).getTime() - new Date(b.placedAt).getTime());
 
   if (settled.length < 2) return [];
 
+  // PERF-CHART-STARTING-BANKROLL (2026-05-17): use the bot's actual starting
+  // bankroll. Was hardcoded €1000, which broke bot_aggressive_v2 (€10k start)
+  // — the line jumped from 1000 to ~10000 on the first bet, looking like the
+  // chart "started from the first bet's result."
+  const origin = startingBankroll ?? 1000;
   const hasBankroll = settled.some((b) => b.bankrollAfter != null);
-  let running = 1000;
+  let running = origin;
 
-  // Prepend a synthetic origin so the line visibly starts at the bot's
-  // 1000€ starting bankroll instead of jumping straight to the first bet's
-  // outcome (e.g. 990 or 1010 with no reference).
   const series = settled.map((b, i) => {
     const bankroll = hasBankroll && b.bankrollAfter != null
       ? b.bankrollAfter
@@ -113,7 +120,7 @@ function buildChartData(bets: SanitizedBotBet[]) {
     };
   });
   return [
-    { idx: 0, bankroll: 1000, date: "Start", result: "origin" as const },
+    { idx: 0, bankroll: origin, date: "Start", result: "origin" as const },
     ...series,
   ];
 }
@@ -139,11 +146,15 @@ function BotModal({
     .filter((b) => b.bot === bot.name && b.result !== "void")
     .sort((a, b) => new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime());
 
-  const chartData = buildChartData(botBets);
+  const chartData = buildChartData(botBets, bot.startingBankroll);
+  const origin = bot.startingBankroll ?? 1000;
   const bankrollValues = chartData.map((d) => d.bankroll);
-  const minB = Math.min(...bankrollValues, 1000);
-  const maxB = Math.max(...bankrollValues, 1000);
-  const yDomain = [Math.floor((minB - 30) / 50) * 50, Math.ceil((maxB + 30) / 50) * 50];
+  const minB = Math.min(...bankrollValues, origin);
+  const maxB = Math.max(...bankrollValues, origin);
+  // Bucket size scales with origin — €50 buckets feel right at €1000 starts
+  // but tiny at €10k. Use 5% of origin, min 50.
+  const bucket = Math.max(50, Math.round((origin * 0.05) / 50) * 50);
+  const yDomain = [Math.floor((minB - bucket * 0.6) / bucket) * bucket, Math.ceil((maxB + bucket * 0.6) / bucket) * bucket];
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>

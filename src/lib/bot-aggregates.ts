@@ -72,6 +72,7 @@ interface BotDbRow {
   name: string;
   strategy?: string | null;
   currentBankroll: number;
+  startingBankroll: number;
   retiredAt?: string | null;
 }
 
@@ -222,6 +223,7 @@ export interface PublicBotStatShape {
   clvDirection: "positive" | "negative" | "neutral" | null;
   avgClv: number | null;
   currentBankroll: number | null;
+  startingBankroll: number | null;
   hasEnoughData: boolean;
 }
 
@@ -275,6 +277,7 @@ export function buildPublicBotStats(
       clvDirection,
       avgClv: opts.isElite ? avgClv : null,
       currentBankroll: opts.isElite ? (bankrollMap.get(dbBot.name) ?? null) : null,
+      startingBankroll: dbBot.startingBankroll,
       hasEnoughData: settled.length >= 5,
     };
   });

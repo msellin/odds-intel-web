@@ -48,6 +48,7 @@ interface BotDbRow {
   name: string;
   strategy?: string | null;
   currentBankroll: number;
+  startingBankroll: number;
   retiredAt?: string | null;
 }
 

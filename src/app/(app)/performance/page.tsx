@@ -36,8 +36,12 @@ function buildCachedBotStats(
   if (!cache) return [];
 
   const bankrollMap = new Map<string, number>();
+  const startingBankrollMap = new Map<string, number>();
   if (botsDB) {
-    for (const b of botsDB) bankrollMap.set(b.name, b.currentBankroll);
+    for (const b of botsDB) {
+      bankrollMap.set(b.name, b.currentBankroll);
+      startingBankrollMap.set(b.name, b.startingBankroll);
+    }
   }
 
   const stats: PublicBotStat[] = (cache.bot_breakdown ?? []).map((b) => {
@@ -52,6 +56,7 @@ function buildCachedBotStats(
       clvDirection: clvDir as PublicBotStat["clvDirection"],
       avgClv: isElite ? b.avg_clv : null,
       currentBankroll: isElite ? (bankrollMap.get(b.name) ?? null) : null,
+      startingBankroll: startingBankrollMap.get(b.name) ?? null,
       hasEnoughData: b.settled >= 5,
     };
   });
