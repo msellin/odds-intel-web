@@ -244,7 +244,12 @@ export function buildPublicBotStats(
   const bankrollMap = new Map<string, number>();
   for (const b of botsDB) bankrollMap.set(b.name, b.currentBankroll);
 
-  const rows: PublicBotStatShape[] = botsDB.map((dbBot): PublicBotStatShape => {
+  // BOTS-RETIRE-1X2 (2026-05-17): public leaderboard must not surface retired bots.
+  // Cache path already filters via dashboard_cache.bot_breakdown (settlement.py
+  // joins `WHERE is_active AND retired_at IS NULL`), but the client-side
+  // aggregateBets toggle would otherwise resurrect them from raw bets data.
+  const activeBots = botsDB.filter((b) => !b.retiredAt);
+  const rows: PublicBotStatShape[] = activeBots.map((dbBot): PublicBotStatShape => {
     const botBets = betsByBot[dbBot.name] || [];
     const settled = botBets.filter((b) => b.result !== "pending" && b.result !== "void");
     const won = settled.filter((b) => b.result === "won").length;
