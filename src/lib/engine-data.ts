@@ -1424,11 +1424,20 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
     });
   }
 
-  // Sort by kickoff ASC, then by edge DESC
+  // COOLBET-SELECTION-BIAS (2026-05-17): rank by expected-value contribution
+  // (edge × Kelly stake) DESC so the top of the list is the highest-EV bet.
+  // When the user runs out of placement time on busy days, the skipped slips
+  // are now the lowest-EV ones instead of a random tail. Real-bets report
+  // measured 13.2pp ROI gap between placed (-7.1%) and unplaced (+6.1%)
+  // bets — the user was systematically skipping the winners under the old
+  // kickoff-first sort. Tiebreak: nearer kickoff first (don't miss windows).
+  // Already-placed bets are pushed to the bottom regardless of score.
   out.sort((a, b) => {
-    const k = new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime();
-    if (k !== 0) return k;
-    return (b.edge ?? 0) - (a.edge ?? 0);
+    if (a.alreadyPlaced !== b.alreadyPlaced) return a.alreadyPlaced ? 1 : -1;
+    const aScore = (a.edge ?? 0) * (a.stake ?? 0);
+    const bScore = (b.edge ?? 0) * (b.stake ?? 0);
+    if (aScore !== bScore) return bScore - aScore;
+    return new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime();
   });
 
   return out;
