@@ -2523,6 +2523,17 @@ export interface BotConsensusData {
 
 // ─── PERF-CACHE: Pre-computed dashboard stats ───────────────────────────────
 
+export interface RetiredBotBreakdownRow {
+  name: string;
+  settled: number;
+  won: number;
+  total_pnl: number;
+  roi_pct: number | null;
+  avg_clv: number | null;
+  retired_at: string | null;
+  retired_reason: string | null;
+}
+
 export interface DashboardCache {
   computed_at: string;
   total_bets: number;
@@ -2554,6 +2565,17 @@ export interface DashboardCache {
   pseudo_clv_count: number;
   live_snapshot_matches: number;
   alignment_settled_count: number;
+  // PERF-HONEST-HEADLINE (2026-05-17): active-only headline + retired
+  // strategies breakdown. Nullable on legacy rows (pre-migration 104).
+  active_total_bets: number | null;
+  active_settled_bets: number | null;
+  active_won_bets: number | null;
+  active_lost_bets: number | null;
+  active_total_staked: number | null;
+  active_total_pnl: number | null;
+  active_roi_pct: number | null;
+  active_avg_clv: number | null;
+  retired_bot_breakdown: RetiredBotBreakdownRow[] | null;
 }
 
 export async function getDashboardCache(): Promise<DashboardCache | null> {

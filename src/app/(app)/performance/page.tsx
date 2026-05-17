@@ -22,6 +22,7 @@ import type { PublicBotStat, SanitizedBotBet } from "@/components/performance-le
 import { PerformanceHistory } from "@/components/performance-history";
 import { ClvEducation } from "@/components/clv-education";
 import { TrackRecordFooterCta } from "@/components/track-record-footer-cta";
+import { RetiredStrategiesSection } from "@/components/retired-strategies-section";
 
 // ── Server-side cache → public stats fallback ────────────────────────────────
 // Used when toggle is off or for Free users (who don't get aggregateBets).
@@ -127,6 +128,10 @@ export default async function PerformancePage() {
         aggregateBets={allBetsRaw}
         botsDB={botsDB}
       />
+
+      {/* PERF-HONEST-HEADLINE: every retired bot with its final stats + reason.
+          Default collapsed so the active leaderboard stays the visual headline. */}
+      <RetiredStrategiesSection retired={cache?.retired_bot_breakdown ?? null} />
 
       {/* Free users: compact recent-results strip as trust signal + upsell.
           Pro/Elite: full bet history lives inside the per-bot modal. */}
