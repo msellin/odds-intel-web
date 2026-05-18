@@ -1033,6 +1033,10 @@ export async function getTodayBets(): Promise<LiveBet[]> {
   // INPLAY-HIDE-VALUEBETS: prematch-only on /value-bets while inplay bots are
   // being tuned. xg_source IS NULL ⇒ prematch bot. Inplay bets still appear on
   // /performance (historical record) where the `live` badge differentiates them.
+  // COMBO-HIDE-FROM-PUBLIC (2026-05-18): hide combo/acca rows too — they're
+  // multi-leg paper experiments, not individually-placeable value bets.
+  // Still visible on /admin/place (manual placer can build the slip at Coolbet)
+  // and /admin/bots (superadmin tracking).
   const { data, error } = await supabase
     .from("simulated_bets")
     .select(
@@ -1048,6 +1052,7 @@ export async function getTodayBets(): Promise<LiveBet[]> {
     )
     .gte("pick_time", todayStart.toISOString())
     .is("xg_source", null)
+    .neq("market", "combo")
     .order("pick_time", { ascending: false });
 
   if (error || !data) return [];
@@ -1246,6 +1251,18 @@ function toBet(row: SimBetRow): LiveBet {
 
 // ── SELF-USE-VALIDATION: placement candidates + real bets ────────────────────
 
+export interface PlaceableBetLeg {
+  matchId: string;
+  match: string;            // "Home vs Away" for display
+  league: string;
+  kickoff: string;          // ISO
+  market: string;
+  selection: string;
+  odds: number;
+  prob: number;
+  botSource: string;        // which single-bet bot picked this leg
+}
+
 export interface PlaceableBet {
   betId: string;            // simulated_bets.id (the paper bet)
   bot: string;
@@ -1264,6 +1281,9 @@ export interface PlaceableBet {
   modelProb: number | null;
   stake: number | null;     // suggested €1-3, manually picked
   alreadyPlaced: boolean;   // true if real_bets already has a bet on this match today
+  // COMBO-ADMIN-PLACE-UI (2026-05-18): for combo/acca rows, the legs to combine
+  // on the Coolbet bet builder slip. null for single bets.
+  comboLegs: PlaceableBetLeg[] | null;
 }
 
 /** Map paper-bet (market, selection) to odds_snapshots (market, selection). */
@@ -1306,7 +1326,7 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
     .from("simulated_bets")
     .select(
       `id, match_id, market, selection, odds_at_pick, pick_time, stake,
-       model_probability, calibrated_prob, edge_percent,
+       model_probability, calibrated_prob, edge_percent, combo_legs,
        bot:bot_id(id, name),
        match:match_id(id, date,
          home_team:home_team_id(name),
@@ -1372,6 +1392,42 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
     }
   }
 
+  // 2c) For combo rows, fetch match info for each leg's match_id (the bet's
+  // own match_id is just the first leg's placeholder — other legs aren't in
+  // the outer join). Batch one query for all unique leg match_ids.
+  const allLegMatchIds = new Set<string>();
+  for (const b of upcoming) {
+    const legs = b.combo_legs;
+    if (Array.isArray(legs)) {
+      for (const leg of legs) {
+        if (leg?.match_id) allLegMatchIds.add(leg.match_id);
+      }
+    }
+  }
+  const legMatchInfo = new Map<string, {match: string; league: string; kickoff: string}>();
+  if (allLegMatchIds.size > 0) {
+    const { data: legMatches } = await admin
+      .from("matches")
+      .select(`id, date, home_team:home_team_id(name), away_team:away_team_id(name), league:league_id(name, country)`)
+      .in("id", Array.from(allLegMatchIds));
+    type LegRow = {
+      id: string; date: string;
+      home_team: {name: string} | {name: string}[] | null;
+      away_team: {name: string} | {name: string}[] | null;
+      league: {name: string; country: string} | {name: string; country: string}[] | null;
+    };
+    for (const lm of ((legMatches ?? []) as LegRow[])) {
+      const ht = Array.isArray(lm.home_team) ? lm.home_team[0] : lm.home_team;
+      const at = Array.isArray(lm.away_team) ? lm.away_team[0] : lm.away_team;
+      const lg = Array.isArray(lm.league) ? lm.league[0] : lm.league;
+      legMatchInfo.set(lm.id, {
+        match: ht && at ? `${ht.name} vs ${at.name}` : "Unknown",
+        league: lg ? `${lg.country} / ${lg.name}` : "Unknown",
+        kickoff: lm.date,
+      });
+    }
+  }
+
   // 3) build PlaceableBet rows
   const out: PlaceableBet[] = [];
   for (const b of upcoming) {
@@ -1403,6 +1459,28 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
       }
     }
 
+    // Build comboLegs for combo bets (otherwise null)
+    let comboLegs: PlaceableBetLeg[] | null = null;
+    if (Array.isArray(b.combo_legs)) {
+      comboLegs = (b.combo_legs as Array<{
+        match_id: string; market: string; selection: string;
+        odds: number; prob: number; bot_source: string;
+      }>).map((leg) => {
+        const info = legMatchInfo.get(leg.match_id);
+        return {
+          matchId: leg.match_id,
+          match: info?.match ?? "Unknown",
+          league: info?.league ?? "Unknown",
+          kickoff: info?.kickoff ?? "",
+          market: leg.market,
+          selection: leg.selection,
+          odds: Number(leg.odds),
+          prob: Number(leg.prob),
+          botSource: leg.bot_source,
+        };
+      });
+    }
+
     out.push({
       betId: b.id,
       bot: bot?.name || "unknown",
@@ -1421,6 +1499,7 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
       modelProb: b.calibrated_prob != null ? Number(b.calibrated_prob) : (b.model_probability != null ? Number(b.model_probability) : null),
       stake: b.stake != null ? Number(b.stake) : null,
       alreadyPlaced: placedSimBetIds.has(b.id),
+      comboLegs,
     });
   }
 

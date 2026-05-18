@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { Fragment, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import type { PlaceableBet } from "@/lib/engine-data";
 
@@ -71,6 +71,17 @@ function ConsensusBadge({ size, recommended }: { size: number; recommended: bool
 export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
   const [filter, setFilter] = useState<"all" | "edge" | "available" | "placed" | "consensus">("all");
   const [openModal, setOpenModal] = useState<PlaceableBet | null>(null);
+  // COMBO-ADMIN-PLACE-UI: track which combo rows are expanded inline. Click a
+  // combo row's chevron to reveal the N legs below.
+  const [expandedCombos, setExpandedCombos] = useState<Set<string>>(new Set());
+  const toggleCombo = (betId: string) => {
+    setExpandedCombos((prev) => {
+      const next = new Set(prev);
+      if (next.has(betId)) next.delete(betId);
+      else next.add(betId);
+      return next;
+    });
+  };
 
   const placedCount = candidates.filter((c) => c.alreadyPlaced).length;
 
@@ -243,43 +254,92 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
           <tbody>
             {filtered.map((c) => {
               const grouped = (groupSizeByBetId.get(c.betId) ?? 1) >= 2;
+              const isCombo = c.comboLegs != null && c.comboLegs.length > 0;
+              const isExpanded = isCombo && expandedCombos.has(c.betId);
               return (
-                <tr key={c.betId} className={`border-t border-border ${c.alreadyPlaced ? "bg-emerald-950/30" : ""} ${grouped ? "border-l-2 border-l-amber-500/60" : ""}`}>
+                <Fragment key={c.betId}>
+                <tr
+                  className={`border-t border-border ${c.alreadyPlaced ? "bg-emerald-950/30" : ""} ${grouped ? "border-l-2 border-l-amber-500/60" : ""} ${isCombo ? "border-l-2 border-l-purple-500/60 bg-purple-950/20" : ""}`}
+                >
                   <td className="p-2">
                     <div className="font-medium flex items-center gap-1.5">
-                      {c.match}
+                      {isCombo ? (
+                        <button
+                          onClick={() => toggleCombo(c.betId)}
+                          className="text-left flex items-center gap-1.5 hover:text-purple-300"
+                        >
+                          <span className="text-purple-400">{isExpanded ? "▼" : "▶"}</span>
+                          <span>{c.bot} — {c.comboLegs!.length}-leg combo</span>
+                        </button>
+                      ) : (
+                        c.match
+                      )}
                       {c.alreadyPlaced && (
                         <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-800 text-emerald-200 font-normal">✓ Placed</span>
                       )}
                     </div>
-                    <div className="text-xs text-muted-foreground">{c.league}</div>
+                    <div className="text-xs text-muted-foreground">{isCombo ? `Build at Coolbet bet builder — combine ${c.comboLegs!.length} legs` : c.league}</div>
                     <div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
-                      <span>{fmtKickoff(c.kickoff)} · {c.bot}</span>
-                      <ConsensusBadge
-                        size={groupSizeByBetId.get(c.betId) ?? 1}
-                        recommended={recommendedByBetId.has(c.betId)}
-                      />
+                      {isCombo ? (
+                        <span>Combined edge {fmtPct(c.edge)} · stake €{c.stake?.toFixed(2) ?? "—"}</span>
+                      ) : (
+                        <>
+                          <span>{fmtKickoff(c.kickoff)} · {c.bot}</span>
+                          <ConsensusBadge
+                            size={groupSizeByBetId.get(c.betId) ?? 1}
+                            recommended={recommendedByBetId.has(c.betId)}
+                          />
+                        </>
+                      )}
                     </div>
                   </td>
                   <td className="p-2 text-xs">
-                    <div>{c.market}</div>
-                    <div className="text-muted-foreground">{fmtAHSelection(c.selection)}</div>
+                    <div>{isCombo ? "COMBO" : c.market}</div>
+                    <div className="text-muted-foreground">{isCombo ? c.selection : fmtAHSelection(c.selection)}</div>
                   </td>
-                  <td className="p-2 text-right font-mono text-emerald-400">{fmtOdds(c.unibetOdds)}</td>
-                  <td className="p-2 text-right font-mono text-blue-300">{fmtOdds(c.bet365Odds)}</td>
-                  <td className="p-2 text-right font-mono text-muted-foreground">{fmtOdds(c.pinnacleOdds)}</td>
+                  <td className="p-2 text-right font-mono text-emerald-400">{isCombo ? "—" : fmtOdds(c.unibetOdds)}</td>
+                  <td className="p-2 text-right font-mono text-blue-300">{isCombo ? "—" : fmtOdds(c.bet365Odds)}</td>
+                  <td className="p-2 text-right font-mono text-muted-foreground">{isCombo ? "—" : fmtOdds(c.pinnacleOdds)}</td>
                   <td className="p-2 text-right font-mono">{fmtOdds(c.botOdds)}</td>
                   <td className="p-2 text-right font-mono">{fmtPct(c.edge)}</td>
                   <td className="p-2 text-right font-mono text-amber-300">{c.stake != null ? `€${c.stake.toFixed(2)}` : "—"}</td>
                   <td className="p-2 text-right">
-                    <button
-                      onClick={() => setOpenModal(c)}
-                      className="px-2 py-1 text-xs rounded bg-emerald-600 hover:bg-emerald-500"
-                    >
-                      Place
-                    </button>
+                    {isCombo ? (
+                      <button
+                        onClick={() => toggleCombo(c.betId)}
+                        className="px-2 py-1 text-xs rounded bg-purple-700 hover:bg-purple-600"
+                      >
+                        {isExpanded ? "Hide" : "Show legs"}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setOpenModal(c)}
+                        className="px-2 py-1 text-xs rounded bg-emerald-600 hover:bg-emerald-500"
+                      >
+                        Place
+                      </button>
+                    )}
                   </td>
                 </tr>
+                {/* Expanded combo legs */}
+                {isCombo && isExpanded && c.comboLegs!.map((leg, i) => (
+                  <tr key={`leg-${i}`} className="border-t border-border/30 bg-purple-950/10 text-xs">
+                    <td className="p-2 pl-8">
+                      <div className="font-medium">Leg {i + 1}: {leg.match}</div>
+                      <div className="text-muted-foreground">{leg.league} · {fmtKickoff(leg.kickoff)}</div>
+                      <div className="text-muted-foreground">{leg.botSource}</div>
+                    </td>
+                    <td className="p-2">
+                      <div>{leg.market}</div>
+                      <div className="text-muted-foreground">{fmtAHSelection(leg.selection)}</div>
+                    </td>
+                    <td className="p-2 text-right text-muted-foreground" colSpan={3}>(combine at Coolbet bet builder)</td>
+                    <td className="p-2 text-right font-mono">{fmtOdds(leg.odds)}</td>
+                    <td className="p-2 text-right font-mono">{fmtPct(leg.prob * leg.odds - 1)}</td>
+                    <td className="p-2 text-right text-muted-foreground" colSpan={2}>—</td>
+                  </tr>
+                ))}
+                </Fragment>
               );
             })}
           </tbody>
