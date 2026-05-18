@@ -69,10 +69,22 @@ export function PerformanceClient({
     return filterQuality(aggregateBets, qualityOnly);
   }, [canRecompute, aggregateBets, qualityOnly]);
 
+  const activeBotNames = useMemo(() => {
+    if (!botsDB) return null;
+    return new Set(botsDB.filter((b) => !b.retiredAt).map((b) => b.name));
+  }, [botsDB]);
+
+  // All-bets perf (for the all-time subtext and total settled count).
   const computedPerf = useMemo(() => {
     if (!filteredBets) return null;
     return buildPerformanceStats(filteredBets);
   }, [filteredBets]);
+
+  // Active-bots-only perf (for the headline ROI and "N on active strategies").
+  const computedActivePerf = useMemo(() => {
+    if (!filteredBets || !activeBotNames) return null;
+    return buildPerformanceStats(filteredBets.filter((b) => activeBotNames.has(b.bot)));
+  }, [filteredBets, activeBotNames]);
 
   const computedBots = useMemo<PublicBotStat[] | null>(() => {
     if (!filteredBets || !botsDB) return null;
@@ -83,14 +95,21 @@ export function PerformanceClient({
   const heroStats: TrackRecordStats = computedPerf
     ? {
         ...trackStats,
-        avgClv: computedPerf.avgClv,
+        avgClv: computedActivePerf?.avgClv ?? computedPerf.avgClv,
         settledBets: computedPerf.settledCount,
       }
     : trackStats;
 
-  // Hero ROI: prefer computed (matches the toggle); fall back to cache.
+  // Hero ROI + active counts: update all quality-sensitive fields so the toggle
+  // actually changes the headline numbers (roi_pct = all-time incl. retired,
+  // active_roi_pct = active-bots-only — both quality-filtered).
   const heroCache: DashboardCache | null = computedPerf && cache
-    ? { ...cache, roi_pct: computedPerf.roi }
+    ? {
+        ...cache,
+        roi_pct: computedPerf.roi,
+        active_roi_pct: computedActivePerf?.roi ?? null,
+        active_settled_bets: computedActivePerf?.settledCount ?? null,
+      }
     : cache;
 
   // Leaderboard rows: computed for Pro+ when toggle data is available, else cache.
