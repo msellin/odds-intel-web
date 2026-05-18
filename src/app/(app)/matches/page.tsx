@@ -93,7 +93,7 @@ export default function MatchesPage({
             Tomorrow
           </Link>
         </div>
-        <span className="text-sm text-muted-foreground/80">{formatShortDate(dayOffset)}</span>
+        <span className="text-sm text-muted-foreground">{formatShortDate(dayOffset)}</span>
       </div>
 
       {/* Streams in after fast queries resolve */}

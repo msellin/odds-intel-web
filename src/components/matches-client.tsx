@@ -2,13 +2,37 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef, use, Suspense } from "react";
 import { useRouter } from "next/navigation";
-import { Star, Search, X } from "lucide-react";
+import Link from "next/link";
+import { Star, Search, X, History } from "lucide-react";
 import dynamic from "next/dynamic";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
 import { useAuth } from "@/components/auth-provider";
 import type { PublicMatch, LiveSnapshot } from "@/lib/engine-data";
 import { LeagueAccordion } from "./league-accordion";
+import { MatchFavoriteButton } from "./match-favorite-button";
 import type { TeaserData } from "@/app/(app)/matches/page";
+
+interface PastSavedMatchRow {
+  id: string;
+  date: string;
+  status: string | null;
+  score_home: number | null;
+  score_away: number | null;
+  home_team: { name: string }[] | { name: string } | null;
+  away_team: { name: string }[] | { name: string } | null;
+  league: { name: string; country: string }[] | { name: string; country: string } | null;
+}
+
+interface PastSavedMatch {
+  id: string;
+  date: string;
+  status: string;
+  scoreHome: number | null;
+  scoreAway: number | null;
+  homeTeam: string;
+  awayTeam: string;
+  league: string;
+}
 
 // Lazy — not included in server HTML, so it can never be the LCP element.
 const DailyValueTeaser = dynamic(
@@ -37,6 +61,8 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
   const [gradeFilter, setGradeFilter] = useState<GradeFilter>(null);
   const [leagueSearch, setLeagueSearch] = useState("");
   const [favoriteMatchIds, setFavoriteMatchIds] = useState<Set<string>>(new Set());
+  const [pastSavedMatches, setPastSavedMatches] = useState<PastSavedMatch[] | null>(null);
+  const [pastSavedLoading, setPastSavedLoading] = useState(false);
   const { user, profile } = useAuth();
 
   // Fetch user's match favorites on mount
@@ -53,6 +79,59 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
         }
       });
   }, [user]);
+
+  // IDs of matches currently visible in today's list — used to filter past saved fetch
+  const visibleMatchIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const [, matches] of sortedGroups) for (const m of matches) ids.add(m.id);
+    return ids;
+  }, [sortedGroups]);
+
+  // Lazy: fetch past saved matches (saved games that no longer appear in today's list)
+  // only when the user opens the My Games tab. Keeps initial bundle/work down.
+  useEffect(() => {
+    if (!user || filterTab !== "favorites" || favoriteMatchIds.size === 0) return;
+    if (pastSavedMatches !== null || pastSavedLoading) return;
+
+    const pastIds = [...favoriteMatchIds].filter((id) => !visibleMatchIds.has(id));
+    if (pastIds.length === 0) {
+      setPastSavedMatches([]);
+      return;
+    }
+
+    setPastSavedLoading(true);
+    const supabase = createSupabaseBrowser();
+    supabase
+      .from("matches")
+      .select(
+        `id, date, status, score_home, score_away,
+         home_team:home_team_id(name),
+         away_team:away_team_id(name),
+         league:league_id(name, country)`
+      )
+      .in("id", pastIds)
+      .order("date", { ascending: false })
+      .then(({ data }) => {
+        const rows = (data ?? []) as PastSavedMatchRow[];
+        const mapped: PastSavedMatch[] = rows.map((r) => {
+          const ht = Array.isArray(r.home_team) ? r.home_team[0] : r.home_team;
+          const at = Array.isArray(r.away_team) ? r.away_team[0] : r.away_team;
+          const lg = Array.isArray(r.league) ? r.league[0] : r.league;
+          return {
+            id: r.id,
+            date: r.date,
+            status: r.status ?? "finished",
+            scoreHome: r.score_home,
+            scoreAway: r.score_away,
+            homeTeam: ht?.name ?? "TBD",
+            awayTeam: at?.name ?? "TBD",
+            league: lg ? `${lg.country} / ${lg.name}` : "Unknown",
+          };
+        });
+        setPastSavedMatches(mapped);
+        setPastSavedLoading(false);
+      });
+  }, [user, filterTab, favoriteMatchIds, visibleMatchIds, pastSavedMatches, pastSavedLoading]);
 
   const handleMatchFavoriteToggle = useCallback((matchId: string, isFavorited: boolean) => {
     setFavoriteMatchIds((prev) => {
@@ -243,7 +322,7 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
             All
             {totalCount > 0 && (
               <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                statusTab === "all" ? "bg-white/[0.08] text-muted-foreground/80" : "bg-white/[0.06] text-muted-foreground/80"
+                statusTab === "all" ? "bg-white/[0.08] text-muted-foreground" : "bg-white/[0.06] text-muted-foreground"
               }`}>
                 {totalCount}
               </span>
@@ -317,7 +396,7 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
             My Games
             {favoriteMatchCount > 0 && (
               <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                filterTab === "favorites" ? "bg-amber-400/20 text-amber-400" : "bg-white/[0.06] text-muted-foreground/80"
+                filterTab === "favorites" ? "bg-amber-400/20 text-amber-400" : "bg-white/[0.06] text-muted-foreground"
               }`}>
                 {favoriteMatchCount}
               </span>
@@ -400,7 +479,7 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
         </Suspense>
       ) : (
         <>
-          {filterTab === "favorites" && filteredGroups.length === 0 && (
+          {filterTab === "favorites" && filteredGroups.length === 0 && (pastSavedMatches?.length ?? 0) === 0 && !pastSavedLoading && (
             <div className="rounded-xl border border-white/[0.06] bg-card/40 py-10 text-center">
               <Star className="mx-auto h-8 w-8 text-muted-foreground/30 mb-3" />
               <p className="text-sm font-medium text-foreground">No saved games today</p>
@@ -452,6 +531,14 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
               prioritizeFirstLogos={i === 0}
             />
           ))}
+
+          {filterTab === "favorites" && pastSavedMatches && pastSavedMatches.filter((m) => favoriteMatchIds.has(m.id)).length > 0 && (
+            <PastSavedGames
+              matches={pastSavedMatches.filter((m) => favoriteMatchIds.has(m.id))}
+              favoriteMatchIds={favoriteMatchIds}
+              onToggle={handleMatchFavoriteToggle}
+            />
+          )}
         </>
       )}
     </div>
@@ -532,5 +619,65 @@ function FinishedContent({
         />
       ))}
     </>
+  );
+}
+
+function PastSavedGames({
+  matches,
+  favoriteMatchIds,
+  onToggle,
+}: {
+  matches: PastSavedMatch[];
+  favoriteMatchIds: Set<string>;
+  onToggle: (matchId: string, isFavorited: boolean) => void;
+}) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-card/40">
+      <div className="flex items-center gap-2 border-b border-white/[0.06] bg-muted/30 px-4 py-2.5">
+        <History className="size-3.5 text-muted-foreground" />
+        <span className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
+          Past saved games
+        </span>
+        <span className="ml-auto text-[10px] text-muted-foreground/60">
+          {matches.length}
+        </span>
+      </div>
+      <div className="divide-y divide-white/[0.04]">
+        {matches.map((m) => {
+          const d = new Date(m.date);
+          const dateLabel = d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+          const hasScore = m.scoreHome != null && m.scoreAway != null;
+          return (
+            <div key={m.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-white/[0.02] transition-colors">
+              <MatchFavoriteButton
+                matchId={m.id}
+                favoriteMatchIds={favoriteMatchIds}
+                onToggle={onToggle}
+              />
+              <Link href={`/matches/${m.id}`} className="flex-1 min-w-0 flex items-center gap-3">
+                <span className="font-mono text-[10px] text-muted-foreground w-12 shrink-0">
+                  {dateLabel}
+                </span>
+                <span className="text-sm text-foreground truncate flex-1">
+                  {m.homeTeam} <span className="text-muted-foreground/50">vs</span> {m.awayTeam}
+                </span>
+                <span className="text-[10px] text-muted-foreground/70 truncate max-w-[10rem] hidden sm:inline">
+                  {m.league}
+                </span>
+                {hasScore ? (
+                  <span className="font-mono text-xs font-bold text-foreground tabular-nums w-12 text-right shrink-0">
+                    {m.scoreHome}–{m.scoreAway}
+                  </span>
+                ) : (
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/50 w-12 text-right shrink-0">
+                    {m.status === "postponed" ? "PP" : "—"}
+                  </span>
+                )}
+              </Link>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }

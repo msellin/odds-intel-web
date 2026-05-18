@@ -86,11 +86,20 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   return (
     <html
       lang="en"
       className={`${inter.variable} ${jetbrainsMono.variable} dark`}
     >
+      <head>
+        {supabaseUrl && (
+          <>
+            <link rel="preconnect" href={supabaseUrl} crossOrigin="anonymous" />
+            <link rel="dns-prefetch" href={supabaseUrl} />
+          </>
+        )}
+      </head>
       <body className="min-h-dvh bg-background text-foreground antialiased">
         <script
           type="application/ld+json"

@@ -1,40 +1,70 @@
 "use client";
 
-import { Suspense, useEffect, useRef } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import posthog from "posthog-js";
+import type posthogJs from "posthog-js";
 import { useAuth } from "@/components/auth-provider";
 
 const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY;
 const POSTHOG_HOST =
   process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com";
 
+// Single shared promise so PageView/UserSync wait on the same import.
+let posthogPromise: Promise<typeof posthogJs> | null = null;
+let posthogRef: typeof posthogJs | null = null;
 let initialized = false;
 
-function PostHogPageView() {
+function loadPosthog(): Promise<typeof posthogJs> {
+  if (!posthogPromise) {
+    posthogPromise = import("posthog-js").then((m) => {
+      const ph = m.default;
+      posthogRef = ph;
+      if (POSTHOG_KEY && !initialized) {
+        ph.init(POSTHOG_KEY, {
+          api_host: POSTHOG_HOST,
+          capture_pageview: false,
+          capture_pageleave: true,
+          persistence: "localStorage",
+          disable_session_recording: true,
+          disable_surveys: true,
+          autocapture: false,
+          // We don't use feature flags / /decide / /flags — disabling avoids
+          // ERR_SOCKET_NOT_CONNECTED noise + skips a request on every page load.
+          advanced_disable_feature_flags: true,
+          advanced_disable_decide: true,
+        });
+        initialized = true;
+      }
+      return ph;
+    });
+  }
+  return posthogPromise;
+}
+
+function PostHogPageView({ ready }: { ready: boolean }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    if (!POSTHOG_KEY || !initialized) return;
+    if (!ready || !posthogRef || !initialized) return;
     const url =
       pathname + (searchParams.toString() ? `?${searchParams.toString()}` : "");
-    posthog.capture("$pageview", { $current_url: url });
-  }, [pathname, searchParams]);
+    posthogRef.capture("$pageview", { $current_url: url });
+  }, [pathname, searchParams, ready]);
 
   return null;
 }
 
-function PostHogUserSync() {
+function PostHogUserSync({ ready }: { ready: boolean }) {
   const { user, profile } = useAuth();
   const lastIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!POSTHOG_KEY || !initialized) return;
+    if (!ready || !posthogRef || !initialized) return;
 
     if (user && profile) {
       if (lastIdRef.current !== user.id) {
-        posthog.identify(user.id, {
+        posthogRef.identify(user.id, {
           email: profile.email,
           name: profile.display_name ?? profile.email,
           tier: profile.tier,
@@ -44,35 +74,40 @@ function PostHogUserSync() {
         lastIdRef.current = user.id;
       }
     } else if (!user && lastIdRef.current) {
-      posthog.reset();
+      posthogRef.reset();
       lastIdRef.current = null;
     }
-  }, [user, profile]);
+  }, [user, profile, ready]);
 
   return null;
 }
 
 export function PostHogProvider({ children }: { children: React.ReactNode }) {
+  const [ready, setReady] = useState(false);
+
   useEffect(() => {
-    if (!POSTHOG_KEY || initialized) return;
-    posthog.init(POSTHOG_KEY, {
-      api_host: POSTHOG_HOST,
-      capture_pageview: false,
-      capture_pageleave: true,
-      persistence: "localStorage",
-      disable_session_recording: true,
-      disable_surveys: true,
-      autocapture: false,
-    });
-    initialized = true;
+    if (!POSTHOG_KEY) return;
+
+    const start = () => {
+      loadPosthog().then(() => setReady(true));
+    };
+
+    const win = window as Window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+    };
+    if (typeof win.requestIdleCallback === "function") {
+      win.requestIdleCallback(start, { timeout: 2500 });
+    } else {
+      setTimeout(start, 1500);
+    }
   }, []);
 
   return (
     <>
       <Suspense fallback={null}>
-        <PostHogPageView />
+        <PostHogPageView ready={ready} />
       </Suspense>
-      <PostHogUserSync />
+      <PostHogUserSync ready={ready} />
       {children}
     </>
   );
