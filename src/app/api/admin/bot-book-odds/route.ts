@@ -70,11 +70,15 @@ export async function POST(req: Request) {
   const matchIds = Array.from(new Set(betRows.map((b) => b.match_id)));
 
   // 3. One query for all needed odds_snapshots, filtered by bookmaker
+  //    COOLBET-REAL-ODDS-WIRE (2026-05-20): Coolbet now included — we ingest
+  //    real Coolbet odds via scripts/coolbet_daemon.py. `unibet` field stays
+  //    in the response as a Kambi-stack fallback; daemon will eventually
+  //    cover every match we see Unibet on.
   const { data: snaps } = await sa
     .from("odds_snapshots")
     .select("match_id, market, selection, bookmaker, odds, timestamp")
     .in("match_id", matchIds)
-    .in("bookmaker", ["Unibet", "Bet365"])
+    .in("bookmaker", ["Coolbet", "Unibet", "Bet365"])
     .order("timestamp", { ascending: false })
     .range(0, 19999);
 
@@ -86,7 +90,8 @@ export async function POST(req: Request) {
     if (!snapMap.has(k)) snapMap.set(k, Number(s.odds));
   }
 
-  // 5. Build the response
+  // 5. Build the response — `unibet` field now prefers real Coolbet when
+  //    available, falls back to Unibet (Kambi proxy) when not yet ingested.
   const out: Record<string, { unibet: number | null; bet365: number | null }> = {};
   for (const b of betRows) {
     const k = mapKey(b.market, b.selection);
@@ -94,8 +99,10 @@ export async function POST(req: Request) {
       out[b.id] = { unibet: null, bet365: null };
       continue;
     }
+    const coolbet = snapMap.get(snapKey(b.match_id, k.market, k.selection, "Coolbet")) ?? null;
+    const unibet  = snapMap.get(snapKey(b.match_id, k.market, k.selection, "Unibet"))  ?? null;
     out[b.id] = {
-      unibet: snapMap.get(snapKey(b.match_id, k.market, k.selection, "Unibet")) ?? null,
+      unibet: coolbet ?? unibet,
       bet365: snapMap.get(snapKey(b.match_id, k.market, k.selection, "Bet365")) ?? null,
     };
   }

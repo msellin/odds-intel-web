@@ -117,7 +117,7 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
   const filtered = candidates
     .filter((c) => {
       if (filter === "edge" && (c.edge ?? 0) < 0.05) return false;
-      if (filter === "available" && c.unibetOdds == null && c.bet365Odds == null) return false;
+      if (filter === "available" && c.coolbetOdds == null && c.unibetOdds == null && c.bet365Odds == null) return false;
       if (filter === "placed" && !c.alreadyPlaced) return false;
       if (filter === "consensus" && (groupSizeByBetId.get(c.betId) ?? 1) < 2) return false;
       if (filter === "consensus" && !recommendedByBetId.has(c.betId)) return false;
@@ -220,7 +220,7 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs text-muted-foreground">{fmtOdds(c.botOdds)}</span>
-                  <span className="font-mono text-emerald-400 font-semibold">{fmtOdds(c.unibetOdds)}</span>
+                  <span className="font-mono text-emerald-400 font-semibold">{fmtOdds(c.coolbetOdds ?? c.unibetOdds)}</span>
                   <span className="font-mono text-xs text-muted-foreground">{fmtPct(c.edge)}</span>
                   <button
                     onClick={() => setOpenModal(c)}
@@ -297,7 +297,12 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
                     <div>{isCombo ? "COMBO" : c.market}</div>
                     <div className="text-muted-foreground">{isCombo ? c.selection : fmtAHSelection(c.selection)}</div>
                   </td>
-                  <td className="p-2 text-right font-mono text-emerald-400">{isCombo ? "—" : fmtOdds(c.unibetOdds)}</td>
+                  <td className="p-2 text-right font-mono text-emerald-400">
+                    {isCombo ? "—" : fmtOdds(c.coolbetOdds ?? c.unibetOdds)}
+                    {c.coolbetOdds == null && c.unibetOdds != null && (
+                      <span className="ml-1 text-[9px] text-amber-500" title="Unibet proxy — Coolbet odds not yet ingested">*</span>
+                    )}
+                  </td>
                   <td className="p-2 text-right font-mono text-blue-300">{isCombo ? "—" : fmtOdds(c.bet365Odds)}</td>
                   <td className="p-2 text-right font-mono text-muted-foreground">{isCombo ? "—" : fmtOdds(c.pinnacleOdds)}</td>
                   <td className="p-2 text-right font-mono">{fmtOdds(c.botOdds)}</td>
@@ -346,7 +351,7 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
         </table>
       </div>
       <p className="text-xs text-muted-foreground mt-2">
-        *Coolbet column shows Unibet odds (proxy — both run on Kambi).
+        *Coolbet column shows real Coolbet odds when ingested; falls back to Unibet proxy (marked with *) when the daemon hasn&rsquo;t snapshotted that match yet.
       </p>
 
       {openModal && <PlaceBetModal candidate={openModal} onClose={() => setOpenModal(null)} />}
@@ -356,7 +361,8 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
 
 function PlaceBetModal({ candidate, onClose }: { candidate: PlaceableBet; onClose: () => void }) {
   const router = useRouter();
-  const defaultOdds = candidate.unibetOdds ?? candidate.bet365Odds ?? candidate.pinnacleOdds ?? candidate.botOdds;
+  // Prefer real Coolbet odds; fall back through proxies (Unibet → Bet365 → Pinnacle → model).
+  const defaultOdds = candidate.coolbetOdds ?? candidate.unibetOdds ?? candidate.bet365Odds ?? candidate.pinnacleOdds ?? candidate.botOdds;
   const bookmaker = "Coolbet";
   const [actualOdds, setActualOdds] = useState<string>(defaultOdds.toFixed(2));
   // Default to the bot's Kelly-recommended stake. Fall back to €2 if missing.
@@ -368,7 +374,9 @@ function PlaceBetModal({ candidate, onClose }: { candidate: PlaceableBet; onClos
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const capturedOdds = candidate.unibetOdds;
+  // capturedOdds = what the snapshot saw (Coolbet preferred). Stored on real_bets
+  // for later CLV / drift analysis vs actualOdds.
+  const capturedOdds = candidate.coolbetOdds ?? candidate.unibetOdds;
 
   const parsedOdds = parseFloat(actualOdds);
   const liveEdge =

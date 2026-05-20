@@ -1274,7 +1274,8 @@ export interface PlaceableBet {
   market: string;
   selection: string;
   botOdds: number;          // odds_at_pick from paper bet
-  unibetOdds: number | null;  // Coolbet proxy
+  coolbetOdds: number | null;  // real Coolbet odds (preferred when present)
+  unibetOdds: number | null;   // Kambi-stack proxy (fallback when Coolbet missing)
   bet365Odds: number | null;
   pinnacleOdds: number | null;
   edge: number | null;
@@ -1371,7 +1372,7 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
     .from("odds_snapshots")
     .select("match_id, market, selection, bookmaker, odds, handicap_line, timestamp")
     .in("match_id", matchIds)
-    .in("bookmaker", ["Unibet", "Bet365", "Pinnacle"])
+    .in("bookmaker", ["Coolbet", "Unibet", "Bet365", "Pinnacle"])
     .order("timestamp", { ascending: false })
     .range(0, 9999);
 
@@ -1441,10 +1442,12 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
     const bot = b.bot ? (Array.isArray(b.bot) ? b.bot[0] : b.bot) : null;
 
     // AH odds: selection is "Home -1.25" → parse to (sel="home", hl=-1.25) for ahSnapMap
+    let coolbetOdds: number | null = null;
     let unibetOdds: number | null = null;
     let bet365Odds: number | null = null;
     let pinnacleOdds: number | null = null;
     if (k) {
+      coolbetOdds = snapMap.get(snapKey(b.match_id, k.market, k.selection, "Coolbet")) ?? null;
       unibetOdds = snapMap.get(snapKey(b.match_id, k.market, k.selection, "Unibet")) ?? null;
       bet365Odds = snapMap.get(snapKey(b.match_id, k.market, k.selection, "Bet365")) ?? null;
       pinnacleOdds = snapMap.get(snapKey(b.match_id, k.market, k.selection, "Pinnacle")) ?? null;
@@ -1453,6 +1456,7 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
       if (ahMatch) {
         const ahSel = ahMatch[1];
         const ahHl = parseFloat(ahMatch[2]);
+        coolbetOdds = ahSnapMap.get(ahSnapKey(b.match_id, ahSel, ahHl, "Coolbet")) ?? null;
         unibetOdds = ahSnapMap.get(ahSnapKey(b.match_id, ahSel, ahHl, "Unibet")) ?? null;
         bet365Odds = ahSnapMap.get(ahSnapKey(b.match_id, ahSel, ahHl, "Bet365")) ?? null;
         pinnacleOdds = ahSnapMap.get(ahSnapKey(b.match_id, ahSel, ahHl, "Pinnacle")) ?? null;
@@ -1492,6 +1496,7 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
       market: b.market,
       selection: b.selection,
       botOdds: Number(b.odds_at_pick),
+      coolbetOdds,
       unibetOdds,
       bet365Odds,
       pinnacleOdds,
@@ -3625,7 +3630,7 @@ export async function getValueBetBookOdds(
     .from("odds_snapshots")
     .select("match_id, market, selection, bookmaker, odds, timestamp")
     .in("match_id", matchIds)
-    .in("bookmaker", ["Unibet", "Bet365", "Pinnacle"])
+    .in("bookmaker", ["Coolbet", "Unibet", "Bet365", "Pinnacle"])
     .order("timestamp", { ascending: false })
     .range(0, 9999);
 
