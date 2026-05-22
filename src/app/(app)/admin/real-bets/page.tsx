@@ -1,7 +1,8 @@
 export const dynamic = "force-dynamic";
 
 import { createSupabaseServer } from "@/lib/supabase-server";
-import { getRealBets } from "@/lib/engine-data";
+import { getRealBets, type RealBet } from "@/lib/engine-data";
+import { RealBetsLog } from "@/components/real-bets-log";
 
 function fmtMoney(v: number) {
   const sign = v >= 0 ? "+" : "−";
@@ -9,6 +10,43 @@ function fmtMoney(v: number) {
 }
 function fmtPct(v: number) {
   return `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
+}
+
+interface AggStats {
+  total: number;
+  settled: number;
+  pending: number;
+  won: number;
+  lost: number;
+  staked: number;
+  pnl: number;
+  roi: number;
+  meanSlip: number | null;
+}
+
+function aggregate(bets: RealBet[]): AggStats {
+  const settled = bets.filter((b) => b.result !== "pending");
+  const won = settled.filter((b) => b.result === "won").length;
+  const lost = settled.filter((b) => b.result === "lost").length;
+  const staked = settled.reduce((s, b) => s + b.stake, 0);
+  const pnl = settled.reduce((s, b) => s + (b.pnl ?? 0), 0);
+  const roi = staked > 0 ? (pnl / staked) * 100 : 0;
+  const withSlip = settled.filter((b) => b.slippagePct != null);
+  const meanSlip =
+    withSlip.length > 0
+      ? withSlip.reduce((s, b) => s + (b.slippagePct ?? 0), 0) / withSlip.length
+      : null;
+  return {
+    total: bets.length,
+    settled: settled.length,
+    pending: bets.length - settled.length,
+    won,
+    lost,
+    staked,
+    pnl,
+    roi,
+    meanSlip,
+  };
 }
 
 export default async function RealBetsPage() {
@@ -26,29 +64,15 @@ export default async function RealBetsPage() {
 
   const bets = await getRealBets();
 
-  // Aggregate stats
-  const settled = bets.filter((b) => b.result !== "pending");
-  const won = settled.filter((b) => b.result === "won").length;
-  const lost = settled.filter((b) => b.result === "lost").length;
-  const totalStaked = settled.reduce((s, b) => s + b.stake, 0);
-  const totalPnl = settled.reduce((s, b) => s + (b.pnl ?? 0), 0);
-  const roi = totalStaked > 0 ? (totalPnl / totalStaked) * 100 : 0;
+  // Today boundary in UTC (engine runs on UTC, settlement at 21:00/23:30/01:00 UTC)
+  const now = new Date();
+  const todayStartUtc = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  );
+  const todayBets = bets.filter((b) => new Date(b.placedAt) >= todayStartUtc);
 
-  // Slippage stats — only on rows where capturedOdds exists
-  const withSlip = settled.filter((b) => b.slippagePct != null);
-  const meanSlip =
-    withSlip.length > 0
-      ? withSlip.reduce((s, b) => s + (b.slippagePct ?? 0), 0) / withSlip.length
-      : 0;
-
-  // Per-book breakdown
-  const byBook: Record<string, { n: number; staked: number; pnl: number }> = {};
-  for (const b of settled) {
-    if (!byBook[b.bookmaker]) byBook[b.bookmaker] = { n: 0, staked: 0, pnl: 0 };
-    byBook[b.bookmaker].n += 1;
-    byBook[b.bookmaker].staked += b.stake;
-    byBook[b.bookmaker].pnl += b.pnl ?? 0;
-  }
+  const overall = aggregate(bets);
+  const today = aggregate(todayBets);
 
   // Per-bot breakdown — covers all bets (including pending) so coverage is visible
   const byBot: Record<string, { n: number; pending: number; staked: number; pnl: number }> = {};
@@ -70,115 +94,82 @@ export default async function RealBetsPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Real bets</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          SELF-USE-VALIDATION cohort. Real-money bets logged from /admin/place. Settles on the
-          same 21:00/23:30/01:00 + 15-min cadence as paper bets.
+          SELF-USE-VALIDATION cohort · Coolbet. Real-money bets logged from /admin/place. Settles
+          on the same 21:00/23:30/01:00 + 15-min cadence as paper bets.
         </p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <Stat label="Total bets" value={bets.length.toString()} sub={`${settled.length} settled · ${bets.length - settled.length} pending`} />
-        <Stat label="Won / lost" value={`${won} / ${lost}`} sub={settled.length > 0 ? `${((won / settled.length) * 100).toFixed(1)}% hit rate` : "—"} />
-        <Stat label="P&L" value={fmtMoney(totalPnl)} sub={`Staked €${totalStaked.toFixed(2)}`} good={totalPnl > 0} bad={totalPnl < 0} />
-        <Stat label="ROI" value={fmtPct(roi)} sub={`Mean slippage ${withSlip.length > 0 ? fmtPct(meanSlip) : "—"}`} good={roi > 0} bad={roi < 0} />
-      </div>
+      <StatRow label="Overall" stats={overall} />
+      <StatRow label={`Today (UTC · ${todayStartUtc.toISOString().slice(0, 10)})`} stats={today} />
 
-      <div className="grid md:grid-cols-2 gap-4 mb-6">
-        {Object.keys(byBook).length > 0 && (
-          <div>
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">Per-book</h2>
-            <div className="rounded-lg border border-border bg-card overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
-                  <tr><th className="text-left p-2">Book</th><th className="text-right p-2">Bets</th><th className="text-right p-2">Staked</th><th className="text-right p-2">P&amp;L</th><th className="text-right p-2">ROI</th></tr>
-                </thead>
-                <tbody>
-                  {Object.entries(byBook).map(([book, s]) => (
-                    <tr key={book} className="border-t border-border">
-                      <td className="p-2 font-medium">{book}</td>
-                      <td className="p-2 text-right">{s.n}</td>
-                      <td className="p-2 text-right">€{s.staked.toFixed(2)}</td>
-                      <td className={`p-2 text-right ${s.pnl > 0 ? "text-emerald-400" : s.pnl < 0 ? "text-red-400" : ""}`}>{fmtMoney(s.pnl)}</td>
-                      <td className="p-2 text-right">{s.staked > 0 ? fmtPct((s.pnl / s.staked) * 100) : "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+      {byBotSorted.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">Per-bot</h2>
+          <div className="rounded-lg border border-border bg-card overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="text-left p-2">Bot</th>
+                  <th className="text-right p-2">Settled</th>
+                  <th className="text-right p-2">Pending</th>
+                  <th className="text-right p-2">Staked</th>
+                  <th className="text-right p-2">P&amp;L</th>
+                  <th className="text-right p-2">ROI</th>
+                </tr>
+              </thead>
+              <tbody>
+                {byBotSorted.map(([bot, s]) => (
+                  <tr key={bot} className="border-t border-border">
+                    <td className="p-2 font-medium">{bot}</td>
+                    <td className="p-2 text-right">{s.n}</td>
+                    <td className="p-2 text-right text-amber-400">{s.pending > 0 ? s.pending : "—"}</td>
+                    <td className="p-2 text-right">€{s.staked.toFixed(2)}</td>
+                    <td className={`p-2 text-right ${s.pnl > 0 ? "text-emerald-400" : s.pnl < 0 ? "text-red-400" : ""}`}>
+                      {s.n > 0 ? fmtMoney(s.pnl) : "—"}
+                    </td>
+                    <td className="p-2 text-right">{s.staked > 0 ? fmtPct((s.pnl / s.staked) * 100) : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        )}
+        </div>
+      )}
 
-        {byBotSorted.length > 0 && (
-          <div>
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">Per-bot</h2>
-            <div className="rounded-lg border border-border bg-card overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
-                  <tr><th className="text-left p-2">Bot</th><th className="text-right p-2">Settled</th><th className="text-right p-2">Pending</th><th className="text-right p-2">Staked</th><th className="text-right p-2">P&amp;L</th><th className="text-right p-2">ROI</th></tr>
-                </thead>
-                <tbody>
-                  {byBotSorted.map(([bot, s]) => (
-                    <tr key={bot} className="border-t border-border">
-                      <td className="p-2 font-medium">{bot}</td>
-                      <td className="p-2 text-right">{s.n}</td>
-                      <td className="p-2 text-right text-amber-400">{s.pending > 0 ? s.pending : "—"}</td>
-                      <td className="p-2 text-right">€{s.staked.toFixed(2)}</td>
-                      <td className={`p-2 text-right ${s.pnl > 0 ? "text-emerald-400" : s.pnl < 0 ? "text-red-400" : ""}`}>{s.n > 0 ? fmtMoney(s.pnl) : "—"}</td>
-                      <td className="p-2 text-right">{s.staked > 0 ? fmtPct((s.pnl / s.staked) * 100) : "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </div>
+      <RealBetsLog bets={bets} />
+    </div>
+  );
+}
 
-      <div className="rounded-lg border border-border bg-card overflow-x-auto">
-        <h2 className="text-sm font-semibold p-3 border-b border-border">Bet log (newest first)</h2>
-        <table className="w-full text-sm">
-          <thead className="bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
-            <tr>
-              <th className="text-left p-2">Placed</th>
-              <th className="text-left p-2">Match</th>
-              <th className="text-left p-2 hidden sm:table-cell">Bot</th>
-              <th className="text-left p-2">Sel</th>
-              <th className="text-left p-2 hidden sm:table-cell">Book</th>
-              <th className="text-right p-2 hidden sm:table-cell">Captured</th>
-              <th className="text-right p-2">Odds</th>
-              <th className="text-right p-2 hidden sm:table-cell">Slip</th>
-              <th className="text-right p-2">Stake</th>
-              <th className="text-left p-2">Result</th>
-              <th className="text-right p-2">PnL</th>
-            </tr>
-          </thead>
-          <tbody>
-            {bets.length === 0 && (
-              <tr><td colSpan={11} className="p-4 text-center text-muted-foreground">No real bets logged yet.</td></tr>
-            )}
-            {bets.map((b) => (
-              <tr key={b.id} className="border-t border-border">
-                <td className="p-2 whitespace-nowrap text-xs">{new Date(b.placedAt).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}</td>
-                <td className="p-2"><div>{b.match}</div><div className="text-xs text-muted-foreground">{b.league}</div></td>
-                <td className="p-2 text-xs hidden sm:table-cell">{b.bot ?? "—"}</td>
-                <td className="p-2 text-xs"><div>{b.market}</div><div className="text-muted-foreground">{b.selection}</div></td>
-                <td className="p-2 hidden sm:table-cell">{b.bookmaker}</td>
-                <td className="p-2 text-right font-mono hidden sm:table-cell">{b.capturedOdds?.toFixed(2) ?? "—"}</td>
-                <td className="p-2 text-right font-mono">{b.actualOdds.toFixed(2)}</td>
-                <td className={`p-2 text-right font-mono hidden sm:table-cell ${b.slippagePct != null && b.slippagePct < -1 ? "text-red-400" : b.slippagePct != null && b.slippagePct > 1 ? "text-emerald-400" : ""}`}>{b.slippagePct != null ? `${b.slippagePct.toFixed(2)}%` : "—"}</td>
-                <td className="p-2 text-right">€{b.stake.toFixed(2)}</td>
-                <td className="p-2">
-                  <span className={
-                    b.result === "won" ? "text-emerald-400" :
-                    b.result === "lost" ? "text-red-400" :
-                    b.result === "void" ? "text-muted-foreground" :
-                    "text-amber-400"
-                  }>{b.result}</span>
-                </td>
-                <td className={`p-2 text-right font-mono ${(b.pnl ?? 0) > 0 ? "text-emerald-400" : (b.pnl ?? 0) < 0 ? "text-red-400" : ""}`}>{b.pnl != null ? fmtMoney(b.pnl) : "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+function StatRow({ label, stats }: { label: string; stats: AggStats }) {
+  return (
+    <div className="mb-4">
+      <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{label}</h2>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Stat
+          label="Total bets"
+          value={stats.total.toString()}
+          sub={`${stats.settled} settled · ${stats.pending} pending`}
+        />
+        <Stat
+          label="Won / lost"
+          value={`${stats.won} / ${stats.lost}`}
+          sub={stats.settled > 0 ? `${((stats.won / stats.settled) * 100).toFixed(1)}% hit rate` : "—"}
+        />
+        <Stat
+          label="P&L"
+          value={stats.settled > 0 ? fmtMoney(stats.pnl) : "—"}
+          sub={`Staked €${stats.staked.toFixed(2)}`}
+          good={stats.pnl > 0}
+          bad={stats.pnl < 0}
+        />
+        <Stat
+          label="ROI"
+          value={stats.settled > 0 ? fmtPct(stats.roi) : "—"}
+          sub={stats.meanSlip != null ? `Mean slippage ${fmtPct(stats.meanSlip)}` : "—"}
+          good={stats.roi > 0}
+          bad={stats.roi < 0}
+        />
       </div>
     </div>
   );
