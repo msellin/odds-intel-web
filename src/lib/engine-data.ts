@@ -1139,6 +1139,7 @@ export interface BotRecord {
   id: string;
   name: string;
   strategy: string | null;
+  description: string | null;
   startingBankroll: number;
   currentBankroll: number;
   isActive: boolean;
@@ -1149,13 +1150,14 @@ export async function getAllBotsFromDB(): Promise<BotRecord[]> {
   const supabase = await createSupabaseServer();
   const { data, error } = await supabase
     .from("bots")
-    .select("id, name, strategy, starting_bankroll, current_bankroll, is_active, retired_at")
+    .select("id, name, strategy, description, starting_bankroll, current_bankroll, is_active, retired_at")
     .order("name");
   if (error || !data) return [];
   return (data as Record<string, unknown>[]).map((r) => ({
     id: r.id as string,
     name: r.name as string,
     strategy: r.strategy as string | null,
+    description: r.description as string | null,
     startingBankroll: Number(r.starting_bankroll ?? 1000),
     currentBankroll: Number(r.current_bankroll ?? 1000),
     isActive: Boolean(r.is_active),

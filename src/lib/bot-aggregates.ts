@@ -71,6 +71,7 @@ export interface PerformanceStats {
 interface BotDbRow {
   name: string;
   strategy?: string | null;
+  description?: string | null;
   currentBankroll: number;
   startingBankroll: number;
   retiredAt?: string | null;
@@ -108,7 +109,7 @@ export function buildBotStats(bets: LiveBet[], botsDB: BotDbRow[]): BotStat[] {
       const totalStaked = settled.reduce((s, b) => s + b.stake, 0);
       return {
         name: dbBot.name,
-        description: dbBot.strategy || "",
+        description: dbBot.description || dbBot.strategy || "",
         total: counted.length,
         pending: botBets.filter((b) => b.result === "pending").length,
         settled: settled.length,

@@ -47,6 +47,7 @@ export type { BotStat, MarketStat, Summary };
 interface BotDbRow {
   name: string;
   strategy?: string | null;
+  description?: string | null;
   currentBankroll: number;
   startingBankroll: number;
   retiredAt?: string | null;
@@ -370,7 +371,19 @@ function BotRow({
       className={`cursor-pointer transition-colors hover:bg-muted/50 ${dimmed ? "opacity-35" : ""}`}
       onClick={onClick}
     >
-      <TableCell className="font-mono text-xs py-2.5">{bot.name}</TableCell>
+      <TableCell className="font-mono text-xs py-2.5">
+        <span className="flex items-center gap-1.5">
+          {bot.name}
+          {bot.description && (
+            <span
+              title={bot.description}
+              className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-muted text-[9px] text-muted-foreground cursor-help select-none flex-shrink-0"
+            >
+              ?
+            </span>
+          )}
+        </span>
+      </TableCell>
       <TableCell className="text-right text-sm py-2.5">{bot.total > 0 ? bot.total : <span className="text-muted-foreground">—</span>}</TableCell>
       <TableCell className="text-right text-sm py-2.5">{bot.settled > 0 ? bot.settled : <span className="text-muted-foreground">{bot.pending > 0 ? `${bot.pending}p` : "—"}</span>}</TableCell>
       <TableCell className="text-right text-sm py-2.5 text-green-400">{bot.won > 0 ? bot.won : <span className="text-muted-foreground">—</span>}</TableCell>
