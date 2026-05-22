@@ -71,6 +71,7 @@ function ConsensusBadge({ size, recommended }: { size: number; recommended: bool
 export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
   const [filter, setFilter] = useState<"all" | "edge" | "available" | "placed" | "consensus">("all");
   const [openModal, setOpenModal] = useState<PlaceableBet | null>(null);
+  const [openComboModal, setOpenComboModal] = useState<PlaceableBet | null>(null);
   // COMBO-ADMIN-PLACE-UI: track which combo rows are expanded inline. Click a
   // combo row's chevron to reveal the N legs below.
   const [expandedCombos, setExpandedCombos] = useState<Set<string>>(new Set());
@@ -310,12 +311,22 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
                   <td className="p-2 text-right font-mono text-amber-300">{c.stake != null ? `€${c.stake.toFixed(2)}` : "—"}</td>
                   <td className="p-2 text-right">
                     {isCombo ? (
-                      <button
-                        onClick={() => toggleCombo(c.betId)}
-                        className="px-2 py-1 text-xs rounded bg-purple-700 hover:bg-purple-600"
-                      >
-                        {isExpanded ? "Hide" : "Show legs"}
-                      </button>
+                      <div className="flex gap-1 justify-end">
+                        <button
+                          onClick={() => toggleCombo(c.betId)}
+                          className="px-2 py-1 text-xs rounded bg-purple-700 hover:bg-purple-600"
+                        >
+                          {isExpanded ? "Hide" : "Legs"}
+                        </button>
+                        {!c.alreadyPlaced && (
+                          <button
+                            onClick={() => setOpenComboModal(c)}
+                            className="px-2 py-1 text-xs rounded bg-emerald-600 hover:bg-emerald-500"
+                          >
+                            Record
+                          </button>
+                        )}
+                      </div>
                     ) : (
                       <button
                         onClick={() => setOpenModal(c)}
@@ -355,6 +366,7 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
       </p>
 
       {openModal && <PlaceBetModal candidate={openModal} onClose={() => setOpenModal(null)} />}
+      {openComboModal && <RecordComboModal candidate={openComboModal} onClose={() => setOpenComboModal(null)} />}
     </>
   );
 }
@@ -512,6 +524,187 @@ function PlaceBetModal({ candidate, onClose }: { candidate: PlaceableBet; onClos
             className="px-3 py-1.5 text-sm rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
           >
             {submitting ? "Logging…" : "Log bet"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function extractSystemType(selection: string): string | null {
+  if (selection.startsWith("fours_up")) return "fours_up";
+  if (selection.startsWith("no_singles")) return "no_singles";
+  return null;
+}
+
+function RecordComboModal({ candidate, onClose }: { candidate: PlaceableBet; onClose: () => void }) {
+  const router = useRouter();
+  const legs = candidate.comboLegs ?? [];
+  const combinedOdds = legs.reduce((acc, l) => acc * l.odds, 1);
+  const systemType = extractSystemType(candidate.selection);
+
+  const [actualOdds, setActualOdds] = useState<string>(combinedOdds.toFixed(2));
+  const defaultStake = candidate.stake != null && candidate.stake > 0
+    ? candidate.stake.toFixed(2)
+    : "2.00";
+  const [stake, setStake] = useState<string>(defaultStake);
+  const [notes, setNotes] = useState<string>("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/admin/record-combo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          simulatedBetId: candidate.betId,
+          botId: candidate.botId,
+          firstLegMatchId: candidate.matchId,
+          systemType,
+          comboLegs: legs.map((l) => ({
+            match_id: l.matchId,
+            market: l.market,
+            selection: l.selection,
+            odds: l.odds,
+            prob: l.prob,
+            bot_source: l.botSource,
+          })),
+          bookmaker: "Coolbet",
+          actualOdds: parseFloat(actualOdds),
+          stake: parseFloat(stake),
+          notes: notes || null,
+        }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || `${res.status} ${res.statusText}`);
+      }
+      router.refresh();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <form
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={onSubmit}
+        className="bg-card border border-border rounded-lg p-6 max-w-xl w-full space-y-4 max-h-[90vh] overflow-y-auto"
+      >
+        <h2 className="text-lg font-bold">Record combo bet</h2>
+        <div className="text-xs text-muted-foreground">
+          {candidate.bot} · {legs.length}-leg {systemType ?? "straight"} · combined edge {fmtPct(candidate.edge)}
+        </div>
+
+        {/* Legs summary */}
+        <div className="rounded border border-border overflow-hidden text-xs">
+          <table className="w-full">
+            <thead className="bg-muted/40 text-muted-foreground">
+              <tr>
+                <th className="text-left p-2">Leg</th>
+                <th className="text-left p-2">Sel</th>
+                <th className="text-right p-2">Odds</th>
+                <th className="text-right p-2">Edge</th>
+              </tr>
+            </thead>
+            <tbody>
+              {legs.map((leg, i) => (
+                <tr key={i} className="border-t border-border/40">
+                  <td className="p-2">
+                    <div className="font-medium">{leg.match}</div>
+                    <div className="text-muted-foreground">{leg.league}</div>
+                  </td>
+                  <td className="p-2">
+                    <div>{leg.market}</div>
+                    <div className="text-muted-foreground">{fmtAHSelection(leg.selection)}</div>
+                  </td>
+                  <td className="p-2 text-right font-mono">{fmtOdds(leg.odds)}</td>
+                  <td className="p-2 text-right font-mono">{fmtPct(leg.prob * leg.odds - 1)}</td>
+                </tr>
+              ))}
+              <tr className="border-t border-border bg-muted/20 font-semibold">
+                <td className="p-2" colSpan={2}>Combined (model)</td>
+                <td className="p-2 text-right font-mono text-purple-300">{combinedOdds.toFixed(2)}</td>
+                <td className="p-2 text-right font-mono">{fmtPct(candidate.edge)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div className="block text-sm">
+          Bookmaker
+          <div className="w-full mt-1 bg-background border border-border rounded px-2 py-1.5 text-muted-foreground">
+            Coolbet
+          </div>
+        </div>
+
+        <label className="block text-sm">
+          Actual combined odds taken
+          <input
+            type="number"
+            step="0.01"
+            min="1.01"
+            required
+            value={actualOdds}
+            onChange={(e) => setActualOdds(e.target.value)}
+            className="w-full mt-1 bg-background border border-border rounded px-2 py-1.5 font-mono"
+          />
+          <span className="text-xs text-muted-foreground">Model estimates {combinedOdds.toFixed(2)} — enter what Coolbet actually showed.</span>
+        </label>
+
+        <label className="block text-sm">
+          Stake (€)
+          <input
+            type="number"
+            step="0.01"
+            min="0.01"
+            required
+            value={stake}
+            onChange={(e) => setStake(e.target.value)}
+            className="w-full mt-1 bg-background border border-border rounded px-2 py-1.5 font-mono"
+          />
+          {candidate.stake != null && candidate.stake > 0 && (
+            <span className="text-xs text-muted-foreground">
+              Bot recommends €{candidate.stake.toFixed(2)}.
+            </span>
+          )}
+        </label>
+
+        <label className="block text-sm">
+          Notes (optional)
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="e.g. 'one leg slightly different odds', 'reduced stake due to low liquidity'…"
+            className="w-full mt-1 bg-background border border-border rounded px-2 py-1.5"
+            rows={2}
+          />
+        </label>
+
+        {error && <div className="text-xs text-red-400">{error}</div>}
+
+        <div className="flex justify-end gap-2 pt-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-3 py-1.5 text-sm rounded bg-muted hover:bg-muted/70"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="px-3 py-1.5 text-sm rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
+          >
+            {submitting ? "Recording…" : "Record bet"}
           </button>
         </div>
       </form>
