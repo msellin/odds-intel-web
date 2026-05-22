@@ -1153,7 +1153,10 @@ export async function getAllBotsFromDB(): Promise<BotRecord[]> {
     .from("bots")
     .select("id, name, strategy, description, strategy_description, starting_bankroll, current_bankroll, is_active, retired_at")
     .order("name");
-  if (error || !data) return [];
+  if (error || !data) {
+    console.error("[getAllBotsFromDB] query failed:", error?.message ?? "no data");
+    return [];
+  }
   return (data as Record<string, unknown>[]).map((r) => ({
     id: r.id as string,
     name: r.name as string,
