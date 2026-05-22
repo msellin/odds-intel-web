@@ -153,6 +153,8 @@ interface PaperVsReal {
   realRoi: number | null;
   paperRoi: number | null;
   slippageCost: number;
+  stakeParityMatched: number;
+  stakeParityDiverged: number;
 }
 function buildPaperVsReal(bets: RealBet[]): PaperVsReal | null {
   const matched = bets.filter(
@@ -162,6 +164,12 @@ function buildPaperVsReal(bets: RealBet[]): PaperVsReal | null {
   const realPnl = matched.reduce((s, b) => s + (b.pnl ?? 0), 0);
   const paperPnl = matched.reduce((s, b) => s + (b.paper?.pnl ?? 0), 0);
   const realStaked = matched.reduce((s, b) => s + b.stake, 0);
+  // Stakes are designed to match (auto-placer uses Kelly, /admin/place pre-fills it).
+  // Any divergence means a clamp fired or someone hand-edited the stake — surface that.
+  const stakeParityDiverged = matched.filter(
+    (b) => Math.abs(b.stake - (b.paper?.stake ?? 0)) >= 0.01
+  ).length;
+  const stakeParityMatched = matched.length - stakeParityDiverged;
   const paperStaked = matched.reduce((s, b) => s + (b.paper?.stake ?? 0), 0);
   return {
     n: matched.length,
@@ -172,6 +180,8 @@ function buildPaperVsReal(bets: RealBet[]): PaperVsReal | null {
     realRoi: realStaked > 0 ? (realPnl / realStaked) * 100 : null,
     paperRoi: paperStaked > 0 ? (paperPnl / paperStaked) * 100 : null,
     slippageCost: paperPnl - realPnl,
+    stakeParityMatched,
+    stakeParityDiverged,
   };
 }
 
@@ -284,6 +294,17 @@ export default async function RealBetsPage() {
                 sub="paper − real"
                 good={pvr.slippageCost < 0}
                 bad={pvr.slippageCost > 0}
+              />
+              <ExposureRow
+                label="Stake parity"
+                value={`${pvr.stakeParityMatched} / ${pvr.n}`}
+                sub={
+                  pvr.stakeParityDiverged === 0
+                    ? "all match Kelly"
+                    : `${pvr.stakeParityDiverged} diverged`
+                }
+                good={pvr.stakeParityDiverged === 0}
+                bad={pvr.stakeParityDiverged > 0}
               />
             </div>
           )}
