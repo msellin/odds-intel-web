@@ -135,6 +135,40 @@ export interface LiveBetComboLeg {
   odds: number;
   prob: number;
   botSource: string | null;
+  // Settled per-leg outcome. "pending" = match not finished yet, "void" = scores missing.
+  result: "won" | "lost" | "pending" | "void";
+  // Final score, when finished. null while pending.
+  scoreHome: number | null;
+  scoreAway: number | null;
+}
+
+// Decide if a single combo leg won/lost given the final score. Markets are
+// limited to the acca-bot eligible set (btts + ou15/ou25/ou35). Anything else
+// returns "void" so the leg is visibly flagged rather than silently mis-settled.
+function settleComboLeg(
+  market: string,
+  selection: string,
+  scoreHome: number | null,
+  scoreAway: number | null,
+): "won" | "lost" | "pending" | "void" {
+  if (scoreHome == null || scoreAway == null) return "pending";
+  const m = market.toLowerCase();
+  const s = selection.toLowerCase();
+  const total = scoreHome + scoreAway;
+  if (m === "btts") {
+    const bothScored = scoreHome > 0 && scoreAway > 0;
+    if (s === "yes") return bothScored ? "won" : "lost";
+    if (s === "no") return bothScored ? "lost" : "won";
+    return "void";
+  }
+  const ouLine: Record<string, number> = { ou15: 1.5, ou25: 2.5, ou35: 3.5, ou45: 4.5 };
+  if (m in ouLine) {
+    const line = ouLine[m];
+    if (s === "over") return total > line ? "won" : "lost";
+    if (s === "under") return total < line ? "won" : "lost";
+    return "void";
+  }
+  return "void";
 }
 
 export interface LiveBet {
@@ -1235,12 +1269,17 @@ export async function getAllBets(): Promise<LiveBet[]> {
     }
   }
 
-  const legMatchMap = new Map<string, { match: string; league: string }>();
+  const legMatchMap = new Map<string, {
+    match: string;
+    league: string;
+    scoreHome: number | null;
+    scoreAway: number | null;
+  }>();
   if (legMatchIds.size > 0) {
     const { data: legMatches } = await supabase
       .from("matches")
       .select(
-        `id,
+        `id, status, score_home, score_away,
          home_team:home_team_id(name),
          away_team:away_team_id(name),
          league:league_id(name, country)`
@@ -1250,9 +1289,12 @@ export async function getAllBets(): Promise<LiveBet[]> {
       const home = Array.isArray(m.home_team) ? m.home_team[0] : m.home_team;
       const away = Array.isArray(m.away_team) ? m.away_team[0] : m.away_team;
       const league = Array.isArray(m.league) ? m.league[0] : m.league;
+      const finished = m.status === "finished";
       legMatchMap.set(String(m.id), {
         match: home && away ? `${home.name} vs ${away.name}` : "Unknown",
         league: league ? `${league.country} / ${league.name}` : "Unknown",
+        scoreHome: finished && m.score_home != null ? Number(m.score_home) : null,
+        scoreAway: finished && m.score_away != null ? Number(m.score_away) : null,
       });
     }
   }
@@ -1262,7 +1304,12 @@ export async function getAllBets(): Promise<LiveBet[]> {
 
 function toBet(
   row: SimBetRow,
-  legMatchMap: Map<string, { match: string; league: string }> = new Map(),
+  legMatchMap: Map<string, {
+    match: string;
+    league: string;
+    scoreHome: number | null;
+    scoreAway: number | null;
+  }> = new Map(),
 ): LiveBet {
   const bot = Array.isArray(row.bot) ? row.bot[0] : row.bot;
   const match = Array.isArray(row.match) ? row.match[0] : row.match;
@@ -1316,15 +1363,22 @@ function toBet(
           bot_source?: string | null;
         }>).map((l) => {
           const resolved = l.match_id ? legMatchMap.get(String(l.match_id)) : undefined;
+          const market = String(l.market ?? "");
+          const selection = String(l.selection ?? "");
+          const scoreHome = resolved?.scoreHome ?? null;
+          const scoreAway = resolved?.scoreAway ?? null;
           return {
             matchId: String(l.match_id ?? ""),
             match: resolved?.match ?? "Unknown",
             league: resolved?.league ?? "—",
-            market: String(l.market ?? ""),
-            selection: String(l.selection ?? ""),
+            market,
+            selection,
             odds: Number(l.odds ?? 0),
             prob: Number(l.prob ?? 0),
             botSource: l.bot_source ?? null,
+            result: settleComboLeg(market, selection, scoreHome, scoreAway),
+            scoreHome,
+            scoreAway,
           };
         })
       : null,

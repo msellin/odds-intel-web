@@ -353,14 +353,19 @@ function BotDetailModal({
                     ];
                     if (isCombo) {
                       bet.comboLegs!.forEach((leg, i) => {
-                        rows.push(
+                        const hasScore = leg.scoreHome != null && leg.scoreAway != null;
+                        const scoreStr = hasScore ? `${leg.scoreHome}-${leg.scoreAway}` : "—";
+                        const matchLabel = hasScore
+                          ? `${leg.match} (${scoreStr})`
+                          : leg.match;
+                        return rows.push(
                           <TableRow
                             key={`${bet.id}-leg-${i}`}
                             className="text-[10px] border-white/[0.04] bg-muted/10 text-muted-foreground"
                           >
                             <TableCell className="py-1.5" />
                             <TableCell className="py-1.5 max-w-[200px]">
-                              <span className="block truncate" title={leg.match}>↳ {leg.match}</span>
+                              <span className="block truncate" title={matchLabel}>↳ {matchLabel}</span>
                             </TableCell>
                             <TableCell className="py-1.5 max-w-[140px]">
                               <span className="block truncate" title={leg.league}>{leg.league}</span>
@@ -375,7 +380,7 @@ function BotDetailModal({
                             <TableCell className="text-right tabular-nums py-1.5">
                               {(leg.prob * 100).toFixed(1)}%
                             </TableCell>
-                            <TableCell className="py-1.5" />
+                            <TableCell className="text-center py-1.5">{resultBadge(leg.result)}</TableCell>
                             <TableCell className="py-1.5" />
                             <TableCell className="py-1.5" />
                           </TableRow>,
