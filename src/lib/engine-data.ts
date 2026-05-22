@@ -1552,6 +1552,8 @@ export interface RealBet {
   pnl: number | null;
   resolvedAt: string | null;
   notes: string | null;
+  /** If this real bet was placed from a paper pick, the paired simulated_bet's outcome. */
+  paper: { stake: number; pnl: number | null; result: string } | null;
 }
 
 /** All real bets, newest first. Used by /admin/real-bets dashboard. */
@@ -1563,6 +1565,7 @@ export async function getRealBets(): Promise<RealBet[]> {
       `id, match_id, market, selection, bookmaker, captured_odds, actual_odds,
        slippage_pct, stake, placed_at, result, pnl, resolved_at, notes,
        bot:bot_id(name),
+       paper:simulated_bet_id(stake, pnl, result),
        match:match_id(date,
          home_team:home_team_id(name),
          away_team:away_team_id(name),
@@ -1579,6 +1582,7 @@ export async function getRealBets(): Promise<RealBet[]> {
     const ht = m?.home_team ? (Array.isArray(m.home_team) ? m.home_team[0] : m.home_team) : null;
     const at = m?.away_team ? (Array.isArray(m.away_team) ? m.away_team[0] : m.away_team) : null;
     const lg = m?.league ? (Array.isArray(m.league) ? m.league[0] : m.league) : null;
+    const paperRow = r.paper ? (Array.isArray(r.paper) ? r.paper[0] : r.paper) : null;
     return {
       id: r.id,
       matchId: r.match_id,
@@ -1597,6 +1601,13 @@ export async function getRealBets(): Promise<RealBet[]> {
       pnl: r.pnl != null ? Number(r.pnl) : null,
       resolvedAt: r.resolved_at,
       notes: r.notes,
+      paper: paperRow
+        ? {
+            stake: Number(paperRow.stake),
+            pnl: paperRow.pnl != null ? Number(paperRow.pnl) : null,
+            result: paperRow.result,
+          }
+        : null,
     };
   });
 }

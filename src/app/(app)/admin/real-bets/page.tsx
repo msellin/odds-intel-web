@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { getRealBets, type RealBet } from "@/lib/engine-data";
 import { RealBetsLog } from "@/components/real-bets-log";
+import { RealBetsChart, type RealBetsChartPoint } from "@/components/real-bets-chart";
 
 function fmtMoney(v: number) {
   const sign = v >= 0 ? "+" : "−";
@@ -10,6 +11,9 @@ function fmtMoney(v: number) {
 }
 function fmtPct(v: number) {
   return `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
+}
+function utcDay(iso: string): string {
+  return iso.slice(0, 10);
 }
 
 interface AggStats {
@@ -49,6 +53,128 @@ function aggregate(bets: RealBet[]): AggStats {
   };
 }
 
+/** Daily breakdown (last N days, newest first). Buckets by UTC day. */
+interface DailyRow {
+  day: string;
+  n: number;
+  settled: number;
+  staked: number;
+  pnl: number;
+  roi: number | null;
+}
+function buildDailyBreakdown(bets: RealBet[], days: number): DailyRow[] {
+  const byDay = new Map<string, DailyRow>();
+  for (const b of bets) {
+    const day = utcDay(b.placedAt);
+    let row = byDay.get(day);
+    if (!row) {
+      row = { day, n: 0, settled: 0, staked: 0, pnl: 0, roi: null };
+      byDay.set(day, row);
+    }
+    row.n += 1;
+    if (b.result !== "pending") {
+      row.settled += 1;
+      row.staked += b.stake;
+      row.pnl += b.pnl ?? 0;
+    }
+  }
+  for (const row of byDay.values()) {
+    row.roi = row.staked > 0 ? (row.pnl / row.staked) * 100 : null;
+  }
+  return Array.from(byDay.values())
+    .sort((a, b) => (a.day < b.day ? 1 : -1))
+    .slice(0, days);
+}
+
+/** Cumulative P&L series. Bets are bucketed by resolved_at (or placed_at if missing). */
+function buildCumulativeSeries(bets: RealBet[]): RealBetsChartPoint[] {
+  const settled = bets
+    .filter((b) => b.result !== "pending")
+    .map((b) => ({
+      day: utcDay(b.resolvedAt ?? b.placedAt),
+      real: b.pnl ?? 0,
+      paper: b.paper && b.paper.result !== "pending" ? b.paper.pnl ?? 0 : null,
+    }))
+    .sort((a, b) => (a.day < b.day ? -1 : 1));
+
+  if (!settled.length) return [];
+
+  // Aggregate per day, then accumulate.
+  const byDay = new Map<string, { real: number; paper: number | null; hasPaper: boolean }>();
+  for (const s of settled) {
+    let bucket = byDay.get(s.day);
+    if (!bucket) {
+      bucket = { real: 0, paper: 0, hasPaper: false };
+      byDay.set(s.day, bucket);
+    }
+    bucket.real += s.real;
+    if (s.paper != null) {
+      bucket.paper = (bucket.paper ?? 0) + s.paper;
+      bucket.hasPaper = true;
+    }
+  }
+  const days = Array.from(byDay.keys()).sort();
+  let cumReal = 0;
+  let cumPaper = 0;
+  let paperEverSeen = false;
+  return days.map((day) => {
+    const b = byDay.get(day)!;
+    cumReal += b.real;
+    if (b.hasPaper) {
+      cumPaper += b.paper ?? 0;
+      paperEverSeen = true;
+    }
+    return {
+      date: day.slice(5), // MM-DD
+      real: Number(cumReal.toFixed(2)),
+      paper: paperEverSeen ? Number(cumPaper.toFixed(2)) : null,
+    };
+  });
+}
+
+interface Exposure {
+  count: number;
+  staked: number;
+  maxPayout: number;
+}
+function buildExposure(bets: RealBet[]): Exposure {
+  const pending = bets.filter((b) => b.result === "pending");
+  const staked = pending.reduce((s, b) => s + b.stake, 0);
+  const maxPayout = pending.reduce((s, b) => s + b.stake * b.actualOdds, 0);
+  return { count: pending.length, staked, maxPayout };
+}
+
+interface PaperVsReal {
+  n: number;
+  realPnl: number;
+  paperPnl: number;
+  realStaked: number;
+  paperStaked: number;
+  realRoi: number | null;
+  paperRoi: number | null;
+  slippageCost: number;
+}
+function buildPaperVsReal(bets: RealBet[]): PaperVsReal | null {
+  const matched = bets.filter(
+    (b) => b.paper != null && b.result !== "pending" && b.paper.result !== "pending"
+  );
+  if (matched.length === 0) return null;
+  const realPnl = matched.reduce((s, b) => s + (b.pnl ?? 0), 0);
+  const paperPnl = matched.reduce((s, b) => s + (b.paper?.pnl ?? 0), 0);
+  const realStaked = matched.reduce((s, b) => s + b.stake, 0);
+  const paperStaked = matched.reduce((s, b) => s + (b.paper?.stake ?? 0), 0);
+  return {
+    n: matched.length,
+    realPnl,
+    paperPnl,
+    realStaked,
+    paperStaked,
+    realRoi: realStaked > 0 ? (realPnl / realStaked) * 100 : null,
+    paperRoi: paperStaked > 0 ? (paperPnl / paperStaked) * 100 : null,
+    slippageCost: paperPnl - realPnl,
+  };
+}
+
 export default async function RealBetsPage() {
   const supabase = await createSupabaseServer();
   const {
@@ -73,6 +199,10 @@ export default async function RealBetsPage() {
 
   const overall = aggregate(bets);
   const today = aggregate(todayBets);
+  const daily = buildDailyBreakdown(bets, 14);
+  const series = buildCumulativeSeries(bets);
+  const exposure = buildExposure(bets);
+  const pvr = buildPaperVsReal(bets);
 
   // Per-bot breakdown — covers all bets (including pending) so coverage is visible
   const byBot: Record<string, { n: number; pending: number; staked: number; pnl: number }> = {};
@@ -101,6 +231,100 @@ export default async function RealBetsPage() {
 
       <StatRow label="Overall" stats={overall} />
       <StatRow label={`Today (UTC · ${todayStartUtc.toISOString().slice(0, 10)})`} stats={today} />
+
+      <div className="grid lg:grid-cols-3 gap-4 mb-6">
+        <div className="lg:col-span-2 rounded-lg border border-border bg-card p-4">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              Cumulative P&amp;L
+            </h2>
+            <span className="text-xs text-muted-foreground">
+              Settled bets, by UTC day
+            </span>
+          </div>
+          <RealBetsChart data={series} />
+        </div>
+
+        <div className="rounded-lg border border-border bg-card p-4 flex flex-col gap-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            Open exposure
+          </h2>
+          <ExposureRow label="Pending bets" value={exposure.count.toString()} />
+          <ExposureRow label="Stake at risk" value={`€${exposure.staked.toFixed(2)}`} />
+          <ExposureRow
+            label="Max potential payout"
+            value={`€${exposure.maxPayout.toFixed(2)}`}
+            sub={
+              exposure.staked > 0
+                ? `+€${(exposure.maxPayout - exposure.staked).toFixed(2)} if all win`
+                : undefined
+            }
+            good={exposure.maxPayout > exposure.staked}
+          />
+          {pvr && (
+            <div className="border-t border-border pt-3 mt-1">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                Paper vs real ({pvr.n} matched)
+              </h3>
+              <ExposureRow
+                label="Real ROI"
+                value={pvr.realRoi != null ? fmtPct(pvr.realRoi) : "—"}
+                good={(pvr.realRoi ?? 0) > 0}
+                bad={(pvr.realRoi ?? 0) < 0}
+              />
+              <ExposureRow
+                label="Paper ROI"
+                value={pvr.paperRoi != null ? fmtPct(pvr.paperRoi) : "—"}
+                good={(pvr.paperRoi ?? 0) > 0}
+                bad={(pvr.paperRoi ?? 0) < 0}
+              />
+              <ExposureRow
+                label="Slippage cost"
+                value={fmtMoney(-pvr.slippageCost)}
+                sub="paper − real"
+                good={pvr.slippageCost < 0}
+                bad={pvr.slippageCost > 0}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {daily.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+            Last {daily.length} days (UTC)
+          </h2>
+          <div className="rounded-lg border border-border bg-card overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="text-left p-2">Day</th>
+                  <th className="text-right p-2">Bets</th>
+                  <th className="text-right p-2">Settled</th>
+                  <th className="text-right p-2">Staked</th>
+                  <th className="text-right p-2">P&amp;L</th>
+                  <th className="text-right p-2">ROI</th>
+                </tr>
+              </thead>
+              <tbody>
+                {daily.map((d) => (
+                  <tr key={d.day} className="border-t border-border">
+                    <td className="p-2 font-mono text-xs">{d.day}</td>
+                    <td className="p-2 text-right">{d.n}</td>
+                    <td className="p-2 text-right">{d.settled}</td>
+                    <td className="p-2 text-right">€{d.staked.toFixed(2)}</td>
+                    <td className={`p-2 text-right font-mono ${d.pnl > 0 ? "text-emerald-400" : d.pnl < 0 ? "text-red-400" : ""}`}>
+                      {d.settled > 0 ? fmtMoney(d.pnl) : "—"}
+                    </td>
+                    <td className="p-2 text-right">{d.roi != null ? fmtPct(d.roi) : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {byBotSorted.length > 0 && (
         <div className="mb-6">
@@ -182,6 +406,31 @@ function Stat({ label, value, sub, good, bad }: { label: string; value: string; 
       <div className="text-xs text-muted-foreground uppercase tracking-wider">{label}</div>
       <div className={`text-2xl font-bold mt-1 ${color}`}>{value}</div>
       {sub && <div className="text-xs text-muted-foreground mt-1">{sub}</div>}
+    </div>
+  );
+}
+
+function ExposureRow({
+  label,
+  value,
+  sub,
+  good,
+  bad,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  good?: boolean;
+  bad?: boolean;
+}) {
+  const color = good ? "text-emerald-400" : bad ? "text-red-400" : "";
+  return (
+    <div className="flex items-baseline justify-between gap-2">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-right">
+        <span className={`text-base font-semibold font-mono ${color}`}>{value}</span>
+        {sub && <span className="text-xs text-muted-foreground ml-2">{sub}</span>}
+      </span>
     </div>
   );
 }

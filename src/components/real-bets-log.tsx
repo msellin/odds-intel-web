@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { RealBet } from "@/lib/engine-data";
 
 const INITIAL_VISIBLE = 50;
@@ -10,22 +10,68 @@ function fmtMoney(v: number) {
   return `${sign}€${Math.abs(v).toFixed(2)}`;
 }
 
+function unique<T>(values: T[]): T[] {
+  return Array.from(new Set(values));
+}
+
 export function RealBetsLog({ bets }: { bets: RealBet[] }) {
   const [showAll, setShowAll] = useState(false);
-  const visible = showAll ? bets : bets.slice(0, INITIAL_VISIBLE);
-  const hidden = bets.length - visible.length;
+  const [bot, setBot] = useState<string>("");
+  const [result, setResult] = useState<string>("");
+  const [market, setMarket] = useState<string>("");
+
+  const bots = useMemo(
+    () => unique(bets.map((b) => b.bot ?? "(none)")).sort(),
+    [bets]
+  );
+  const markets = useMemo(() => unique(bets.map((b) => b.market)).sort(), [bets]);
+  const results = useMemo(() => unique(bets.map((b) => b.result)).sort(), [bets]);
+
+  const filtered = useMemo(
+    () =>
+      bets.filter((b) => {
+        if (bot && (b.bot ?? "(none)") !== bot) return false;
+        if (result && b.result !== result) return false;
+        if (market && b.market !== market) return false;
+        return true;
+      }),
+    [bets, bot, result, market]
+  );
+
+  const visible = showAll ? filtered : filtered.slice(0, INITIAL_VISIBLE);
+  const hidden = filtered.length - visible.length;
+  const anyFilter = bot || result || market;
 
   return (
     <div className="rounded-lg border border-border bg-card overflow-x-auto">
-      <div className="flex items-center justify-between p-3 border-b border-border">
+      <div className="flex flex-wrap items-center gap-3 p-3 border-b border-border">
         <h2 className="text-sm font-semibold">
           Bet log (newest first)
-          {bets.length > INITIAL_VISIBLE && (
-            <span className="text-muted-foreground font-normal ml-2">
-              · showing {visible.length} of {bets.length}
-            </span>
-          )}
+          <span className="text-muted-foreground font-normal ml-2">
+            · {filtered.length === bets.length
+              ? `${filtered.length}`
+              : `${filtered.length} of ${bets.length}`}
+            {filtered.length > INITIAL_VISIBLE && ` · showing ${visible.length}`}
+          </span>
         </h2>
+        <div className="ml-auto flex flex-wrap items-center gap-2 text-xs">
+          <FilterSelect label="Bot" value={bot} onChange={setBot} options={bots} />
+          <FilterSelect label="Result" value={result} onChange={setResult} options={results} />
+          <FilterSelect label="Market" value={market} onChange={setMarket} options={markets} />
+          {anyFilter && (
+            <button
+              type="button"
+              onClick={() => {
+                setBot("");
+                setResult("");
+                setMarket("");
+              }}
+              className="text-muted-foreground hover:text-foreground underline"
+            >
+              clear
+            </button>
+          )}
+        </div>
       </div>
       <table className="w-full text-sm">
         <thead className="bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
@@ -46,7 +92,7 @@ export function RealBetsLog({ bets }: { bets: RealBet[] }) {
           {visible.length === 0 && (
             <tr>
               <td colSpan={10} className="p-4 text-center text-muted-foreground">
-                No real bets logged yet.
+                {anyFilter ? "No bets match these filters." : "No real bets logged yet."}
               </td>
             </tr>
           )}
@@ -113,11 +159,11 @@ export function RealBetsLog({ bets }: { bets: RealBet[] }) {
             onClick={() => setShowAll(true)}
             className="text-sm text-primary hover:underline"
           >
-            Show all {bets.length} bets ({hidden} more)
+            Show all {filtered.length} bets ({hidden} more)
           </button>
         </div>
       )}
-      {showAll && bets.length > INITIAL_VISIBLE && (
+      {showAll && filtered.length > INITIAL_VISIBLE && (
         <div className="p-3 border-t border-border text-center">
           <button
             type="button"
@@ -129,5 +175,35 @@ export function RealBetsLog({ bets }: { bets: RealBet[] }) {
         </div>
       )}
     </div>
+  );
+}
+
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+}) {
+  return (
+    <label className="flex items-center gap-1.5">
+      <span className="text-muted-foreground">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="bg-muted/40 border border-border rounded px-2 py-1 text-xs focus:outline-none focus:border-primary"
+      >
+        <option value="">all</option>
+        {options.map((opt) => (
+          <option key={opt} value={opt}>
+            {opt}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
