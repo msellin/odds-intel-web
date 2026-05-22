@@ -24,6 +24,7 @@ export const QUALITY_CUTOFF = "2026-05-06";
 export interface BotStat {
   name: string;
   description: string;
+  strategyDescription: string;
   total: number;
   pending: number;
   settled: number;
@@ -72,6 +73,7 @@ interface BotDbRow {
   name: string;
   strategy?: string | null;
   description?: string | null;
+  strategyDescription?: string | null;
   currentBankroll: number;
   startingBankroll: number;
   retiredAt?: string | null;
@@ -110,6 +112,7 @@ export function buildBotStats(bets: LiveBet[], botsDB: BotDbRow[]): BotStat[] {
       return {
         name: dbBot.name,
         description: dbBot.description || dbBot.strategy || "",
+        strategyDescription: dbBot.strategyDescription || "",
         total: counted.length,
         pending: botBets.filter((b) => b.result === "pending").length,
         settled: settled.length,

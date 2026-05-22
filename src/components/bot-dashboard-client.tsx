@@ -48,6 +48,7 @@ interface BotDbRow {
   name: string;
   strategy?: string | null;
   description?: string | null;
+  strategyDescription?: string | null;
   currentBankroll: number;
   startingBankroll: number;
   retiredAt?: string | null;
@@ -195,9 +196,13 @@ function BotDetailModal({
                   : "No bets placed yet"}
             </span>
           </DialogTitle>
-          {bot.description && (
+          {bot.strategyDescription ? (
+            <div className="mt-2 rounded border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground whitespace-pre-line leading-relaxed">
+              {bot.strategyDescription}
+            </div>
+          ) : bot.description ? (
             <p className="text-xs text-muted-foreground mt-1">{bot.description}</p>
-          )}
+          ) : null}
         </DialogHeader>
 
         {/* Bankroll chart */}
