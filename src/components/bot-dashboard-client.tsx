@@ -307,43 +307,83 @@ function BotDetailModal({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {botBets.map((bet) => (
-                    <TableRow key={bet.id} className="text-xs border-white/[0.06]">
-                      <TableCell className="text-muted-foreground whitespace-nowrap py-2">
-                        {new Date(bet.placedAt).toLocaleDateString("en-GB", {
-                          month: "short",
-                          day: "numeric",
-                        })}
-                      </TableCell>
-                      <TableCell className="py-2 max-w-[200px]">
-                        <span className="block truncate" title={bet.match}>{bet.match}</span>
-                      </TableCell>
-                      <TableCell className="py-2 max-w-[140px] text-muted-foreground">
-                        <span className="block truncate text-[10px]" title={bet.league}>{bet.league}</span>
-                      </TableCell>
-                      <TableCell className="font-mono uppercase text-muted-foreground py-2 whitespace-nowrap text-[10px]">
-                        {bet.market} · {bet.selection}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums py-2">{bet.odds.toFixed(2)}</TableCell>
-                      <TableCell className="text-right tabular-nums py-2 text-emerald-400">
-                        {bookOdds[bet.id]?.unibet != null ? bookOdds[bet.id]!.unibet!.toFixed(2) : "—"}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums py-2 text-blue-300">
-                        {bookOdds[bet.id]?.bet365 != null ? bookOdds[bet.id]!.bet365!.toFixed(2) : "—"}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums py-2 whitespace-nowrap">€{bet.stake.toFixed(2)}</TableCell>
-                      <TableCell className="text-right tabular-nums py-2 text-muted-foreground">
-                        {(bet.modelProb * 100).toFixed(1)}%
-                      </TableCell>
-                      <TableCell className="text-center py-2">{resultBadge(bet.result)}</TableCell>
-                      <TableCell className={`text-right tabular-nums py-2 ${bet.result !== "pending" ? pnlClass(bet.pnl) : "text-muted-foreground"}`}>
-                        {bet.result !== "pending" ? fmt(bet.pnl) : "—"}
-                      </TableCell>
-                      <TableCell className={`text-right tabular-nums py-2 ${bet.clv != null ? (bet.clv > 0 ? "text-green-400" : bet.clv < 0 ? "text-red-400" : "text-muted-foreground") : "text-muted-foreground"}`}>
-                        {bet.clv != null ? (bet.clv >= 0 ? "+" : "") + (bet.clv * 100).toFixed(1) + "%" : "—"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {botBets.flatMap((bet) => {
+                    const isCombo = !!(bet.comboLegs && bet.comboLegs.length > 0);
+                    const matchLabel = isCombo
+                      ? `${bet.comboSize ?? bet.comboLegs!.length}-leg ${bet.systemType ?? "combo"}`
+                      : bet.match;
+                    const rows = [
+                      <TableRow key={bet.id} className="text-xs border-white/[0.06]">
+                        <TableCell className="text-muted-foreground whitespace-nowrap py-2">
+                          {new Date(bet.placedAt).toLocaleDateString("en-GB", {
+                            month: "short",
+                            day: "numeric",
+                          })}
+                        </TableCell>
+                        <TableCell className="py-2 max-w-[200px]">
+                          <span className="block truncate" title={matchLabel}>{matchLabel}</span>
+                        </TableCell>
+                        <TableCell className="py-2 max-w-[140px] text-muted-foreground">
+                          <span className="block truncate text-[10px]" title={isCombo ? "Mixed leagues" : bet.league}>
+                            {isCombo ? "—" : bet.league}
+                          </span>
+                        </TableCell>
+                        <TableCell className="font-mono uppercase text-muted-foreground py-2 whitespace-nowrap text-[10px]">
+                          {bet.market} · {bet.selection}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums py-2">{bet.odds.toFixed(2)}</TableCell>
+                        <TableCell className="text-right tabular-nums py-2 text-emerald-400">
+                          {bookOdds[bet.id]?.unibet != null ? bookOdds[bet.id]!.unibet!.toFixed(2) : "—"}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums py-2 text-blue-300">
+                          {bookOdds[bet.id]?.bet365 != null ? bookOdds[bet.id]!.bet365!.toFixed(2) : "—"}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums py-2 whitespace-nowrap">€{bet.stake.toFixed(2)}</TableCell>
+                        <TableCell className="text-right tabular-nums py-2 text-muted-foreground">
+                          {(bet.modelProb * 100).toFixed(1)}%
+                        </TableCell>
+                        <TableCell className="text-center py-2">{resultBadge(bet.result)}</TableCell>
+                        <TableCell className={`text-right tabular-nums py-2 ${bet.result !== "pending" ? pnlClass(bet.pnl) : "text-muted-foreground"}`}>
+                          {bet.result !== "pending" ? fmt(bet.pnl) : "—"}
+                        </TableCell>
+                        <TableCell className={`text-right tabular-nums py-2 ${bet.clv != null ? (bet.clv > 0 ? "text-green-400" : bet.clv < 0 ? "text-red-400" : "text-muted-foreground") : "text-muted-foreground"}`}>
+                          {bet.clv != null ? (bet.clv >= 0 ? "+" : "") + (bet.clv * 100).toFixed(1) + "%" : "—"}
+                        </TableCell>
+                      </TableRow>,
+                    ];
+                    if (isCombo) {
+                      bet.comboLegs!.forEach((leg, i) => {
+                        rows.push(
+                          <TableRow
+                            key={`${bet.id}-leg-${i}`}
+                            className="text-[10px] border-white/[0.04] bg-muted/10 text-muted-foreground"
+                          >
+                            <TableCell className="py-1.5" />
+                            <TableCell className="py-1.5 max-w-[200px]">
+                              <span className="block truncate" title={leg.match}>↳ {leg.match}</span>
+                            </TableCell>
+                            <TableCell className="py-1.5 max-w-[140px]">
+                              <span className="block truncate" title={leg.league}>{leg.league}</span>
+                            </TableCell>
+                            <TableCell className="font-mono uppercase py-1.5 whitespace-nowrap">
+                              {leg.market} · {leg.selection}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums py-1.5">{leg.odds.toFixed(2)}</TableCell>
+                            <TableCell className="py-1.5" />
+                            <TableCell className="py-1.5" />
+                            <TableCell className="py-1.5" />
+                            <TableCell className="text-right tabular-nums py-1.5">
+                              {(leg.prob * 100).toFixed(1)}%
+                            </TableCell>
+                            <TableCell className="py-1.5" />
+                            <TableCell className="py-1.5" />
+                            <TableCell className="py-1.5" />
+                          </TableRow>,
+                        );
+                      });
+                    }
+                    return rows;
+                  })}
                 </TableBody>
               </Table>
             </div>

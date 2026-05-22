@@ -126,6 +126,17 @@ export interface LiveMatch {
   scrapedAt: string;
 }
 
+export interface LiveBetComboLeg {
+  matchId: string;
+  match: string;        // "Home vs Away", resolved server-side
+  league: string;
+  market: string;
+  selection: string;
+  odds: number;
+  prob: number;
+  botSource: string | null;
+}
+
 export interface LiveBet {
   id: string;
   matchId: string;
@@ -148,6 +159,10 @@ export interface LiveBet {
   closingOdds: number | null;
   clv: number | null;
   recommendedBookmaker: string | null;
+  // Combo/system bets — null for singles.
+  comboLegs: LiveBetComboLeg[] | null;
+  comboSize: number | null;
+  systemType: string | null;
 }
 
 // ─── Supabase row types ─────────────────────────────────────────────────────
@@ -1057,7 +1072,7 @@ export async function getTodayBets(): Promise<LiveBet[]> {
 
   if (error || !data) return [];
 
-  return (data as SimBetRow[]).map(toBet);
+  return (data as SimBetRow[]).map((row) => toBet(row));
 }
 
 // The single free pick shown on the matches page — intentionally public data
@@ -1188,6 +1203,7 @@ export async function getAllBets(): Promise<LiveBet[]> {
       `id, match_id, market, selection, odds_at_pick, pick_time, stake,
        model_probability, calibrated_prob, edge_percent, closing_odds, clv, result, pnl,
        bankroll_after, news_triggered, reasoning,
+       combo_legs, combo_size, system_type,
        bot:bot_id(id, name, strategy),
        match:match_id(id, date,
          home_team:home_team_id(name),
@@ -1207,10 +1223,47 @@ export async function getAllBets(): Promise<LiveBet[]> {
     );
   }
 
-  return (data as SimBetRow[]).map(toBet);
+  // Resolve leg match names for combo bets. combo_legs only contains match_id strings —
+  // the modal needs "Home vs Away" + league per leg, so batch-fetch them in one query.
+  const legMatchIds = new Set<string>();
+  for (const row of data as SimBetRow[]) {
+    const legs = row.combo_legs;
+    if (Array.isArray(legs)) {
+      for (const l of legs) {
+        if (l?.match_id) legMatchIds.add(String(l.match_id));
+      }
+    }
+  }
+
+  const legMatchMap = new Map<string, { match: string; league: string }>();
+  if (legMatchIds.size > 0) {
+    const { data: legMatches } = await supabase
+      .from("matches")
+      .select(
+        `id,
+         home_team:home_team_id(name),
+         away_team:away_team_id(name),
+         league:league_id(name, country)`
+      )
+      .in("id", Array.from(legMatchIds));
+    for (const m of legMatches ?? []) {
+      const home = Array.isArray(m.home_team) ? m.home_team[0] : m.home_team;
+      const away = Array.isArray(m.away_team) ? m.away_team[0] : m.away_team;
+      const league = Array.isArray(m.league) ? m.league[0] : m.league;
+      legMatchMap.set(String(m.id), {
+        match: home && away ? `${home.name} vs ${away.name}` : "Unknown",
+        league: league ? `${league.country} / ${league.name}` : "Unknown",
+      });
+    }
+  }
+
+  return (data as SimBetRow[]).map((row) => toBet(row, legMatchMap));
 }
 
-function toBet(row: SimBetRow): LiveBet {
+function toBet(
+  row: SimBetRow,
+  legMatchMap: Map<string, { match: string; league: string }> = new Map(),
+): LiveBet {
   const bot = Array.isArray(row.bot) ? row.bot[0] : row.bot;
   const match = Array.isArray(row.match) ? row.match[0] : row.match;
   const homeTeam = match?.home_team
@@ -1253,6 +1306,30 @@ function toBet(row: SimBetRow): LiveBet {
     closingOdds: row.closing_odds != null ? Number(row.closing_odds) : null,
     clv: row.clv != null ? Number(row.clv) : null,
     recommendedBookmaker: row.recommended_bookmaker ?? null,
+    comboLegs: Array.isArray(row.combo_legs)
+      ? (row.combo_legs as Array<{
+          match_id?: string;
+          market?: string;
+          selection?: string;
+          odds?: number;
+          prob?: number;
+          bot_source?: string | null;
+        }>).map((l) => {
+          const resolved = l.match_id ? legMatchMap.get(String(l.match_id)) : undefined;
+          return {
+            matchId: String(l.match_id ?? ""),
+            match: resolved?.match ?? "Unknown",
+            league: resolved?.league ?? "—",
+            market: String(l.market ?? ""),
+            selection: String(l.selection ?? ""),
+            odds: Number(l.odds ?? 0),
+            prob: Number(l.prob ?? 0),
+            botSource: l.bot_source ?? null,
+          };
+        })
+      : null,
+    comboSize: row.combo_size != null ? Number(row.combo_size) : null,
+    systemType: row.system_type ?? null,
   };
 }
 
@@ -3673,4 +3750,139 @@ export async function getValueBetBookOdds(
     };
   }
   return out;
+}
+
+// ─── Public performance extras ─────────────────────────────────────────────
+// Feeds /performance's cumulative chart, calibration table, streak badges,
+// and the per-bot recent-ROI map used by the free-tier value-bets teaser.
+// One query, four derivations — keeps the page fast for anon visitors.
+
+export interface PublicPnlPoint { date: string; cumPnl: number; }
+export interface CalibrationBucket {
+  label: string;        // e.g. "40–50%"
+  predictedMid: number; // bucket midpoint, 0-1
+  actualHit: number | null;
+  n: number;
+}
+export interface Streaks {
+  currentWin: number;
+  currentLoss: number;
+  longestWin: number;
+  longestLoss: number;
+}
+export interface PublicPerformanceExtras {
+  cumulative: PublicPnlPoint[];
+  calibration: CalibrationBucket[];
+  streaks: Streaks;
+  botRecentRoi: Record<string, { roi: number; settled: number }>;
+}
+
+export async function getPublicPerformanceExtras(): Promise<PublicPerformanceExtras> {
+  const admin = createSupabaseAdmin();
+  // 90-day chart window covers the launch-to-now visual story without bloating
+  // the response. Settled bets only — pending have no P&L yet.
+  const since = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString();
+  const { data } = await admin
+    .from("simulated_bets")
+    .select("pick_time, result, pnl, stake, model_probability, calibrated_prob, bot:bot_id(name)")
+    .in("result", ["won", "lost"])
+    .gte("pick_time", since)
+    .order("pick_time", { ascending: true })
+    .range(0, 49999);
+
+  type Row = {
+    pick_time: string;
+    result: "won" | "lost";
+    pnl: number | string | null;
+    stake: number | string;
+    model_probability: number | string;
+    calibrated_prob: number | string | null;
+    bot: { name: string } | { name: string }[] | null;
+  };
+  const rows = (data ?? []) as Row[];
+
+  // Cumulative daily series — bucket by UTC day of pick_time.
+  const byDay = new Map<string, number>();
+  for (const r of rows) {
+    const day = r.pick_time.slice(0, 10);
+    byDay.set(day, (byDay.get(day) ?? 0) + Number(r.pnl ?? 0));
+  }
+  const days = Array.from(byDay.keys()).sort();
+  let cum = 0;
+  const cumulative: PublicPnlPoint[] = days.map((d) => {
+    cum += byDay.get(d) ?? 0;
+    return { date: d.slice(5), cumPnl: Number(cum.toFixed(2)) };
+  });
+
+  // Calibration — bucket by calibrated_prob (fallback to model_probability).
+  const buckets: Array<[string, number, number]> = [
+    ["<30%", 0, 0.30],
+    ["30–40%", 0.30, 0.40],
+    ["40–50%", 0.40, 0.50],
+    ["50–60%", 0.50, 0.60],
+    ["60–70%", 0.60, 0.70],
+    ["70%+", 0.70, 1.01],
+  ];
+  const calibration: CalibrationBucket[] = buckets.map(([label, lo, hi]) => {
+    const inBucket = rows.filter((r) => {
+      const p = Number(r.calibrated_prob ?? r.model_probability);
+      return p >= lo && p < hi;
+    });
+    const won = inBucket.filter((r) => r.result === "won").length;
+    return {
+      label,
+      predictedMid: (lo + hi) / 2,
+      actualHit: inBucket.length > 0 ? won / inBucket.length : null,
+      n: inBucket.length,
+    };
+  });
+
+  // Streaks — walk chronologically, count current + longest W/L runs.
+  let currentWin = 0,
+    currentLoss = 0,
+    longestWin = 0,
+    longestLoss = 0;
+  let runKind: "won" | "lost" | null = null;
+  let runLen = 0;
+  for (const r of rows) {
+    if (r.result === runKind) {
+      runLen += 1;
+    } else {
+      runKind = r.result;
+      runLen = 1;
+    }
+    if (runKind === "won") longestWin = Math.max(longestWin, runLen);
+    else longestLoss = Math.max(longestLoss, runLen);
+  }
+  // "Current" = the most recent run length.
+  if (runKind === "won") currentWin = runLen;
+  else if (runKind === "lost") currentLoss = runLen;
+  const streaks: Streaks = { currentWin, currentLoss, longestWin, longestLoss };
+
+  // Bot recent ROI — last 30 days, per bot.
+  const cutoff30 = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+  const recentByBot = new Map<string, { staked: number; pnl: number; settled: number }>();
+  for (const r of rows) {
+    if (r.pick_time < cutoff30) continue;
+    const bot = Array.isArray(r.bot) ? r.bot[0] : r.bot;
+    const name = bot?.name;
+    if (!name) continue;
+    let agg = recentByBot.get(name);
+    if (!agg) {
+      agg = { staked: 0, pnl: 0, settled: 0 };
+      recentByBot.set(name, agg);
+    }
+    agg.staked += Number(r.stake);
+    agg.pnl += Number(r.pnl ?? 0);
+    agg.settled += 1;
+  }
+  const botRecentRoi: Record<string, { roi: number; settled: number }> = {};
+  for (const [name, agg] of recentByBot) {
+    botRecentRoi[name] = {
+      roi: agg.staked > 0 ? (agg.pnl / agg.staked) * 100 : 0,
+      settled: agg.settled,
+    };
+  }
+
+  return { cumulative, calibration, streaks, botRecentRoi };
 }
