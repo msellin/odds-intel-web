@@ -112,14 +112,23 @@ export default async function PerformancePage() {
 
   // Pro+ gets raw bets for the toggle to recompute aggregates client-side
   // (BOT-QUAL-FILTER-DUAL). Free gets last 10 settled for the activity strip.
+  // botsDB always fetched (small query) so RetiredStrategiesSection can filter
+  // against live retired_at rather than relying on stale dashboard_cache.
   const [allBetsRaw, botsDB, recentSettled] = await Promise.all([
     isPro ? getAllBets() : Promise.resolve(null),
-    isPro ? getAllBotsFromDB() : Promise.resolve(null),
+    getAllBotsFromDB(),
     !isPro ? getRecentSettledBets(10) : Promise.resolve(null),
   ]);
 
   const cachedBots = buildCachedBotStats(cache, botsDB, isPro, isElite);
   const sanitizedBets = allBetsRaw ? sanitizeBets(allBetsRaw, isElite) : null;
+
+  // Filter retired_bot_breakdown against live DB so un-retired bots disappear
+  // immediately without waiting for tonight's dashboard_cache refresh.
+  const liveRetiredNames = new Set(botsDB.filter((b) => !!b.retiredAt).map((b) => b.name));
+  const retiredBreakdown = (cache?.retired_bot_breakdown ?? null)?.filter((r) =>
+    liveRetiredNames.has(r.name)
+  ) ?? null;
 
   return (
     <>
@@ -136,7 +145,7 @@ export default async function PerformancePage() {
 
       {/* PERF-HONEST-HEADLINE: every retired bot with its final stats + reason.
           Default collapsed so the active leaderboard stays the visual headline. */}
-      <RetiredStrategiesSection retired={cache?.retired_bot_breakdown ?? null} />
+      <RetiredStrategiesSection retired={retiredBreakdown} />
 
       {/* Free users: compact recent-results strip as trust signal + upsell.
           Pro/Elite: full bet history lives inside the per-bot modal. */}
