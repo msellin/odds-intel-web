@@ -15,7 +15,8 @@ interface Props {
 // happened. Default closed so the leaderboard stays the visual headline, but
 // expand reveals the full story.
 export function RetiredStrategiesSection({ retired }: Props) {
-  const [open, setOpen] = useState(false);
+  // Default open — "kept for transparency" reads as something to hide when collapsed.
+  const [open, setOpen] = useState(true);
   if (!retired || retired.length === 0) return null;
 
   // PERF-RETIRED-CLEANUP (2026-05-17): skip rows that have nothing to show —

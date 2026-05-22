@@ -20,6 +20,8 @@ interface ValueBetsLiveProps {
   userTier: "free" | "pro" | "elite";
   oddsVerifiedAt?: string | null;
   bookOdds?: Record<string, BookOddsEntry>;
+  /** Bot name → last 30-day ROI/N — used by the free-tier teaser hook. */
+  botRecentRoi?: Record<string, { roi: number; settled: number }>;
 }
 
 const ALL = "__all__";
@@ -33,13 +35,6 @@ function edgeColor(edge: number): string {
   if (pct >= 10) return "text-emerald-500";
   if (pct >= 5) return "text-amber-500";
   return "text-muted-foreground";
-}
-
-function edgeLabel(edge: number): { label: string; color: string } {
-  const pct = edge * 100;
-  if (pct >= 10) return { label: "Strong", color: "text-emerald-500" };
-  if (pct >= 5) return { label: "Moderate", color: "text-amber-500" };
-  return { label: "Marginal", color: "text-muted-foreground" };
 }
 
 function ResultBadge({ result }: { result: string }) {
@@ -112,15 +107,20 @@ function BetCard({
   isElite,
   isFreeHighlight = false,
   bookOddsEntry,
+  botRecentRoi,
 }: {
   bet: LiveBet & { botCount: number };
   isPro: boolean;
   isElite: boolean;
   isFreeHighlight?: boolean;
   bookOddsEntry?: BookOddsEntry;
+  botRecentRoi?: Record<string, { roi: number; settled: number }>;
 }) {
-  const kickoffSoon = !isFreeHighlight && isKickoffSoon(bet.kickoff, bet.result);
-  const oddsMoved = !isFreeHighlight && !!bookOddsEntry && isOddsMoved(bookOddsEntry, bet.modelProb, bet.result);
+  const kickoffSoon = isKickoffSoon(bet.kickoff, bet.result);
+  const koLabel = kickoffLabel(bet.kickoff, bet.result);
+  const oddsMoved = !!bookOddsEntry && isOddsMoved(bookOddsEntry, bet.modelProb, bet.result);
+  const line = lineDirection(bookOddsEntry, bet.odds, bet.result);
+  const botRoi = botRecentRoi?.[bet.bot] ?? null;
   return (
     <div className={cn(
       "px-4 py-3",
@@ -136,9 +136,9 @@ function BetCard({
                 Free pick
               </span>
             )}
-            {isElite && bet.botCount > 1 && (
+            {bet.botCount > 1 && (
               <span className="rounded border border-blue-500/30 bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-bold text-blue-400">
-                {bet.botCount} bots
+                {bet.botCount} bots agree
               </span>
             )}
             {kickoffSoon && (
@@ -146,14 +146,14 @@ function BetCard({
                 KO soon
               </span>
             )}
-            {oddsMoved && !kickoffSoon && (
-              <span className="rounded border border-border/40 bg-muted/30 px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground">
-                Odds moved
-              </span>
-            )}
+            <LineDirChip line={line} oddsMoved={oddsMoved && !kickoffSoon} />
           </div>
           <p className="font-medium text-sm text-foreground/90 truncate">{bet.match}</p>
-          <p className="text-[10px] text-muted-foreground/80">{bet.league}</p>
+          <p className="text-[10px] text-muted-foreground/80">
+            {bet.league}
+            {koLabel && <span className="ml-1.5">· {koLabel}</span>}
+            {bet.recommendedBookmaker && <span className="ml-1.5">· best at {bet.recommendedBookmaker}</span>}
+          </p>
         </div>
         <ResultBadge result={bet.result} />
       </div>
@@ -170,6 +170,28 @@ function BetCard({
           +{formatEdge(bet.edge)}%
         </span>
       </div>
+
+      {/* Free pick: bot 30-day ROI hook + odds */}
+      {isFreeHighlight && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+          <span>
+            <span className="opacity-70 mr-0.5">@</span>
+            <span className="font-mono font-semibold text-foreground/80">{bet.odds.toFixed(2)}</span>
+          </span>
+          {botRoi && botRoi.settled >= 10 && (
+            <span className="rounded border border-border/40 bg-muted/30 px-1.5 py-0.5">
+              <span className="opacity-70">{formatBotName(bet.bot)} · 30d </span>
+              <span className={cn(
+                "font-mono font-semibold",
+                botRoi.roi > 0 ? "text-emerald-400" : botRoi.roi < 0 ? "text-red-400" : "",
+              )}>
+                {botRoi.roi >= 0 ? "+" : ""}{botRoi.roi.toFixed(1)}%
+              </span>
+              <span className="opacity-70"> · {botRoi.settled} bets</span>
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Elite: odds + model prob + stake + explain */}
       {isElite && (
@@ -194,15 +216,42 @@ function BetCard({
           {bookOddsEntry && <BookOddsLine entry={bookOddsEntry} modelProb={bet.modelProb} />}
         </div>
       )}
-
-      {/* Free pick: show odds */}
-      {isFreeHighlight && (
-        <div className="mt-2 text-[11px] text-muted-foreground">
-          <span className="opacity-70 mr-0.5">@</span>
-          <span className="font-mono font-semibold text-foreground/80">{bet.odds.toFixed(2)}</span>
-        </div>
-      )}
     </div>
+  );
+}
+
+function LineDirChip({
+  line,
+  oddsMoved,
+}: {
+  line: { dir: "shorter" | "drifted" | "steady"; pctChange: number } | null;
+  oddsMoved: boolean;
+}) {
+  if (!line) return null;
+  if (line.dir === "steady") {
+    return oddsMoved ? (
+      <span className="rounded border border-border/40 bg-muted/30 px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground">
+        Odds moved
+      </span>
+    ) : null;
+  }
+  if (line.dir === "shorter") {
+    return (
+      <span
+        title={`Line moved with us (${line.pctChange.toFixed(1)}% shorter) — sharp pick`}
+        className="rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-400"
+      >
+        Line ↓ {line.pctChange.toFixed(1)}%
+      </span>
+    );
+  }
+  return (
+    <span
+      title={`Line drifted away (+${line.pctChange.toFixed(1)}%) — value still on offer`}
+      className="rounded border border-blue-500/30 bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-blue-400"
+    >
+      Line ↑ +{line.pctChange.toFixed(1)}%
+    </span>
   );
 }
 
@@ -247,10 +296,40 @@ function isKickoffSoon(kickoff: string, result: string): boolean {
   return minsToKickoff > 0 && minsToKickoff < 45;
 }
 
+function kickoffLabel(kickoff: string, result: string): string | null {
+  if (result !== "pending") return null;
+  const mins = Math.round((new Date(kickoff).getTime() - Date.now()) / 60000);
+  if (mins <= 0) return "Live";
+  if (mins < 60) return `KO in ${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  const rem = mins % 60;
+  if (hrs < 6) return rem > 0 ? `KO in ${hrs}h ${rem}m` : `KO in ${hrs}h`;
+  return `KO in ${hrs}h`;
+}
+
 function isOddsMoved(entry: BookOddsEntry, modelProb: number, result: string): boolean {
   if (result !== "pending") return false;
   const best = getBestNow(entry);
   return !!best && modelProb - 1 / best.odds < 0.02;
+}
+
+/** "shorter" = market caught up to our pick (sharpness signal), "drifted" = price held or improved. */
+function lineDirection(
+  entry: BookOddsEntry | undefined,
+  placementOdds: number,
+  result: string,
+): { dir: "shorter" | "drifted" | "steady"; pctChange: number } | null {
+  if (result !== "pending" || !entry) return null;
+  const best = getBestNow(entry);
+  if (!best || placementOdds <= 0) return null;
+  const pctChange = ((best.odds - placementOdds) / placementOdds) * 100;
+  if (pctChange <= -1.5) return { dir: "shorter", pctChange };
+  if (pctChange >= 1.5) return { dir: "drifted", pctChange };
+  return { dir: "steady", pctChange };
+}
+
+function formatBotName(bot: string): string {
+  return bot.replace("bot_", "").replace(/_/g, " ");
 }
 
 function BookOddsLine({ entry, modelProb }: { entry: BookOddsEntry; modelProb: number }) {
@@ -284,7 +363,7 @@ function BookOddsLine({ entry, modelProb }: { entry: BookOddsEntry; modelProb: n
   );
 }
 
-export function ValueBetsLive({ bets, totalCount, userTier, oddsVerifiedAt, bookOdds }: ValueBetsLiveProps) {
+export function ValueBetsLive({ bets, totalCount, userTier, oddsVerifiedAt, bookOdds, botRecentRoi }: ValueBetsLiveProps) {
   const [league, setLeague] = useState(ALL);
   const [bot, setBot] = useState(ALL);
 
@@ -398,7 +477,7 @@ export function ValueBetsLive({ bets, totalCount, userTier, oddsVerifiedAt, book
         <div className="rounded-xl border border-border/50 bg-card/60 overflow-hidden">
           {/* Mobile: card + blurred cards */}
           <div className="sm:hidden">
-            {topBet && <BetCard bet={topBet} isPro={false} isElite={false} isFreeHighlight />}
+            {topBet && <BetCard bet={topBet} isPro={false} isElite={false} isFreeHighlight bookOddsEntry={bookOdds?.[topBet.id]} botRecentRoi={botRecentRoi} />}
             {Array.from({ length: Math.min(lockedCount, 3) }).map((_, i) => (
               <div key={i} className="px-4 py-3 border-t border-border/20 blur-[3px] opacity-40 pointer-events-none select-none" aria-hidden>
                 <div className="flex justify-between mb-2">
@@ -429,14 +508,37 @@ export function ValueBetsLive({ bets, totalCount, userTier, oddsVerifiedAt, book
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/20">
-                {topBet && (
+                {topBet && (() => {
+                  const tBotRoi = botRecentRoi?.[topBet.bot] ?? null;
+                  const tKo = kickoffLabel(topBet.kickoff, topBet.result);
+                  return (
                   <tr className="bg-emerald-500/[0.03] ring-1 ring-inset ring-emerald-500/20">
                     <td className="py-3 pl-4 pr-2">
-                      <span className="mb-1 inline-block rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-bold text-emerald-400 uppercase tracking-wide">
-                        Free pick
-                      </span>
+                      <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                        <span className="rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-bold text-emerald-400 uppercase tracking-wide">
+                          Free pick
+                        </span>
+                        {topBet.botCount > 1 && (
+                          <span className="rounded border border-blue-500/30 bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-bold text-blue-400">
+                            {topBet.botCount} bots agree
+                          </span>
+                        )}
+                        {tBotRoi && tBotRoi.settled >= 10 && (
+                          <span className="rounded border border-border/40 bg-muted/30 px-1.5 py-0.5 text-[9px] font-semibold">
+                            <span className="text-muted-foreground">30d </span>
+                            <span className={tBotRoi.roi > 0 ? "text-emerald-400" : tBotRoi.roi < 0 ? "text-red-400" : ""}>
+                              {tBotRoi.roi >= 0 ? "+" : ""}{tBotRoi.roi.toFixed(1)}%
+                            </span>
+                            <span className="text-muted-foreground"> · {tBotRoi.settled}</span>
+                          </span>
+                        )}
+                      </div>
                       <p className="font-medium text-foreground/90 truncate max-w-[240px]">{topBet.match}</p>
-                      <p className="text-[10px] text-muted-foreground/80">{topBet.league}</p>
+                      <p className="text-[10px] text-muted-foreground/80">
+                        {topBet.league}
+                        {tKo && <span className="ml-1.5">· {tKo}</span>}
+                        {topBet.recommendedBookmaker && <span className="ml-1.5">· best at {topBet.recommendedBookmaker}</span>}
+                      </p>
                     </td>
                     <td className="py-3 px-2 text-center">
                       <Badge variant="outline" className="text-[10px]">{topBet.market}</Badge>
@@ -452,7 +554,8 @@ export function ValueBetsLive({ bets, totalCount, userTier, oddsVerifiedAt, book
                     <td className="py-3 px-2 text-center font-mono font-bold">{topBet.odds.toFixed(2)}</td>
                     <td className="py-3 pl-2 pr-4 text-center"><ResultBadge result={topBet.result} /></td>
                   </tr>
-                )}
+                  );
+                })()}
                 {Array.from({ length: Math.min(lockedCount, 4) }).map((_, i) => (
                   <tr key={i} className="pointer-events-none select-none blur-[3px] opacity-50" aria-hidden>
                     <td className="py-3 pl-4 pr-2">
@@ -588,6 +691,8 @@ function BetRow({
 }) {
   const kickoffSoon = isKickoffSoon(bet.kickoff, bet.result);
   const oddsMoved = !!bookOddsEntry && isOddsMoved(bookOddsEntry, bet.modelProb, bet.result);
+  const line = lineDirection(bookOddsEntry, bet.odds, bet.result);
+  const koLabel = kickoffLabel(bet.kickoff, bet.result);
   return (
     <tr className={cn(
       "hover:bg-muted/5 transition-colors",
@@ -597,9 +702,9 @@ function BetRow({
         <div>
           <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
             <p className="font-medium text-foreground/90 truncate max-w-[200px]">{bet.match}</p>
-            {isElite && bet.botCount > 1 && (
+            {bet.botCount > 1 && (
               <span className="shrink-0 rounded border border-blue-500/30 bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-bold text-blue-400">
-                {bet.botCount} bots
+                {bet.botCount} bots agree
               </span>
             )}
             {kickoffSoon && (
@@ -607,13 +712,13 @@ function BetRow({
                 KO soon
               </span>
             )}
-            {oddsMoved && !kickoffSoon && (
-              <span className="shrink-0 rounded border border-border/40 bg-muted/30 px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground">
-                Odds moved
-              </span>
-            )}
+            <LineDirChip line={line} oddsMoved={oddsMoved && !kickoffSoon} />
           </div>
-          <p className="text-[10px] text-muted-foreground/80 truncate">{bet.league}</p>
+          <p className="text-[10px] text-muted-foreground/80 truncate">
+            {bet.league}
+            {koLabel && <span className="ml-1.5">· {koLabel}</span>}
+            {bet.recommendedBookmaker && <span className="ml-1.5">· best at {bet.recommendedBookmaker}</span>}
+          </p>
           {isElite && bookOddsEntry && <BookOddsLine entry={bookOddsEntry} modelProb={bet.modelProb} />}
         </div>
       </td>

@@ -15,6 +15,7 @@ import {
   getAllBets,
   getAllBotsFromDB,
   getRecentSettledBets,
+  getPublicPerformanceExtras,
 } from "@/lib/engine-data";
 import type { LiveBet } from "@/lib/engine-data";
 import { PerformanceClient } from "@/components/performance-client";
@@ -23,6 +24,7 @@ import { PerformanceHistory } from "@/components/performance-history";
 import { ClvEducation } from "@/components/clv-education";
 import { TrackRecordFooterCta } from "@/components/track-record-footer-cta";
 import { RetiredStrategiesSection } from "@/components/retired-strategies-section";
+import { PerformanceExtras } from "@/components/performance-extras";
 
 // ── Server-side cache → public stats fallback ────────────────────────────────
 // Used when toggle is off or for Free users (who don't get aggregateBets).
@@ -91,7 +93,7 @@ function sanitizeBets(bets: LiveBet[], isElite: boolean): SanitizedBotBet[] {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default async function PerformancePage() {
-  const [authResult, trackStats, cache] = await Promise.all([
+  const [authResult, trackStats, cache, extras] = await Promise.all([
     (async () => {
       const supabase = await createSupabaseServer();
       const {
@@ -102,6 +104,7 @@ export default async function PerformancePage() {
     })(),
     getTrackRecordStats(),
     getDashboardCache(),
+    getPublicPerformanceExtras(),
   ]);
 
   const { isPro, isElite } = authResult as {
@@ -143,8 +146,10 @@ export default async function PerformancePage() {
         botsDB={botsDB}
       />
 
-      {/* PERF-HONEST-HEADLINE: every retired bot with its final stats + reason.
-          Default collapsed so the active leaderboard stays the visual headline. */}
+      {/* Cumulative P&L chart + streak badges + calibration table — visible to all tiers. */}
+      <PerformanceExtras data={extras} />
+
+      {/* PERF-HONEST-HEADLINE: every retired bot with its final stats + reason. */}
       <RetiredStrategiesSection retired={retiredBreakdown} />
 
       {/* Free users: compact recent-results strip as trust signal + upsell.

@@ -8,6 +8,7 @@ import {
   getTodayPicks,
   getOddsVerifiedAt,
   getValueBetBookOdds,
+  getPublicPerformanceExtras,
   type LiveBet,
   type BookOddsEntry,
 } from "@/lib/engine-data";
@@ -106,15 +107,20 @@ async function ValueBetsContent({ userId }: { userId: string }) {
   const supabase = await createSupabaseServer();
   const { tier: userTier, isPro, isElite } = await getUserTier(userId, supabase);
 
-  const [allBets, todayPicks] = await Promise.all([
+  const [allBets, todayPicks, extras] = await Promise.all([
     getTodayBets(),
     getTodayPicks(),
+    // Used for the free-tier "this bot's last-30-day ROI" hook + Pro odds-movement view.
+    getPublicPerformanceExtras(),
   ]);
   const sorted = [...allBets].sort((a, b) => b.edge - a.edge);
   const { bets, totalCount } = sanitizeBets(sorted, isPro, isElite);
 
   const matchIds = Array.from(new Set(bets.map((b) => b.matchId).filter(Boolean)));
-  const [oddsVerifiedAt, bookOdds] = isElite && matchIds.length > 0
+  // Fetch current best book odds for Pro+ (so they get the line-movement chip),
+  // and for Free's single highlighted row.
+  const fetchBookOdds = (isPro || bets.length > 0) && matchIds.length > 0;
+  const [oddsVerifiedAt, bookOdds] = fetchBookOdds
     ? await Promise.all([
         getOddsVerifiedAt(matchIds),
         getValueBetBookOdds(bets.map((b) => ({ id: b.id, matchId: b.matchId, market: b.market, selection: b.selection }))),
@@ -130,6 +136,7 @@ async function ValueBetsContent({ userId }: { userId: string }) {
         userTier={userTier}
         oddsVerifiedAt={oddsVerifiedAt}
         bookOdds={bookOdds}
+        botRecentRoi={extras.botRecentRoi}
       />
     </div>
   );
