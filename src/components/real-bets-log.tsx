@@ -83,6 +83,8 @@ export function RealBetsLog({ bets }: { bets: RealBet[] }) {
             <th className="text-right p-2 hidden sm:table-cell">Captured</th>
             <th className="text-right p-2">Odds</th>
             <th className="text-right p-2 hidden sm:table-cell">Slip</th>
+            <th className="text-right p-2 hidden md:table-cell" title="Edge implied by the odds we took × bot model probability − 1">Edge</th>
+            <th className="text-right p-2 hidden md:table-cell" title="Closing-line value: (actual_odds / closing_odds) − 1. Set at settlement.">CLV</th>
             <th className="text-right p-2">Stake</th>
             <th className="text-left p-2">Result</th>
             <th className="text-right p-2">PnL</th>
@@ -91,7 +93,7 @@ export function RealBetsLog({ bets }: { bets: RealBet[] }) {
         <tbody>
           {visible.length === 0 && (
             <tr>
-              <td colSpan={10} className="p-4 text-center text-muted-foreground">
+              <td colSpan={12} className="p-4 text-center text-muted-foreground">
                 {anyFilter ? "No bets match these filters." : "No real bets logged yet."}
               </td>
             </tr>
@@ -124,6 +126,30 @@ export function RealBetsLog({ bets }: { bets: RealBet[] }) {
                 }`}
               >
                 {b.slippagePct != null ? `${b.slippagePct.toFixed(2)}%` : "—"}
+              </td>
+              <td
+                className={`p-2 text-right font-mono hidden md:table-cell ${
+                  b.edgePctTaken != null && b.edgePctTaken > 0
+                    ? "text-emerald-400"
+                    : b.edgePctTaken != null && b.edgePctTaken < 0
+                      ? "text-red-400"
+                      : ""
+                }`}
+              >
+                {b.edgePctTaken != null
+                  ? `${(b.edgePctTaken * 100).toFixed(2)}%`
+                  : "—"}
+              </td>
+              <td
+                className={`p-2 text-right font-mono hidden md:table-cell ${
+                  b.clv != null && b.clv > 0
+                    ? "text-emerald-400"
+                    : b.clv != null && b.clv < 0
+                      ? "text-red-400"
+                      : ""
+                }`}
+              >
+                {b.clv != null ? `${(b.clv * 100).toFixed(2)}%` : "—"}
               </td>
               <td className="p-2 text-right">€{b.stake.toFixed(2)}</td>
               <td className="p-2">

@@ -1677,6 +1677,10 @@ export interface RealBet {
   capturedOdds: number | null;
   actualOdds: number;
   slippagePct: number | null;
+  /** REAL-BETS-CLV-EDGE: edge implied by actual_odds × model_probability − 1, decimal (0.05 = +5%). */
+  edgePctTaken: number | null;
+  /** REAL-BETS-CLV-EDGE: (actual_odds / closing_odds) − 1, decimal. Set at settlement. */
+  clv: number | null;
   stake: number;
   placedAt: string;
   result: string;
@@ -1694,7 +1698,8 @@ export async function getRealBets(): Promise<RealBet[]> {
     .from("real_bets")
     .select(
       `id, match_id, market, selection, bookmaker, captured_odds, actual_odds,
-       slippage_pct, stake, placed_at, result, pnl, resolved_at, notes,
+       slippage_pct, edge_pct_taken, clv,
+       stake, placed_at, result, pnl, resolved_at, notes,
        bot:bot_id(name),
        paper:simulated_bet_id(stake, pnl, result),
        match:match_id(date,
@@ -1726,6 +1731,8 @@ export async function getRealBets(): Promise<RealBet[]> {
       capturedOdds: r.captured_odds != null ? Number(r.captured_odds) : null,
       actualOdds: Number(r.actual_odds),
       slippagePct: r.slippage_pct != null ? Number(r.slippage_pct) : null,
+      edgePctTaken: r.edge_pct_taken != null ? Number(r.edge_pct_taken) : null,
+      clv: r.clv != null ? Number(r.clv) : null,
       stake: Number(r.stake),
       placedAt: r.placed_at,
       result: r.result,
