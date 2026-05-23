@@ -46,6 +46,51 @@ function fmtKickoff(iso: string) {
   return d.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
 }
 
+// COMBO-LABELS (2026-05-23): all five combo variants have nearly identical
+// row chrome (5 legs, similar odds + edge), so the row was unreadable. This
+// returns a short {label, subtitle, placeable} tuple per bot name so the UI
+// can show what's actually different.
+function comboVariantLabel(botName: string): {
+  label: string;
+  subtitle: string;
+  placeable: boolean;
+} {
+  switch (botName) {
+    case "bot_acca_value":
+      return {
+        label: "Straight 5-fold · all markets",
+        subtitle: "One ticket, all 5 legs must win",
+        placeable: false,
+      };
+    case "bot_combo_system":
+      return {
+        label: "Fours-up system · all markets",
+        subtitle: "Same 5 picks split into 5 four-folds + 1 five-fold (6 sub-tickets) · tolerates 1 leg failing",
+        placeable: false,
+      };
+    case "bot_acca_proven":
+      return {
+        label: "Straight 5-fold · proven markets only",
+        subtitle: "Markets restricted to OU25/OU35/BTTS (+ OU15 required leg)",
+        placeable: false,
+      };
+    case "bot_combo_proven_system":
+      return {
+        label: "Fours-up system · proven markets only",
+        subtitle: "Same proven-market picks split into 5 four-folds + 1 five-fold (6 sub-tickets)",
+        placeable: false,
+      };
+    case "bot_acca_coolbet":
+      return {
+        label: "Straight 5-fold · Coolbet leagues only",
+        subtitle: "Legs restricted to leagues offered on Coolbet — this is the one you can build at the slip",
+        placeable: true,
+      };
+    default:
+      return { label: "Combo", subtitle: "", placeable: false };
+  }
+}
+
 function ConsensusBadge({ size, recommended }: { size: number; recommended: boolean }) {
   if (size < 2) return null;
   if (recommended) {
@@ -263,15 +308,26 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
                   className={`border-t border-border ${c.alreadyPlaced ? "bg-emerald-950/30" : ""} ${grouped ? "border-l-2 border-l-amber-500/60" : ""} ${isCombo ? "border-l-2 border-l-purple-500/60 bg-purple-950/20" : ""}`}
                 >
                   <td className="p-2">
-                    <div className="font-medium flex items-center gap-1.5">
+                    <div className="font-medium flex items-center gap-1.5 flex-wrap">
                       {isCombo ? (
-                        <button
-                          onClick={() => toggleCombo(c.betId)}
-                          className="text-left flex items-center gap-1.5 hover:text-purple-300"
-                        >
-                          <span className="text-purple-400">{isExpanded ? "▼" : "▶"}</span>
-                          <span>{c.bot} — {c.comboLegs!.length}-leg combo</span>
-                        </button>
+                        <>
+                          <button
+                            onClick={() => toggleCombo(c.betId)}
+                            className="text-left flex items-center gap-1.5 hover:text-purple-300"
+                          >
+                            <span className="text-purple-400">{isExpanded ? "▼" : "▶"}</span>
+                            <span>{comboVariantLabel(c.bot).label}</span>
+                          </button>
+                          {comboVariantLabel(c.bot).placeable ? (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-900/60 text-emerald-300 font-medium border border-emerald-700/40">
+                              ✓ Placeable at Coolbet
+                            </span>
+                          ) : (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800/60 text-zinc-400 font-medium border border-zinc-700/40">
+                              paper-only
+                            </span>
+                          )}
+                        </>
                       ) : (
                         c.match
                       )}
@@ -279,10 +335,16 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
                         <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-800 text-emerald-200 font-normal">✓ Placed</span>
                       )}
                     </div>
-                    <div className="text-xs text-muted-foreground">{isCombo ? `Build at Coolbet bet builder — combine ${c.comboLegs!.length} legs` : c.league}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {isCombo ? (
+                        <span title={c.bot}>{comboVariantLabel(c.bot).subtitle}</span>
+                      ) : (
+                        c.league
+                      )}
+                    </div>
                     <div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
                       {isCombo ? (
-                        <span>Combined edge {fmtPct(c.edge)} · stake €{c.stake?.toFixed(2) ?? "—"}</span>
+                        <span>Combined edge {fmtPct(c.edge)} · stake €{c.stake?.toFixed(2) ?? "—"} · {c.bot}</span>
                       ) : (
                         <>
                           <span>{fmtKickoff(c.kickoff)} · {c.bot}</span>
