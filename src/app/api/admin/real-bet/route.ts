@@ -70,6 +70,30 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `bookmaker '${bookmaker}' status is ${book.status}` }, { status: 400 });
   }
 
+  // DUPE-FIX-1: dedup guard. The /admin/place UI filters out already-placed
+  // bets via getPlaceableBets, but stale UI state + the auto coolbet_placer
+  // can race and double-record the same selection. Belt-and-braces server-side
+  // check against today's real_bets — if one exists for the same
+  // (match, market, selection), return 409 so the UI can surface it instead
+  // of silently inserting a duplicate.
+  const todayStart = new Date();
+  todayStart.setUTCHours(0, 0, 0, 0);
+  const { data: existing } = await sa
+    .from("real_bets")
+    .select("id")
+    .eq("match_id", matchId)
+    .eq("market", market)
+    .eq("selection", selection.toLowerCase())
+    .gte("placed_at", todayStart.toISOString())
+    .limit(1)
+    .maybeSingle();
+  if (existing?.id) {
+    return NextResponse.json(
+      { error: "already_placed", existingId: existing.id },
+      { status: 409 },
+    );
+  }
+
   const { data, error } = await sa
     .from("real_bets")
     .insert({
