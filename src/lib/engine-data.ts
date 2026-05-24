@@ -1420,10 +1420,26 @@ export interface PlaceableBet {
   modelProb: number | null;
   stake: number | null;     // suggested €1-3, manually picked
   alreadyPlaced: boolean;   // true if real_bets already has a bet on this match today
+  // ADMIN-PLACE-SKIP-REASON (2026-05-24): per-row label for why the
+  // auto-placer would (or would not) take this bet.
+  //   "placed"        — real_bets row exists for today
+  //   "below_min"     — pick edge < COOLBET_MIN_EDGE (5%)
+  //   "edge_eroded"   — current Coolbet edge < 0 (modelProb − 1/coolbetOdds)
+  //   "no_coolbet"    — neither Coolbet nor Unibet has snapshotted this match
+  //   "ready"         — auto-placer would place this
+  autoPlaceStatus: "placed" | "below_min" | "edge_eroded" | "no_coolbet" | "ready";
+  /** Edge at the *current* Coolbet (or Unibet proxy) price using modelProb − 1/odds. Null when no live price. */
+  liveEdge: number | null;
   // COMBO-ADMIN-PLACE-UI (2026-05-18): for combo/acca rows, the legs to combine
   // on the Coolbet bet builder slip. null for single bets.
   comboLegs: PlaceableBetLeg[] | null;
 }
+
+/** Threshold (decimal fraction, 0.05 = 5%) below which the Coolbet auto-placer
+ * refuses to place a bet at pick time. Mirrors `COOLBET_MIN_EDGE` env in
+ * `workers/automation/coolbet_placer.py`. Surface it in the UI so superadmins
+ * can see why a low-edge pick isn't being auto-placed. */
+export const COOLBET_AUTO_MIN_EDGE = 0.05;
 
 /** Map paper-bet (market, selection) to odds_snapshots (market, selection). */
 function _mapPaperToSnapshotKey(market: string, selection: string): { market: string; selection: string } | null {
@@ -1623,6 +1639,32 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
       });
     }
 
+    const pickEdge = b.edge_percent != null ? Number(b.edge_percent) : null;
+    const modelProb = b.calibrated_prob != null
+      ? Number(b.calibrated_prob)
+      : (b.model_probability != null ? Number(b.model_probability) : null);
+    const alreadyPlaced = placedSimBetIds.has(b.id);
+    const livePrice = coolbetOdds ?? unibetOdds;
+    const liveEdge = (modelProb != null && livePrice != null && livePrice > 1)
+      ? modelProb - 1 / livePrice
+      : null;
+
+    // ADMIN-PLACE-SKIP-REASON: precompute the auto-placer's decision so the
+    // table can show a per-row label (✓ Placed / Edge < 5% / Edge eroded /
+    // No Coolbet odds / Ready). Mirrors `coolbet_placer.py`'s gate order.
+    let autoPlaceStatus: PlaceableBet["autoPlaceStatus"];
+    if (alreadyPlaced) {
+      autoPlaceStatus = "placed";
+    } else if (pickEdge != null && pickEdge < COOLBET_AUTO_MIN_EDGE) {
+      autoPlaceStatus = "below_min";
+    } else if (livePrice == null) {
+      autoPlaceStatus = "no_coolbet";
+    } else if (liveEdge != null && liveEdge < 0) {
+      autoPlaceStatus = "edge_eroded";
+    } else {
+      autoPlaceStatus = "ready";
+    }
+
     out.push({
       betId: b.id,
       bot: bot?.name || "unknown",
@@ -1638,10 +1680,12 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
       unibetOdds,
       bet365Odds,
       pinnacleOdds,
-      edge: b.edge_percent != null ? Number(b.edge_percent) : null,
-      modelProb: b.calibrated_prob != null ? Number(b.calibrated_prob) : (b.model_probability != null ? Number(b.model_probability) : null),
+      edge: pickEdge,
+      modelProb,
       stake: b.stake != null ? Number(b.stake) : null,
-      alreadyPlaced: placedSimBetIds.has(b.id),
+      alreadyPlaced,
+      autoPlaceStatus,
+      liveEdge,
       comboLegs,
     });
   }

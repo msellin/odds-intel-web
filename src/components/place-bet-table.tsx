@@ -4,6 +4,64 @@ import { Fragment, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import type { PlaceableBet } from "@/lib/engine-data";
 
+// ADMIN-PLACE-SKIP-REASON (2026-05-24): per-row badge explaining whether the
+// auto-placer would take this bet. Mirrors `coolbet_placer.py` gate order:
+// already placed → pick edge < 5% → no live Coolbet/Unibet price → edge now < 0.
+function AutoPlaceStatusBadge({
+  status,
+  liveEdge,
+}: {
+  status: PlaceableBet["autoPlaceStatus"];
+  liveEdge: number | null;
+}) {
+  if (status === "placed") {
+    // The match-card already renders ✓ Placed in its own slot; suppress here
+    // to avoid duplicating the indicator.
+    return null;
+  }
+  if (status === "ready") {
+    return (
+      <span
+        className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-900/40 text-emerald-300 font-medium"
+        title="Auto-placer would take this bet on its next run"
+      >
+        ⏵ auto-place
+      </span>
+    );
+  }
+  if (status === "below_min") {
+    return (
+      <span
+        className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800/60 text-zinc-400"
+        title="Edge below COOLBET_MIN_EDGE (5%) — auto-placer ignores this bet"
+      >
+        ✗ edge &lt; 5%
+      </span>
+    );
+  }
+  if (status === "no_coolbet") {
+    return (
+      <span
+        className="text-[10px] px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-300"
+        title="No recent Coolbet or Unibet snapshot — placer can't price this bet right now"
+      >
+        ⚠ no Coolbet odds
+      </span>
+    );
+  }
+  if (status === "edge_eroded") {
+    return (
+      <span
+        className="text-[10px] px-1.5 py-0.5 rounded bg-red-900/40 text-red-300"
+        title={`Edge at current Coolbet price = ${liveEdge != null ? (liveEdge * 100).toFixed(1) : "?"}% — auto-placer skips -EV bets`}
+      >
+        ✗ edge eroded
+      </span>
+    );
+  }
+  return null;
+}
+
 
 function fmtAHSelection(selection: string): string {
   const m = selection.match(/^(home|away)\s+([+-]?\d+(?:\.\d+)?)$/i);
@@ -263,6 +321,7 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
                     size={groupSizeByBetId.get(c.betId) ?? 1}
                     recommended={recommendedByBetId.has(c.betId)}
                   />
+                  <AutoPlaceStatusBadge status={c.autoPlaceStatus} liveEdge={c.liveEdge} />
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs text-muted-foreground">{fmtOdds(c.botOdds)}</span>
@@ -352,6 +411,7 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
                             size={groupSizeByBetId.get(c.betId) ?? 1}
                             recommended={recommendedByBetId.has(c.betId)}
                           />
+                          <AutoPlaceStatusBadge status={c.autoPlaceStatus} liveEdge={c.liveEdge} />
                         </>
                       )}
                     </div>
