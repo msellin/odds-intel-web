@@ -28,18 +28,55 @@ function normalizeTeam(name: string): string {
   return name.replace(CLUB_PREFIX_RE, "").toLowerCase().trim();
 }
 
+// BOT-FAMILY-DEDUP (2026-05-24): when multiple bots in the SAME strategy family
+// agree on a pick, that's not independent confirmation — they share most of
+// their logic. Map each bot to its family; "N bots agree" now counts distinct
+// families, not raw bot count. Bots not in this map count as their own family
+// (the common case).
+//
+// Discovered when bot_dc_value + bot_dc_strong_fav were both showing "2 bots
+// agree" on every DC pick, but bot_dc_strong_fav is a tightened subset of
+// bot_dc_value (every pick is shared) — verified 100% overlap on 34/34 picks.
+// bot_dc_strong_fav has since been re-retired but the historical bets remain.
+const BOT_FAMILY: Record<string, string> = {
+  bot_dc_value: "dc",
+  bot_dc_strong_fav: "dc",
+  bot_aggressive: "aggressive_1x2",
+  bot_aggressive_v2: "aggressive_1x2",
+  bot_draw_specialist: "aggressive_1x2", // subset of bot_aggressive's draws
+  bot_acca_value: "combo",
+  bot_acca_proven: "combo",
+  bot_acca_coolbet: "combo",
+  bot_combo_system: "combo",
+  bot_combo_proven_system: "combo",
+};
+function botFamily(bot: string): string {
+  return BOT_FAMILY[bot] ?? bot;
+}
+
 function deduplicateBets(bets: LiveBet[]): (LiveBet & { botCount: number })[] {
   const seen = new Map<string, LiveBet & { botCount: number }>();
+  const familiesByKey = new Map<string, Set<string>>();
   for (const bet of bets) {
     const [home = "", away = ""] = bet.match.split(" vs ");
     const key = `${bet.kickoff}|${normalizeTeam(home)}|${normalizeTeam(away)}|${bet.market}|${bet.selection}`;
+    const family = botFamily(bet.bot);
+    let families = familiesByKey.get(key);
+    if (!families) {
+      families = new Set();
+      familiesByKey.set(key, families);
+    }
+    const isNewFamily = !families.has(family);
+    families.add(family);
     const existing = seen.get(key);
     if (!existing) {
       seen.set(key, { ...bet, botCount: 1 });
     } else {
-      existing.botCount += 1;
+      const newCount = isNewFamily ? existing.botCount + 1 : existing.botCount;
       if (bet.edge > existing.edge) {
-        seen.set(key, { ...bet, botCount: existing.botCount });
+        seen.set(key, { ...bet, botCount: newCount });
+      } else if (isNewFamily) {
+        existing.botCount = newCount;
       }
     }
   }
