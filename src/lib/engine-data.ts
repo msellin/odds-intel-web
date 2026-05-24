@@ -1521,18 +1521,48 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
   const matchIds = Array.from(new Set(upcoming.map((b) => b.match_id)));
 
   // 2b) check which simulated bets already have a real bet placed today (UTC)
+  // Also surface match_id + bookmaker so we can use Coolbet real_bets as
+  // ground truth that Coolbet has the event for that match.
   const todayUtc = new Date();
   todayUtc.setUTCHours(0, 0, 0, 0);
   const { data: placedToday } = await admin
     .from("real_bets")
-    .select("simulated_bet_id")
+    .select("simulated_bet_id, match_id, bookmaker")
     .in("match_id", matchIds)
     .gte("placed_at", todayUtc.toISOString());
+  type PlacedRow = { simulated_bet_id: string | null; match_id: string | null; bookmaker: string | null };
   const placedSimBetIds = new Set(
-    ((placedToday ?? []) as Array<{ simulated_bet_id: string | null }>)
+    ((placedToday ?? []) as PlacedRow[])
       .filter((r) => r.simulated_bet_id != null)
       .map((r) => r.simulated_bet_id as string)
   );
+  // ADMIN-PLACE-SKIP-REASON: match_ids that have ANY Coolbet/Unibet evidence
+  // — used to distinguish `no_event` (match not found at bookmaker at all)
+  // from `no_market` (match found, just doesn't offer this market).
+  //
+  // Two evidence sources, combined so a single missed snapshot doesn't
+  // mis-classify a match the user can see has bets placed at Coolbet:
+  //   (a) any odds_snapshots row from Coolbet/Unibet for this match — done
+  //       in a dedicated lightweight query (just match_id) below, so the
+  //       10k-row cap on the main `snaps` query doesn't push older Coolbet
+  //       snapshots off the bottom and trigger false `no_event` chips.
+  //   (b) any real_bet placed at Coolbet for this match today — definitive
+  //       proof the event exists at Coolbet regardless of snapshot state.
+  const matchIdsWithCoolbetEvent = new Set<string>();
+  for (const r of ((placedToday ?? []) as PlacedRow[])) {
+    if (r.match_id && r.bookmaker === "Coolbet") {
+      matchIdsWithCoolbetEvent.add(r.match_id);
+    }
+  }
+  const { data: coolbetEventRows } = await admin
+    .from("odds_snapshots")
+    .select("match_id")
+    .in("match_id", matchIds)
+    .in("bookmaker", ["Coolbet", "Unibet"])
+    .range(0, 99999);
+  for (const r of ((coolbetEventRows ?? []) as Array<{ match_id: string }>)) {
+    matchIdsWithCoolbetEvent.add(r.match_id);
+  }
   const { data: snaps } = await admin
     .from("odds_snapshots")
     .select("match_id, market, selection, bookmaker, odds, handicap_line, timestamp")
@@ -1548,14 +1578,7 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
   // AH: match_id|selection|handicap_line|bookmaker → most-recent odds (5-part key)
   const ahSnapKey = (m: string, sel: string, hl: number, bm: string) => `${m}|${sel}|${hl}|${bm}`;
   const ahSnapMap = new Map<string, number>();
-  // ADMIN-PLACE-SKIP-REASON: match_ids that have ANY Coolbet/Unibet snapshot.
-  // Used to distinguish `no_event` (match not found at bookmaker at all) from
-  // `no_market` (match found, but this specific market not offered).
-  const matchIdsWithCoolbetEvent = new Set<string>();
   for (const s of (snaps ?? []) as SnapRow[]) {
-    if (s.bookmaker === "Coolbet" || s.bookmaker === "Unibet") {
-      matchIdsWithCoolbetEvent.add(s.match_id);
-    }
     if (s.market === "asian_handicap" && s.handicap_line != null) {
       const k = ahSnapKey(s.match_id, s.selection, s.handicap_line, s.bookmaker);
       if (!ahSnapMap.has(k)) ahSnapMap.set(k, Number(s.odds));
