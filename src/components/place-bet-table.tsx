@@ -6,7 +6,7 @@ import type { PlaceableBet } from "@/lib/engine-data";
 
 // ADMIN-PLACE-SKIP-REASON (2026-05-24): per-row badge explaining whether the
 // auto-placer would take this bet. Mirrors `coolbet_placer.py` gate order:
-// already placed → pick edge < 5% → no live Coolbet/Unibet price → edge now < 0.
+// already placed → pick edge < 5% → no event / no market → edge now < 0.
 function AutoPlaceStatusBadge({
   status,
   liveEdge,
@@ -39,13 +39,23 @@ function AutoPlaceStatusBadge({
       </span>
     );
   }
-  if (status === "no_coolbet") {
+  if (status === "no_event") {
     return (
       <span
         className="text-[10px] px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-300"
-        title="No recent Coolbet or Unibet snapshot — placer can't price this bet right now"
+        title="No Coolbet/Unibet snapshot exists for this match — fuzzy event match likely failed (team-name mismatch, league not covered, etc.). Worth spot-checking manually."
       >
-        ⚠ no Coolbet odds
+        ⚠ no match
+      </span>
+    );
+  }
+  if (status === "no_market") {
+    return (
+      <span
+        className="text-[10px] px-1.5 py-0.5 rounded bg-amber-900/30 text-amber-400"
+        title="Coolbet/Unibet has this match but no odds for this specific market/selection — bookmaker likely doesn't offer it (e.g. AH quarter lines, exotic DC, etc.). Worth spot-checking manually."
+      >
+        ⚠ no market
       </span>
     );
   }

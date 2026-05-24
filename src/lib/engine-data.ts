@@ -1425,9 +1425,12 @@ export interface PlaceableBet {
   //   "placed"        — real_bets row exists for today
   //   "below_min"     — pick edge < COOLBET_MIN_EDGE (5%)
   //   "edge_eroded"   — current Coolbet edge < 0 (modelProb − 1/coolbetOdds)
-  //   "no_coolbet"    — neither Coolbet nor Unibet has snapshotted this match
+  //   "no_event"      — no Coolbet/Unibet snapshot for this match at all
+  //                     (likely fuzzy match couldn't find the event)
+  //   "no_market"     — match has Coolbet/Unibet snapshots, but not for this
+  //                     (market, selection) — Coolbet doesn't offer this market
   //   "ready"         — auto-placer would place this
-  autoPlaceStatus: "placed" | "below_min" | "edge_eroded" | "no_coolbet" | "ready";
+  autoPlaceStatus: "placed" | "below_min" | "edge_eroded" | "no_event" | "no_market" | "ready";
   /** Edge at the *current* Coolbet (or Unibet proxy) price using modelProb − 1/odds. Null when no live price. */
   liveEdge: number | null;
   // COMBO-ADMIN-PLACE-UI (2026-05-18): for combo/acca rows, the legs to combine
@@ -1545,7 +1548,14 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
   // AH: match_id|selection|handicap_line|bookmaker → most-recent odds (5-part key)
   const ahSnapKey = (m: string, sel: string, hl: number, bm: string) => `${m}|${sel}|${hl}|${bm}`;
   const ahSnapMap = new Map<string, number>();
+  // ADMIN-PLACE-SKIP-REASON: match_ids that have ANY Coolbet/Unibet snapshot.
+  // Used to distinguish `no_event` (match not found at bookmaker at all) from
+  // `no_market` (match found, but this specific market not offered).
+  const matchIdsWithCoolbetEvent = new Set<string>();
   for (const s of (snaps ?? []) as SnapRow[]) {
+    if (s.bookmaker === "Coolbet" || s.bookmaker === "Unibet") {
+      matchIdsWithCoolbetEvent.add(s.match_id);
+    }
     if (s.market === "asian_handicap" && s.handicap_line != null) {
       const k = ahSnapKey(s.match_id, s.selection, s.handicap_line, s.bookmaker);
       if (!ahSnapMap.has(k)) ahSnapMap.set(k, Number(s.odds));
@@ -1670,14 +1680,19 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
 
     // ADMIN-PLACE-SKIP-REASON: precompute the auto-placer's decision so the
     // table can show a per-row label (✓ Placed / Edge < 5% / Edge eroded /
-    // No Coolbet odds / Ready). Mirrors `coolbet_placer.py`'s gate order.
+    // No event / No market / Ready). Mirrors `coolbet_placer.py`'s gate order.
+    // When livePrice is null we split into:
+    //   - no_event  → no Coolbet/Unibet snapshots exist for this match_id at
+    //                 all (fuzzy event match likely failed)
+    //   - no_market → the match HAS Coolbet/Unibet snapshots, just not for
+    //                 this (market, selection) — Coolbet doesn't offer it
     let autoPlaceStatus: PlaceableBet["autoPlaceStatus"];
     if (alreadyPlaced) {
       autoPlaceStatus = "placed";
     } else if (pickEdge != null && pickEdge < COOLBET_AUTO_MIN_EDGE) {
       autoPlaceStatus = "below_min";
     } else if (livePrice == null) {
-      autoPlaceStatus = "no_coolbet";
+      autoPlaceStatus = matchIdsWithCoolbetEvent.has(b.match_id) ? "no_market" : "no_event";
     } else if (liveEdge != null && liveEdge < 0) {
       autoPlaceStatus = "edge_eroded";
     } else {
