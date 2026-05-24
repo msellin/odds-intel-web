@@ -1497,9 +1497,17 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
 
   // Filter to those whose match really is in the future (the .gt filter on
   // an embedded relation doesn't always behave the way we want via PostgREST).
+  //
+  // COMBO-LEG-FUTURE-FILTER (2026-05-24): for combo rows the bet's match_id is
+  // just a placeholder pointing to one of the 5 legs (arbitrary which one). We
+  // can't reject a combo because the placeholder leg has kicked off — we have
+  // to check that ALL legs are still future, since Coolbet won't accept a
+  // combo with any leg already started. We defer the combo filter to after
+  // legMatchInfo is populated below.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows = bets as any[];
   const upcoming = rows.filter((b) => {
+    if (Array.isArray(b.combo_legs) && b.combo_legs.length > 0) return true;
     const m = Array.isArray(b.match) ? b.match[0] : b.match;
     return m && new Date(m.date) > new Date();
   });
@@ -1585,7 +1593,18 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
 
   // 3) build PlaceableBet rows
   const out: PlaceableBet[] = [];
+  const nowMs = Date.now();
   for (const b of upcoming) {
+    // COMBO-LEG-FUTURE-FILTER (2026-05-24): drop combos where any leg has
+    // already kicked off. The placer can't write a Coolbet ticket for a
+    // combo with a finished leg, so showing it as placeable is misleading.
+    if (Array.isArray(b.combo_legs) && b.combo_legs.length > 0) {
+      const allLegsFuture = b.combo_legs.every((leg: { match_id?: string }) => {
+        const info = leg?.match_id ? legMatchInfo.get(leg.match_id) : null;
+        return info && new Date(info.kickoff).getTime() > nowMs;
+      });
+      if (!allLegsFuture) continue;
+    }
     const k = _mapPaperToSnapshotKey(b.market, b.selection);
     // k is null for asian_handicap — use ahSnapMap with parsed handicap_line instead
     const m = Array.isArray(b.match) ? b.match[0] : b.match;
