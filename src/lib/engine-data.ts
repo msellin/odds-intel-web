@@ -1539,18 +1539,29 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
       .filter((r) => r.simulated_bet_id != null)
       .map((r) => r.simulated_bet_id as string)
   );
-  // ADMIN-PLACE-SKIP-REASON: match_ids that have ANY Coolbet/Unibet evidence
-  // — used to distinguish `no_event` (match not found at bookmaker at all)
-  // from `no_market` (match found, just doesn't offer this market).
+  // ADMIN-PLACE-SKIP-REASON: match_ids with definitive evidence the event
+  // exists at *Coolbet specifically* — used to distinguish `no_event` (match
+  // not at Coolbet at all) from `no_market` (Coolbet has the event but not
+  // this market).
   //
-  // Two evidence sources, combined so a single missed snapshot doesn't
-  // mis-classify a match the user can see has bets placed at Coolbet:
-  //   (a) any odds_snapshots row from Coolbet/Unibet for this match — done
-  //       in a dedicated lightweight query (just match_id) below, so the
-  //       10k-row cap on the main `snaps` query doesn't push older Coolbet
-  //       snapshots off the bottom and trigger false `no_event` chips.
-  //   (b) any real_bet placed at Coolbet for this match today — definitive
-  //       proof the event exists at Coolbet regardless of snapshot state.
+  // ADMIN-PLACE-COOLBET-ONLY-EVIDENCE (2026-05-26): Unibet was previously
+  // treated as a proxy for "Coolbet has the event" because Unibet shares the
+  // Kambi backend and Coolbet's snapshot ingest occasionally missed events.
+  // That broke for leagues Unibet covers but Coolbet does not — notably
+  // Argentina Primera B Metropolitana Reserves and other minor reserves /
+  // women's lower divisions where Unibet (global) carries the fixture
+  // (delivered to our DB through AF's bulk-odds endpoint, no fuzzy match
+  // involved) while Estonian Coolbet just doesn't list the league. Result
+  // was every row flipped to `⚠ no market` instead of the correct
+  // `⚠ no match`. Two evidence sources, both Coolbet-only:
+  //   (a) any odds_snapshots row from Coolbet for this match — dedicated
+  //       lightweight query so the 10k cap on the main snaps query can't
+  //       push older Coolbet rows off the bottom and trigger false
+  //       no_event chips. The placer writes a presence-marker snapshot
+  //       (1X2 home) when it hits no_market, so legitimate Coolbet-no-market
+  //       rows always have a Coolbet snapshot to anchor this check.
+  //   (b) any real_bet placed at Coolbet for this match today — ground
+  //       truth regardless of snapshot state.
   const matchIdsWithCoolbetEvent = new Set<string>();
   for (const r of ((placedToday ?? []) as PlacedRow[])) {
     if (r.match_id && r.bookmaker === "Coolbet") {
@@ -1561,7 +1572,7 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
     .from("odds_snapshots")
     .select("match_id")
     .in("match_id", matchIds)
-    .in("bookmaker", ["Coolbet", "Unibet"])
+    .eq("bookmaker", "Coolbet")
     .range(0, 99999);
   for (const r of ((coolbetEventRows ?? []) as Array<{ match_id: string }>)) {
     matchIdsWithCoolbetEvent.add(r.match_id);
