@@ -1469,6 +1469,9 @@ function _mapPaperToSnapshotKey(market: string, selection: string): { market: st
     const dc = s.replace(/\s+/g, "");  // "1X" → "1x", "X2" → "x2", "12" → "12"
     if (["1x", "x2", "12"].includes(dc)) return { market: "double_chance", selection: dc };
   }
+  if (m === "draw_no_bet") {
+    if (s === "home" || s === "away") return { market: "draw_no_bet", selection: s };
+  }
   return null;
 }
 
@@ -1704,19 +1707,28 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
     // ADMIN-PLACE-SKIP-REASON: precompute the auto-placer's decision so the
     // table can show a per-row label (✓ Placed / Edge < 5% / Edge eroded /
     // No event / No market / Ready). Mirrors `coolbet_placer.py`'s gate order.
-    // When livePrice is null we split into:
-    //   - no_event  → no Coolbet/Unibet snapshots exist for this match_id at
-    //                 all (fuzzy event match likely failed)
-    //   - no_market → the match HAS Coolbet/Unibet snapshots, just not for
-    //                 this (market, selection) — Coolbet doesn't offer it
+    //
+    // ADMIN-PLACE-STRICT-COOLBET (2026-05-26): the gate uses `coolbetOdds`
+    // strictly — the Unibet proxy can NOT stand in for it. Coolbet (Estonia)
+    // and Unibet (global) share the Kambi backend but expose different market
+    // catalogs per region — Coolbet often lacks double_chance, AH quarter
+    // lines, and other exotics that Unibet still carries. Treating Unibet as
+    // proof Coolbet has the market produced false-positive "⏵ auto-place"
+    // badges on rows the placer then aborts with no_market (e.g. bot_dc_value
+    // x2 on a South-African PSL fixture that Coolbet only offers 1X2 on).
+    // For display the table still falls back to the Unibet proxy in the
+    // Coolbet column with the "*" marker.
+    const coolbetGateEdge = (modelProb != null && coolbetOdds != null && coolbetOdds > 1)
+      ? modelProb - 1 / coolbetOdds
+      : null;
     let autoPlaceStatus: PlaceableBet["autoPlaceStatus"];
     if (alreadyPlaced) {
       autoPlaceStatus = "placed";
     } else if (pickEdge != null && pickEdge < COOLBET_AUTO_MIN_EDGE) {
       autoPlaceStatus = "below_min";
-    } else if (livePrice == null) {
+    } else if (coolbetOdds == null) {
       autoPlaceStatus = matchIdsWithCoolbetEvent.has(b.match_id) ? "no_market" : "no_event";
-    } else if (liveEdge != null && liveEdge < 0) {
+    } else if (coolbetGateEdge != null && coolbetGateEdge < 0) {
       autoPlaceStatus = "edge_eroded";
     } else {
       autoPlaceStatus = "ready";
