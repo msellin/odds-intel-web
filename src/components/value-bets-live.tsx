@@ -132,7 +132,9 @@ function BetCard({
   botRecentRoi?: Record<string, { roi: number; settled: number }>;
 }) {
   const kickoffSoon = isKickoffSoon(bet.kickoff, bet.result);
+  const matchLive = isMatchLive(bet.kickoff, bet.result);
   const koLabel = kickoffLabel(bet.kickoff, bet.result);
+  const koTime = formatKickoffTime(bet.kickoff);
   const oddsMoved = !!bookOddsEntry && isOddsMoved(bookOddsEntry, bet.modelProb, bet.result);
   const line = lineDirection(bookOddsEntry, bet.odds, bet.result);
   const botRoi = botRecentRoi?.[bet.bot] ?? null;
@@ -151,12 +153,21 @@ function BetCard({
                 Free pick
               </span>
             )}
+            {matchLive ? (
+              <span className="rounded border border-red-500/40 bg-red-500/10 px-1.5 py-0.5 text-[9px] font-bold text-red-400 uppercase tracking-wide">
+                ● Live
+              </span>
+            ) : (
+              <span className="rounded bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-mono text-muted-foreground/70" suppressHydrationWarning>
+                {koTime}
+              </span>
+            )}
             {bet.botCount > 1 && (
               <span className="rounded border border-blue-500/30 bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-bold text-blue-400">
                 {bet.botCount} bots agree
               </span>
             )}
-            {kickoffSoon && (
+            {kickoffSoon && !matchLive && (
               <span className="rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-amber-400">
                 KO soon
               </span>
@@ -312,15 +323,28 @@ function isKickoffSoon(kickoff: string, result: string): boolean {
   return minsToKickoff > 0 && minsToKickoff < 45;
 }
 
+function isMatchLive(kickoff: string, result: string): boolean {
+  if (result !== "pending") return false;
+  return new Date(kickoff).getTime() <= Date.now();
+}
+
 function kickoffLabel(kickoff: string, result: string): string | null {
   if (result !== "pending") return null;
   const mins = Math.round((new Date(kickoff).getTime() - Date.now()) / 60000);
-  if (mins <= 0) return "Live";
+  if (mins <= 0) return null; // Live badge handled separately
   if (mins < 60) return `KO in ${mins}m`;
   const hrs = Math.floor(mins / 60);
   const rem = mins % 60;
   if (hrs < 6) return rem > 0 ? `KO in ${hrs}h ${rem}m` : `KO in ${hrs}h`;
   return `KO in ${hrs}h`;
+}
+
+function formatKickoffTime(kickoff: string): string {
+  try {
+    return new Date(kickoff).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "";
+  }
 }
 
 function isOddsMoved(entry: BookOddsEntry, modelProb: number, result: string): boolean {
@@ -710,9 +734,11 @@ function BetRow({
   bookOddsEntry?: BookOddsEntry;
 }) {
   const kickoffSoon = isKickoffSoon(bet.kickoff, bet.result);
+  const matchLive = isMatchLive(bet.kickoff, bet.result);
   const oddsMoved = !!bookOddsEntry && isOddsMoved(bookOddsEntry, bet.modelProb, bet.result);
   const line = lineDirection(bookOddsEntry, bet.odds, bet.result);
   const koLabel = kickoffLabel(bet.kickoff, bet.result);
+  const koTime = formatKickoffTime(bet.kickoff);
   return (
     <tr className={cn(
       "hover:bg-muted/5 transition-colors",
@@ -722,12 +748,21 @@ function BetRow({
         <div>
           <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
             <p className="font-medium text-foreground/90 truncate max-w-[200px]">{bet.match}</p>
+            {matchLive ? (
+              <span className="shrink-0 rounded border border-red-500/40 bg-red-500/10 px-1.5 py-0.5 text-[9px] font-bold text-red-400 uppercase tracking-wide">
+                ● Live
+              </span>
+            ) : (
+              <span className="shrink-0 rounded bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-mono text-muted-foreground/70" suppressHydrationWarning>
+                {koTime}
+              </span>
+            )}
             {bet.botCount > 1 && (
               <span className="shrink-0 rounded border border-blue-500/30 bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-bold text-blue-400">
                 {bet.botCount} bots agree
               </span>
             )}
-            {kickoffSoon && (
+            {kickoffSoon && !matchLive && (
               <span className="shrink-0 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-amber-400">
                 KO soon
               </span>
