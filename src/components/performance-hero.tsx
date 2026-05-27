@@ -9,10 +9,19 @@ interface Props {
 }
 
 export function PerformanceHero({ stats, cache, botsTracked }: Props) {
-  const clvDisplay = stats.avgClv != null
-    ? `${stats.avgClv >= 0 ? "+" : ""}${(stats.avgClv * 100).toFixed(1)}%`
+  const activeClv = cache?.active_avg_clv ?? null;
+  const allTimeClv = cache?.avg_clv ?? null;
+  // For Pro+ users stats.avgClv is computed from active bots live; for free
+  // users it comes from the cache (all-time). Show all-time in subtext when
+  // the two differ meaningfully, mirroring the ROI card pattern.
+  const clv = stats.avgClv;
+  const clvDisplay = clv != null
+    ? `${clv >= 0 ? "+" : ""}${(clv * 100).toFixed(1)}%`
     : "Tracking…";
-  const clvPositive = stats.avgClv != null && stats.avgClv > 0;
+  const clvPositive = clv != null && clv > 0;
+  const allTimeClvDisplay = allTimeClv != null && clv != null && Math.abs(clv - allTimeClv) >= 0.001
+    ? `${allTimeClv >= 0 ? "+" : ""}${(allTimeClv * 100).toFixed(1)}%`
+    : null;
 
   // PERF-HONEST-HEADLINE (2026-05-17): two-row ROI display. Big number is
   // "active strategies only" — what the engine is currently producing. Subtext
@@ -67,8 +76,8 @@ export function PerformanceHero({ stats, cache, botsTracked }: Props) {
               {clvDisplay}
             </span>
             <p className="text-[10px] text-muted-foreground mt-1">
-              {stats.avgClv != null
-                ? "beats the closing line"
+              {clv != null
+                ? <>active{allTimeClvDisplay ? <> · all-time {allTimeClvDisplay}</> : null}</>
                 : "appears after bets settle"}
             </p>
           </CardContent>
