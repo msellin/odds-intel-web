@@ -22,6 +22,7 @@ export interface UserProfile {
   preferred_leagues: string[];
   timezone: string;
   stripe_customer_id: string | null;
+  telegram_chat_id: number | null;
   created_at: string;
   updated_at: string;
 }

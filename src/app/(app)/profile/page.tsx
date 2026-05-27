@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import posthog from "posthog-js";
-import { User, Settings, X, Plus, Loader2, Zap, Bell } from "lucide-react";
+import { User, Settings, X, Plus, Loader2, Zap, Bell, MessageCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -86,6 +86,7 @@ export default function ProfilePage() {
   };
   const [notifSettings, setNotifSettings] = useState<NotifSettings | null>(null);
   const [savingNotif, setSavingNotif] = useState<string | null>(null);
+  const [disconnectingTelegram, setDisconnectingTelegram] = useState(false);
 
   const handleCheckoutResult = useCallback((msg: string) => {
     setCheckoutMsg(msg);
@@ -145,6 +146,16 @@ export default function ProfilePage() {
       .eq("user_id", user.id);
     setSavingNotif(null);
   }, [user, savingNotif, notifSettings, supabase]);
+
+  const disconnectTelegram = useCallback(async () => {
+    setDisconnectingTelegram(true);
+    try {
+      await fetch("/api/telegram/disconnect", { method: "POST" });
+      await refreshProfile();
+    } finally {
+      setDisconnectingTelegram(false);
+    }
+  }, [refreshProfile]);
 
   useEffect(() => {
     if (!loading && !user) router.push("/login");
@@ -379,6 +390,68 @@ export default function ProfilePage() {
                     {league}
                   </button>
                 ))}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Telegram Bet Alerts */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <MessageCircle className="h-4 w-4" />
+            Telegram Bet Alerts
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {tierKey === "free" ? (
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-muted-foreground">
+                Get notified the moment a new value bet is found — directly in Telegram.
+              </p>
+              <button
+                onClick={() => openUpgrade("pro")}
+                disabled={!!upgrading}
+                className="flex w-fit items-center gap-1.5 rounded-md bg-green-500 px-3 py-1.5 text-xs font-bold text-black hover:bg-green-400 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {upgrading === "pro" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                Upgrade to Pro to unlock
+              </button>
+            </div>
+          ) : profile?.telegram_chat_id ? (
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2 text-sm text-green-400">
+                <span className="text-base">✅</span>
+                Telegram connected — alerts are active
+              </div>
+              <button
+                onClick={disconnectTelegram}
+                disabled={disconnectingTelegram}
+                className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+              >
+                {disconnectingTelegram && <Loader2 className="h-3 w-3 animate-spin" />}
+                Disconnect
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-muted-foreground">
+                Connect your Telegram account to receive instant alerts when new value bets are found.
+              </p>
+              <div className="flex flex-col gap-2">
+                <a
+                  href={`https://t.me/${process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME}?start=${user.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex w-fit items-center gap-1.5 rounded-md bg-sky-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-sky-400"
+                >
+                  <MessageCircle className="h-3 w-3" />
+                  Connect Telegram
+                </a>
+                <p className="text-[11px] text-muted-foreground">
+                  After connecting in Telegram, refresh this page to confirm.
+                </p>
               </div>
             </div>
           )}
