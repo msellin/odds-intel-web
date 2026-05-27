@@ -28,7 +28,7 @@ const ALL = "__all__";
 
 // Markets where the XGBoost model was directly trained (May 24 model).
 // Everything else (dc, asian_handicap, btts, dnb) is derived from these outputs.
-const MODEL_DIRECT_MARKETS = new Set(["1x2", "over_under_25"]);
+const MODEL_DIRECT_MARKETS = new Set(["1x2", "o/u"]);
 
 function ModelChip() {
   return (
