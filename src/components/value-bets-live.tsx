@@ -26,6 +26,21 @@ interface ValueBetsLiveProps {
 
 const ALL = "__all__";
 
+// Markets where the XGBoost model was directly trained (May 24 model).
+// Everything else (dc, asian_handicap, btts, dnb) is derived from these outputs.
+const MODEL_DIRECT_MARKETS = new Set(["1x2", "over_under_25"]);
+
+function ModelChip() {
+  return (
+    <span
+      title="Bet uses a market the ML model was directly trained on"
+      className="rounded border border-purple-500/30 bg-purple-500/10 px-1.5 py-0.5 text-[9px] font-bold text-purple-400 uppercase tracking-wide"
+    >
+      ML
+    </span>
+  );
+}
+
 function formatEdge(edge: number): string {
   return (edge * 100).toFixed(1);
 }
@@ -161,6 +176,7 @@ function BetCard({
       {/* Market + selection + edge — Pro sees exact edge % */}
       <div className="flex items-center gap-2 mt-2 flex-wrap">
         <Badge variant="outline" className="text-[10px] shrink-0">{bet.market}</Badge>
+        {MODEL_DIRECT_MARKETS.has(bet.market) && <ModelChip />}
         {isElite || isFreeHighlight ? (
           <span className="rounded bg-white/[0.06] px-2 py-0.5 text-xs font-medium">{formatSelection(bet.market, bet.selection)}</span>
         ) : (
@@ -462,7 +478,8 @@ export function ValueBetsLive({ bets, totalCount, userTier, oddsVerifiedAt, book
         <p className="text-[10px] text-muted-foreground">
           Edge % = model probability minus book-implied probability.{" "}
           <span className="text-amber-400/70 font-medium">KO soon</span> = kicks off in &lt;45 min.{" "}
-          <span className="text-muted-foreground font-medium">Odds moved</span> = live edge dropped below 2pp since placement.
+          <span className="text-muted-foreground font-medium">Odds moved</span> = live edge dropped below 2pp since placement.{" "}
+          <span className="text-purple-400/70 font-medium">ML</span> = market directly predicted by the trained model (1X2, O/U 2.5); others are derived.
         </p>
       )}
 
@@ -541,7 +558,10 @@ export function ValueBetsLive({ bets, totalCount, userTier, oddsVerifiedAt, book
                       </p>
                     </td>
                     <td className="py-3 px-2 text-center">
-                      <Badge variant="outline" className="text-[10px]">{topBet.market}</Badge>
+                      <div className="flex flex-col items-center gap-0.5">
+                        <Badge variant="outline" className="text-[10px]">{topBet.market}</Badge>
+                        {MODEL_DIRECT_MARKETS.has(topBet.market) && <ModelChip />}
+                      </div>
                     </td>
                     <td className="py-3 px-2 text-center">
                       <span className="rounded bg-white/[0.06] px-2 py-0.5 font-medium">{formatSelection(topBet.market, topBet.selection)}</span>
@@ -723,7 +743,10 @@ function BetRow({
         </div>
       </td>
       <td className="py-3 px-2 text-center">
-        <Badge variant="outline" className="text-[10px]">{bet.market}</Badge>
+        <div className="flex flex-col items-center gap-0.5">
+          <Badge variant="outline" className="text-[10px]">{bet.market}</Badge>
+          {MODEL_DIRECT_MARKETS.has(bet.market) && <ModelChip />}
+        </div>
       </td>
       <td className="py-3 px-2 text-center">
         {isElite ? (
