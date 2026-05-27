@@ -111,14 +111,29 @@ export function Nav() {
                 <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-[10px] font-bold text-primary">
                   {initials}
                 </div>
+                {(profile?.tier === "elite" || profile?.is_superadmin) && (
+                  <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-purple-500/15 text-purple-400 border border-purple-500/30">Elite</span>
+                )}
+                {profile?.tier === "pro" && !profile?.is_superadmin && (
+                  <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-blue-500/15 text-blue-400 border border-blue-500/30">Pro</span>
+                )}
                 <ChevronDown className={cn("h-3 w-3 transition-transform", profileOpen && "rotate-180")} />
               </button>
 
               {profileOpen && (
                 <div className="absolute right-0 top-full mt-1.5 w-52 rounded-xl border border-border/60 bg-popover shadow-xl ring-1 ring-black/5">
-                  {/* Email header */}
+                  {/* Email + tier header */}
                   <div className="border-b border-border/40 px-3 py-2.5">
                     <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                    {(profile?.tier === "elite" || profile?.is_superadmin) && (
+                      <span className="mt-1 inline-block rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-purple-500/15 text-purple-400 border border-purple-500/30">Elite</span>
+                    )}
+                    {profile?.tier === "pro" && !profile?.is_superadmin && (
+                      <span className="mt-1 inline-block rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-blue-500/15 text-blue-400 border border-blue-500/30">Pro</span>
+                    )}
+                    {profile?.tier === "free" && !profile?.is_superadmin && (
+                      <span className="mt-1 inline-block rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-muted/50 text-muted-foreground border border-border/50">Free</span>
+                    )}
                   </div>
 
                   <div className="p-1">
@@ -320,9 +335,18 @@ export function Nav() {
             <>
               {/* Section: Account */}
               <div className="my-2 h-px bg-border/50" />
-              <p className="px-3 pb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/40">
-                Account
-              </p>
+              <div className="flex items-center gap-2 px-3 pb-1">
+                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/40">Account</p>
+                {(profile?.tier === "elite" || profile?.is_superadmin) && (
+                  <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-purple-500/15 text-purple-400 border border-purple-500/30">Elite</span>
+                )}
+                {profile?.tier === "pro" && !profile?.is_superadmin && (
+                  <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-blue-500/15 text-blue-400 border border-blue-500/30">Pro</span>
+                )}
+                {profile?.tier === "free" && !profile?.is_superadmin && (
+                  <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-muted/50 text-muted-foreground border border-border/50">Free</span>
+                )}
+              </div>
               <Link
                 href="/my-picks"
                 onClick={() => setMobileOpen(false)}
