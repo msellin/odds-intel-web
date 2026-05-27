@@ -149,7 +149,7 @@ function BetCard({
             <LineDirChip line={line} oddsMoved={oddsMoved && !kickoffSoon} />
           </div>
           <p className="font-medium text-sm text-foreground/90 truncate">{bet.match}</p>
-          <p className="text-[10px] text-muted-foreground/80">
+          <p className="text-[10px] text-muted-foreground">
             {bet.league}
             {koLabel && <span className="ml-1.5">· {koLabel}</span>}
             {bet.recommendedBookmaker && <span className="ml-1.5">· best at {bet.recommendedBookmaker}</span>}
@@ -459,7 +459,7 @@ export function ValueBetsLive({ bets, totalCount, userTier, oddsVerifiedAt, book
 
       {/* Legend */}
       {isPro && bets.length > 0 && (
-        <p className="text-[10px] text-muted-foreground/80">
+        <p className="text-[10px] text-muted-foreground">
           Edge % = model probability minus book-implied probability.{" "}
           <span className="text-amber-400/70 font-medium">KO soon</span> = kicks off in &lt;45 min.{" "}
           <span className="text-muted-foreground font-medium">Odds moved</span> = live edge dropped below 2pp since placement.
@@ -534,7 +534,7 @@ export function ValueBetsLive({ bets, totalCount, userTier, oddsVerifiedAt, book
                         )}
                       </div>
                       <p className="font-medium text-foreground/90 truncate max-w-[240px]">{topBet.match}</p>
-                      <p className="text-[10px] text-muted-foreground/80">
+                      <p className="text-[10px] text-muted-foreground">
                         {topBet.league}
                         {tKo && <span className="ml-1.5">· {tKo}</span>}
                         {topBet.recommendedBookmaker && <span className="ml-1.5">· best at {topBet.recommendedBookmaker}</span>}
@@ -714,7 +714,7 @@ function BetRow({
             )}
             <LineDirChip line={line} oddsMoved={oddsMoved && !kickoffSoon} />
           </div>
-          <p className="text-[10px] text-muted-foreground/80 truncate">
+          <p className="text-[10px] text-muted-foreground truncate">
             {bet.league}
             {koLabel && <span className="ml-1.5">· {koLabel}</span>}
             {bet.recommendedBookmaker && <span className="ml-1.5">· best at {bet.recommendedBookmaker}</span>}

@@ -358,7 +358,7 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
           >
             Upcoming
             {upcomingCount > 0 && statusTab !== "upcoming" && (
-              <span className="ml-1.5 rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground/80">
+              <span className="ml-1.5 rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground/60">
                 {upcomingCount}
               </span>
             )}
@@ -373,7 +373,7 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
           >
             Finished
             {finishedCount > 0 && statusTab !== "finished" && (
-              <span className="ml-1.5 rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground/80">
+              <span className="ml-1.5 rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground/60">
                 {finishedCount}
               </span>
             )}

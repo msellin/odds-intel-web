@@ -237,7 +237,8 @@ export default async function LeaguePredictionsPage({
           <div className="rounded-xl border border-white/[0.06] bg-card/40 p-8 text-center">
             <p className="text-sm text-muted-foreground">No upcoming fixtures in the next 3 weeks.</p>
             <p className="mt-1 text-xs text-muted-foreground/60">
-              Fixtures are loaded daily. Check back tomorrow.
+              Most European leagues run August–May. If the season has just ended, fixtures will
+              reappear once pre-season and new-season schedules are released.
             </p>
           </div>
         ) : (

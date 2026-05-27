@@ -364,7 +364,7 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets }: Props)
                         )}
                       </div>
                       {isMaturing && (
-                        <p className="text-[10px] text-muted-foreground/80 mt-0.5">
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
                           {bot.settled > 0 ? `${bot.settled} settled — accumulating data` : "Active · no settled bets yet"}
                         </p>
                       )}

@@ -318,7 +318,7 @@ export default function ProfilePage() {
         </CardHeader>
         <CardContent className="space-y-5">
           <p className="text-xs text-muted-foreground">
-            Starred leagues appear in your <strong className="text-foreground/70">My Matches</strong> tab.
+            Starred leagues are pinned to the top of your matches feed.
             You can also star leagues directly from the matches page.
           </p>
 
@@ -397,7 +397,7 @@ export default function ProfilePage() {
               [
                 { field: "email_digest_enabled", label: "Daily digest", desc: "Morning email with top matches and value bets" },
                 { field: "weekly_report", label: "Weekly performance report", desc: "Monday summary of model stats and upcoming fixtures" },
-                { field: "watchlist_alerts_enabled", label: "Watchlist alerts", desc: "Kickoff reminders and odds movement alerts for saved matches" },
+                { field: "watchlist_alerts_enabled", label: "Watchlist alerts", desc: "Kickoff reminders and odds movement alerts for your starred leagues" },
               ] as const
             ).map(({ field, label, desc }) => (
               <div key={field} className="flex items-start justify-between gap-4 py-1">
