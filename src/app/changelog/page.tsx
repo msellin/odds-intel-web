@@ -155,30 +155,17 @@ const CHANGELOG: ChangelogEntry[] = [
     ],
   },
   {
-    date: "2026-05-01",
-    title: "Bot dashboard · Pipeline monitoring",
-    changes: [
-      { type: "feature", text: "Superadmin bot dashboard: per-bot P&L, hit rate, stakes, ROI, and market breakdown (16 bots running)" },
-      { type: "feature", text: "Daily morning monitoring script: threshold progress, per-bot P&L, calibration health, pipeline status" },
-      { type: "infra", text: "GitHub Actions backfill cron disabled — Railway handles all scheduling" },
-    ],
-  },
-  {
     date: "2026-04-29",
-    title: "16 bots live · Timing A/B test · Instant settlement",
+    title: "16 bots live · Instant settlement",
     changes: [
       { type: "feature", text: "6 new bots added (total 16): BTTS, O/U 1.5, O/U 3.5, draw specialist, and optimised variants" },
-      { type: "feature", text: "Timing cohort A/B test: pre-match (2h) vs last-minute (30min) to measure information timing value" },
-      { type: "feature", text: "Exposure control: stake halved for 3rd+ bet in same league per bot per day" },
       { type: "fix", text: "Settlement triggers instantly on full-time detection — no more waiting for nightly batch" },
-      { type: "model", text: "Closing Line Value (CLV) recorded per bet for ongoing model benchmarking" },
     ],
   },
   {
     date: "2026-04-28",
-    title: "Railway pipeline · AI previews · Email digest",
+    title: "AI previews · Email digest · Live polling",
     changes: [
-      { type: "infra", text: "All pipeline jobs moved to Railway ($5/mo) — no more GitHub Actions 12-minute limits" },
       { type: "infra", text: "Smart live polling: 30s during live matches, 60s/5min when quiet — fully automatic" },
       { type: "feature", text: "AI match previews published daily at 09:00 UTC (Gemini-powered)" },
       { type: "feature", text: "Email digest: daily picks summary sent to subscribers" },
@@ -220,14 +207,12 @@ const CHANGELOG: ChangelogEntry[] = [
   },
   {
     date: "2026-04-24",
-    title: "Data sources · Model foundation · Paper trading begins",
+    title: "Data sources · Model foundation",
     changes: [
-      { type: "infra", text: "API-Football Ultra: fixtures, odds (13 bookmakers), lineups, injuries, H2H, events, player stats" },
-      { type: "infra", text: "Kambi scraper: supplementary odds for 41 additional leagues" },
-      { type: "infra", text: "Historical backfill: 354,000 matches across 275 leagues for model training" },
+      { type: "data", text: "Odds from 13 bookmakers including Pinnacle, Betfair, Unibet, and Bet365 — covering 13 top-tier leagues" },
+      { type: "data", text: "Supplementary odds coverage extended to 41 additional leagues" },
       { type: "model", text: "Global ELO ratings covering 8,385 teams" },
-      { type: "model", text: "Poisson model with 3-tier fallback (own history → league averages → AF predictions)" },
-      { type: "feature", text: "Paper trading started — all bets logged, zero real money" },
+      { type: "model", text: "Poisson model with 3-tier fallback (own history → league averages → league predictions)" },
     ],
   },
   {
