@@ -4096,17 +4096,17 @@ const EXPERIMENTAL_BOTS_V2 = new Set([
 ]);
 
 /**
- * Live stats for all bets placed since Model v2 was deployed (May 24, 2026),
- * excluding retired and experimental bots. Uses pick_time date filter rather
- * than model_version tag because early May 24 bets ran before the model file
- * was swapped and still carry the v14 tag — date is the right boundary.
+ * Live stats for bets that literally used model v20260524_market (Model v2),
+ * excluding retired and experimental bots. model_version tag is the correct
+ * filter here — date would include early May 24 pipeline runs that still
+ * carried v14 before the model file was swapped.
  */
 export async function getModelV2Stats(): Promise<ModelV2Stats> {
   const admin = createSupabaseAdmin();
   const { data } = await admin
     .from("simulated_bets")
     .select("result, pnl, stake, clv, bot:bot_id(name, retired_at, maturity_label)")
-    .gte("pick_time", "2026-05-24")
+    .eq("model_version", "v20260524_market")
     .in("result", ["won", "lost"]);
 
   type Row = {
