@@ -48,6 +48,7 @@ function buildCachedBotStats(
 
   const stats: PublicBotStat[] = (cache.bot_breakdown ?? []).map((b) => {
     const clvDir = b.avg_clv == null ? "neutral" : b.avg_clv > 0 ? "positive" : "negative";
+    const dbBot = botsDB?.find(db => db.name === b.name);
     return {
       name: b.name,
       settled: b.settled,
@@ -60,6 +61,7 @@ function buildCachedBotStats(
       currentBankroll: isElite ? (bankrollMap.get(b.name) ?? null) : null,
       startingBankroll: startingBankrollMap.get(b.name) ?? null,
       hasEnoughData: b.settled >= 5,
+      maturityLabel: dbBot?.maturityLabel ?? 'active',
     };
   });
 
@@ -123,7 +125,7 @@ export default async function PerformancePage() {
     !isPro ? getRecentSettledBets(10) : Promise.resolve(null),
   ]);
 
-  const cachedBots = buildCachedBotStats(cache, botsDB, isPro, isElite);
+  const cachedBots = buildCachedBotStats(cache, botsDB, isPro, isElite).filter(b => b.maturityLabel !== 'experimental');
   const sanitizedBets = allBetsRaw ? sanitizeBets(allBetsRaw, isElite) : null;
 
   // Filter retired_bot_breakdown against live DB so un-retired bots disappear

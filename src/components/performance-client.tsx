@@ -32,6 +32,7 @@ interface BotDbRow {
   currentBankroll: number;
   startingBankroll: number;
   retiredAt?: string | null;
+  maturityLabel?: string;
 }
 
 interface Props {
@@ -120,29 +121,20 @@ export function PerformanceClient({
     return aggregateBets.filter((b) => b.placedAt < QUALITY_CUTOFF && b.result !== "void").length;
   }, [aggregateBets]);
 
+  // Count non-experimental active bots with enough data for the scale row
+  const botsTracked = leaderboardBots.filter(b => b.hasEnoughData).length || null;
+
   return (
     <div className="space-y-8">
-      <PerformanceHero stats={heroStats} cache={heroCache} />
+      <PerformanceHero stats={heroStats} cache={heroCache} botsTracked={botsTracked} />
 
       {canRecompute && (
-        <div className="flex items-center justify-between rounded-lg border border-border/40 bg-card/40 px-4 py-2.5">
-          <div className="text-[11px] text-muted-foreground">
-            <span className="font-medium text-foreground">Data quality filter:</span>{" "}
-            {qualityOnly
-              ? `Showing bets from May 6 onward — Pinnacle odds anchor went live, fixing stake sizing. ${legacyCount} earlier bets excluded.`
-              : `Showing all ${legacyCount > 0 ? `bets including ${legacyCount} from before May 6` : "bets"} (pre-pipeline calibration bets included).`}
-          </div>
-          <label className="flex items-center gap-2 text-xs cursor-pointer select-none whitespace-nowrap">
-            <input
-              type="checkbox"
-              checked={qualityOnly}
-              onChange={(e) => setQualityOnly(e.target.checked)}
-              className="h-3.5 w-3.5"
-              data-testid="quality-only-toggle"
-            />
-            <span>Quality only</span>
-          </label>
-        </div>
+        <p className="text-[10px] text-muted-foreground -mt-4">
+          * Stats use bets placed from May 6 (pipeline v2).{' '}
+          <button onClick={() => setQualityOnly(v => !v)} className="underline underline-offset-2 hover:text-foreground transition-colors">
+            {qualityOnly ? `Show all (incl. ${legacyCount} pre-pipeline bets)` : `Hide pre-pipeline bets`}
+          </button>
+        </p>
       )}
 
       <PerformanceLeaderboard

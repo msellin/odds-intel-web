@@ -77,6 +77,7 @@ interface BotDbRow {
   currentBankroll: number;
   startingBankroll: number;
   retiredAt?: string | null;
+  maturityLabel?: string;
 }
 
 // ── Filtering ────────────────────────────────────────────────────────────────
@@ -229,6 +230,7 @@ export interface PublicBotStatShape {
   currentBankroll: number | null;
   startingBankroll: number | null;
   hasEnoughData: boolean;
+  maturityLabel: string;
 }
 
 /**
@@ -254,7 +256,8 @@ export function buildPublicBotStats(
   // Cache path already filters via dashboard_cache.bot_breakdown (settlement.py
   // joins `WHERE is_active AND retired_at IS NULL`), but the client-side
   // aggregateBets toggle would otherwise resurrect them from raw bets data.
-  const activeBots = botsDB.filter((b) => !b.retiredAt);
+  // Experimental bots are excluded from the public leaderboard entirely.
+  const activeBots = botsDB.filter((b) => !b.retiredAt && b.maturityLabel !== 'experimental');
   const rows: PublicBotStatShape[] = activeBots.map((dbBot): PublicBotStatShape => {
     const botBets = betsByBot[dbBot.name] || [];
     const settled = botBets.filter((b) => b.result !== "pending" && b.result !== "void");
@@ -283,6 +286,7 @@ export function buildPublicBotStats(
       currentBankroll: opts.isElite ? (bankrollMap.get(dbBot.name) ?? null) : null,
       startingBankroll: dbBot.startingBankroll,
       hasEnoughData: settled.length >= 5,
+      maturityLabel: dbBot.maturityLabel ?? 'active',
     };
   });
 

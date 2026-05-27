@@ -1194,13 +1194,14 @@ export interface BotRecord {
   currentBankroll: number;
   isActive: boolean;
   retiredAt: string | null;
+  maturityLabel: string;
 }
 
 export async function getAllBotsFromDB(): Promise<BotRecord[]> {
   const supabase = await createSupabaseServer();
   const { data, error } = await supabase
     .from("bots")
-    .select("id, name, strategy, description, strategy_description, starting_bankroll, current_bankroll, is_active, retired_at")
+    .select("id, name, strategy, description, strategy_description, starting_bankroll, current_bankroll, is_active, retired_at, maturity_label")
     .order("name");
   if (error || !data) {
     console.error("[getAllBotsFromDB] query failed:", error?.message ?? "no data");
@@ -1216,6 +1217,7 @@ export async function getAllBotsFromDB(): Promise<BotRecord[]> {
     currentBankroll: Number(r.current_bankroll ?? 1000),
     isActive: Boolean(r.is_active),
     retiredAt: (r.retired_at as string | null) ?? null,
+    maturityLabel: (r.maturity_label as string) ?? 'active',
   }));
 }
 

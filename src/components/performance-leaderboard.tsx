@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Lock, TrendingUp, TrendingDown, Minus, ChevronRight } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, ChevronRight } from "lucide-react";
 import Link from "next/link";
+import { isLiveBot } from "@/lib/bot-aggregates";
 import {
   Dialog,
   DialogContent,
@@ -37,6 +38,7 @@ export interface PublicBotStat {
   // on the first bet, looking like the chart "started from the first bet."
   startingBankroll: number | null;
   hasEnoughData: boolean;
+  maturityLabel: string;
 }
 
 export interface SanitizedBotBet {
@@ -82,6 +84,12 @@ function ClvIcon({ dir }: { dir: "positive" | "negative" | "neutral" | null }) {
   if (dir === "positive") return <TrendingUp className="h-3.5 w-3.5 text-emerald-400" />;
   if (dir === "negative") return <TrendingDown className="h-3.5 w-3.5 text-red-400" />;
   return <Minus className="h-3.5 w-3.5 text-muted-foreground/40" />;
+}
+
+function MaturityChip({ label }: { label: string }) {
+  if (label === 'calibrated') return <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">calibrated</span>;
+  if (label === 'beta') return <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-400 border border-amber-500/25">beta</span>;
+  return null; // 'active' shows no chip — it's the default
 }
 
 function resultBadge(r: string) {
@@ -306,15 +314,20 @@ function BotModal({
 export function PerformanceLeaderboard({ bots, isPro, isElite, allBets }: Props) {
   const [selected, setSelected] = useState<PublicBotStat | null>(null);
   const [showUnderperforming, setShowUnderperforming] = useState(false);
+  const [tab, setTab] = useState<'all' | 'prematch' | 'inplay'>('all');
 
-  const performingBots = bots.filter((b) => !b.hasEnoughData || b.roi == null || b.roi >= 0);
-  const underperformingBots = bots.filter((b) => b.hasEnoughData && b.roi != null && b.roi < 0);
-  const visibleBots = showUnderperforming ? bots : performingBots;
+  const tabFilteredBots = tab === 'all' ? bots
+    : tab === 'inplay' ? bots.filter((b) => isLiveBot(b.name))
+    : bots.filter((b) => !isLiveBot(b.name));
+
+  const performingBots = tabFilteredBots.filter((b) => !b.hasEnoughData || b.roi == null || b.roi >= 0);
+  const underperformingBots = tabFilteredBots.filter((b) => b.hasEnoughData && b.roi != null && b.roi < 0);
+  const visibleBots = showUnderperforming ? tabFilteredBots : performingBots;
 
   return (
     <div className="rounded-xl border border-border/50 bg-card/60 overflow-hidden">
       <div className="px-5 py-4 border-b border-border/30">
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h2 className="text-sm font-semibold">Bot Leaderboard</h2>
             <p className="text-[11px] text-muted-foreground mt-0.5">
@@ -322,6 +335,17 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets }: Props)
                 ? `${bots.length} bots · click any row for bankroll chart`
                 : `${bots.length} bots · dimmed = still accumulating · Pro unlocks W/L, P&L, charts`}
             </p>
+          </div>
+          <div className="flex items-center gap-1 rounded-lg border border-border/30 bg-background/40 p-0.5">
+            {(['all', 'prematch', 'inplay'] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`rounded-md px-3 py-1 text-[11px] font-medium transition-colors ${tab === t ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+              >
+                {t === 'all' ? 'All' : t === 'prematch' ? 'Pre-match' : 'In-play'}
+              </button>
+            ))}
           </div>
         </div>
       </div>
@@ -349,7 +373,7 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets }: Props)
             <tbody className="divide-y divide-border/10">
               {visibleBots.map((bot) => {
                 const isMaturing = !bot.hasEnoughData;
-                const isLive = bot.name.startsWith("inplay_");
+                const isLive = isLiveBot(bot.name);
 
                 return (
                   <tr
@@ -358,13 +382,14 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets }: Props)
                     onClick={() => isPro && allBets && setSelected(bot)}
                   >
                     <td className="py-3 pl-5 pr-2">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-mono text-xs">{bot.name}</span>
                         {isLive && (
                           <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-amber-500/30 text-amber-400/70">
                             live
                           </Badge>
                         )}
+                        <MaturityChip label={bot.maturityLabel ?? 'active'} />
                       </div>
                       {isMaturing && (
                         <p className="text-[10px] text-muted-foreground mt-0.5">

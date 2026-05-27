@@ -5,9 +5,10 @@ import type { TrackRecordStats, DashboardCache } from "@/lib/engine-data";
 interface Props {
   stats: TrackRecordStats;
   cache: DashboardCache | null;
+  botsTracked?: number | null;
 }
 
-export function PerformanceHero({ stats, cache }: Props) {
+export function PerformanceHero({ stats, cache, botsTracked }: Props) {
   const clvDisplay = stats.avgClv != null
     ? `${stats.avgClv >= 0 ? "+" : ""}${(stats.avgClv * 100).toFixed(1)}%`
     : "Tracking…";
@@ -32,6 +33,10 @@ export function PerformanceHero({ stats, cache }: Props) {
 
   const meaningfulBotCount = cache?.bot_breakdown?.filter((b) => b.settled >= 5).length ?? null;
 
+  const QUALITY_CUTOFF_DATE = new Date("2026-05-06");
+  const daysRunning = Math.floor((Date.now() - QUALITY_CUTOFF_DATE.getTime()) / 86400000);
+  const activeStrategies = botsTracked ?? cache?.bot_breakdown?.length ?? null;
+
   return (
     <div className="space-y-4">
       <div>
@@ -39,6 +44,33 @@ export function PerformanceHero({ stats, cache }: Props) {
         <p className="text-sm text-muted-foreground">
           {meaningfulBotCount ?? (cache?.bot_breakdown?.length ?? 16)} paper-trading bots · Pipeline upgraded May 6 · Model v2 May 24 · Every bet logged · No cherry-picking.
         </p>
+      </div>
+
+      {/* Scale row */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="rounded-lg border border-border/30 bg-card/40 px-3 py-2">
+          <span className="text-base font-bold text-foreground">{allTimeSettled.toLocaleString()}+</span>
+          <p className="text-xs text-muted-foreground mt-0.5">Total bets logged</p>
+        </div>
+        <div className="rounded-lg border border-border/30 bg-card/40 px-3 py-2">
+          <span className="text-base font-bold text-foreground">{activeStrategies ?? "—"}</span>
+          <p className="text-xs text-muted-foreground mt-0.5">Active strategies</p>
+        </div>
+        <div className="rounded-lg border border-border/30 bg-card/40 px-3 py-2">
+          <span className="text-base font-bold text-foreground">13</span>
+          <p className="text-xs text-muted-foreground mt-0.5">Bookmakers tracked</p>
+        </div>
+        <div className="rounded-lg border border-border/30 bg-card/40 px-3 py-2">
+          <span className="text-base font-bold text-foreground">{daysRunning}</span>
+          <p className="text-xs text-muted-foreground mt-0.5">Days running</p>
+        </div>
+      </div>
+
+      {/* Era callout */}
+      <div className="rounded-lg border border-purple-500/20 bg-purple-500/5 px-4 py-2 flex items-center gap-3 flex-wrap">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400">Model v2 · May 24</span>
+        <span className="text-[11px] text-muted-foreground">6 new signals · AH overhaul · B-ML3 meta-model · overnight prices</span>
+        <span className="ml-auto text-[11px] font-mono text-emerald-400 font-semibold">467 bets · +5.3% ROI</span>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

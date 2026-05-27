@@ -52,11 +52,6 @@ export function TrackRecordFooterCta({ isPro, isElite }: Props) {
             Upgrade to Pro — €4.99/mo
           </button>
         )}
-        {!isElite && (
-          <span className="rounded-md border border-emerald-500/20 px-5 py-2 text-xs font-medium text-emerald-400/50 text-center cursor-default">
-            Elite — Coming Soon
-          </span>
-        )}
       </div>
     </div>
   );
