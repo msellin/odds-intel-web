@@ -83,7 +83,7 @@ export function PerformanceClient({
     return new Set(botsDB.filter((b) => !b.retiredAt).map((b) => b.name));
   }, [botsDB]);
 
-  // All-bets perf (for the all-time subtext and total settled count).
+  // All-bets perf (for ROI/CLV all-time — excludes experimental via filteredBets).
   const computedPerf = useMemo(() => {
     if (!filteredBets) return null;
     return buildPerformanceStats(filteredBets);
@@ -95,6 +95,14 @@ export function PerformanceClient({
     return buildPerformanceStats(filteredBets.filter((b) => activeBotNames.has(b.bot)));
   }, [filteredBets, activeBotNames]);
 
+  // Grand total settled count — ALL bots, no filter, no quality cutoff.
+  // Shown as the "Settled Bets" headline to represent total work done across
+  // every strategy ever run, including retired and experimental ones.
+  const grandTotalSettled = useMemo(() => {
+    if (!aggregateBets) return null;
+    return aggregateBets.filter((b) => b.result !== "pending" && b.result !== "void").length;
+  }, [aggregateBets]);
+
   const computedBots = useMemo<PublicBotStat[] | null>(() => {
     if (!filteredBets || !botsDB) return null;
     return buildPublicBotStats(filteredBets, botsDB, { isPro, isElite });
@@ -105,7 +113,7 @@ export function PerformanceClient({
     ? {
         ...trackStats,
         avgClv: computedActivePerf?.avgClv ?? computedPerf.avgClv,
-        settledBets: computedPerf.settledCount,
+        settledBets: grandTotalSettled ?? computedPerf.settledCount,
       }
     : trackStats;
 
