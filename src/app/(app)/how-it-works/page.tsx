@@ -38,8 +38,7 @@ const ELITE_FEATURES = [
   "Value bets list — every match where edge > threshold today",
   "Closing line value (CLV) tracking — the gold standard for +EV betting",
   "Natural language explanations: why the model likes this pick",
-  "Tips from top-performing bot once ROI is validated (launching Q3)",
-  "Early access to new signal groups and league coverage",
+  "Telegram alerts — notified the moment a new value bet is found",
 ];
 
 const SIGNAL_GROUPS = [
@@ -430,8 +429,8 @@ export default function HowItWorksPage() {
               a: "The pipeline runs at 05:30 UTC. Predictions are available by 06:00 UTC. Injury and lineup signals update throughout the day (4× news scans, lineups at T-1h).",
             },
             {
-              q: "When does Elite launch?",
-              a: "Elite launches once 60+ bets have settled and we can show validated ROI. We're paper-trading now — the track record page shows model accuracy. Value bets are visible to signed-in users already as we build toward the paid launch.",
+              q: "Is Elite available now?",
+              a: "Yes. Elite is open for subscriptions. The model has 80+ settled bets across active strategies with validated positive ROI — you can verify this on the track record page before subscribing. Founding members lock in €9.99/mo forever.",
             },
           ].map(({ q, a }) => (
             <div key={q} className="rounded-xl border border-border/40 bg-card/40 px-5 py-4">

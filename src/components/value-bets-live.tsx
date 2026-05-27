@@ -703,11 +703,14 @@ export function ValueBetsLive({ bets, totalCount, userTier, oddsVerifiedAt, book
             {!isElite ? (
               <>
                 <p className="text-[11px] text-muted-foreground">
-                  Elite unlocks exact selections, odds, model probabilities, and Kelly stake sizing for every pick.
+                  Elite unlocks exact selections, model probabilities, edge %, and Kelly stake sizing for every pick.
                 </p>
-                <span className="shrink-0 rounded-md border border-amber-500/20 px-3 py-1.5 text-[11px] font-medium text-amber-400/50 cursor-default">
-                  Elite — Coming Soon
-                </span>
+                <a
+                  href="/profile"
+                  className="shrink-0 rounded-md bg-amber-500 px-3 py-1.5 text-[11px] font-bold text-black hover:bg-amber-400 transition-colors"
+                >
+                  Upgrade to Elite
+                </a>
               </>
             ) : (
               <p className="text-[11px] text-muted-foreground">

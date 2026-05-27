@@ -18,11 +18,12 @@ const proFeatures = [
 
 const eliteFeatures = [
   "Everything in Pro",
-  "All AI value bets — full daily list",
-  "AI probability & market edge %",
+  "Full value bets list — every edge pick today",
+  "Exact model probability % per pick",
+  "Edge % vs each bookmaker",
   "CLV tracking — beat the closing line",
-  "Track record & ROI analytics",
-  "AI strategy performance data",
+  "AI explanation for every value bet",
+  "Telegram alerts when new picks arrive",
 ];
 
 const freeFeatures = [
@@ -190,11 +191,15 @@ export function PricingCards() {
             ))}
           </ul>
           <div className="mt-6">
-            <Button className="w-full border-amber-500/30 text-amber-400/50 cursor-not-allowed opacity-60" variant="outline" disabled>
-              Coming Soon
+            <Button
+              className="w-full bg-amber-500 text-black hover:bg-amber-400 font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
+              onClick={() => handleUpgrade("elite")}
+              disabled={!!upgrading}
+            >
+              {upgrading === "elite" ? "Loading…" : "Subscribe to Elite — €14.99/mo"}
             </Button>
             <p className="mt-2 text-center text-[10px] text-muted-foreground">
-              Pro features ship first — Elite launching soon
+              Founding members lock in €9.99/mo · Annual €119.99/yr
             </p>
           </div>
         </div>

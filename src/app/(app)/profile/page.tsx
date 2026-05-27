@@ -273,25 +273,27 @@ export default function ProfilePage() {
                   Upgrade to Pro — €4.99/mo
                 </button>
                 <button
-                  disabled
-                  className="flex items-center gap-1.5 rounded-md border border-amber-500/20 px-3 py-1.5 text-xs font-medium text-amber-400/50 cursor-not-allowed opacity-60"
+                  onClick={() => openUpgrade("elite")}
+                  disabled={!!upgrading}
+                  className="flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-xs font-bold text-black hover:bg-amber-400 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <Zap className="h-3 w-3" />
-                  Elite — Coming Soon
+                  {upgrading === "elite" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                  Upgrade to Elite — €14.99/mo
                 </button>
                 <p className="text-[10px] text-muted-foreground">
-                  Founding member rates locked for early subscribers
+                  Founding members lock in €9.99/mo forever
                 </p>
               </div>
             ) : (
               <div className="flex flex-col items-end gap-2">
                 {tierKey === "pro" && (
                   <button
-                    disabled
-                    className="flex items-center gap-1.5 rounded-md border border-amber-500/20 px-3 py-1.5 text-xs font-medium text-amber-400/50 cursor-not-allowed opacity-60"
+                    onClick={() => openUpgrade("elite")}
+                    disabled={!!upgrading}
+                    className="flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-xs font-bold text-black hover:bg-amber-400 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    <Zap className="h-3 w-3" />
-                    Elite — Coming Soon
+                    {upgrading === "elite" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                    Upgrade to Elite — €14.99/mo
                   </button>
                 )}
                 <button

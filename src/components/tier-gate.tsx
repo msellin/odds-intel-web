@@ -123,7 +123,7 @@ export function TierGate({ requiredTier, children, featureName }: TierGateProps)
               textTransform: "capitalize",
             }}
           >
-            {TIER_LABELS[requiredTier]}{requiredTier !== "pro" ? " — Coming Soon" : ""}
+            {TIER_LABELS[requiredTier]}
           </h3>
 
           <p
@@ -152,46 +152,34 @@ export function TierGate({ requiredTier, children, featureName }: TierGateProps)
             {TIER_PRICES[requiredTier]}
           </p>
 
-          {requiredTier === "pro" ? (
-            <button
-              onClick={handleUpgrade}
-              disabled={upgrading}
-              style={{
-                display: "block",
-                backgroundColor: upgrading ? "rgba(34, 197, 94, 0.3)" : "rgb(34, 197, 94)",
-                color: "#000",
-                border: "none",
-                borderRadius: "8px",
-                padding: "12px 32px",
-                fontSize: "15px",
-                fontWeight: 600,
-                width: "100%",
-                textAlign: "center",
-                boxSizing: "border-box",
-                cursor: upgrading ? "not-allowed" : "pointer",
-              }}
-            >
-              {upgrading ? "Loading…" : "Upgrade to Pro — €4.99/mo"}
-            </button>
-          ) : (
-            <span
-              style={{
-                display: "block",
-                backgroundColor: "rgba(34, 197, 94, 0.15)",
-                color: "rgba(34, 197, 94, 0.5)",
-                border: "1px solid rgba(34, 197, 94, 0.2)",
-                borderRadius: "8px",
-                padding: "12px 32px",
-                fontSize: "15px",
-                fontWeight: 600,
-                width: "100%",
-                textAlign: "center",
-                boxSizing: "border-box",
-              }}
-            >
-              Coming Soon
-            </span>
-          )}
+          <button
+            onClick={handleUpgrade}
+            disabled={upgrading}
+            style={{
+              display: "block",
+              backgroundColor: upgrading
+                ? "rgba(34, 197, 94, 0.3)"
+                : requiredTier === "elite"
+                  ? "rgb(245, 158, 11)"
+                  : "rgb(34, 197, 94)",
+              color: "#000",
+              border: "none",
+              borderRadius: "8px",
+              padding: "12px 32px",
+              fontSize: "15px",
+              fontWeight: 600,
+              width: "100%",
+              textAlign: "center",
+              boxSizing: "border-box",
+              cursor: upgrading ? "not-allowed" : "pointer",
+            }}
+          >
+            {upgrading
+              ? "Loading…"
+              : requiredTier === "elite"
+                ? "Upgrade to Elite — €14.99/mo"
+                : "Upgrade to Pro — €4.99/mo"}
+          </button>
         </div>
       </div>
     </div>
