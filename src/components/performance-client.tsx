@@ -22,6 +22,7 @@ import type { TrackRecordStats, DashboardCache, LiveBet } from "@/lib/engine-dat
 import {
   QUALITY_CUTOFF,
   filterQuality,
+  filterExperimental,
   buildPerformanceStats,
   buildPublicBotStats,
 } from "@/lib/bot-aggregates";
@@ -65,10 +66,17 @@ export function PerformanceClient({
 
   const canRecompute = isPro && aggregateBets != null && botsDB != null;
 
+  // Strip experimental bots once before any aggregation — they must not appear
+  // in any headline number, chart, or leaderboard on /performance.
+  const nonExperimentalBets = useMemo(() => {
+    if (!aggregateBets) return null;
+    return filterExperimental(aggregateBets);
+  }, [aggregateBets]);
+
   const filteredBets = useMemo(() => {
-    if (!canRecompute || !aggregateBets) return null;
-    return filterQuality(aggregateBets, qualityOnly);
-  }, [canRecompute, aggregateBets, qualityOnly]);
+    if (!canRecompute || !nonExperimentalBets) return null;
+    return filterQuality(nonExperimentalBets, qualityOnly);
+  }, [canRecompute, nonExperimentalBets, qualityOnly]);
 
   const activeBotNames = useMemo(() => {
     if (!botsDB) return null;
@@ -117,9 +125,9 @@ export function PerformanceClient({
   const leaderboardBots: PublicBotStat[] = computedBots ?? cachedBots;
 
   const legacyCount = useMemo(() => {
-    if (!aggregateBets) return 0;
-    return aggregateBets.filter((b) => b.placedAt < QUALITY_CUTOFF && b.result !== "void").length;
-  }, [aggregateBets]);
+    if (!nonExperimentalBets) return 0;
+    return nonExperimentalBets.filter((b) => b.placedAt < QUALITY_CUTOFF && b.result !== "void").length;
+  }, [nonExperimentalBets]);
 
   // Count non-experimental active bots with enough data for the scale row
   const botsTracked = leaderboardBots.filter(b => b.hasEnoughData).length || null;

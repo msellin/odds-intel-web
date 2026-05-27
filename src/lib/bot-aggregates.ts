@@ -19,6 +19,11 @@ import type { LiveBet } from "./engine-data";
 
 export const QUALITY_CUTOFF = "2026-05-06";
 
+export const EXPERIMENTAL_BOT_NAMES = new Set([
+  "bot_acca_value", "bot_acca_proven", "bot_acca_coolbet",
+  "bot_combo_system", "bot_combo_proven_system", "bot_acca_leg_shadow",
+]);
+
 // ── Shared types ─────────────────────────────────────────────────────────────
 
 export interface BotStat {
@@ -90,6 +95,11 @@ interface BotDbRow {
 export function filterQuality(bets: LiveBet[], on: boolean): LiveBet[] {
   if (!on) return bets;
   return bets.filter((b) => b.placedAt >= QUALITY_CUTOFF);
+}
+
+/** Strip experimental (acca/combo) bots from any bet array before aggregation. */
+export function filterExperimental(bets: LiveBet[]): LiveBet[] {
+  return bets.filter((b) => !EXPERIMENTAL_BOT_NAMES.has(b.bot));
 }
 
 // ── Aggregations ─────────────────────────────────────────────────────────────
