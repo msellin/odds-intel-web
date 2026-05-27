@@ -50,12 +50,21 @@ export const metadata: Metadata = {
     siteName: "OddsIntel",
     locale: "en_US",
     type: "website",
+    images: [
+      {
+        url: "https://oddsintel.app/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "OddsIntel — Sports Betting Intelligence",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "OddsIntel — AI Football Predictions & Value Bets Today",
     description:
       "Get AI-powered value bets and football predictions today. Compare bookmaker odds, track injuries, and check H2H records — free, across 280+ leagues.",
+    images: ["https://oddsintel.app/opengraph-image"],
   },
   alternates: {
     canonical: "https://oddsintel.app",
