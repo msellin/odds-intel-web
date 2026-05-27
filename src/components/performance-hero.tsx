@@ -1,14 +1,15 @@
 import { TrendingUp, Bot, Award, BarChart2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { TrackRecordStats, DashboardCache } from "@/lib/engine-data";
+import type { TrackRecordStats, DashboardCache, ModelV2Stats } from "@/lib/engine-data";
 
 interface Props {
   stats: TrackRecordStats;
   cache: DashboardCache | null;
   botsTracked?: number | null;
+  modelV2Stats?: ModelV2Stats | null;
 }
 
-export function PerformanceHero({ stats, cache, botsTracked }: Props) {
+export function PerformanceHero({ stats, cache, botsTracked, modelV2Stats }: Props) {
   const activeClv = cache?.active_avg_clv ?? null;
   const allTimeClv = cache?.avg_clv ?? null;
   // For Pro+ users stats.avgClv is computed from active bots live; for free
@@ -57,6 +58,13 @@ export function PerformanceHero({ stats, cache, botsTracked }: Props) {
       <div className="rounded-lg border border-purple-500/20 bg-purple-500/5 px-4 py-2 flex items-center gap-3 flex-wrap">
         <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400">Model v2 · May 24</span>
         <span className="text-[11px] text-muted-foreground">6 new signals · AH overhaul · B-ML3 meta-model · overnight prices</span>
+        {modelV2Stats && modelV2Stats.settled > 0 && (
+          <span className="ml-auto text-[11px] font-mono font-semibold text-emerald-400">
+            {modelV2Stats.settled} bets
+            {modelV2Stats.roi != null && ` · ${modelV2Stats.roi >= 0 ? "+" : ""}${modelV2Stats.roi.toFixed(1)}% ROI`}
+            {modelV2Stats.avgClv != null && ` · ${modelV2Stats.avgClv >= 0 ? "+" : ""}${(modelV2Stats.avgClv * 100).toFixed(1)}% CLV`}
+          </span>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

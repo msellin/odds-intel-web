@@ -4081,3 +4081,57 @@ export async function getPublicPerformanceExtras(): Promise<PublicPerformanceExt
 
   return { cumulative, calibration, streaks, botRecentRoi };
 }
+
+// ── Model v2 era stats ────────────────────────────────────────────────────────
+
+export interface ModelV2Stats {
+  settled: number;
+  roi: number | null;
+  avgClv: number | null;
+}
+
+const EXPERIMENTAL_BOTS_V2 = new Set([
+  "bot_acca_value", "bot_acca_proven", "bot_acca_coolbet",
+  "bot_combo_system", "bot_combo_proven_system", "bot_acca_leg_shadow",
+]);
+
+/**
+ * Live stats for bets placed with model v20260524_market (Model v2, May 24+),
+ * excluding retired and experimental bots. Used for the era callout strip on
+ * /performance so the number stays accurate as new bets settle.
+ */
+export async function getModelV2Stats(): Promise<ModelV2Stats> {
+  const admin = createSupabaseAdmin();
+  const { data } = await admin
+    .from("simulated_bets")
+    .select("result, pnl, stake, clv, bot:bot_id(name, retired_at, maturity_label)")
+    .eq("model_version", "v20260524_market")
+    .in("result", ["won", "lost"]);
+
+  type Row = {
+    result: string;
+    pnl: number | string | null;
+    stake: number | string;
+    clv: number | null;
+    bot: { name: string; retired_at: string | null; maturity_label: string | null } | null
+       | { name: string; retired_at: string | null; maturity_label: string | null }[];
+  };
+
+  const rows = ((data ?? []) as Row[]).filter((r) => {
+    const bot = Array.isArray(r.bot) ? r.bot[0] : r.bot;
+    if (!bot) return true;
+    if (EXPERIMENTAL_BOTS_V2.has(bot.name)) return false;
+    if (bot.retired_at) return false;
+    return true;
+  });
+
+  const staked = rows.reduce((s, r) => s + Number(r.stake), 0);
+  const pnl = rows.reduce((s, r) => s + Number(r.pnl ?? 0), 0);
+  const clvValues = rows.map((r) => r.clv).filter((c): c is number => c != null && Number.isFinite(c));
+
+  return {
+    settled: rows.length,
+    roi: staked > 0 ? (pnl / staked) * 100 : null,
+    avgClv: clvValues.length > 0 ? clvValues.reduce((a, b) => a + b, 0) / clvValues.length : null,
+  };
+}

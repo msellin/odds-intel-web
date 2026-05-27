@@ -18,7 +18,7 @@ import { useMemo, useState } from "react";
 import { PerformanceHero } from "./performance-hero";
 import { PerformanceLeaderboard } from "./performance-leaderboard";
 import type { PublicBotStat, SanitizedBotBet } from "./performance-leaderboard";
-import type { TrackRecordStats, DashboardCache, LiveBet } from "@/lib/engine-data";
+import type { TrackRecordStats, DashboardCache, LiveBet, ModelV2Stats } from "@/lib/engine-data";
 import {
   QUALITY_CUTOFF,
   filterQuality,
@@ -48,6 +48,7 @@ interface Props {
   allBets: SanitizedBotBet[] | null;
   aggregateBets: LiveBet[] | null;
   botsDB: BotDbRow[] | null;
+  modelV2Stats: ModelV2Stats | null;
 }
 
 export function PerformanceClient({
@@ -59,6 +60,7 @@ export function PerformanceClient({
   allBets,
   aggregateBets,
   botsDB,
+  modelV2Stats,
 }: Props) {
   // Default ON for /performance — paying users see honest current-pipeline
   // numbers by default; toggle off reveals legacy bets for transparency.
@@ -142,7 +144,7 @@ export function PerformanceClient({
 
   return (
     <div className="space-y-8">
-      <PerformanceHero stats={heroStats} cache={heroCache} botsTracked={botsTracked} />
+      <PerformanceHero stats={heroStats} cache={heroCache} botsTracked={botsTracked} modelV2Stats={modelV2Stats} />
 
       {canRecompute && (
         <p className="text-[10px] text-muted-foreground -mt-4">

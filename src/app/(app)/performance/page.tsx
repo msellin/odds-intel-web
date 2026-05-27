@@ -16,8 +16,9 @@ import {
   getAllBotsFromDB,
   getRecentSettledBets,
   getPublicPerformanceExtras,
+  getModelV2Stats,
 } from "@/lib/engine-data";
-import type { LiveBet } from "@/lib/engine-data";
+import type { LiveBet, ModelV2Stats } from "@/lib/engine-data";
 import { PerformanceClient } from "@/components/performance-client";
 import type { PublicBotStat, SanitizedBotBet } from "@/components/performance-leaderboard";
 import { PerformanceHistory } from "@/components/performance-history";
@@ -95,7 +96,7 @@ function sanitizeBets(bets: LiveBet[], isElite: boolean): SanitizedBotBet[] {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default async function PerformancePage() {
-  const [authResult, trackStats, cache, extras] = await Promise.all([
+  const [authResult, trackStats, cache, extras, modelV2Stats] = await Promise.all([
     (async () => {
       const supabase = await createSupabaseServer();
       const {
@@ -107,6 +108,7 @@ export default async function PerformancePage() {
     getTrackRecordStats(),
     getDashboardCache(),
     getPublicPerformanceExtras(),
+    getModelV2Stats(),
   ]);
 
   const { isPro, isElite } = authResult as {
@@ -146,6 +148,7 @@ export default async function PerformancePage() {
         allBets={sanitizedBets}
         aggregateBets={allBetsRaw}
         botsDB={botsDB}
+        modelV2Stats={modelV2Stats}
       />
 
       {/* Cumulative P&L chart + streak badges + calibration table — visible to all tiers. */}
