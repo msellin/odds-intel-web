@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 // ── Changelog data ────────────────────────────────────────────────────────────
 // Both engine (pipeline/model) and frontend (UI/UX) changes in one place.
 
-type EntryType = "feature" | "fix" | "model" | "infra";
+type EntryType = "feature" | "fix" | "model" | "infra" | "data";
 
 interface ChangeEntry {
   type: EntryType;
@@ -24,6 +24,95 @@ interface ChangelogEntry {
 }
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    date: "2026-05-27",
+    title: "UI polish · Copy accuracy · Off-season empty state",
+    changes: [
+      { type: "fix", text: "Profile page copy corrected: starred matches now accurately described as pinned to top of your feed" },
+      { type: "fix", text: "Watchlist alerts description updated to accurately say 'starred leagues' instead of saved matches" },
+      { type: "fix", text: "Predictions page now shows a clear off-season explanation (Aug–May cycle) instead of a confusing 'check back tomorrow' message" },
+      { type: "fix", text: "Contrast improvements across several pages — low-opacity labels lifted to meet accessibility standards" },
+    ],
+  },
+  {
+    date: "2026-05-25",
+    title: "Value bets improvements · Performance page · Draw No Bet market",
+    changes: [
+      { type: "feature", text: "Bot consensus chip ('N bots agree') now visible to all tiers on the value bets page, not just Elite" },
+      { type: "feature", text: "Line direction chip per pick: ↓ green means the market has moved toward our pick (sharpness signal), ↑ blue means the value is widening" },
+      { type: "feature", text: "Compact league, kick-off time, and best bookmaker subtitle on every value bet row for quick line-shopping" },
+      { type: "feature", text: "Free tier: highlighted pick now shows last-30-day ROI and sample size as a conversion hook" },
+      { type: "feature", text: "Performance page: platform-wide cumulative P&L chart (90-day, daily buckets) as the headline trust signal" },
+      { type: "feature", text: "Performance page: win streak and losing streak badges with sample-size disclaimer" },
+      { type: "feature", text: "Performance page: calibration table (5 probability buckets) showing model accuracy vs actual outcomes" },
+      { type: "data", text: "Draw No Bet (DNB) market now available on match pages — real DNB odds ingested from 13 bookmakers" },
+    ],
+  },
+  {
+    date: "2026-05-19",
+    title: "Expanded league coverage · Model improvements · In-play signals",
+    changes: [
+      { type: "data", text: "Model predictions now cover 13 additional leagues: USA, Brazil, Argentina, Mexico, Japan, Sweden, Norway, Poland, Austria, Denmark, Czech Republic, China, and Russia" },
+      { type: "model", text: "Improved in-play signal accuracy — in-play picks now go through stricter evidence filters before being surfaced" },
+      { type: "model", text: "Added BTTS (Both Teams to Score) in-play signals — new market type available during live matches" },
+      { type: "model", text: "Added Under 1.5 goals market to value picks" },
+    ],
+  },
+  {
+    date: "2026-05-17",
+    title: "Performance page accuracy · Retired strategies",
+    changes: [
+      { type: "fix", text: "Performance page headline now shows active-strategy ROI separately from all-time ROI — no more mixing active and retired results" },
+      { type: "fix", text: "Retired strategies now shown in a separate collapsible section rather than polluting the active leaderboard" },
+      { type: "fix", text: "Performance charts now correctly start at each strategy's starting bankroll (not first bet outcome)" },
+      { type: "fix", text: "Strategies with zero bets or no retirement reason hidden from the retired section" },
+    ],
+  },
+  {
+    date: "2026-05-12",
+    title: "Value bets display · Odds quality · Mobile improvements",
+    changes: [
+      { type: "feature", text: "Value bets page now shows Pinnacle odds and a live edge indicator — see how much value remains vs the sharpest book" },
+      { type: "feature", text: "Stale pick dimming: value bets where odds have moved significantly are visually dimmed with an explicit status badge" },
+      { type: "fix", text: "Asian Handicap labels now display correctly (e.g. Away +2 instead of Away -2)" },
+      { type: "fix", text: "Value bets page now shows calibrated probability instead of raw model probability" },
+      { type: "fix", text: "Mobile layout for value bets replaced with a proper card layout — no more truncated table rows" },
+      { type: "fix", text: "Page load speed improvements: Lighthouse scores improved across SEO, accessibility, and LCP" },
+    ],
+  },
+  {
+    date: "2026-05-10",
+    title: "Odds quality · Duplicate fixtures cleaned up",
+    changes: [
+      { type: "fix", text: "Over/Under odds cleaned up: 3 unreliable sources removed, plus an implied-sum sanity check to catch malformed lines" },
+      { type: "fix", text: "1,425 duplicate fixture entries removed — match list and predictions pages no longer show the same match twice" },
+    ],
+  },
+  {
+    date: "2026-05-07",
+    title: "Match detail redesign · Signal improvements · Predictions expansion",
+    changes: [
+      { type: "feature", text: "Match detail fully redesigned with tabbed layout: Overview, Intel, Context, and Stats tabs" },
+      { type: "feature", text: "Model probabilities now shown in the Intel tab — see exact predicted win/draw/loss percentages" },
+      { type: "feature", text: "Venue and referee shown in the Context tab for all matches" },
+      { type: "feature", text: "Tab badge counts — e.g. Intel tab shows number of active signals without opening it" },
+      { type: "feature", text: "Predictions pages now show league fixtures grouped by day with team crests and a 2-column grid layout" },
+      { type: "fix", text: "Odds and probabilities correctly hidden for finished matches — Intel tab promoted to primary view post-match" },
+      { type: "model", text: "Tier D renamed to Tier C across the model — clearer coverage tier labelling" },
+    ],
+  },
+  {
+    date: "2026-05-06",
+    title: "Matches page UX · Today/Tomorrow tabs · Performance fixes",
+    changes: [
+      { type: "feature", text: "Today and Tomorrow tabs on the matches page — browse the next day's fixtures without refreshing" },
+      { type: "feature", text: "Matches page now covers all active leagues (previously limited to top-tier leagues)" },
+      { type: "fix", text: "Live scores shown in red, winning team bold — consistent with Flashscore-style visual conventions" },
+      { type: "fix", text: "Match rows cleaned up on mobile: two-line team layout, slimmer headers, removed visual noise" },
+      { type: "fix", text: "Match times shown in your local timezone (was showing UTC)" },
+      { type: "fix", text: "Duplicate match entries on predictions pages fixed (PSG, Bayern Munich, and cross-league name variants)" },
+    ],
+  },
   {
     date: "2026-05-05",
     title: "Magic link sign-in · Branded auth emails · Auth flow improvements",
@@ -152,6 +241,7 @@ const TYPE_LABELS: Record<EntryType, string> = {
   fix: "Fix",
   model: "Model",
   infra: "Infra",
+  data: "Data",
 };
 
 const TYPE_CLASSES: Record<EntryType, string> = {
@@ -159,6 +249,7 @@ const TYPE_CLASSES: Record<EntryType, string> = {
   fix: "bg-blue-500/15 text-blue-400 border-blue-500/30",
   model: "bg-purple-500/15 text-purple-400 border-purple-500/30",
   infra: "bg-zinc-500/15 text-zinc-400 border-zinc-500/30",
+  data: "bg-amber-500/15 text-amber-400 border-amber-500/30",
 };
 
 // ── Page ──────────────────────────────────────────────────────────────────────
