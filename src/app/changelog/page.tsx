@@ -36,7 +36,7 @@ const CHANGELOG: ChangelogEntry[] = [
   },
   {
     date: "2026-05-25",
-    title: "Value bets improvements · Performance page · Draw No Bet market",
+    title: "Value bets · Performance page · Draw No Bet · Meta-model",
     changes: [
       { type: "feature", text: "Bot consensus chip ('N bots agree') now visible to all tiers on the value bets page, not just Elite" },
       { type: "feature", text: "Line direction chip per pick: ↓ green means the market has moved toward our pick (sharpness signal), ↑ blue means the value is widening" },
@@ -46,6 +46,17 @@ const CHANGELOG: ChangelogEntry[] = [
       { type: "feature", text: "Performance page: win streak and losing streak badges with sample-size disclaimer" },
       { type: "feature", text: "Performance page: calibration table (5 probability buckets) showing model accuracy vs actual outcomes" },
       { type: "data", text: "Draw No Bet (DNB) market now available on match pages — real DNB odds ingested from 13 bookmakers" },
+      { type: "model", text: "Second-layer meta-model (B-ML3-V2) integrated into the pipeline — scores each pick's expected closing line value before selection; currently in passive monitoring mode" },
+      { type: "data", text: "Overnight odds capture at 02:00 and 04:00 UTC — morning value picks now use significantly fresher line prices" },
+    ],
+  },
+  {
+    date: "2026-05-24",
+    title: "6 new model signals · Asian Handicap overhaul · BTTS in-play bots",
+    changes: [
+      { type: "model", text: "6 new prediction signals added: season phase (fatigue and urgency patterns in early/mid/late-season matches), line velocity (how fast Pinnacle moves before kick-off), per-league draw rate, xG overperformance (regression-to-mean on expected goals), injury severity weighting (ACL/fracture counts 3× more than a knock), and rolling player ratings" },
+      { type: "model", text: "Asian Handicap model overhauled: retired the away-dog bot (12-day backtest: −31.8% ROI), re-activated with a handicap line floor that lifts it to +43% ROI in backtesting, and filtered the home-fav bot to avoid a miscalibrated handicap zone (was −49% ROI on +0 lines)" },
+      { type: "feature", text: "2 new BTTS in-play bots: one fires on 1-0 / 0-1 score states with active shot creation, one targets 0-0 games entering the final 25 minutes with high shot volume — both calibrating on first real results" },
     ],
   },
   {
@@ -281,33 +292,30 @@ export default function ChangelogPage() {
 
         <div className="space-y-10">
           {CHANGELOG.map((entry) => (
-            <div key={entry.date} className="relative">
-              {/* Date + title */}
-              <div className="flex items-baseline gap-4 mb-4">
-                <span className="font-mono text-sm text-muted-foreground whitespace-nowrap">
+            <div key={entry.date}>
+              <div className="grid grid-cols-[auto_1fr] gap-x-6">
+                <span className="font-mono text-sm text-muted-foreground whitespace-nowrap pt-0.5">
                   {entry.date}
                 </span>
-                <h2 className="text-base font-semibold leading-snug">{entry.title}</h2>
+                <div>
+                  <h2 className="text-base font-semibold leading-snug mb-4">{entry.title}</h2>
+                  <ul className="space-y-2">
+                    {entry.changes.map((change, i) => (
+                      <li key={i} className="flex items-start gap-3">
+                        <Badge
+                          variant="outline"
+                          className={`shrink-0 text-[10px] px-1.5 py-0 h-5 ${TYPE_CLASSES[change.type]}`}
+                        >
+                          {TYPE_LABELS[change.type]}
+                        </Badge>
+                        <span className="text-sm text-muted-foreground leading-snug">
+                          {change.text}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
-
-              {/* Changes */}
-              <ul className="space-y-2 pl-0">
-                {entry.changes.map((change, i) => (
-                  <li key={i} className="flex items-start gap-3">
-                    <Badge
-                      variant="outline"
-                      className={`shrink-0 text-[10px] px-1.5 py-0 h-5 ${TYPE_CLASSES[change.type]}`}
-                    >
-                      {TYPE_LABELS[change.type]}
-                    </Badge>
-                    <span className="text-sm text-muted-foreground leading-snug">
-                      {change.text}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-
-              {/* Divider */}
               <div className="mt-8 border-b border-white/[0.06]" />
             </div>
           ))}
