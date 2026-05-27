@@ -302,7 +302,7 @@ export default function ChangelogPage() {
                   <li key={i} className="flex items-start gap-3">
                     <Badge
                       variant="outline"
-                      className={`mt-0.5 shrink-0 text-[10px] px-1.5 py-0 h-5 ${TYPE_CLASSES[change.type]}`}
+                      className={`shrink-0 text-[10px] px-1.5 py-0 h-5 ${TYPE_CLASSES[change.type]}`}
                     >
                       {TYPE_LABELS[change.type]}
                     </Badge>
