@@ -69,6 +69,15 @@ const CHANGELOG: ChangelogEntry[] = [
     ],
   },
   {
+    date: "2026-05-13",
+    title: "New inplay strategies · Performance quality filter",
+    changes: [
+      { type: "model", text: "2 new inplay strategies added: Underdog Hold (backs the underdog when the leading team stalls in the second half) and Post-Equalizer (picks up value in the minutes immediately after an equalizer)" },
+      { type: "feature", text: "Quality filter toggle on the performance page — switch between all strategies and high-quality-only view" },
+      { type: "fix", text: "Value bets: 'N bots agree' chip repositioned inline with the match name for a cleaner layout" },
+    ],
+  },
+  {
     date: "2026-05-12",
     title: "Value bets display · Odds quality · Mobile improvements",
     changes: [
