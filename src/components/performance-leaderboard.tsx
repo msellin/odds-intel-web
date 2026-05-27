@@ -314,15 +314,22 @@ function BotModal({
 export function PerformanceLeaderboard({ bots, isPro, isElite, allBets }: Props) {
   const [selected, setSelected] = useState<PublicBotStat | null>(null);
   const [showUnderperforming, setShowUnderperforming] = useState(false);
+  const [showDeveloping, setShowDeveloping] = useState(false);
   const [tab, setTab] = useState<'all' | 'prematch' | 'inplay'>('all');
 
   const tabFilteredBots = tab === 'all' ? bots
     : tab === 'inplay' ? bots.filter((b) => isLiveBot(b.name))
     : bots.filter((b) => !isLiveBot(b.name));
 
-  const performingBots = tabFilteredBots.filter((b) => !b.hasEnoughData || b.roi == null || b.roi >= 0);
+  const activeBots = tabFilteredBots.filter((b) => b.hasEnoughData && (b.roi == null || b.roi >= 0));
   const underperformingBots = tabFilteredBots.filter((b) => b.hasEnoughData && b.roi != null && b.roi < 0);
-  const visibleBots = showUnderperforming ? tabFilteredBots : performingBots;
+  const developingBots = tabFilteredBots.filter((b) => !b.hasEnoughData);
+
+  const visibleBots = [
+    ...activeBots,
+    ...(showUnderperforming ? underperformingBots : []),
+    ...(showDeveloping ? developingBots : []),
+  ];
 
   return (
     <div className="rounded-xl border border-border/50 bg-card/60 overflow-hidden">
@@ -332,8 +339,8 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets }: Props)
             <h2 className="text-sm font-semibold">Bot Leaderboard</h2>
             <p className="text-[11px] text-muted-foreground mt-0.5">
               {isPro
-                ? `${bots.length} bots · click any row for bankroll chart`
-                : `${bots.length} bots · dimmed = still accumulating · Pro unlocks W/L, P&L, charts`}
+                ? `${activeBots.length} active · click any row for bankroll chart`
+                : `${activeBots.length} active strategies · Pro unlocks W/L, P&L, charts`}
             </p>
           </div>
           <div className="flex items-center gap-1 rounded-lg border border-border/30 bg-background/40 p-0.5">
@@ -464,18 +471,31 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets }: Props)
         </div>
       )}
 
-      {/* Underperforming bots collapse toggle */}
-      {underperformingBots.length > 0 && (
-        <div className="border-t border-border/20 px-5 py-2.5">
-          <button
-            onClick={() => setShowUnderperforming((v) => !v)}
-            className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ChevronRight className={`h-3 w-3 transition-transform ${showUnderperforming ? "rotate-90" : ""}`} />
-            {showUnderperforming
-              ? `Hide ${underperformingBots.length} underperforming bot${underperformingBots.length > 1 ? "s" : ""}`
-              : `Show ${underperformingBots.length} underperforming bot${underperformingBots.length > 1 ? "s" : ""} (negative ROI, still running)`}
-          </button>
+      {/* Underperforming + developing collapse toggles */}
+      {(underperformingBots.length > 0 || developingBots.length > 0) && (
+        <div className="border-t border-border/20 px-5 py-2.5 flex flex-wrap gap-x-5 gap-y-1.5">
+          {underperformingBots.length > 0 && (
+            <button
+              onClick={() => setShowUnderperforming((v) => !v)}
+              className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ChevronRight className={`h-3 w-3 transition-transform ${showUnderperforming ? "rotate-90" : ""}`} />
+              {showUnderperforming
+                ? `Hide ${underperformingBots.length} underperforming`
+                : `${underperformingBots.length} underperforming (negative ROI)`}
+            </button>
+          )}
+          {developingBots.length > 0 && (
+            <button
+              onClick={() => setShowDeveloping((v) => !v)}
+              className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ChevronRight className={`h-3 w-3 transition-transform ${showDeveloping ? "rotate-90" : ""}`} />
+              {showDeveloping
+                ? `Hide ${developingBots.length} in development`
+                : `${developingBots.length} in development (< 5 bets)`}
+            </button>
+          )}
         </div>
       )}
 

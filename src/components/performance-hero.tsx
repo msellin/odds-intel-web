@@ -33,37 +33,15 @@ export function PerformanceHero({ stats, cache, botsTracked }: Props) {
 
   const meaningfulBotCount = cache?.bot_breakdown?.filter((b) => b.settled >= 5).length ?? null;
 
-  const QUALITY_CUTOFF_DATE = new Date("2026-05-06");
-  const daysRunning = Math.floor((Date.now() - QUALITY_CUTOFF_DATE.getTime()) / 86400000);
-  const activeStrategies = botsTracked ?? cache?.bot_breakdown?.length ?? null;
+  const daysRunning = Math.floor((Date.now() - new Date("2026-05-01").getTime()) / 86400000);
 
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Performance</h1>
         <p className="text-sm text-muted-foreground">
-          {meaningfulBotCount ?? (cache?.bot_breakdown?.length ?? 16)} paper-trading bots · Pipeline upgraded May 6 · Model v2 May 24 · Every bet logged · No cherry-picking.
+          {meaningfulBotCount ?? (cache?.bot_breakdown?.length ?? 16)} strategies with data · {daysRunning} days running · Every bet logged · No cherry-picking.
         </p>
-      </div>
-
-      {/* Scale row */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <div className="rounded-lg border border-border/30 bg-card/40 px-3 py-2">
-          <span className="text-base font-bold text-foreground">{allTimeSettled.toLocaleString()}+</span>
-          <p className="text-xs text-muted-foreground mt-0.5">Total bets logged</p>
-        </div>
-        <div className="rounded-lg border border-border/30 bg-card/40 px-3 py-2">
-          <span className="text-base font-bold text-foreground">{activeStrategies ?? "—"}</span>
-          <p className="text-xs text-muted-foreground mt-0.5">Active strategies</p>
-        </div>
-        <div className="rounded-lg border border-border/30 bg-card/40 px-3 py-2">
-          <span className="text-base font-bold text-foreground">13</span>
-          <p className="text-xs text-muted-foreground mt-0.5">Bookmakers tracked</p>
-        </div>
-        <div className="rounded-lg border border-border/30 bg-card/40 px-3 py-2">
-          <span className="text-base font-bold text-foreground">{daysRunning}</span>
-          <p className="text-xs text-muted-foreground mt-0.5">Days running</p>
-        </div>
       </div>
 
       {/* Era callout */}
@@ -147,9 +125,9 @@ export function PerformanceHero({ stats, cache, botsTracked }: Props) {
             </CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-3 pt-0">
-            <span className="font-mono text-2xl font-bold tabular-nums text-foreground">{cache?.bot_breakdown?.length ?? "—"}</span>
+            <span className="font-mono text-2xl font-bold tabular-nums text-foreground">{meaningfulBotCount ?? cache?.bot_breakdown?.length ?? "—"}</span>
             <p className="text-[10px] text-muted-foreground mt-1">
-              strategies running
+              strategies with data
             </p>
           </CardContent>
         </Card>
