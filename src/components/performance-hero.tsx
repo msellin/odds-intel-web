@@ -30,12 +30,14 @@ export function PerformanceHero({ stats, cache }: Props) {
   const activeSettled = cache?.active_settled_bets ?? null;
   const allTimeSettled = stats.settledBets;
 
+  const meaningfulBotCount = cache?.bot_breakdown?.filter((b) => b.settled >= 5).length ?? null;
+
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Performance</h1>
         <p className="text-sm text-muted-foreground">
-          {cache?.bot_breakdown?.length ?? 16} paper-trading bots · Running since April 27, 2026 · Every pick logged · No cherry-picking.
+          {meaningfulBotCount ?? (cache?.bot_breakdown?.length ?? 16)} paper-trading bots · Pipeline upgraded May 6 · Model v2 May 24 · Every bet logged · No cherry-picking.
         </p>
       </div>
 

@@ -129,8 +129,8 @@ export function PerformanceClient({
           <div className="text-[11px] text-muted-foreground">
             <span className="font-medium text-foreground">Data quality filter:</span>{" "}
             {qualityOnly
-              ? `Showing bets placed on or after ${QUALITY_CUTOFF} (current pipeline). ${legacyCount} legacy bets excluded.`
-              : `Showing all bets including ${legacyCount} placed before ${QUALITY_CUTOFF} (older calibration).`}
+              ? `Showing bets from May 6 onward — Pinnacle odds anchor went live, fixing stake sizing. ${legacyCount} earlier bets excluded.`
+              : `Showing all ${legacyCount > 0 ? `bets including ${legacyCount} from before May 6` : "bets"} (pre-pipeline calibration bets included).`}
           </div>
           <label className="flex items-center gap-2 text-xs cursor-pointer select-none whitespace-nowrap">
             <input

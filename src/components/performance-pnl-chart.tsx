@@ -53,6 +53,8 @@ export function PerformancePnlChart({ data }: { data: PublicPnlPoint[] }) {
         <YAxis tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={false} tickFormatter={fmtEur} width={48} />
         <Tooltip content={<CustomTooltip />} />
         <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)" strokeDasharray="4 4" />
+        <ReferenceLine x="05-06" stroke="#f59e0b" strokeDasharray="3 3" label={{ value: "Pipeline v2", position: "insideTopRight", fontSize: 9, fill: "#f59e0b" }} />
+        <ReferenceLine x="05-24" stroke="#a855f7" strokeDasharray="3 3" label={{ value: "Model v2", position: "insideTopRight", fontSize: 9, fill: "#a855f7" }} />
         <Area type="monotone" dataKey="cumPnl" stroke={positive ? "#22c55e" : "#ef4444"} strokeWidth={2} fill="url(#pnlGrad)" dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
       </AreaChart>
     </ResponsiveContainer>
