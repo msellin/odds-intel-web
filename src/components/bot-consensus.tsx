@@ -41,9 +41,10 @@ function ModelPips({ active, total }: { active: number; total: number }) {
 interface BotConsensusProps {
   consensus: BotConsensusData;
   isPro: boolean;
+  isElite?: boolean;
 }
 
-export function BotConsensus({ consensus, isPro }: BotConsensusProps) {
+export function BotConsensus({ consensus, isPro, isElite = false }: BotConsensusProps) {
   if (consensus.totalBets === 0) return null;
 
   const level = consensusLevel(consensus.totalBets);
@@ -80,20 +81,31 @@ export function BotConsensus({ consensus, isPro }: BotConsensusProps) {
           </div>
         </div>
       ) : (
-        // Pro tier: full breakdown
+        // Pro+ tier: full breakdown
         <div className="space-y-1.5">
           {consensus.markets.map((item) => (
-            <div key={`${item.market}-${item.selection}`} className="flex items-center justify-between rounded-lg bg-muted/20 px-3 py-2">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-foreground">{marketLabel(item.market, item.selection)}</span>
-                <span className="text-xs text-muted-foreground">{item.count}/{TOTAL_BOTS}</span>
+            <div key={`${item.market}-${item.selection}`} className="rounded-lg bg-muted/20 px-3 py-2 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-foreground">{marketLabel(item.market, item.selection)}</span>
+                  <span className="text-xs text-muted-foreground">{item.count}/{TOTAL_BOTS}</span>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <span>~{item.avgProb}% prob</span>
+                  {item.avgEdge > 0 && (
+                    <span className="text-emerald-400 font-medium">+{item.avgEdge}% edge</span>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                <span>~{item.avgProb}% prob</span>
-                {item.avgEdge > 0 && (
-                  <span className="text-emerald-400 font-medium">+{item.avgEdge}% edge</span>
-                )}
-              </div>
+              {isElite && item.botNames.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {item.botNames.map((name) => (
+                    <span key={name} className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                      {name}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>

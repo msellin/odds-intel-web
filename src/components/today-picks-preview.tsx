@@ -144,9 +144,11 @@ export function TodayPicksPreview({ picks, isPro = false, isElite = false }: Pro
                 {/* Best odds */}
                 <td className="py-2.5 px-2 text-center">
                   {isPro ? (
-                    <span className="font-mono text-xs text-muted-foreground/50">
-                      Live
-                    </span>
+                    pick.bestOdds != null ? (
+                      <span className="font-mono text-xs text-foreground/80">{pick.bestOdds.toFixed(2)}</span>
+                    ) : (
+                      <span className="font-mono text-xs text-muted-foreground/40">—</span>
+                    )
                   ) : (
                     <span className="inline-flex items-center gap-1 rounded border border-blue-500/20 bg-blue-500/5 px-2 py-0.5 text-[10px] text-blue-400/50">
                       <Lock className="h-2.5 w-2.5" />
@@ -158,9 +160,11 @@ export function TodayPicksPreview({ picks, isPro = false, isElite = false }: Pro
                 {/* Kelly stake */}
                 <td className="py-2.5 pl-2 pr-4 text-center">
                   {isElite ? (
-                    <span className="font-mono text-xs text-muted-foreground/50">
-                      Live
-                    </span>
+                    pick.kellyStake != null && pick.kellyStake > 0 ? (
+                      <span className="font-mono text-xs text-emerald-400">€{pick.kellyStake.toFixed(2)}</span>
+                    ) : (
+                      <span className="font-mono text-xs text-muted-foreground/40">—</span>
+                    )
                   ) : (
                     <span className="inline-flex items-center gap-1 rounded border border-emerald-500/20 bg-emerald-500/5 px-2 py-0.5 text-[10px] text-emerald-400/50">
                       <Lock className="h-2.5 w-2.5" />

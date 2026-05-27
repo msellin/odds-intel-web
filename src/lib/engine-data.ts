@@ -1958,6 +1958,8 @@ export interface TodayPick {
   league: string;
   modelCall: "home" | "draw" | "away";
   confidence: number;
+  bestOdds: number | null;    // best odds at pick time across bots (null = no bot bet this)
+  kellyStake: number | null;  // normalized to €1000 bankroll (null = no bot bet this)
 }
 
 export async function getTodayPicks(): Promise<TodayPick[]> {
@@ -1998,6 +2000,25 @@ export async function getTodayPicks(): Promise<TodayPick[]> {
     predsByMatch[p.match_id][p.market] = Number(p.model_probability);
   }
 
+  // Best odds + kelly stake from pending simulated_bets (1x2 market only)
+  const { data: simBets } = await supabase
+    .from("simulated_bets")
+    .select("match_id, selection, odds_at_pick, model_probability")
+    .in("match_id", matchIds)
+    .eq("market", "1x2")
+    .eq("result", "pending");
+
+  // For each (matchId, selection): keep the entry with highest odds_at_pick
+  type SimEntry = { odds: number; modelProb: number };
+  const simMap: Record<string, SimEntry> = {};
+  for (const b of (simBets ?? []) as Array<{ match_id: string; selection: string; odds_at_pick: number; model_probability: number }>) {
+    const key = `${b.match_id}|${b.selection}`;
+    const existing = simMap[key];
+    if (!existing || Number(b.odds_at_pick) > existing.odds) {
+      simMap[key] = { odds: Number(b.odds_at_pick), modelProb: Number(b.model_probability) };
+    }
+  }
+
   const picks: TodayPick[] = [];
   for (const m of matches as Array<Record<string, unknown>>) {
     const pMap = predsByMatch[m.id as string];
@@ -2017,6 +2038,15 @@ export async function getTodayPicks(): Promise<TodayPick[]> {
     const awayTeam = Array.isArray(m.away_team) ? m.away_team[0] : m.away_team as Record<string, unknown>;
     const league   = Array.isArray(m.league)    ? m.league[0]    : m.league    as Record<string, unknown>;
 
+    const simEntry = simMap[`${m.id as string}|${modelCall}`];
+    let bestOdds: number | null = null;
+    let kellyStake: number | null = null;
+    if (simEntry) {
+      bestOdds = simEntry.odds;
+      const kellyFrac = Math.max(0, (simEntry.modelProb * simEntry.odds - 1) / (simEntry.odds - 1));
+      kellyStake = Math.round(kellyFrac * 1000 * 100) / 100; // normalized to €1000 bankroll
+    }
+
     picks.push({
       matchId: m.id as string,
       kickoff: m.date as string,
@@ -2025,6 +2055,8 @@ export async function getTodayPicks(): Promise<TodayPick[]> {
       league: league ? `${league.country} / ${league.name}` : "Unknown",
       modelCall,
       confidence,
+      bestOdds,
+      kellyStake,
     });
   }
 
@@ -2890,6 +2922,7 @@ export interface BotConsensusItem {
   count: number;
   avgEdge: number;
   avgProb: number;
+  botNames: string[];  // names of bots backing this market (Elite-only display)
 }
 
 export interface BotConsensusData {
@@ -3009,20 +3042,22 @@ export async function getBotConsensus(matchId: string): Promise<BotConsensusData
 
   const { data, error } = await supabase
     .from("simulated_bets")
-    .select("market, selection, edge_percent, model_probability")
+    .select("market, selection, edge_percent, model_probability, bot:bot_id(name)")
     .eq("match_id", matchId)
     .eq("result", "pending");
 
   if (error || !data || data.length === 0) return null;
 
   // Group by market+selection
-  const grouped: Record<string, { count: number; totalEdge: number; totalProb: number }> = {};
-  for (const row of data) {
+  const grouped: Record<string, { count: number; totalEdge: number; totalProb: number; botNames: string[] }> = {};
+  for (const row of data as Array<{ market: string; selection: string; edge_percent: number | null; model_probability: number | null; bot: { name: string } | { name: string }[] | null }>) {
     const key = `${row.market}||${row.selection}`;
-    if (!grouped[key]) grouped[key] = { count: 0, totalEdge: 0, totalProb: 0 };
+    if (!grouped[key]) grouped[key] = { count: 0, totalEdge: 0, totalProb: 0, botNames: [] };
     grouped[key].count++;
     grouped[key].totalEdge += row.edge_percent ?? 0;
     grouped[key].totalProb += row.model_probability ?? 0;
+    const bot = Array.isArray(row.bot) ? row.bot[0] : row.bot;
+    if (bot?.name) grouped[key].botNames.push(bot.name);
   }
 
   const markets: BotConsensusItem[] = Object.entries(grouped)
@@ -3034,6 +3069,7 @@ export async function getBotConsensus(matchId: string): Promise<BotConsensusData
         count: g.count,
         avgEdge: Math.round((g.totalEdge / g.count) * 1000) / 10,
         avgProb: Math.round((g.totalProb / g.count) * 1000) / 10,
+        botNames: g.botNames,
       };
     })
     .sort((a, b) => b.count - a.count || b.avgEdge - a.avgEdge);

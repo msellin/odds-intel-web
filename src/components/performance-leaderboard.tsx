@@ -55,6 +55,7 @@ export interface SanitizedBotBet {
   bankrollAfter: number | null;
   modelProb: number;
   clv: number | null;
+  edge: number | null;  // model edge % at pick time (Elite-only)
   bot: string;
 }
 
@@ -263,6 +264,7 @@ function BotModal({
                     {isElite && <th className="py-2 px-2 text-right">Stake</th>}
                     <th className="py-2 px-2 text-center">Result</th>
                     <th className="py-2 px-2 text-right">P&L</th>
+                    {isElite && <th className="py-2 px-2 text-right">Edge</th>}
                     <th className="py-2 pr-3 text-right">CLV</th>
                   </tr>
                 </thead>
@@ -286,6 +288,17 @@ function BotModal({
                       <td className={`py-2 px-2 text-right tabular-nums ${b.result !== "pending" ? pnlColor(b.pnl) : "text-muted-foreground"}`}>
                         {b.result !== "pending" ? fmt(b.pnl) : "—"}
                       </td>
+                      {isElite && (
+                        <td className="py-2 px-2 text-right tabular-nums">
+                          {b.edge != null ? (
+                            <span className={b.edge > 0 ? "text-emerald-400" : b.edge < 0 ? "text-red-400" : "text-muted-foreground"}>
+                              {b.edge >= 0 ? "+" : ""}{(b.edge * 100).toFixed(1)}%
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                      )}
                       <td className="py-2 pr-3 text-right tabular-nums">
                         {isElite && b.clv != null ? (
                           <span className={b.clv > 0 ? "text-emerald-400" : b.clv < 0 ? "text-red-400" : "text-muted-foreground"}>

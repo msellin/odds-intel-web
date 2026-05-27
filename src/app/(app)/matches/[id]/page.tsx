@@ -273,7 +273,7 @@ export default async function MatchDetailPage({
 
       {/* Bot consensus (ENG-6) */}
       {botConsensus && (
-        <BotConsensus consensus={botConsensus} isPro={isPro} />
+        <BotConsensus consensus={botConsensus} isPro={isPro} isElite={isElite} />
       )}
 
       {/* AI Match Preview (ENG-3) */}
