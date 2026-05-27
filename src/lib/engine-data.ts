@@ -3986,7 +3986,15 @@ export async function getPublicPerformanceExtras(): Promise<PublicPerformanceExt
     calibrated_prob: number | string | null;
     bot: { name: string } | { name: string }[] | null;
   };
-  const rows = (data ?? []) as Row[];
+  const EXPERIMENTAL_BOT_NAMES = new Set([
+    "bot_acca_value", "bot_acca_proven", "bot_acca_coolbet",
+    "bot_combo_system", "bot_combo_proven_system", "bot_acca_leg_shadow",
+  ]);
+
+  const rows = ((data ?? []) as Row[]).filter((r) => {
+    const botName = Array.isArray(r.bot) ? r.bot[0]?.name : r.bot?.name;
+    return botName ? !EXPERIMENTAL_BOT_NAMES.has(botName) : true;
+  });
 
   // Cumulative daily series — bucket by UTC day of pick_time.
   const byDay = new Map<string, number>();
