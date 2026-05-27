@@ -1489,7 +1489,7 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
     .from("simulated_bets")
     .select(
       `id, match_id, market, selection, odds_at_pick, pick_time, stake,
-       model_probability, calibrated_prob, edge_percent, combo_legs,
+       model_probability, calibrated_prob, edge_percent, combo_legs, admin_offered_at,
        bot:bot_id(id, name),
        match:match_id(id, date,
          home_team:home_team_id(name),
@@ -1521,6 +1521,17 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
   });
 
   if (upcoming.length === 0) return [];
+
+  // Stamp admin_offered_at on first appearance — records when admin had the chance to place.
+  const unOfferedIds = upcoming
+    .filter((b) => !b.admin_offered_at)
+    .map((b) => b.id as string);
+  if (unOfferedIds.length > 0) {
+    await admin
+      .from("simulated_bets")
+      .update({ admin_offered_at: new Date().toISOString() })
+      .in("id", unOfferedIds);
+  }
 
   // 2) one round-trip for all relevant odds_snapshots — Unibet, Bet365, Pinnacle
   const matchIds = Array.from(new Set(upcoming.map((b) => b.match_id)));
