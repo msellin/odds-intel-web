@@ -144,7 +144,7 @@ export function PerformanceHero({ stats, cache, modelV2Stats, activeBotCount, re
               {fmtRoi(activeRoi)}
             </span>
             <p className="text-[10px] text-muted-foreground mt-1">
-              active strategies{showAllTime ? ` · all-time ${fmtRoi(allTimeRoi)}` : ""}
+              active strategies{showAllTime ? ` · incl. retired: ${fmtRoi(allTimeRoi)}` : ""}
             </p>
           </CardContent>
         </Card>
