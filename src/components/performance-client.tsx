@@ -14,14 +14,12 @@
  * identical to before this refactor.
  */
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { PerformanceHero } from "./performance-hero";
 import { PerformanceLeaderboard } from "./performance-leaderboard";
 import type { PublicBotStat, SanitizedBotBet } from "./performance-leaderboard";
 import type { TrackRecordStats, DashboardCache, LiveBet, ModelV2Stats } from "@/lib/engine-data";
 import {
-  QUALITY_CUTOFF,
-  filterQuality,
   filterExperimental,
   buildPerformanceStats,
   buildPublicBotStats,
@@ -62,10 +60,6 @@ export function PerformanceClient({
   botsDB,
   modelV2Stats,
 }: Props) {
-  // Default ON for /performance — paying users see honest current-pipeline
-  // numbers by default; toggle off reveals legacy bets for transparency.
-  const [qualityOnly, setQualityOnly] = useState(true);
-
   const canRecompute = isPro && aggregateBets != null && botsDB != null;
 
   // Strip experimental bots once before any aggregation — they must not appear
@@ -75,10 +69,9 @@ export function PerformanceClient({
     return filterExperimental(aggregateBets);
   }, [aggregateBets]);
 
-  const filteredBets = useMemo(() => {
-    if (!canRecompute || !nonExperimentalBets) return null;
-    return filterQuality(nonExperimentalBets, qualityOnly);
-  }, [canRecompute, nonExperimentalBets, qualityOnly]);
+  // Include all bets — the pre-May 6 period is only 44 bets with 0.41pp impact
+  // on headline ROI. Hiding them contradicts "every bet logged · no cherry-picking".
+  const filteredBets = nonExperimentalBets;
 
   const activeBotNames = useMemo(() => {
     if (!botsDB) return null;
@@ -134,11 +127,6 @@ export function PerformanceClient({
   // Leaderboard rows: computed for Pro+ when toggle data is available, else cache.
   const leaderboardBots: PublicBotStat[] = computedBots ?? cachedBots;
 
-  const legacyCount = useMemo(() => {
-    if (!nonExperimentalBets) return 0;
-    return nonExperimentalBets.filter((b) => b.placedAt < QUALITY_CUTOFF && b.result !== "void").length;
-  }, [nonExperimentalBets]);
-
   // Count non-experimental active bots with enough data for the scale row
   const botsTracked = leaderboardBots.filter(b => b.hasEnoughData).length || null;
 
@@ -156,14 +144,6 @@ export function PerformanceClient({
         retiredBotCount={retiredBotCount}
       />
 
-      {canRecompute && (
-        <p className="text-[10px] text-muted-foreground -mt-4">
-          * Stats use bets placed from May 6 (pipeline v2).{' '}
-          <button onClick={() => setQualityOnly(v => !v)} className="underline underline-offset-2 hover:text-foreground transition-colors">
-            {qualityOnly ? `Show all (incl. ${legacyCount} pre-pipeline bets)` : `Hide pre-pipeline bets`}
-          </button>
-        </p>
-      )}
 
       <PerformanceLeaderboard
         bots={leaderboardBots}
