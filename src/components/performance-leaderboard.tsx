@@ -91,6 +91,7 @@ function ClvIcon({ dir }: { dir: "positive" | "negative" | "neutral" | null }) {
 function MaturityChip({ label }: { label: string }) {
   if (label === 'calibrated') return <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">calibrated</span>;
   if (label === 'beta') return <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-400 border border-amber-500/25">beta</span>;
+  if (label === 'testing') return <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-zinc-500/15 text-zinc-400 border border-zinc-500/25">testing</span>;
   return null; // 'active' shows no chip — it's the default
 }
 
@@ -359,6 +360,16 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets }: Props)
                 ? `${activeBots.length} active · click any row for bankroll chart`
                 : `${activeBots.length} active strategies · Pro unlocks W/L, P&L, charts`}
             </p>
+            <div className="flex items-center gap-2.5 mt-2 flex-wrap">
+              <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">calibrated</span>
+              <span className="text-[10px] text-muted-foreground">confirmed signals · league-whitelisted</span>
+              <span className="text-muted-foreground/30 mx-0.5">·</span>
+              <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-400 border border-amber-500/25">beta</span>
+              <span className="text-[10px] text-muted-foreground">backtest evidence, limited live history</span>
+              <span className="text-muted-foreground/30 mx-0.5">·</span>
+              <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-zinc-500/15 text-zinc-400 border border-zinc-500/25">testing</span>
+              <span className="text-[10px] text-muted-foreground">accumulating data, no confirmed signals yet</span>
+            </div>
           </div>
           <div className="flex items-center gap-1 rounded-lg border border-border/30 bg-background/40 p-0.5">
             {(['all', 'prematch', 'inplay'] as const).map((t) => (
