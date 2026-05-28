@@ -187,6 +187,9 @@ function BetCard({
       {/* Market + selection + edge — Pro sees exact edge % */}
       <div className="flex items-center gap-2 mt-2 flex-wrap">
         <Badge variant="outline" className="text-[10px] shrink-0">{bet.market}</Badge>
+        {bet.strategyProfile && (
+          <span className="rounded px-1.5 py-0.5 text-[9px] text-blue-400/70 border border-blue-400/20 bg-blue-400/5 shrink-0">{bet.strategyProfile}</span>
+        )}
         {MODEL_DIRECT_MARKETS.has(bet.market) && <ModelChip />}
         {isElite || isFreeHighlight ? (
           <span className="rounded bg-white/[0.06] px-2 py-0.5 text-xs font-medium">{formatSelection(bet.market, bet.selection)}</span>

@@ -91,6 +91,7 @@ function sanitizeBets(bets: LiveBet[], isElite: boolean): SanitizedBotBet[] {
     clv: b.clv,
     edge: isElite ? b.edge : null,
     bot: b.bot,
+    strategyProfile: b.strategyProfile,
   }));
 }
 

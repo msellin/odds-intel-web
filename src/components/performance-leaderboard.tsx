@@ -57,6 +57,7 @@ export interface SanitizedBotBet {
   clv: number | null;
   edge: number | null;  // model edge % at pick time (Elite-only)
   bot: string;
+  strategyProfile: string | null;
 }
 
 interface Props {
@@ -275,8 +276,11 @@ function BotModal({
                         {new Date(b.placedAt).toLocaleDateString("en-GB", { month: "short", day: "numeric" })}
                       </td>
                       <td className="py-2 px-2 max-w-[180px] truncate" title={b.match}>{b.match}</td>
-                      <td className="py-2 px-2 font-mono uppercase text-muted-foreground text-[10px] whitespace-nowrap">
-                        {b.market} · {b.selection}
+                      <td className="py-2 px-2">
+                        <div className="font-mono uppercase text-muted-foreground text-[10px] whitespace-nowrap">{b.market} · {b.selection}</div>
+                        {b.strategyProfile && (
+                          <div className="text-[9px] text-blue-400/60 mt-0.5">{b.strategyProfile}</div>
+                        )}
                       </td>
                       <td className="py-2 px-2 text-right tabular-nums">{b.odds.toFixed(2)}</td>
                       {isElite && (

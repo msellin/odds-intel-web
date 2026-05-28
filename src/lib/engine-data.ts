@@ -197,6 +197,7 @@ export interface LiveBet {
   comboLegs: LiveBetComboLeg[] | null;
   comboSize: number | null;
   systemType: string | null;
+  strategyProfile: string | null;
 }
 
 // ─── Supabase row types ─────────────────────────────────────────────────────
@@ -1091,7 +1092,7 @@ export async function getTodayBets(): Promise<LiveBet[]> {
     .select(
       `id, match_id, market, selection, odds_at_pick, pick_time, stake,
        model_probability, calibrated_prob, edge_percent, closing_odds, clv, result, pnl,
-       bankroll_after, news_triggered, reasoning, recommended_bookmaker,
+       bankroll_after, news_triggered, reasoning, recommended_bookmaker, strategy_profile,
        bot:bot_id(id, name, strategy),
        match:match_id(id, date,
          home_team:home_team_id(name),
@@ -1238,7 +1239,7 @@ export async function getAllBets(): Promise<LiveBet[]> {
     .select(
       `id, match_id, market, selection, odds_at_pick, pick_time, stake,
        model_probability, calibrated_prob, edge_percent, closing_odds, clv, result, pnl,
-       bankroll_after, news_triggered, reasoning,
+       bankroll_after, news_triggered, reasoning, strategy_profile,
        combo_legs, combo_size, system_type,
        bot:bot_id(id, name, strategy),
        match:match_id(id, date,
@@ -1386,6 +1387,7 @@ function toBet(
       : null,
     comboSize: row.combo_size != null ? Number(row.combo_size) : null,
     systemType: row.system_type ?? null,
+    strategyProfile: row.strategy_profile ?? null,
   };
 }
 
