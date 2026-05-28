@@ -25,6 +25,17 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-05-28",
+    title: "426 more leagues · In-play fixes · DNB data fix",
+    changes: [
+      { type: "data", text: "Model coverage expanded to 426 additional leagues — Kazakhstan, Estonia, Georgia, Ethiopia, Iraq, Peru, Uruguay, Indonesia, and many more. Picks in these leagues were previously filtered out due to insufficient historical data; they now go through the full model and value-bet pipeline." },
+      { type: "model", text: "Fixed 6 in-play strategies that were silently skipping 62% of matches because prematch predictions data only covers ~38% of leagues. Strategies now fall back to expected-goals data which has near-100% coverage." },
+      { type: "model", text: "In-play Post-Equalizer strategy capped at odds 5.0 — data audit showed −50% ROI at 5.0–6.0 and −59% above 6.0." },
+      { type: "fix", text: "In-play BTTS bots were silent for 4 days due to a missing column in the candidate query. Fixed — both bots now active." },
+      { type: "fix", text: "Draw No Bet market data fixed — an API naming mismatch meant DNB odds were stored as zero since the market launched. Real prices now land correctly." },
+    ],
+  },
+  {
     date: "2026-05-27",
     title: "UI polish · Copy accuracy · Off-season empty state",
     changes: [
