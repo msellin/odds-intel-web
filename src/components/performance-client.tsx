@@ -142,9 +142,19 @@ export function PerformanceClient({
   // Count non-experimental active bots with enough data for the scale row
   const botsTracked = leaderboardBots.filter(b => b.hasEnoughData).length || null;
 
+  const activeBotCount  = botsDB ? botsDB.filter((b) => !b.retiredAt).length : null;
+  const retiredBotCount = botsDB ? botsDB.filter((b) => !!b.retiredAt).length : null;
+
   return (
     <div className="space-y-8">
-      <PerformanceHero stats={heroStats} cache={heroCache} botsTracked={botsTracked} modelV2Stats={modelV2Stats} />
+      <PerformanceHero
+        stats={heroStats}
+        cache={heroCache}
+        botsTracked={botsTracked}
+        modelV2Stats={modelV2Stats}
+        activeBotCount={activeBotCount}
+        retiredBotCount={retiredBotCount}
+      />
 
       {canRecompute && (
         <p className="text-[10px] text-muted-foreground -mt-4">

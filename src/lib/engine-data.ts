@@ -4135,6 +4135,10 @@ export interface ModelV2Stats {
   settled: number;
   roi: number | null;
   avgClv: number | null;
+  prematchSettled: number;
+  prematchRoi: number | null;
+  inplaySettled: number;
+  inplayRoi: number | null;
 }
 
 const EXPERIMENTAL_BOTS_V2 = new Set([
@@ -4173,13 +4177,32 @@ export async function getModelV2Stats(): Promise<ModelV2Stats> {
     return true;
   });
 
+  const getBotName = (r: Row) => {
+    const bot = Array.isArray(r.bot) ? r.bot[0] : r.bot;
+    return bot?.name ?? "";
+  };
+
+  const prematch = rows.filter((r) => !getBotName(r).startsWith("inplay_"));
+  const inplay   = rows.filter((r) => getBotName(r).startsWith("inplay_"));
+
+  const calcRoi = (subset: Row[]) => {
+    const staked = subset.reduce((s, r) => s + Number(r.stake), 0);
+    const pnl    = subset.reduce((s, r) => s + Number(r.pnl ?? 0), 0);
+    return staked > 0 ? (pnl / staked) * 100 : null;
+  };
+
   const staked = rows.reduce((s, r) => s + Number(r.stake), 0);
-  const pnl = rows.reduce((s, r) => s + Number(r.pnl ?? 0), 0);
-  const clvValues = rows.map((r) => r.clv).filter((c): c is number => c != null && Number.isFinite(c));
+  const pnl    = rows.reduce((s, r) => s + Number(r.pnl ?? 0), 0);
+  // CLV only meaningful for pre-match bets; inplay bots don't track it.
+  const clvValues = prematch.map((r) => r.clv).filter((c): c is number => c != null && Number.isFinite(c));
 
   return {
-    settled: rows.length,
-    roi: staked > 0 ? (pnl / staked) * 100 : null,
-    avgClv: clvValues.length > 0 ? clvValues.reduce((a, b) => a + b, 0) / clvValues.length : null,
+    settled:         rows.length,
+    roi:             staked > 0 ? (pnl / staked) * 100 : null,
+    avgClv:          clvValues.length > 0 ? clvValues.reduce((a, b) => a + b, 0) / clvValues.length : null,
+    prematchSettled: prematch.length,
+    prematchRoi:     calcRoi(prematch),
+    inplaySettled:   inplay.length,
+    inplayRoi:       calcRoi(inplay),
   };
 }
