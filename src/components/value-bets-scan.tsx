@@ -123,16 +123,6 @@ function lineDrift(entry: BookOddsEntry | undefined, postOdds: number, result: s
   return { dir: "steady" as const, pct };
 }
 
-function bookmakerUrl(name: string | null | undefined): string {
-  const urls: Record<string, string> = {
-    Unibet: "https://www.unibet.com",
-    Bet365: "https://www.bet365.com",
-    Pinnacle: "https://www.pinnacle.com",
-    Marathonbet: "https://www.marathonbet.com",
-    Coolbet: "https://www.coolbet.com",
-  };
-  return (name && urls[name]) ?? "#";
-}
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -316,18 +306,6 @@ function ExpandedPanel({
         </div>
       )}
 
-      {/* Action row */}
-      {(isPro || isElite) && (
-        <a
-          href={bookmakerUrl(best?.name ?? bet.recommendedBookmaker)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center justify-center gap-1.5 w-full rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-2.5 text-sm font-medium text-blue-400 hover:bg-blue-500/20 transition-colors"
-        >
-          Bet at {best?.name ?? bet.recommendedBookmaker ?? "bookmaker"}
-          <span className="text-[11px] opacity-60">↗</span>
-        </a>
-      )}
     </div>
   );
 }

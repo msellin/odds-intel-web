@@ -150,15 +150,12 @@ async function ValueBetsContent({ userId }: { userId: string }) {
     // Used for the free-tier "this bot's last-30-day ROI" hook + Pro odds-movement view.
     getPublicPerformanceExtras(),
   ]);
-  // COOLBET-FIRST-SORT (2026-05-25): bets with Coolbet as the recommended
-  // book come first — Coolbet is the operator's primary placement venue,
-  // so surfacing those bets reduces friction. Within each group, sort by
-  // edge descending (the original sort).
+  // Sort: edge descending (highest value first), KO time ascending as tiebreak
+  // so among equal-edge bets, earlier matches surface first.
   const sorted = [...allBets].sort((a, b) => {
-    const aCoolbet = (a.recommendedBookmaker ?? "").toLowerCase() === "coolbet" ? 1 : 0;
-    const bCoolbet = (b.recommendedBookmaker ?? "").toLowerCase() === "coolbet" ? 1 : 0;
-    if (aCoolbet !== bCoolbet) return bCoolbet - aCoolbet;
-    return b.edge - a.edge;
+    const edgeDiff = b.edge - a.edge;
+    if (Math.abs(edgeDiff) > 0.001) return edgeDiff;
+    return new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime();
   });
   const { bets, totalCount } = sanitizeBets(sorted, isPro, isElite);
 
