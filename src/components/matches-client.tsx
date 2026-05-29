@@ -52,6 +52,7 @@ interface Props {
 
 type StatusTab = "all" | "live" | "upcoming" | "finished";
 type FilterTab = "all" | "favorites";
+type SortMode = "league" | "value" | "kickoff";
 
 export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, finishedGroupsPromise, teaserData, valueBets }: Props) {
   const router = useRouter();
@@ -60,6 +61,7 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
   const [filterTab, setFilterTab] = useState<FilterTab>("all");
   const [hasValueFilter, setHasValueFilter] = useState(false);
   const [topLeaguesFilter, setTopLeaguesFilter] = useState(false);
+  const [sortMode, setSortMode] = useState<SortMode>("league");
   const [leagueSearch, setLeagueSearch] = useState("");
   const [favoriteMatchIds, setFavoriteMatchIds] = useState<Set<string>>(new Set());
   const [pastSavedMatches, setPastSavedMatches] = useState<PastSavedMatch[] | null>(null);
@@ -299,6 +301,35 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
     return reorderedGroups;
   }, [reorderedGroups, filterTab, favoriteLeagues, favoriteMatchIds, isFavoriteLeague]);
 
+  // Re-sort groups by value or kickoff when sort mode changes
+  const sortedForDisplay = useMemo(() => {
+    if (sortMode === "league") return filteredGroups;
+    return [...filteredGroups]
+      .map(([league, matches]) => {
+        let sorted: PublicMatch[];
+        if (sortMode === "value") {
+          sorted = [...matches].sort((a, b) => {
+            const aEdge = valueBets[a.id]?.topEdge ?? -1;
+            const bEdge = valueBets[b.id]?.topEdge ?? -1;
+            return bEdge - aEdge;
+          });
+        } else {
+          sorted = [...matches].sort((a, b) => a.kickoff.localeCompare(b.kickoff));
+        }
+        return [league, sorted] as [string, PublicMatch[]];
+      })
+      .sort(([, aMatches], [, bMatches]) => {
+        if (sortMode === "value") {
+          const aEdge = valueBets[aMatches[0]?.id]?.topEdge ?? -1;
+          const bEdge = valueBets[bMatches[0]?.id]?.topEdge ?? -1;
+          return bEdge - aEdge;
+        }
+        const aKo = aMatches[0]?.kickoff ?? "";
+        const bKo = bMatches[0]?.kickoff ?? "";
+        return aKo.localeCompare(bKo);
+      });
+  }, [filteredGroups, sortMode, valueBets]);
+
   const favoriteMatchCount = useMemo(() => {
     const counted = new Set<string>();
     // Count matches from favorite leagues
@@ -365,7 +396,7 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
           >
             Upcoming
             {upcomingCount > 0 && statusTab !== "upcoming" && (
-              <span className="ml-1.5 rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground/60">
+              <span className="ml-1.5 rounded-full bg-white/[0.10] px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground">
                 {upcomingCount}
               </span>
             )}
@@ -380,12 +411,13 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
           >
             Finished
             {finishedCount > 0 && statusTab !== "finished" && (
-              <span className="ml-1.5 rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground/60">
+              <span className="ml-1.5 rounded-full bg-white/[0.10] px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground">
                 {finishedCount}
               </span>
             )}
           </button>
         </div>
+        <p className="mt-1 px-1 text-[10px] text-muted-foreground/40">Times in your local timezone</p>
       </div>
 
       {/* Secondary filter row — my games + value/top filters + search */}
@@ -467,6 +499,24 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
         </div>
       </div>
 
+      {/* Sort controls — hidden on finished tab */}
+      {statusTab !== "finished" && (
+        <div className="flex items-center gap-1 rounded-lg border border-white/[0.06] bg-muted/20 p-0.5 w-fit">
+          {(["league", "value", "kickoff"] as SortMode[]).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setSortMode(mode)}
+              className={`rounded px-2.5 py-1 text-xs font-medium transition-all ${
+                sortMode === mode
+                  ? "bg-muted text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {mode === "league" ? "By league" : mode === "value" ? "⚡ By value" : "By kickoff"}
+            </button>
+          ))}
+        </div>
+      )}
 
       {statusTab === "finished" ? (
         <Suspense fallback={
@@ -487,7 +537,7 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
         </Suspense>
       ) : (
         <>
-          {filterTab === "favorites" && filteredGroups.length === 0 && (pastSavedMatches?.length ?? 0) === 0 && !pastSavedLoading && (
+          {filterTab === "favorites" && sortedForDisplay.length === 0 && (pastSavedMatches?.length ?? 0) === 0 && !pastSavedLoading && (
             <div className="rounded-xl border border-white/[0.06] bg-card/40 py-10 text-center">
               <Star className="mx-auto h-8 w-8 text-muted-foreground/30 mb-3" />
               <p className="text-sm font-medium text-foreground">No saved games today</p>
@@ -501,7 +551,7 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
             </div>
           )}
 
-          {statusTab !== "all" && filteredGroups.length === 0 && filterTab !== "favorites" && (
+          {statusTab !== "all" && sortedForDisplay.length === 0 && filterTab !== "favorites" && (
             <div className="rounded-xl border border-white/[0.06] bg-card/40 py-8 text-center">
               <p className="text-sm text-muted-foreground">
                 {statusTab === "live" ? "No live matches right now." : "No upcoming matches."}
@@ -509,7 +559,7 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
             </div>
           )}
 
-          {leagueSearch && filteredGroups.length === 0 && (
+          {leagueSearch && sortedForDisplay.length === 0 && (
             <div className="rounded-xl border border-white/[0.06] bg-card/40 py-8 text-center">
               <p className="text-sm text-muted-foreground">
                 No leagues matching &ldquo;{leagueSearch}&rdquo;.
@@ -526,7 +576,7 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
             />
           )}
 
-          {filteredGroups.map(([league, matches], i) => (
+          {sortedForDisplay.map(([league, matches], i) => (
             <LeagueAccordion
               key={league}
               league={league}

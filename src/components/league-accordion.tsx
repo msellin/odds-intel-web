@@ -105,7 +105,7 @@ function getTeaserStyle(teaser: string): {
     return { color: "text-amber-400/70", Icon: TrendingDown };
   }
   if (t.includes("volatile") || t.includes("disagreement") || t.includes("shifted") || t.includes("odds")) {
-    return { color: "text-blue-400/60", Icon: Activity };
+    return { color: "text-blue-400", Icon: Activity };
   }
   return { color: "text-muted-foreground/60", Icon: Minus };
 }
