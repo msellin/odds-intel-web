@@ -30,13 +30,33 @@ const primaryLinks = [
   { href: "/predictions", label: "Predictions", icon: TrendingUp },
 ];
 
-export function Nav() {
+interface NavProps {
+  previewTier?: "free" | "pro" | "elite" | null;
+}
+
+const PREVIEW_TIERS = ["free", "pro", "elite"] as const;
+
+export function Nav({ previewTier: initialPreviewTier = null }: NavProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [localPreviewTier, setLocalPreviewTier] = useState<"free" | "pro" | "elite" | null>(initialPreviewTier);
+  const [tierLoading, setTierLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { user, profile, loading, signOut } = useAuth();
+
+  const setTierPreview = async (tier: string) => {
+    setTierLoading(true);
+    await fetch("/api/set-preview-tier", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tier }),
+    });
+    setLocalPreviewTier((tier as "free" | "pro" | "elite") || null);
+    setTierLoading(false);
+    router.refresh();
+  };
 
   const handleSignOut = async () => {
     setProfileOpen(false);
@@ -257,6 +277,38 @@ export function Nav() {
                         <Bot className="h-3.5 w-3.5" />
                         Real Bets
                       </Link>
+                      <div className="mx-3 mt-1.5 mb-0.5">
+                        <p className="text-[10px] text-amber-500/40 mb-1">Preview tier</p>
+                        <div className="flex gap-1">
+                          {PREVIEW_TIERS.map((t) => (
+                            <button
+                              key={t}
+                              disabled={tierLoading}
+                              onClick={() => setTierPreview(t)}
+                              className={cn(
+                                "rounded px-2 py-0.5 text-[10px] capitalize transition-colors disabled:opacity-50",
+                                localPreviewTier === t
+                                  ? "bg-amber-500/20 text-amber-400"
+                                  : "text-muted-foreground hover:bg-muted"
+                              )}
+                            >
+                              {t}
+                            </button>
+                          ))}
+                          <button
+                            disabled={tierLoading}
+                            onClick={() => setTierPreview("")}
+                            className={cn(
+                              "rounded px-2 py-0.5 text-[10px] transition-colors disabled:opacity-50",
+                              !localPreviewTier
+                                ? "bg-amber-500/20 text-amber-400"
+                                : "text-muted-foreground hover:bg-muted"
+                            )}
+                          >
+                            Real
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   )}
 
@@ -468,6 +520,38 @@ export function Nav() {
                     <Bot className="h-4 w-4" />
                     Real Bets
                   </Link>
+                  <div className="px-3 pt-1.5 pb-0.5">
+                    <p className="text-[10px] text-amber-500/40 mb-1">Preview tier</p>
+                    <div className="flex gap-1">
+                      {PREVIEW_TIERS.map((t) => (
+                        <button
+                          key={t}
+                          disabled={tierLoading}
+                          onClick={() => setTierPreview(t)}
+                          className={cn(
+                            "rounded px-2.5 py-1 text-xs capitalize transition-colors disabled:opacity-50",
+                            localPreviewTier === t
+                              ? "bg-amber-500/20 text-amber-400"
+                              : "text-muted-foreground hover:bg-muted"
+                          )}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                      <button
+                        disabled={tierLoading}
+                        onClick={() => setTierPreview("")}
+                        className={cn(
+                          "rounded px-2.5 py-1 text-xs transition-colors disabled:opacity-50",
+                          !localPreviewTier
+                            ? "bg-amber-500/20 text-amber-400"
+                            : "text-muted-foreground hover:bg-muted"
+                        )}
+                      >
+                        Real
+                      </button>
+                    </div>
+                  </div>
                 </>
               )}
               <div className="my-2 h-px bg-border/50" />

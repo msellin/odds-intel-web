@@ -394,7 +394,7 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets }: Props)
           <table className="w-full min-w-[480px]">
             <thead>
               <tr className="border-b border-border/20 text-left text-[10px] uppercase tracking-wider text-muted-foreground">
-                <th scope="col" className="py-2.5 pl-5 pr-2">Bot</th>
+                <th scope="col" className="sticky left-0 z-10 bg-background py-2.5 pl-5 pr-2">Bot</th>
                 <th scope="col" className="py-2.5 px-2 text-right">Settled</th>
                 {isPro && <th scope="col" className="py-2.5 px-2 text-right">W / L</th>}
                 <th scope="col" className="py-2.5 px-2 text-right">ROI</th>
@@ -416,9 +416,9 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets }: Props)
                     className={`group transition-colors ${isPro ? "cursor-pointer hover:bg-muted/40" : ""} ${isMaturing ? "opacity-50" : ""}`}
                     onClick={() => isPro && allBets && setSelected(bot)}
                   >
-                    <td className="py-3 pl-5 pr-2">
+                    <td className="sticky left-0 z-10 bg-background py-3 pl-5 pr-2">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono text-xs">{bot.name}</span>
+                        <span className="font-mono text-xs max-w-[110px] sm:max-w-none truncate">{bot.name}</span>
                         {isLive && (
                           <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-amber-500/30 text-amber-400/70">
                             live
