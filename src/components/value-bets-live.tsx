@@ -65,6 +65,7 @@ function ResultBadge({ result }: { result: string }) {
         Lost
       </Badge>
     );
+  if (result === "pending") return null;
   return (
     <Badge variant="secondary" className="text-[10px] font-semibold uppercase shrink-0">
       {result}
@@ -155,18 +156,14 @@ function BetCard({
                 Free pick
               </span>
             )}
-            {matchLive ? (
+            {matchLive && (
               <span className="rounded border border-red-500/40 bg-red-500/10 px-1.5 py-0.5 text-[9px] font-bold text-red-400 uppercase tracking-wide">
                 ● Live
-              </span>
-            ) : (
-              <span className="rounded bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-mono text-muted-foreground/70" suppressHydrationWarning>
-                {koTime}
               </span>
             )}
             {bet.botCount > 1 && (
               <span className="rounded border border-blue-500/30 bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-bold text-blue-400">
-                {bet.botCount} bots agree
+                {bet.botCount} strategies
               </span>
             )}
             {kickoffSoon && !matchLive && (
@@ -207,7 +204,7 @@ function BetCard({
       {isFreeHighlight && (
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
           <span>
-            <span className="opacity-70 mr-0.5">@</span>
+            <span className="opacity-70 mr-0.5">post @</span>
             <span className="font-mono font-semibold text-foreground/80">{bet.odds.toFixed(2)}</span>
           </span>
           {botRoi && botRoi.settled >= 10 && (
@@ -230,7 +227,7 @@ function BetCard({
         <div className="mt-2">
           <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
             <span>
-              <span className="opacity-70 mr-0.5">@</span>
+              <span className="opacity-70 mr-0.5">post @</span>
               <span className="font-mono font-semibold text-foreground/80">{bet.odds.toFixed(2)}</span>
             </span>
             <span>
@@ -239,7 +236,7 @@ function BetCard({
             </span>
             <span>
               <span className="opacity-70 mr-0.5">stake</span>
-              <span className="font-mono text-foreground/80">{bet.stake.toFixed(1)}</span>
+              <span className="font-mono text-foreground/80">{bet.stake.toFixed(1)}</span><span className="opacity-40 text-[10px]">u</span>
             </span>
             <div className="ml-auto">
               <BetExplainButton betId={bet.id} />
@@ -574,7 +571,7 @@ export function ValueBetsLive({ bets, totalCount, userTier, oddsVerifiedAt, book
                         </span>
                         {topBet.botCount > 1 && (
                           <span className="rounded border border-blue-500/30 bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-bold text-blue-400">
-                            {topBet.botCount} bots agree
+                            {topBet.botCount} strategies
                           </span>
                         )}
                         {tBotRoi && tBotRoi.settled >= 10 && (
@@ -777,7 +774,7 @@ function BetRow({
             )}
             {bet.botCount > 1 && (
               <span className="shrink-0 rounded border border-blue-500/30 bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-bold text-blue-400">
-                {bet.botCount} bots agree
+                {bet.botCount} strategies
               </span>
             )}
             {kickoffSoon && !matchLive && (
@@ -825,7 +822,7 @@ function BetRow({
       {isElite && (
         <>
           <td className="py-3 px-2 text-center font-mono">{(bet.modelProb * 100).toFixed(1)}%</td>
-          <td className="py-3 px-2 text-center font-mono">{bet.stake.toFixed(1)}</td>
+          <td className="py-3 px-2 text-center font-mono">{bet.stake.toFixed(1)}<span className="opacity-40 text-[10px]">u</span></td>
         </>
       )}
       <td className="py-3 pl-2 pr-4 text-center">
