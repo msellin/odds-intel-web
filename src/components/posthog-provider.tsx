@@ -7,7 +7,7 @@ import { useAuth } from "@/components/auth-provider";
 
 const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY;
 const POSTHOG_HOST =
-  process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com";
+  process.env.NEXT_PUBLIC_POSTHOG_HOST || "/ingest";
 
 // Single shared promise so PageView/UserSync wait on the same import.
 let posthogPromise: Promise<typeof posthogJs> | null = null;

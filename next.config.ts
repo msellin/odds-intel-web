@@ -2,6 +2,14 @@ import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
+  // Proxy PostHog through our own domain so ad blockers don't block /e/ events.
+  skipTrailingSlashRedirect: true,
+  async rewrites() {
+    return [
+      { source: "/ingest/static/:path*", destination: "https://us-assets.i.posthog.com/static/:path*" },
+      { source: "/ingest/:path*", destination: "https://us.i.posthog.com/:path*" },
+    ];
+  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "media.api-sports.io" },
@@ -22,7 +30,7 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https://*.supabase.co https://media.api-sports.io",
               "font-src 'self'",
-              "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.sentry.io https://api.stripe.com https://us.i.posthog.com https://us-assets.i.posthog.com",
+              "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.sentry.io https://api.stripe.com",
               "frame-src 'self' https://js.stripe.com https://hooks.stripe.com",
               "worker-src 'self' blob:",
             ].join("; "),
