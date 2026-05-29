@@ -12,7 +12,7 @@ import {
   type LiveBet,
   type BookOddsEntry,
 } from "@/lib/engine-data";
-import { ValueBetsLive } from "@/components/value-bets-live";
+import { ValueBetsScan } from "@/components/value-bets-scan";
 import { ValueBetsGate } from "@/components/value-bets-gate";
 import { TodayPicksPreview } from "@/components/today-picks-preview";
 import { getUserTier } from "@/lib/get-user-tier";
@@ -176,7 +176,7 @@ async function ValueBetsContent({ userId }: { userId: string }) {
   return (
     <div className="space-y-6">
       <TodayPicksPreview picks={todayPicks} isPro={isPro} isElite={isElite} />
-      <ValueBetsLive
+      <ValueBetsScan
         bets={bets}
         totalCount={totalCount}
         userTier={userTier}
