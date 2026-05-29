@@ -10,7 +10,8 @@ export const metadata: Metadata = {
 };
 import { SearchX } from "lucide-react";
 import Link from "next/link";
-import { getActiveMatches, getFinishedMatches, getMatchCounts, getLiveSnapshots, getFreeDailyPick, getWhatChangedToday } from "@/lib/engine-data";
+import { getActiveMatches, getFinishedMatches, getMatchCounts, getLiveSnapshots, getFreeDailyPick, getWhatChangedToday, getTodayBets } from "@/lib/engine-data";
+import type { MatchValueInfo } from "@/components/league-accordion";
 import { MatchesClient } from "@/components/matches-client";
 import { SignupBanner } from "@/components/signup-banner";
 import { WhatChangedToday } from "@/components/what-changed-today";
@@ -184,8 +185,25 @@ async function MatchListContent({
   teaserData: TeaserData;
 }) {
   const finishedGroupsPromise = getFinishedMatches(dayOffset).then(groupAndSort);
-  const activeMatches = await getActiveMatches(dayOffset);
+  const [activeMatches, betsRaw] = await Promise.all([
+    getActiveMatches(dayOffset),
+    dayOffset === 0 ? getTodayBets() : Promise.resolve([]),
+  ]);
   const sortedGroups = groupAndSort(activeMatches);
+
+  // Build matchId → top value bet map (highest edge per match)
+  const valueBets: Record<string, MatchValueInfo> = {};
+  for (const bet of betsRaw) {
+    if (!bet.matchId) continue;
+    const existing = valueBets[bet.matchId];
+    if (!existing || bet.edge > existing.topEdge) {
+      valueBets[bet.matchId] = {
+        topSelection: bet.selection,
+        topMarket: bet.market,
+        topEdge: bet.edge,
+      };
+    }
+  }
 
   const liveMatchIds = activeMatches.filter((m) => m.status === "live").map((m) => m.id);
   const liveSnapshotsArr = await getLiveSnapshots(liveMatchIds);
@@ -216,6 +234,7 @@ async function MatchListContent({
       counts={counts}
       finishedGroupsPromise={finishedGroupsPromise}
       teaserData={teaserData}
+      valueBets={valueBets}
     />
   );
 }

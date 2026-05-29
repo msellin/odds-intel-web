@@ -3,12 +3,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef, use, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Star, Search, X, History } from "lucide-react";
+import { Star, Search, X, History, Zap, Trophy } from "lucide-react";
 import dynamic from "next/dynamic";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
 import { useAuth } from "@/components/auth-provider";
 import type { PublicMatch, LiveSnapshot } from "@/lib/engine-data";
-import { LeagueAccordion } from "./league-accordion";
+import { LeagueAccordion, type MatchValueInfo } from "./league-accordion";
 import { MatchFavoriteButton } from "./match-favorite-button";
 import type { TeaserData } from "@/app/(app)/matches/page";
 
@@ -47,18 +47,19 @@ interface Props {
   counts: { live: number; upcoming: number; finished: number; total: number };
   finishedGroupsPromise: Promise<[string, PublicMatch[]][]>;
   teaserData: TeaserData;
+  valueBets: Record<string, MatchValueInfo>;
 }
 
 type StatusTab = "all" | "live" | "upcoming" | "finished";
 type FilterTab = "all" | "favorites";
-type GradeFilter = "A" | "B" | "C" | null;
 
-export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, finishedGroupsPromise, teaserData }: Props) {
+export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, finishedGroupsPromise, teaserData, valueBets }: Props) {
   const router = useRouter();
   const [snapshots, setSnapshots] = useState<Record<string, LiveSnapshot>>(initialSnapshots);
   const [statusTab, setStatusTab] = useState<StatusTab>("all");
   const [filterTab, setFilterTab] = useState<FilterTab>("all");
-  const [gradeFilter, setGradeFilter] = useState<GradeFilter>(null);
+  const [hasValueFilter, setHasValueFilter] = useState(false);
+  const [topLeaguesFilter, setTopLeaguesFilter] = useState(false);
   const [leagueSearch, setLeagueSearch] = useState("");
   const [favoriteMatchIds, setFavoriteMatchIds] = useState<Set<string>>(new Set());
   const [pastSavedMatches, setPastSavedMatches] = useState<PastSavedMatch[] | null>(null);
@@ -236,16 +237,22 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
       .filter(([, ms]) => ms.length > 0);
   }, [searchFiltered, statusTab]);
 
-  // Grade filter — applied at match level within each league group
-  const gradeFiltered = useMemo(() => {
-    if (!gradeFilter) return statusFiltered;
+  // "Has value" filter — only show matches with a value bet
+  const valueFiltered = useMemo(() => {
+    if (!hasValueFilter) return statusFiltered;
     return statusFiltered
       .map(([league, matches]) => {
-        const filtered = matches.filter((m) => m.dataGrade === gradeFilter);
+        const filtered = matches.filter((m) => valueBets[m.id]);
         return [league, filtered] as [string, PublicMatch[]];
       })
       .filter(([, ms]) => ms.length > 0);
-  }, [statusFiltered, gradeFilter]);
+  }, [statusFiltered, hasValueFilter, valueBets]);
+
+  // "Top leagues" filter — only show priority leagues (leaguePriority != null)
+  const topLeaguesFiltered = useMemo(() => {
+    if (!topLeaguesFilter) return valueFiltered;
+    return valueFiltered.filter(([, matches]) => matches[0]?.leaguePriority != null);
+  }, [valueFiltered, topLeaguesFilter]);
 
   // Helper: check if a league is in favorites
   const isFavoriteLeague = useCallback(
@@ -256,12 +263,12 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
 
   // Re-sort: priority leagues → my leagues → rest (preserves server sort within tiers)
   const reorderedGroups = useMemo(() => {
-    if (favoriteLeagues.length === 0) return gradeFiltered;
+    if (favoriteLeagues.length === 0) return topLeaguesFiltered;
     const priority: [string, PublicMatch[]][] = [];
     const favorites: [string, PublicMatch[]][] = [];
     const rest: [string, PublicMatch[]][] = [];
 
-    for (const group of gradeFiltered) {
+    for (const group of topLeaguesFiltered) {
       const [, matches] = group;
       const hasPriority = matches[0]?.leaguePriority != null;
       if (hasPriority) {
@@ -273,7 +280,7 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
       }
     }
     return [...priority, ...favorites, ...rest];
-  }, [statusFiltered, favoriteLeagues, isFavoriteLeague]);
+  }, [topLeaguesFiltered, favoriteLeagues, isFavoriteLeague]);
 
   // Then filter by favorites (my leagues + followed matches)
   const filteredGroups = useMemo(() => {
@@ -381,18 +388,18 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
         </div>
       </div>
 
-      {/* Secondary filter row — my games + grade filter + search */}
+      {/* Secondary filter row — my games + value/top filters + search */}
       <div className="flex flex-wrap items-center gap-2">
         {user && (
           <button
             onClick={() => setFilterTab(filterTab === "favorites" ? "all" : "favorites")}
             className={`flex items-center gap-1.5 rounded-md border px-3 py-1 text-xs font-bold transition-all ${
               filterTab === "favorites"
-                ? "border-amber-400/30 bg-amber-400/10 text-amber-400"
+                ? "border-amber-400/40 bg-amber-400/15 text-amber-400"
                 : "border-white/[0.06] bg-muted/20 text-muted-foreground hover:text-foreground"
             }`}
           >
-            <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+            <Star className={`h-3 w-3 ${filterTab === "favorites" ? "fill-amber-400 text-amber-400" : "text-amber-400"}`} />
             My Games
             {favoriteMatchCount > 0 && (
               <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
@@ -404,46 +411,42 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
           </button>
         )}
 
-        {/* Grade filter */}
-        {(["A", "B", "C"] as const).map((g) => {
-          const active = gradeFilter === g;
-          const styles = {
-            A: active
-              ? "border-green-500/40 bg-green-500/20 text-green-400"
-              : "border-white/[0.06] bg-muted/20 text-muted-foreground hover:border-green-500/20 hover:text-green-400/70",
-            B: active
-              ? "border-amber-500/40 bg-amber-500/20 text-amber-500"
-              : "border-white/[0.06] bg-muted/20 text-muted-foreground hover:border-amber-500/20 hover:text-amber-500/70",
-            C: active
-              ? "border-white/[0.15] bg-white/[0.08] text-muted-foreground"
-              : "border-white/[0.06] bg-muted/20 text-muted-foreground/50 hover:border-white/[0.10] hover:text-muted-foreground",
-          }[g];
-          const titles = {
-            A: "Grade A — top leagues with full model coverage",
-            B: "Grade B — good coverage, model predictions available",
-            C: "Grade C — partial coverage, basic data only",
-          }[g];
-          return (
-            <button
-              key={g}
-              title={titles}
-              onClick={() => setGradeFilter(active ? null : g)}
-              className={`rounded-md border px-2.5 py-1 text-xs font-bold transition-all ${styles}`}
-            >
-              {g}
-            </button>
-          );
-        })}
-        {gradeFilter && (
+        {/* Has value filter */}
+        <button
+          onClick={() => setHasValueFilter(!hasValueFilter)}
+          className={`flex items-center gap-1.5 rounded-md border px-3 py-1 text-xs font-bold transition-all ${
+            hasValueFilter
+              ? "border-green-500/40 bg-green-500/15 text-green-400"
+              : "border-white/[0.06] bg-muted/20 text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Zap className="h-3 w-3" />
+          Has value
+        </button>
+
+        {/* Top leagues filter */}
+        <button
+          onClick={() => setTopLeaguesFilter(!topLeaguesFilter)}
+          className={`flex items-center gap-1.5 rounded-md border px-3 py-1 text-xs font-bold transition-all ${
+            topLeaguesFilter
+              ? "border-amber-500/40 bg-amber-500/15 text-amber-500"
+              : "border-white/[0.06] bg-muted/20 text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Trophy className="h-3 w-3" />
+          Top leagues
+        </button>
+
+        {(hasValueFilter || topLeaguesFilter) && (
           <button
-            onClick={() => setGradeFilter(null)}
+            onClick={() => { setHasValueFilter(false); setTopLeaguesFilter(false); }}
             className="flex items-center gap-1 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors"
           >
             <X className="size-3" /> clear
           </button>
         )}
 
-        {/* League search — right-aligned, inline with grade filter on both mobile and desktop */}
+        {/* League search */}
         <div className="relative ml-auto flex-1 min-w-[8rem] sm:flex-none sm:w-56">
           <Search className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/50" />
           <input
@@ -473,7 +476,6 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
         }>
           <FinishedContent
             promise={finishedGroupsPromise}
-            gradeFilter={gradeFilter}
             leagueSearch={leagueSearch}
             filterTab={filterTab}
             favoriteMatchIds={favoriteMatchIds}
@@ -535,6 +537,7 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
               favoriteMatchIds={favoriteMatchIds}
               onMatchFavoriteToggle={handleMatchFavoriteToggle}
               prioritizeFirstLogos={i === 0}
+              valueBets={valueBets}
             />
           ))}
 
@@ -553,7 +556,6 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
 
 function FinishedContent({
   promise,
-  gradeFilter,
   leagueSearch,
   filterTab,
   favoriteMatchIds,
@@ -563,7 +565,6 @@ function FinishedContent({
   onMatchFavoriteToggle,
 }: {
   promise: Promise<[string, PublicMatch[]][]>;
-  gradeFilter: GradeFilter;
   leagueSearch: string;
   filterTab: FilterTab;
   favoriteMatchIds: Set<string>;
@@ -582,12 +583,6 @@ function FinishedContent({
       result = result.filter(([league]) => league.toLowerCase().includes(lower));
     }
 
-    if (gradeFilter) {
-      result = result
-        .map(([league, matches]) => [league, matches.filter((m) => m.dataGrade === gradeFilter)] as [string, PublicMatch[]])
-        .filter(([, ms]) => ms.length > 0);
-    }
-
     if (filterTab === "favorites") {
       result = result
         .map(([league, matches]) => {
@@ -600,7 +595,7 @@ function FinishedContent({
     }
 
     return result;
-  }, [groups, leagueSearch, gradeFilter, filterTab, favoriteMatchIds, favoriteLeagues]);
+  }, [groups, leagueSearch, filterTab, favoriteMatchIds, favoriteLeagues]);
 
   if (filtered.length === 0) {
     return (

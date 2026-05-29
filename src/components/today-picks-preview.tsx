@@ -53,7 +53,7 @@ export function TodayPicksPreview({ picks, isPro = false, isElite = false }: Pro
           <div className="flex items-center gap-2">
             <Clock className="h-4 w-4 text-amber-400" />
             <h2 className="text-base font-semibold text-foreground">
-              Today&apos;s value opportunities — {picks.length} pending
+              Today&apos;s value bets — {picks.length} pending
             </h2>
           </div>
           <p className="text-xs text-muted-foreground leading-relaxed max-w-2xl">

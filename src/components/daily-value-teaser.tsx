@@ -57,7 +57,7 @@ export function DailyValueTeaser({
             <Zap className="h-4 w-4 shrink-0 text-amber-400" />
             <span className="text-sm text-muted-foreground">
               <span className="font-medium text-foreground">
-                {totalCount} value {totalCount === 1 ? "opportunity" : "opportunities"}
+                {totalCount} value {totalCount === 1 ? "bet" : "bets"}
               </span>{" "}
               <span className="hidden sm:inline">detected </span>today
             </span>
