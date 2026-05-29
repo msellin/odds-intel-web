@@ -124,14 +124,6 @@ export async function IntelProContent({
 
   return (
     <>
-      {(signalHistory as MatchSignalRow[]).length > 0 && (
-        <SignalTimeline
-          signals={signalHistory as MatchSignalRow[]}
-          homeTeam={publicMatch.homeTeam}
-          awayTeam={publicMatch.awayTeam}
-        />
-      )}
-
       {isElite && matchSignals.length > 0 && (
         <WhyThisPick
           signals={matchSignals}
@@ -147,6 +139,22 @@ export async function IntelProContent({
           awayTeam={publicMatch.awayTeam}
           matchStatus={publicMatch.status}
         />
+      )}
+
+      {/* Raw signal timeline — Elite-only debug, hidden by default */}
+      {isElite && (signalHistory as MatchSignalRow[]).length > 0 && (
+        <details className="rounded-xl border border-border/30 bg-card/30">
+          <summary className="cursor-pointer px-4 py-3 text-xs text-muted-foreground/60 hover:text-muted-foreground select-none">
+            Show raw model inputs (advanced) — {(signalHistory as MatchSignalRow[]).length} signal snapshots
+          </summary>
+          <div className="border-t border-border/20 pt-2">
+            <SignalTimeline
+              signals={signalHistory as MatchSignalRow[]}
+              homeTeam={publicMatch.homeTeam}
+              awayTeam={publicMatch.awayTeam}
+            />
+          </div>
+        </details>
       )}
     </>
   );

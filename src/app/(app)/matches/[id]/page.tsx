@@ -14,27 +14,23 @@ import {
   getMatchStats,
   getBotConsensus,
   getMatchPreview,
-  getModelMarketUsers,
+  getMatchValueBet,
 } from "@/lib/engine-data";
 import type { MatchSignalRow } from "@/lib/engine-data";
 import { MatchDetailHeader } from "@/components/match-detail-header";
 import { MatchDetailTabs } from "@/components/match-detail-tabs";
 import { MatchEventTimeline } from "@/components/match-event-timeline";
 import { MatchDetailFree } from "@/components/match-detail-free";
-import { MatchScoreDisplay } from "@/components/match-score-display";
 import { MatchSignalSummary } from "@/components/match-signal-summary";
 import { SignalAccordion } from "@/components/signal-accordion";
 import { SignalDelta } from "@/components/signal-delta";
-import { MatchPickButton } from "@/components/match-pick-button";
 import { MatchNotes } from "@/components/match-notes";
 import { CommunityVote } from "@/components/community-vote";
 import { BotConsensus } from "@/components/bot-consensus";
 import { MatchPreviewCard } from "@/components/match-preview-card";
-import { MatchViewingCounter } from "@/components/match-viewing-counter";
-import { ModelMarketUsers } from "@/components/model-market-users";
-import { Badge } from "@/components/ui/badge";
+import { MatchVerdictCard } from "@/components/match-verdict-card";
 import { Separator } from "@/components/ui/separator";
-import { Clock, Calendar, Shield, MapPin, User } from "lucide-react";
+import { Shield, MapPin, User } from "lucide-react";
 import Link from "next/link";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { getUserTier } from "@/lib/get-user-tier";
@@ -136,7 +132,7 @@ export default async function MatchDetailPage({
     bookmakerCount,
     botConsensus,
     matchPreview,
-    modelMarketUsers,
+    valueBet,
   ] = await Promise.all([
     (async () => {
       try {
@@ -159,7 +155,7 @@ export default async function MatchDetailPage({
     publicMatch.hasOdds ? getPublicMatchBookmakerCount(id) : Promise.resolve(0),
     getBotConsensus(id),
     getMatchPreview(id),
-    getModelMarketUsers(id),
+    publicMatch.status !== "finished" ? getMatchValueBet(id) : Promise.resolve(null),
   ]);
 
   const { isAuthenticated, isPro, isElite } = authResult;
@@ -259,15 +255,7 @@ export default async function MatchDetailPage({
           modelDraw={publicMatch.modelDraw}
           modelAway={publicMatch.modelAway}
           matchStatus={publicMatch.status}
-        />
-      )}
-
-      {/* Model vs Market vs Users triangulation (ENG-12) */}
-      {modelMarketUsers && (
-        <ModelMarketUsers
-          data={modelMarketUsers}
-          homeTeam={publicMatch.homeTeam}
-          awayTeam={publicMatch.awayTeam}
+          isPro={isPro}
         />
       )}
 
@@ -280,17 +268,6 @@ export default async function MatchDetailPage({
       {matchPreview && (
         <MatchPreviewCard preview={matchPreview} isPro={isPro} />
       )}
-
-      {/* Match Pick */}
-      <MatchPickButton
-        matchId={publicMatch.id}
-        homeTeam={publicMatch.homeTeam}
-        awayTeam={publicMatch.awayTeam}
-        bestHome={publicMatch.bestHome}
-        bestDraw={publicMatch.bestDraw}
-        bestAway={publicMatch.bestAway}
-        matchStatus={publicMatch.status}
-      />
 
       {/* Signal group accordion (SUX-5) */}
       {hasSignals && (
@@ -316,7 +293,7 @@ export default async function MatchDetailPage({
       )}
 
       {/* Empty state when truly no intel content */}
-      {!hasSignals && !botConsensus && !matchPreview && !modelMarketUsers && !publicMatch.hasOdds && contextSentences.length === 0 && (
+      {!hasSignals && !botConsensus && !matchPreview && !publicMatch.hasOdds && contextSentences.length === 0 && (
         <div className="rounded-xl border border-border/50 bg-card p-6 text-center space-y-2">
           <p className="text-sm text-muted-foreground">
             Intelligence data is being collected for this match.
@@ -492,6 +469,23 @@ export default async function MatchDetailPage({
       />
 
       <Separator className="bg-border" />
+
+      {/* Verdict card — above tabs, visible on every tab */}
+      {publicMatch.hasOdds && publicMatch.bestHome > 0 && (
+        <MatchVerdictCard
+          valueBet={valueBet}
+          homeTeam={publicMatch.homeTeam}
+          awayTeam={publicMatch.awayTeam}
+          matchStatus={publicMatch.status}
+          modelHome={publicMatch.modelHome}
+          modelDraw={publicMatch.modelDraw}
+          modelAway={publicMatch.modelAway}
+          bestHome={publicMatch.bestHome}
+          bestDraw={publicMatch.bestDraw}
+          bestAway={publicMatch.bestAway}
+          isPro={isPro}
+        />
+      )}
 
       {/* Tabbed content */}
       <MatchDetailTabs

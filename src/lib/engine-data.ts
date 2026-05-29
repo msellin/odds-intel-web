@@ -1110,6 +1110,49 @@ export async function getTodayBets(): Promise<LiveBet[]> {
   return (data as SimBetRow[]).map((row) => toBet(row));
 }
 
+// Top value bet for a specific match today — used in MatchVerdictCard.
+// Service role required — RLS on simulated_bets blocks anon/user reads.
+export interface MatchValueBet {
+  market: string;
+  selection: string;
+  odds: number;
+  edge: number;
+  stake: number;
+  bookmaker: string | null;
+  modelProb: number;
+  marketProb: number;
+}
+
+export async function getMatchValueBet(matchId: string): Promise<MatchValueBet | null> {
+  const supabase = createSupabaseAdmin();
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  const { data, error } = await supabase
+    .from("simulated_bets")
+    .select("market, selection, odds_at_pick, edge_percent, stake, recommended_bookmaker, model_probability, calibrated_prob")
+    .eq("match_id", matchId)
+    .gte("pick_time", todayStart.toISOString())
+    .is("xg_source", null)
+    .neq("market", "combo")
+    .order("edge_percent", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data) return null;
+
+  return {
+    market: data.market ?? "",
+    selection: data.selection ?? "",
+    odds: Number(data.odds_at_pick ?? 0),
+    edge: Number(data.edge_percent ?? 0),
+    stake: Number(data.stake ?? 0),
+    bookmaker: data.recommended_bookmaker ?? null,
+    modelProb: Math.round(Number(data.model_probability ?? 0) * 1000) / 10,
+    marketProb: Math.round(Number(data.calibrated_prob ?? 0) * 1000) / 10,
+  };
+}
+
 // The single free pick shown on the matches page — intentionally public data
 // (we use this as a marketing teaser). Fetched server-side via service role
 // so no client-side Supabase query is needed in DailyValueTeaser.

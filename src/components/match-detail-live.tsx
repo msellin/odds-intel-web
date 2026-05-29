@@ -483,6 +483,23 @@ export function MatchDetailLive({
                 <AlertTriangle className="h-4 w-4 text-amber-400" />
                 Injury Report
               </CardTitle>
+              {/* Summary header */}
+              <div className="flex gap-4 text-[11px] text-muted-foreground pt-1">
+                {[{ team: match.homeTeam, list: homeInjuries }, { team: match.awayTeam, list: awayInjuries }].map(({ team, list }) => {
+                  const out = list.filter((i) => !i.status.toLowerCase().includes("doubt")).length;
+                  const doubt = list.filter((i) => i.status.toLowerCase().includes("doubt")).length;
+                  return (
+                    <span key={team}>
+                      <span className="font-medium text-foreground/70">{team.split(" ").slice(-1)[0]}</span>
+                      {" "}
+                      {out > 0 && <span>{out} out</span>}
+                      {out > 0 && doubt > 0 && " + "}
+                      {doubt > 0 && <span className="text-amber-400/80">{doubt} doubt</span>}
+                      {out === 0 && doubt === 0 && <span className="text-muted-foreground/40">none</span>}
+                    </span>
+                  );
+                })}
+              </div>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
