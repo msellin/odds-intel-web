@@ -17,12 +17,15 @@ import type {
   MatchSignalRow,
   OddsMovementPoint,
 } from "@/lib/engine-data";
-import { LiveOddsChart } from "@/components/live-odds-chart";
-import { OddsMovement1X2, OddsMovementOU25 } from "@/components/odds-movement-standalone";
+import dynamic from "next/dynamic";
 import { SignalTimeline } from "@/components/signal-timeline";
 import { WhyThisPick } from "@/components/why-this-pick";
 import { CLVTracker } from "@/components/clv-tracker";
-import { MatchDetailLive } from "@/components/match-detail-live";
+
+const LiveOddsChart = dynamic(() => import("@/components/live-odds-chart").then(m => ({ default: m.LiveOddsChart })), { ssr: false });
+const OddsMovement1X2 = dynamic(() => import("@/components/odds-movement-standalone").then(m => ({ default: m.OddsMovement1X2 })), { ssr: false });
+const OddsMovementOU25 = dynamic(() => import("@/components/odds-movement-standalone").then(m => ({ default: m.OddsMovementOU25 })), { ssr: false });
+const MatchDetailLive = dynamic(() => import("@/components/match-detail-live").then(m => ({ default: m.MatchDetailLive })), { ssr: false });
 
 interface MatchProContentProps {
   matchId: string;

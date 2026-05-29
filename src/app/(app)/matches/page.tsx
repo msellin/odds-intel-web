@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import type { Metadata } from "next";
-import { Suspense, use } from "react";
+import { Suspense, use, cache } from "react";
 
 export const metadata: Metadata = {
   title: "Football Matches Today — OddsIntel",
@@ -19,6 +19,16 @@ import { createSupabaseServer } from "@/lib/supabase-server";
 import { getUserTier } from "@/lib/get-user-tier";
 import type { PublicMatch, LiveSnapshot } from "@/lib/engine-data";
 import type { FreePick } from "@/components/daily-value-teaser";
+
+// Deduplicated cached fetchers — calling before AboveFoldContent resolves
+// starts the expensive queries in parallel with auth/count queries, cutting LCP.
+const getActiveMatchesCached = cache(getActiveMatches);
+const getTodayBetsCached = cache(getTodayBets);
+
+function preloadMatchData(dayOffset: number) {
+  void getActiveMatchesCached(dayOffset);
+  if (dayOffset === 0) void getTodayBetsCached();
+}
 
 function groupAndSort(matches: PublicMatch[]): [string, PublicMatch[]][] {
   const grouped = new Map<string, PublicMatch[]>();
@@ -67,6 +77,7 @@ export default function MatchesPage({
 }) {
   const { tab } = use(searchParams);
   const dayOffset = tab === "tomorrow" ? 1 : 0;
+  preloadMatchData(dayOffset);
 
   return (
     <div className="space-y-3">
@@ -186,8 +197,8 @@ async function MatchListContent({
 }) {
   const finishedGroupsPromise = getFinishedMatches(dayOffset).then(groupAndSort);
   const [activeMatches, betsRaw] = await Promise.all([
-    getActiveMatches(dayOffset),
-    dayOffset === 0 ? getTodayBets() : Promise.resolve([]),
+    getActiveMatchesCached(dayOffset),
+    dayOffset === 0 ? getTodayBetsCached() : Promise.resolve([]),
   ]);
   const sortedGroups = groupAndSort(activeMatches);
 
