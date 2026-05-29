@@ -310,7 +310,7 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
       {/* Top row: status tabs */}
       <div>
         {/* ML-5: Status tabs — primary navigation */}
-        <div className="flex rounded-lg border border-white/[0.06] bg-muted/20 p-1 w-fit">
+        <div className="flex rounded-lg border border-white/[0.06] bg-muted/20 p-1 w-fit max-w-full overflow-x-auto scrollbar-none">
           <button
             onClick={() => setStatusTab("all")}
             className={`rounded-md px-4 py-1.5 text-xs font-bold transition-all ${
@@ -418,9 +418,15 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
               ? "border-white/[0.15] bg-white/[0.08] text-muted-foreground"
               : "border-white/[0.06] bg-muted/20 text-muted-foreground/50 hover:border-white/[0.10] hover:text-muted-foreground",
           }[g];
+          const titles = {
+            A: "Grade A — top leagues with full model coverage",
+            B: "Grade B — good coverage, model predictions available",
+            C: "Grade C — partial coverage, basic data only",
+          }[g];
           return (
             <button
               key={g}
+              title={titles}
               onClick={() => setGradeFilter(active ? null : g)}
               className={`rounded-md border px-2.5 py-1 text-xs font-bold transition-all ${styles}`}
             >
@@ -444,7 +450,7 @@ export function MatchesClient({ sortedGroups, initialSnapshots, isPro, counts, f
             type="text"
             value={leagueSearch}
             onChange={(e) => setLeagueSearch(e.target.value)}
-            placeholder="Filter by league..."
+            placeholder="Search leagues"
             className="w-full rounded-lg border border-white/[0.06] bg-muted/20 py-1.5 pl-9 pr-8 text-xs text-foreground placeholder:text-muted-foreground/50 focus:border-green-500/40 focus:outline-none transition-colors"
           />
           {leagueSearch && (

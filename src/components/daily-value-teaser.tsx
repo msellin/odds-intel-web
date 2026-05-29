@@ -55,11 +55,11 @@ export function DailyValueTeaser({
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <Zap className="h-4 w-4 shrink-0 text-amber-400" />
-            <span className="text-sm text-muted-foreground truncate">
+            <span className="text-sm text-muted-foreground">
               <span className="font-medium text-foreground">
                 {totalCount} value {totalCount === 1 ? "opportunity" : "opportunities"}
               </span>{" "}
-              detected today
+              <span className="hidden sm:inline">detected </span>today
             </span>
           </div>
           <Link

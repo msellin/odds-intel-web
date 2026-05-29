@@ -443,7 +443,7 @@ export function ValueBetsLive({ bets, totalCount, userTier, oddsVerifiedAt, book
       {/* Compact header */}
       <div className="flex flex-wrap items-center gap-2.5">
         <Target className="h-4 w-4 text-primary shrink-0" />
-        <h1 className="font-mono text-lg font-bold tracking-tight">Value Bets</h1>
+        <h1 className="text-lg font-bold tracking-tight">Value Bets</h1>
         <Badge variant="secondary" className="font-mono text-xs">
           {userTier === "free" ? `1 of ${totalCount}` : filtered.length}
         </Badge>
@@ -500,14 +500,22 @@ export function ValueBetsLive({ bets, totalCount, userTier, oddsVerifiedAt, book
         </div>
       )}
 
-      {/* Legend */}
+      {/* Legend — collapsible on mobile */}
       {isPro && bets.length > 0 && (
-        <p className="text-[10px] text-muted-foreground">
-          Edge % = model probability minus book-implied probability.{" "}
-          <span className="text-amber-400/70 font-medium">KO soon</span> = kicks off in &lt;45 min.{" "}
-          <span className="text-muted-foreground font-medium">Odds moved</span> = live edge dropped below 2pp since placement.{" "}
-          <span className="text-purple-400/70 font-medium">ML</span> = market directly predicted by the trained model (1X2, O/U 2.5); others are derived.
-        </p>
+        <details className="group">
+          <summary className="flex cursor-pointer items-center gap-1 text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition-colors list-none">
+            <Info className="h-3 w-3 shrink-0" />
+            <span>Legend &amp; definitions</span>
+            <span className="ml-1 text-muted-foreground/40 group-open:hidden">▸</span>
+            <span className="ml-1 text-muted-foreground/40 hidden group-open:inline">▾</span>
+          </summary>
+          <p className="mt-1.5 text-[10px] text-muted-foreground leading-relaxed">
+            <span className="font-medium text-foreground/70">Edge %</span> = model probability minus book-implied probability.{" "}
+            <span className="text-amber-400/70 font-medium">KO soon</span> = kicks off in &lt;45 min.{" "}
+            <span className="text-muted-foreground font-medium">Odds moved</span> = live edge dropped below 2pp since placement.{" "}
+            <span className="text-purple-400/70 font-medium">ML</span> = market directly trained on (1X2, O/U 2.5); others are derived.
+          </p>
+        </details>
       )}
 
       {/* Main content */}

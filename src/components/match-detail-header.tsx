@@ -38,7 +38,16 @@ export function MatchDetailHeader({ match, initialSnapshot }: MatchDetailHeaderP
           <span className="text-foreground/70 truncate">{match.league}</span>
         </div>
         {match.dataGrade && (
-          <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-bold ${GRADE_STYLES[match.dataGrade]}`}>
+          <span
+            className={`inline-flex items-center rounded border px-2 py-0.5 text-xs font-bold ${GRADE_STYLES[match.dataGrade]}`}
+            title={
+              match.dataGrade === "A"
+                ? "Grade A — top league, full model coverage"
+                : match.dataGrade === "B"
+                ? "Grade B — good coverage, model predictions available"
+                : "Grade C — partial coverage, basic data only"
+            }
+          >
             Grade {match.dataGrade}
           </span>
         )}

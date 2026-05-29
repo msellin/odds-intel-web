@@ -26,7 +26,7 @@ export function SuperadminTierBarClient({
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex items-center gap-1 rounded-full border bg-background/95 px-3 py-1.5 text-xs shadow-lg backdrop-blur">
+    <div className="fixed top-16 right-2 z-50 flex items-center gap-1 rounded-full border bg-background/95 px-3 py-1.5 text-xs shadow-lg backdrop-blur">
       <span className="mr-1 text-muted-foreground">Preview:</span>
       {TIERS.map((t) => (
         <button

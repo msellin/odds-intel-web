@@ -414,7 +414,7 @@ export function MatchSignalSummary({
         <Zap className="h-4 w-4 text-primary" />
         <h3 className="text-sm font-semibold">Intelligence Summary</h3>
         <span className="ml-auto text-[10px] font-mono text-muted-foreground bg-muted/40 rounded px-1.5 py-0.5">
-          {totalSignals} signals
+          {totalSignals} signals analysed
         </span>
       </div>
 
