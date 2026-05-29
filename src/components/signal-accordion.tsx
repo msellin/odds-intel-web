@@ -107,6 +107,28 @@ const SEVERITY_DOT: Record<SignalSeverity, string> = {
   negative: "bg-rose-400",
 };
 
+// 3-segment strength meter: how many bars to fill (1-3)
+const SEVERITY_BARS: Record<SignalSeverity, number> = {
+  neutral: 0,
+  low: 1,
+  medium: 2,
+  high: 3,
+  negative: 3,
+};
+
+function StrengthMeter({ severity }: { severity: SignalSeverity }) {
+  const filled = SEVERITY_BARS[severity];
+  if (filled === 0) return null;
+  const color = severity === "negative" ? "bg-rose-400" : severity === "high" ? "bg-emerald-400" : "bg-amber-400";
+  return (
+    <div className="flex gap-0.5 items-center shrink-0">
+      {[1, 2, 3].map((i) => (
+        <span key={i} className={cn("h-[5px] w-3.5 rounded-sm", i <= filled ? color : "bg-white/[0.08]")} />
+      ))}
+    </div>
+  );
+}
+
 const SEVERITY_LABEL_COLOR: Record<SignalSeverity, string> = {
   neutral: "text-muted-foreground",
   low: "text-sky-400",
@@ -564,14 +586,17 @@ function AccordionSection({
                 <div key={i} className="flex items-start gap-3 px-4 py-2.5">
                   <span className={cn("mt-1 h-1.5 w-1.5 rounded-full shrink-0", SEVERITY_DOT[item.severity])} />
                   <div className="flex-1 min-w-0">
-                    <p className={cn("text-xs font-semibold", SEVERITY_LABEL_COLOR[item.severity])}>
-                      {item.icon} {item.label}
-                      {item.value && (
-                        <span className="font-mono font-normal text-muted-foreground ml-2">{item.value}</span>
-                      )}
-                    </p>
+                    <div className="flex items-center gap-2 justify-between">
+                      <p className={cn("text-xs font-semibold", SEVERITY_LABEL_COLOR[item.severity])}>
+                        {item.icon} {item.label}
+                      </p>
+                      <StrengthMeter severity={item.severity} />
+                    </div>
                     {item.description && (
                       <p className="text-[11px] text-muted-foreground mt-0.5">{item.description}</p>
+                    )}
+                    {item.value && (
+                      <p className="text-[10px] text-muted-foreground/40 font-mono mt-0.5">{item.value}</p>
                     )}
                   </div>
                 </div>
@@ -630,7 +655,14 @@ export function SignalAccordion({
 
   return (
     <div className="space-y-2">
-      <h3 className="text-sm font-semibold mb-1">Signal Groups</h3>
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="text-sm font-semibold">Signal Groups</h3>
+        <span className="flex items-center gap-2 text-[10px] text-muted-foreground/50">
+          <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400 inline-block" />value</span>
+          <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-amber-400 inline-block" />watch</span>
+          <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-rose-400 inline-block" />risk</span>
+        </span>
+      </div>
       {groups.map((group) => (
         <AccordionSection
           key={group.id}

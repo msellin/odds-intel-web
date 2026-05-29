@@ -410,11 +410,23 @@ export function MatchSignalSummary({
 
   return (
     <div className="rounded-xl border border-border/50 bg-card overflow-hidden">
-      <div className="flex items-center gap-2 px-4 pt-4 pb-3 border-b border-border/30">
+      <div className="flex items-center gap-2 px-4 pt-4 pb-2 border-b border-border/30">
         <Zap className="h-4 w-4 text-primary" />
         <h3 className="text-sm font-semibold">Intelligence Summary</h3>
         <span className="ml-auto text-[10px] font-mono text-muted-foreground bg-muted/40 rounded px-1.5 py-0.5">
-          {totalSignals} signals analysed
+          {totalSignals} signals
+        </span>
+      </div>
+      {/* Dot legend */}
+      <div className="flex items-center gap-3 px-4 py-1.5 border-b border-border/20">
+        <span className="flex items-center gap-1 text-[10px] text-muted-foreground/60">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 inline-block" />supports value
+        </span>
+        <span className="flex items-center gap-1 text-[10px] text-muted-foreground/60">
+          <span className="h-1.5 w-1.5 rounded-full bg-amber-400 inline-block" />caution
+        </span>
+        <span className="flex items-center gap-1 text-[10px] text-muted-foreground/60">
+          <span className="h-1.5 w-1.5 rounded-full bg-rose-400 inline-block" />erodes value
         </span>
       </div>
 

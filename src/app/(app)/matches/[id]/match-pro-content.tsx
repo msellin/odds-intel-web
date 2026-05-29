@@ -22,10 +22,10 @@ import { SignalTimeline } from "@/components/signal-timeline";
 import { WhyThisPick } from "@/components/why-this-pick";
 import { CLVTracker } from "@/components/clv-tracker";
 
-const LiveOddsChart = dynamic(() => import("@/components/live-odds-chart").then(m => ({ default: m.LiveOddsChart })), { ssr: false });
-const OddsMovement1X2 = dynamic(() => import("@/components/odds-movement-standalone").then(m => ({ default: m.OddsMovement1X2 })), { ssr: false });
-const OddsMovementOU25 = dynamic(() => import("@/components/odds-movement-standalone").then(m => ({ default: m.OddsMovementOU25 })), { ssr: false });
-const MatchDetailLive = dynamic(() => import("@/components/match-detail-live").then(m => ({ default: m.MatchDetailLive })), { ssr: false });
+const LiveOddsChart = dynamic(() => import("@/components/live-odds-chart").then(m => ({ default: m.LiveOddsChart })));
+const OddsMovement1X2 = dynamic(() => import("@/components/odds-movement-standalone").then(m => ({ default: m.OddsMovement1X2 })));
+const OddsMovementOU25 = dynamic(() => import("@/components/odds-movement-standalone").then(m => ({ default: m.OddsMovementOU25 })));
+const MatchDetailLive = dynamic(() => import("@/components/match-detail-live").then(m => ({ default: m.MatchDetailLive })));
 
 interface MatchProContentProps {
   matchId: string;
@@ -221,32 +221,63 @@ export async function ContextProContent({
 
   if (!seasonStats.home && !seasonStats.away) return null;
 
-  // Render season stats inline
-  const stats = [
-    { label: "PLAYED", home: seasonStats.home?.playedTotal, away: seasonStats.away?.playedTotal },
-    { label: "W / D / L", home: seasonStats.home ? `${seasonStats.home.winsTotal}/${seasonStats.home.drawsTotal}/${seasonStats.home.lossesTotal}` : null, away: seasonStats.away ? `${seasonStats.away.winsTotal}/${seasonStats.away.drawsTotal}/${seasonStats.away.lossesTotal}` : null },
-    { label: "GOALS FOR AVG", home: seasonStats.home?.goalsForAvg?.toFixed(2), away: seasonStats.away?.goalsForAvg?.toFixed(2) },
-    { label: "GOALS AGAINST AVG", home: seasonStats.home?.goalsAgainstAvg?.toFixed(2), away: seasonStats.away?.goalsAgainstAvg?.toFixed(2) },
-    { label: "CLEAN SHEET %", home: seasonStats.home?.cleanSheetPct != null ? `${Math.round(seasonStats.home.cleanSheetPct)}%` : null, away: seasonStats.away?.cleanSheetPct != null ? `${Math.round(seasonStats.away.cleanSheetPct)}%` : null },
-    { label: "FORMATION", home: seasonStats.home?.mostUsedFormation, away: seasonStats.away?.mostUsedFormation },
-  ];
+  // When both sides have data, show side-by-side comparison
+  if (seasonStats.home && seasonStats.away) {
+    const stats = [
+      { label: "PLAYED", home: seasonStats.home.playedTotal, away: seasonStats.away.playedTotal },
+      { label: "W / D / L", home: `${seasonStats.home.winsTotal}/${seasonStats.home.drawsTotal}/${seasonStats.home.lossesTotal}`, away: `${seasonStats.away.winsTotal}/${seasonStats.away.drawsTotal}/${seasonStats.away.lossesTotal}` },
+      { label: "GOALS FOR AVG", home: seasonStats.home.goalsForAvg?.toFixed(2), away: seasonStats.away.goalsForAvg?.toFixed(2) },
+      { label: "GOALS AGAINST AVG", home: seasonStats.home.goalsAgainstAvg?.toFixed(2), away: seasonStats.away.goalsAgainstAvg?.toFixed(2) },
+      { label: "CLEAN SHEET %", home: seasonStats.home.cleanSheetPct != null ? `${Math.round(seasonStats.home.cleanSheetPct)}%` : null, away: seasonStats.away.cleanSheetPct != null ? `${Math.round(seasonStats.away.cleanSheetPct)}%` : null },
+      { label: "FORMATION", home: seasonStats.home.mostUsedFormation, away: seasonStats.away.mostUsedFormation },
+    ];
+    return (
+      <div className="rounded-xl border border-border/50 bg-card p-4">
+        <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+          <span className="text-base">📊</span>
+          Team Season Stats
+        </h3>
+        <div className="space-y-0">
+          <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 pb-2">
+            <span className="truncate max-w-[120px]">{publicMatch.homeTeam}</span>
+            <span className="truncate max-w-[120px] text-right">{publicMatch.awayTeam}</span>
+          </div>
+          {stats.map(({ label, home, away }) => (
+            <div key={label} className="flex items-center justify-between py-1.5 border-t border-white/[0.04]">
+              <span className="font-mono text-xs text-foreground">{home ?? "—"}</span>
+              <span className="text-[10px] text-muted-foreground/60 uppercase tracking-wide">{label}</span>
+              <span className="font-mono text-xs text-foreground text-right">{away ?? "—"}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // When only one team has data, show a single-team card + a notice for the missing side
+  const availableTeam = seasonStats.home ? publicMatch.homeTeam : publicMatch.awayTeam;
+  const missingTeam = seasonStats.home ? publicMatch.awayTeam : publicMatch.homeTeam;
+  const s = (seasonStats.home ?? seasonStats.away)!;
 
   return (
-    <div className="rounded-xl border border-border/50 bg-card p-4">
-      <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+    <div className="rounded-xl border border-border/50 bg-card p-4 space-y-3">
+      <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
         <span className="text-base">📊</span>
-        Team Season Stats
+        Season Stats · {availableTeam}
       </h3>
+      <p className="text-[11px] text-muted-foreground/60">Season stats unavailable for {missingTeam} this season.</p>
       <div className="space-y-0">
-        <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 pb-2">
-          <span className="truncate max-w-[120px]">{publicMatch.homeTeam}</span>
-          <span className="truncate max-w-[120px] text-right">{publicMatch.awayTeam}</span>
-        </div>
-        {stats.map(({ label, home, away }) => (
+        {[
+          { label: "PLAYED", value: s.playedTotal },
+          { label: "W / D / L", value: `${s.winsTotal}/${s.drawsTotal}/${s.lossesTotal}` },
+          { label: "GOALS FOR AVG", value: s.goalsForAvg?.toFixed(2) },
+          { label: "GOALS AGAINST AVG", value: s.goalsAgainstAvg?.toFixed(2) },
+          { label: "CLEAN SHEET %", value: s.cleanSheetPct != null ? `${Math.round(s.cleanSheetPct)}%` : null },
+          { label: "FORMATION", value: s.mostUsedFormation },
+        ].map(({ label, value }) => (
           <div key={label} className="flex items-center justify-between py-1.5 border-t border-white/[0.04]">
-            <span className="font-mono text-xs text-foreground">{home ?? "—"}</span>
             <span className="text-[10px] text-muted-foreground/60 uppercase tracking-wide">{label}</span>
-            <span className="font-mono text-xs text-foreground text-right">{away ?? "—"}</span>
+            <span className="font-mono text-xs text-foreground">{value ?? "—"}</span>
           </div>
         ))}
       </div>
