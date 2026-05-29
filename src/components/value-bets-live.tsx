@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Target, Lock, Info } from "lucide-react";
 import { BetExplainButton } from "@/components/bet-explain-button";
 import {
@@ -131,9 +131,11 @@ function BetCard({
   bookOddsEntry?: BookOddsEntry;
   botRecentRoi?: Record<string, { roi: number; settled: number }>;
 }) {
-  const kickoffSoon = isKickoffSoon(bet.kickoff, bet.result);
-  const matchLive = isMatchLive(bet.kickoff, bet.result);
-  const koLabel = kickoffLabel(bet.kickoff, bet.result);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  const kickoffSoon = mounted && isKickoffSoon(bet.kickoff, bet.result);
+  const matchLive = mounted && isMatchLive(bet.kickoff, bet.result);
+  const koLabel = mounted ? kickoffLabel(bet.kickoff, bet.result) : null;
   const koTime = formatKickoffTime(bet.kickoff);
   const oddsMoved = !!bookOddsEntry && isOddsMoved(bookOddsEntry, bet.modelProb, bet.result);
   const line = lineDirection(bookOddsEntry, bet.odds, bet.result);
@@ -304,7 +306,7 @@ function FreshnessChip({ verifiedAt }: { verifiedAt: string }) {
     cls = "text-red-500 border-red-500/20 bg-red-500/10";
   }
   return (
-    <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-medium", cls)}>
+    <span suppressHydrationWarning className={cn("rounded-full border px-2 py-0.5 text-[10px] font-medium", cls)}>
       Odds verified {label}
     </span>
   );
@@ -747,11 +749,13 @@ function BetRow({
   isElite: boolean;
   bookOddsEntry?: BookOddsEntry;
 }) {
-  const kickoffSoon = isKickoffSoon(bet.kickoff, bet.result);
-  const matchLive = isMatchLive(bet.kickoff, bet.result);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  const kickoffSoon = mounted && isKickoffSoon(bet.kickoff, bet.result);
+  const matchLive = mounted && isMatchLive(bet.kickoff, bet.result);
   const oddsMoved = !!bookOddsEntry && isOddsMoved(bookOddsEntry, bet.modelProb, bet.result);
   const line = lineDirection(bookOddsEntry, bet.odds, bet.result);
-  const koLabel = kickoffLabel(bet.kickoff, bet.result);
+  const koLabel = mounted ? kickoffLabel(bet.kickoff, bet.result) : null;
   const koTime = formatKickoffTime(bet.kickoff);
   return (
     <tr className={cn(
