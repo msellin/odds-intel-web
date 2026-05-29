@@ -419,13 +419,13 @@ export function MatchSignalSummary({
       </div>
       {/* Dot legend */}
       <div className="flex items-center gap-3 px-4 py-1.5 border-b border-border/20">
-        <span className="flex items-center gap-1 text-[10px] text-muted-foreground/60">
+        <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 inline-block" />supports value
         </span>
-        <span className="flex items-center gap-1 text-[10px] text-muted-foreground/60">
+        <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
           <span className="h-1.5 w-1.5 rounded-full bg-amber-400 inline-block" />caution
         </span>
-        <span className="flex items-center gap-1 text-[10px] text-muted-foreground/60">
+        <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
           <span className="h-1.5 w-1.5 rounded-full bg-rose-400 inline-block" />erodes value
         </span>
       </div>

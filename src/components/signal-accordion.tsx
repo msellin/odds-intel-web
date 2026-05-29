@@ -596,7 +596,7 @@ function AccordionSection({
                       <p className="text-[11px] text-muted-foreground mt-0.5">{item.description}</p>
                     )}
                     {item.value && (
-                      <p className="text-[10px] text-muted-foreground/40 font-mono mt-0.5">{item.value}</p>
+                      <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{item.value}</p>
                     )}
                   </div>
                 </div>
@@ -657,7 +657,7 @@ export function SignalAccordion({
     <div className="space-y-2">
       <div className="flex items-center justify-between mb-1">
         <h3 className="text-sm font-semibold">Signal Groups</h3>
-        <span className="flex items-center gap-2 text-[10px] text-muted-foreground/50">
+        <span className="flex items-center gap-2 text-[10px] text-muted-foreground">
           <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400 inline-block" />value</span>
           <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-amber-400 inline-block" />watch</span>
           <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-rose-400 inline-block" />risk</span>

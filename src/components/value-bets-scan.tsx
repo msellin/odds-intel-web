@@ -171,7 +171,7 @@ function EdgeBar({ modelProb, liveImplied }: { modelProb: number; liveImplied: n
         <div className="absolute inset-y-0 left-0 bg-white/[0.07] rounded-full" style={{ width: `${iPct}%` }} />
         <div className="absolute inset-y-0 rounded-full bg-emerald-500/50" style={{ left: `${iPct}%`, width: `${ePct}%` }} />
       </div>
-      <p className="text-[10px] text-muted-foreground/50 mt-1.5">
+      <p className="text-[10px] text-muted-foreground mt-1.5">
         Fair price {fairOdds} · the gap between model probability and market-implied probability is the edge.
       </p>
     </div>
@@ -233,7 +233,7 @@ function ExpandedPanel({
                 <td className="py-1.5 text-right font-medium text-emerald-400">
                   {fmtEdge(liveEdge ?? bet.edge)}
                   {liveEdge !== null && bet.odds > 0 && Math.abs(liveEdge - bet.edge) > 0.003 && (
-                    <span className="ml-1.5 text-[10px] text-muted-foreground/50">was {fmtEdge(bet.edge)} at post</span>
+                    <span className="ml-1.5 text-[10px] text-muted-foreground">was {fmtEdge(bet.edge)} at post</span>
                   )}
                 </td>
               </tr>
@@ -378,7 +378,7 @@ function ValueBetRow({
               <ConsensusDots count={bet.botCount} />
             </div>
             {oddsLine && (
-              <p className="text-[11px] text-muted-foreground/60">{oddsLine}</p>
+              <p className="text-[11px] text-muted-foreground">{oddsLine}</p>
             )}
           </div>
 
@@ -536,8 +536,8 @@ export function ValueBetsScan({
       {!bannerDismissed && (
         <div className="flex items-center justify-between gap-2 rounded-lg border border-border/40 bg-muted/10 px-3 py-2 text-[11px] text-muted-foreground">
           <span>{totalCount} bets sorted by edge · tap any row to see the math</span>
-          <button onClick={dismissBanner} className="shrink-0 hover:text-foreground transition-colors">
-            <X className="h-3.5 w-3.5" />
+          <button onClick={dismissBanner} aria-label="Dismiss" className="shrink-0 hover:text-foreground transition-colors">
+            <X className="h-3.5 w-3.5" aria-hidden />
           </button>
         </div>
       )}

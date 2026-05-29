@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { createSupabaseServer } from "@/lib/supabase-server";
 
 export const metadata: Metadata = {
@@ -28,7 +29,6 @@ import { RetiredStrategiesSection } from "@/components/retired-strategies-sectio
 import { PerformanceExtras } from "@/components/performance-extras";
 
 // ── Server-side cache → public stats fallback ────────────────────────────────
-// Used when toggle is off or for Free users (who don't get aggregateBets).
 
 function buildCachedBotStats(
   cache: Awaited<ReturnType<typeof getDashboardCache>>,
@@ -95,10 +95,51 @@ function sanitizeBets(bets: LiveBet[], isElite: boolean): SanitizedBotBet[] {
   }));
 }
 
+// ── Streaming component for Pro bets (slow query) ─────────────────────────────
+// Rendered inside Suspense so the cached hero/leaderboard shows immediately.
+
+interface ProSectionProps {
+  isPro: boolean;
+  isElite: boolean;
+  trackStats: Awaited<ReturnType<typeof getTrackRecordStats>>;
+  cache: Awaited<ReturnType<typeof getDashboardCache>>;
+  cachedBots: PublicBotStat[];
+  botsDB: Awaited<ReturnType<typeof getAllBotsFromDB>>;
+  modelV2Stats: ModelV2Stats | null;
+}
+
+async function ProPerformanceSection({
+  isPro,
+  isElite,
+  trackStats,
+  cache,
+  cachedBots,
+  botsDB,
+  modelV2Stats,
+}: ProSectionProps) {
+  const allBetsRaw = await getAllBets();
+  const sanitizedBets = sanitizeBets(allBetsRaw, isElite);
+
+  return (
+    <PerformanceClient
+      trackStats={trackStats}
+      cache={cache}
+      cachedBots={cachedBots}
+      isPro={isPro}
+      isElite={isElite}
+      allBets={sanitizedBets}
+      aggregateBets={allBetsRaw}
+      botsDB={botsDB}
+      modelV2Stats={modelV2Stats}
+    />
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default async function PerformancePage() {
-  const [authResult, trackStats, cache, extras, modelV2Stats] = await Promise.all([
+  // All fast fetches run in parallel — botsDB moved here since it doesn't need isPro.
+  const [authResult, trackStats, cache, extras, modelV2Stats, botsDB] = await Promise.all([
     (async () => {
       const supabase = await createSupabaseServer();
       const {
@@ -111,6 +152,7 @@ export default async function PerformancePage() {
     getDashboardCache(),
     getPublicPerformanceExtras(),
     getModelV2Stats(),
+    getAllBotsFromDB(),
   ]);
 
   const { isPro, isElite } = authResult as {
@@ -119,18 +161,10 @@ export default async function PerformancePage() {
     is_superadmin: boolean;
   };
 
-  // Pro+ gets raw bets for the toggle to recompute aggregates client-side
-  // (BOT-QUAL-FILTER-DUAL). Free gets last 10 settled for the activity strip.
-  // botsDB always fetched (small query) so RetiredStrategiesSection can filter
-  // against live retired_at rather than relying on stale dashboard_cache.
-  const [allBetsRaw, botsDB, recentSettled] = await Promise.all([
-    isPro ? getAllBets() : Promise.resolve(null),
-    getAllBotsFromDB(),
-    !isPro ? getRecentSettledBets(10) : Promise.resolve(null),
-  ]);
+  // Free users: fetch last 10 settled bets (small, fast).
+  const recentSettled = !isPro ? await getRecentSettledBets(10) : null;
 
   const cachedBots = buildCachedBotStats(cache, botsDB, isPro, isElite).filter(b => b.maturityLabel !== 'experimental');
-  const sanitizedBets = allBetsRaw ? sanitizeBets(allBetsRaw, isElite) : null;
 
   // Filter retired_bot_breakdown against live DB so un-retired bots disappear
   // immediately without waiting for tonight's dashboard_cache refresh.
@@ -139,19 +173,38 @@ export default async function PerformancePage() {
     liveRetiredNames.has(r.name)
   ) ?? null;
 
+  // Shared cached fallback props — used both as the Suspense fallback for Pro
+  // and as the direct render for Free users.
+  const cachedClientProps = {
+    trackStats,
+    cache,
+    cachedBots,
+    isPro,
+    isElite,
+    allBets: null as SanitizedBotBet[] | null,
+    aggregateBets: null as LiveBet[] | null,
+    botsDB,
+    modelV2Stats,
+  };
+
   return (
     <>
-      <PerformanceClient
-        trackStats={trackStats}
-        cache={cache}
-        cachedBots={cachedBots}
-        isPro={isPro}
-        isElite={isElite}
-        allBets={sanitizedBets}
-        aggregateBets={allBetsRaw}
-        botsDB={botsDB}
-        modelV2Stats={modelV2Stats}
-      />
+      {isPro ? (
+        // Pro: show cached hero immediately, stream in full bet data behind Suspense.
+        <Suspense fallback={<PerformanceClient {...cachedClientProps} />}>
+          <ProPerformanceSection
+            isPro={isPro}
+            isElite={isElite}
+            trackStats={trackStats}
+            cache={cache}
+            cachedBots={cachedBots}
+            botsDB={botsDB}
+            modelV2Stats={modelV2Stats}
+          />
+        </Suspense>
+      ) : (
+        <PerformanceClient {...cachedClientProps} />
+      )}
 
       {/* Cumulative P&L chart + streak badges + calibration table — visible to all tiers. */}
       <PerformanceExtras data={extras} />
