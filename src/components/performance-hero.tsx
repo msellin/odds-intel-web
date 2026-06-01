@@ -29,6 +29,16 @@ export function PerformanceHero({ stats, cache, modelV2Stats, activeBotCount, re
     r != null ? `${r >= 0 ? "+" : ""}${r.toFixed(1)}%` : "—";
   const showAllTime = allTimeRoi != null && activeRoi != null && Math.abs(activeRoi - allTimeRoi) >= 0.1;
 
+  // PERF-HERO-COHORT-SPLIT (2026-06-01): last-30d ROI by cohort. Falls back to
+  // the combined active_roi_pct if cohort fields are absent (pre-migration-157
+  // cache rows). When both cohort values exist, the combined tile is replaced
+  // by two tiles below.
+  const prematchRoi      = cache?.prematch_roi_pct ?? null;
+  const prematchSettled  = cache?.prematch_settled_bets ?? null;
+  const inplayRoi        = cache?.inplay_roi_pct ?? null;
+  const inplaySettled    = cache?.inplay_settled_bets ?? null;
+  const hasCohortSplit   = prematchRoi != null && inplayRoi != null;
+
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold tracking-tight">Performance</h1>
@@ -130,24 +140,66 @@ export function PerformanceHero({ stats, cache, modelV2Stats, activeBotCount, re
           </CardContent>
         </Card>
 
-        <Card className="border-border/50 bg-card/80 sm:col-span-2">
-          <CardHeader className="pb-1 pt-3 px-4">
-            <CardTitle className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              <BarChart2 className="h-3 w-3" />
-              System ROI
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-3 pt-0">
-            <span className={`font-mono text-2xl font-bold tabular-nums ${
-              activeRoi == null ? "text-muted-foreground" : activeRoi >= 0 ? "text-emerald-400" : "text-red-400"
-            }`}>
-              {fmtRoi(activeRoi)}
-            </span>
-            <p className="text-[10px] text-muted-foreground mt-1">
-              active strategies{showAllTime ? ` · incl. retired: ${fmtRoi(allTimeRoi)}` : ""}
-            </p>
-          </CardContent>
-        </Card>
+        {hasCohortSplit ? (
+          <>
+            <Card className="border-border/50 bg-card/80">
+              <CardHeader className="pb-1 pt-3 px-4">
+                <CardTitle className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  <BarChart2 className="h-3 w-3" />
+                  Pre-match ROI · 30d
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-3 pt-0">
+                <span className={`font-mono text-2xl font-bold tabular-nums ${
+                  prematchRoi! >= 0 ? "text-emerald-400" : "text-red-400"
+                }`}>
+                  {fmtRoi(prematchRoi)}
+                </span>
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  {prematchSettled != null ? `${prematchSettled.toLocaleString()} bets · ` : ""}before kickoff
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/50 bg-card/80">
+              <CardHeader className="pb-1 pt-3 px-4">
+                <CardTitle className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  <BarChart2 className="h-3 w-3" />
+                  In-play ROI · 30d
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-3 pt-0">
+                <span className={`font-mono text-2xl font-bold tabular-nums ${
+                  inplayRoi! >= 0 ? "text-emerald-400" : "text-red-400"
+                }`}>
+                  {fmtRoi(inplayRoi)}
+                </span>
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  {inplaySettled != null ? `${inplaySettled.toLocaleString()} bets · ` : ""}during the match
+                </p>
+              </CardContent>
+            </Card>
+          </>
+        ) : (
+          <Card className="border-border/50 bg-card/80 sm:col-span-2">
+            <CardHeader className="pb-1 pt-3 px-4">
+              <CardTitle className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                <BarChart2 className="h-3 w-3" />
+                System ROI
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-3 pt-0">
+              <span className={`font-mono text-2xl font-bold tabular-nums ${
+                activeRoi == null ? "text-muted-foreground" : activeRoi >= 0 ? "text-emerald-400" : "text-red-400"
+              }`}>
+                {fmtRoi(activeRoi)}
+              </span>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                active strategies{showAllTime ? ` · incl. retired: ${fmtRoi(allTimeRoi)}` : ""}
+              </p>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* ── Model v2 era callout ─────────────────────────────────────────── */}

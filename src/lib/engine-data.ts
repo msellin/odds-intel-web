@@ -3031,6 +3031,20 @@ export interface DashboardCache {
   active_roi_pct: number | null;
   active_avg_clv: number | null;
   retired_bot_breakdown: RetiredBotBreakdownRow[] | null;
+  // PERF-HERO-COHORT-SPLIT (2026-06-01): last-30d ROI split by cohort so the
+  // hero can render separate Pre-match / In-play tiles. Nullable on legacy
+  // rows (pre-migration 157) and on empty cohorts.
+  prematch_settled_bets: number | null;
+  prematch_won_bets: number | null;
+  prematch_total_staked: number | null;
+  prematch_total_pnl: number | null;
+  prematch_roi_pct: number | null;
+  prematch_avg_clv: number | null;
+  inplay_settled_bets: number | null;
+  inplay_won_bets: number | null;
+  inplay_total_staked: number | null;
+  inplay_total_pnl: number | null;
+  inplay_roi_pct: number | null;
 }
 
 export async function getDashboardCache(): Promise<DashboardCache | null> {
