@@ -218,6 +218,48 @@ export function PerformanceHero({ stats, cache, modelV2Stats, activeBotCount, re
           </span>
         )}
       </div>
+
+      {/* ── Next model upgrade callout (PERF-HERO-NEXT-MODEL 2026-06-01) ─── */}
+      <NextModelCallout summary={cache?.upcoming_model_summary ?? null} />
+    </div>
+  );
+}
+
+function NextModelCallout({
+  summary,
+}: {
+  summary: DashboardCache["upcoming_model_summary"];
+}) {
+  if (!summary) return null;
+  const deltas = summary.group_deltas ?? {};
+  const headlineHead = Object.entries(deltas)
+    .filter(([, d]) => d < -1)
+    .sort(([, a], [, b]) => a - b)[0];
+
+  const fmtPct = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
+  const fmtMarket = (k: string) =>
+    k === "1x2" ? "1X2" : k === "ah" ? "AH" : k === "ou" ? "O/U" : k.toUpperCase();
+  const trainedDate = summary.trained_at
+    ? new Date(summary.trained_at).toLocaleDateString("en", { month: "short", day: "numeric" })
+    : null;
+
+  return (
+    <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 px-4 py-2 flex items-center gap-3 flex-wrap">
+      <span className="text-[10px] font-bold uppercase tracking-wider text-sky-400">
+        Next upgrade{trainedDate ? ` · trained ${trainedDate}` : ""}
+      </span>
+      {headlineHead && (
+        <span className="text-[11px] text-muted-foreground">
+          <span className="font-mono font-semibold text-sky-300">
+            {fmtMarket(headlineHead[0])} {fmtPct(headlineHead[1])} log-loss
+          </span>{" "}
+          in offline tests
+        </span>
+      )}
+      <span className="ml-auto text-[10px] font-mono text-muted-foreground">
+        {summary.markets_better} better / {summary.markets_worse} worse
+        {summary.holdout_n ? ` · n=${summary.holdout_n.toLocaleString()}` : ""} · promoting after validation window
+      </span>
     </div>
   );
 }

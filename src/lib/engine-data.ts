@@ -3063,6 +3063,20 @@ export interface DashboardCache {
     clv: number;
     pick_time: string | null;
   }> | null;
+  // PERF-HERO-NEXT-MODEL (2026-06-01): summary of the latest unpromoted
+  // candidate model vs production from model_versions.cv_metrics. Drives the
+  // "Next upgrade" callout on /performance. Null when no candidate is
+  // available or candidate has zero markets improving.
+  upcoming_model_summary: {
+    candidate: string;
+    production: string;
+    trained_at: string | null;
+    markets_better: number;
+    markets_worse: number;
+    markets_tied: number;
+    group_deltas: Record<string, number>; // e.g. { "1x2": -10.0, "ah": -2.6 }
+    holdout_n: number | null;
+  } | null;
 }
 
 export async function getDashboardCache(): Promise<DashboardCache | null> {
