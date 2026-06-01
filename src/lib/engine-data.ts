@@ -3045,6 +3045,10 @@ export interface DashboardCache {
   inplay_total_staked: number | null;
   inplay_total_pnl: number | null;
   inplay_roi_pct: number | null;
+  // PERF-HERO-EQUITY-SPARKLINE (2026-06-01): daily cumulative P&L for last
+  // 30d on active+non-experimental bots, ascending by date. Nullable on
+  // legacy cache rows (pre-migration 158).
+  daily_pnl_curve_30d: Array<{ d: string; cum: number }> | null;
 }
 
 export async function getDashboardCache(): Promise<DashboardCache | null> {

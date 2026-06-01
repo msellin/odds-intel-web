@@ -1,6 +1,7 @@
 import { TrendingUp, Bot, BarChart2, Clock, Archive } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { TrackRecordStats, DashboardCache, ModelV2Stats } from "@/lib/engine-data";
+import { EquitySparkline } from "@/components/equity-sparkline";
 
 interface Props {
   stats: TrackRecordStats;
@@ -201,6 +202,9 @@ export function PerformanceHero({ stats, cache, modelV2Stats, activeBotCount, re
           </Card>
         )}
       </div>
+
+      {/* ── Equity sparkline ─────────────────────────────────────────────── */}
+      <EquitySparkline curve={cache?.daily_pnl_curve_30d ?? null} />
 
       {/* ── Model v2 era callout ─────────────────────────────────────────── */}
       <div className="rounded-lg border border-purple-500/20 bg-purple-500/5 px-4 py-2 flex items-center gap-3 flex-wrap">
