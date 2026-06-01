@@ -164,11 +164,21 @@ export default async function PerformancePage() {
   // Free users: fetch last 10 settled bets (small, fast).
   const recentSettled = !isPro ? await getRecentSettledBets(10) : null;
 
-  const cachedBots = buildCachedBotStats(cache, botsDB, isPro, isElite).filter(b => b.maturityLabel !== 'experimental');
+  // Live retirement state. Drives two cache-staleness fixes below so the
+  // /performance page reflects a fresh retirement without waiting up to 30min
+  // for the next dashboard_cache rebuild.
+  const liveRetiredNames = new Set(botsDB.filter((b) => !!b.retiredAt).map((b) => b.name));
+
+  // Drop retired bots from the active leaderboard. The settlement.py
+  // bot_breakdown query already filters retired bots at write time, but a bot
+  // retired between cache rebuilds would otherwise still show in the active
+  // list. Same pattern as the retired_breakdown filter below, inverse direction.
+  const cachedBots = buildCachedBotStats(cache, botsDB, isPro, isElite)
+    .filter(b => b.maturityLabel !== 'experimental')
+    .filter(b => !liveRetiredNames.has(b.name));
 
   // Filter retired_bot_breakdown against live DB so un-retired bots disappear
   // immediately without waiting for tonight's dashboard_cache refresh.
-  const liveRetiredNames = new Set(botsDB.filter((b) => !!b.retiredAt).map((b) => b.name));
   const retiredBreakdown = (cache?.retired_bot_breakdown ?? null)?.filter((r) =>
     liveRetiredNames.has(r.name)
   ) ?? null;
