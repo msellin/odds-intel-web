@@ -157,7 +157,7 @@ export function PerformanceHero({ stats, cache, modelV2Stats, activeBotCount, re
                   {fmtRoi(prematchRoi)}
                 </span>
                 <p className="text-[10px] text-muted-foreground mt-1">
-                  {prematchSettled != null ? `${prematchSettled.toLocaleString()} bets · ` : ""}before kickoff
+                  {prematchSettled != null ? `${prematchSettled.toLocaleString()} bets · ` : ""}before kickoff · last 30d
                 </p>
               </CardContent>
             </Card>
@@ -176,7 +176,7 @@ export function PerformanceHero({ stats, cache, modelV2Stats, activeBotCount, re
                   {fmtRoi(inplayRoi)}
                 </span>
                 <p className="text-[10px] text-muted-foreground mt-1">
-                  {inplaySettled != null ? `${inplaySettled.toLocaleString()} bets · ` : ""}during the match
+                  {inplaySettled != null ? `${inplaySettled.toLocaleString()} bets · ` : ""}during the match · last 30d
                 </p>
               </CardContent>
             </Card>

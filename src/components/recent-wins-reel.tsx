@@ -16,6 +16,40 @@ interface Props {
   wins: RecentWin[] | null;
 }
 
+// Country name → flag emoji. Falls back to globe for unmapped / "World" / null.
+// Names match the `leagues.country` column values (English spelling, hyphens
+// for two-word countries like "United-Arab-Emirates").
+const COUNTRY_FLAGS: Record<string, string> = {
+  "Argentina": "🇦🇷", "Australia": "🇦🇺", "Austria": "🇦🇹",
+  "Belgium": "🇧🇪", "Brazil": "🇧🇷", "Bulgaria": "🇧🇬",
+  "Canada": "🇨🇦", "Chile": "🇨🇱", "China": "🇨🇳", "Colombia": "🇨🇴",
+  "Croatia": "🇭🇷", "Cyprus": "🇨🇾", "Czech-Republic": "🇨🇿",
+  "Denmark": "🇩🇰", "Ecuador": "🇪🇨", "Egypt": "🇪🇬",
+  "England": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "Estonia": "🇪🇪", "Ethiopia": "🇪🇹",
+  "Finland": "🇫🇮", "France": "🇫🇷", "Georgia": "🇬🇪",
+  "Germany": "🇩🇪", "Greece": "🇬🇷", "Hungary": "🇭🇺",
+  "Iceland": "🇮🇸", "India": "🇮🇳", "Indonesia": "🇮🇩",
+  "Ireland": "🇮🇪", "Israel": "🇮🇱", "Italy": "🇮🇹",
+  "Japan": "🇯🇵", "Kazakhstan": "🇰🇿", "Latvia": "🇱🇻",
+  "Lithuania": "🇱🇹", "Malaysia": "🇲🇾", "Mexico": "🇲🇽",
+  "Morocco": "🇲🇦", "Netherlands": "🇳🇱", "New-Zealand": "🇳🇿",
+  "Northern-Ireland": "🇬🇧", "Norway": "🇳🇴", "Paraguay": "🇵🇾",
+  "Peru": "🇵🇪", "Poland": "🇵🇱", "Portugal": "🇵🇹",
+  "Romania": "🇷🇴", "Russia": "🇷🇺", "Saudi-Arabia": "🇸🇦",
+  "Scotland": "🏴󠁧󠁢󠁳󠁣󠁴󠁿", "Serbia": "🇷🇸", "Singapore": "🇸🇬",
+  "Slovakia": "🇸🇰", "Slovenia": "🇸🇮", "South-Africa": "🇿🇦",
+  "South-Korea": "🇰🇷", "Spain": "🇪🇸", "Sweden": "🇸🇪",
+  "Switzerland": "🇨🇭", "Thailand": "🇹🇭", "Turkey": "🇹🇷",
+  "Ukraine": "🇺🇦", "United-Arab-Emirates": "🇦🇪", "Uruguay": "🇺🇾",
+  "USA": "🇺🇸", "Venezuela": "🇻🇪", "Vietnam": "🇻🇳",
+  "Wales": "🏴󠁧󠁢󠁷󠁬󠁳󠁿", "World": "🌍",
+};
+
+function flagFor(country: string | null): string {
+  if (!country) return "🌍";
+  return COUNTRY_FLAGS[country] ?? "🌍";
+}
+
 function marketLabel(m: string, s: string): string {
   if (m === "1x2") {
     if (s.toLowerCase() === "home") return "Home win";
@@ -51,6 +85,7 @@ export function RecentWinsReel({ wins }: Props) {
             </div>
             {w.country && (
               <div className="text-[10px] text-muted-foreground truncate" title={`${w.country} · ${w.league ?? ""}`}>
+                <span className="mr-1" aria-hidden="true">{flagFor(w.country)}</span>
                 {w.country}{w.league ? ` · ${w.league}` : ""}
               </div>
             )}
