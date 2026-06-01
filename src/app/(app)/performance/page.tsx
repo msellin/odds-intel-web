@@ -27,6 +27,7 @@ import { ClvEducation } from "@/components/clv-education";
 import { TrackRecordFooterCta } from "@/components/track-record-footer-cta";
 import { RetiredStrategiesSection } from "@/components/retired-strategies-section";
 import { PerformanceExtras } from "@/components/performance-extras";
+import { RecentWinsReel } from "@/components/recent-wins-reel";
 
 // ── Server-side cache → public stats fallback ────────────────────────────────
 
@@ -215,6 +216,9 @@ export default async function PerformancePage() {
       ) : (
         <PerformanceClient {...cachedClientProps} />
       )}
+
+      {/* PERF-HERO-RECENT-WINS (2026-06-01): concrete "model called these and beat the closing line" stories. */}
+      <RecentWinsReel wins={cache?.recent_top_wins ?? null} />
 
       {/* Cumulative P&L chart + streak badges + calibration table — visible to all tiers. */}
       <PerformanceExtras data={extras} />

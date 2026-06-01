@@ -3049,6 +3049,20 @@ export interface DashboardCache {
   // 30d on active+non-experimental bots, ascending by date. Nullable on
   // legacy cache rows (pre-migration 158).
   daily_pnl_curve_30d: Array<{ d: string; cum: number }> | null;
+  // PERF-HERO-RECENT-WINS (2026-06-01): top 8 deduped wins from last 14d by
+  // CLV beat. Concrete "model picked these and was right" stories for the
+  // public page. Nullable on legacy cache rows (pre-migration 159).
+  recent_top_wins: Array<{
+    home: string;
+    away: string;
+    league: string | null;
+    country: string | null;
+    market: string;
+    selection: string;
+    odds: number;
+    clv: number;
+    pick_time: string | null;
+  }> | null;
 }
 
 export async function getDashboardCache(): Promise<DashboardCache | null> {
