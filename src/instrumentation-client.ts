@@ -30,7 +30,12 @@ if (dsn) {
       Sentry.feedbackIntegration({
         colorScheme: "dark",                  // matches our shell
         showBranding: false,                  // we're a self-serve product
-        autoInject: true,                     // floats the right-edge tab
+        // FEEDBACK-BUTTON-GLOBAL: autoInject was unreliable across
+        // App-Router SPA navigation (logged-in routes never showed the
+        // button). We now render <FeedbackButton /> in the root layout
+        // and bind it via Sentry.getFeedback()?.attachTo() — guaranteed
+        // presence on every page.
+        autoInject: false,
         buttonLabel: "Give feedback",
         submitButtonLabel: "Send",
         cancelButtonLabel: "Cancel",

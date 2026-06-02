@@ -7,6 +7,7 @@ import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { CookieBanner } from "@/components/cookie-banner";
 import { MetaPixel } from "@/components/meta-pixel";
+import { FeedbackButton } from "@/components/feedback-button";
 
 const inter = Inter({
   variable: "--font-sans",
@@ -127,6 +128,7 @@ export default function RootLayout({
           <PostHogProvider>{children}</PostHogProvider>
         </AuthProvider>
         <CookieBanner />
+        <FeedbackButton />
         {process.env.NEXT_PUBLIC_META_PIXEL_ID && (
           <MetaPixel pixelId={process.env.NEXT_PUBLIC_META_PIXEL_ID} />
         )}
