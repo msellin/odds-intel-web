@@ -201,10 +201,21 @@ function RankCell({
   );
 }
 
+// WC-GHOSTS-LAYER-2 (2026-06-02): anonymous AI variants are stored with
+// ai_label = "Player NNN" (3-digit zero-padded). They render WITHOUT the
+// "AI" badge and with extra-muted text so they look like rank-and-file
+// players, not labelled bots. Named strategies (Elite AI / Pro AI / etc.)
+// keep the AI badge so the "beat the AI" narrative is intact.
+function isAnonymousVariant(aiLabel: string | undefined | null): boolean {
+  if (!aiLabel) return false;
+  return /^Player \d+$/.test(aiLabel);
+}
+
 function LeaderboardRow({ e, i, usePercentile, isPinnedView }: RowProps) {
   const rank = e.currentRank ?? i + 1;
   const rowKey = isPinnedView ? `pin-${e.key}` : e.key;
   const name = e.isAi ? e.aiLabel : (e.displayName ?? "Anonymous player");
+  const anonymousVariant = e.isAi && isAnonymousVariant(e.aiLabel);
 
   return (
     <tr
@@ -221,7 +232,7 @@ function LeaderboardRow({ e, i, usePercentile, isPinnedView }: RowProps) {
       </td>
       <td className="px-3 py-2 text-foreground">
         <div className="flex items-center gap-1.5">
-          {e.isAi && (
+          {e.isAi && !anonymousVariant && (
             <span
               aria-label="AI ghost"
               className="inline-flex items-center gap-1 rounded-full bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground ring-1 ring-white/[0.06]"
@@ -235,7 +246,17 @@ function LeaderboardRow({ e, i, usePercentile, isPinnedView }: RowProps) {
               you
             </span>
           )}
-          <span className={e.isAi ? "text-muted-foreground" : ""}>{name}</span>
+          <span
+            className={
+              anonymousVariant
+                ? "text-muted-foreground/60"
+                : e.isAi
+                ? "text-muted-foreground"
+                : ""
+            }
+          >
+            {name}
+          </span>
         </div>
       </td>
       <td className="hidden px-3 py-2 text-right font-mono text-muted-foreground tabular-nums sm:table-cell">
