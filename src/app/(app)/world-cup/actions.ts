@@ -181,6 +181,78 @@ export async function getOrCreateShareToken(): Promise<ShareTokenResult> {
   };
 }
 
+// ─── Group-standings predictor (WC-GROUP-PREDICTOR — 2026-06-02) ────────────
+
+export interface SaveGroupStandingsResult {
+  ok: boolean;
+  error?: string;
+}
+
+/**
+ * Save (or replace) a user's full 1st/2nd/3rd/4th picks for ONE group. All
+ * four positions are upserted in a single call so a partial save can't leave
+ * inconsistent picks.
+ *
+ * Validation:
+ *   - all four team IDs must be distinct (a team can't finish in two
+ *     positions of the same group)
+ *   - group_letter must be A..L
+ *   - server lock is the same as bracket: writes refuse after WC_FIRST_KICKOFF
+ */
+export async function saveGroupStandings(
+  groupLetter: string,
+  picks: { 1: string; 2: string; 3: string; 4: string }
+): Promise<SaveGroupStandingsResult> {
+  if (bracketLocked()) {
+    return { ok: false, error: "Picks are locked — tournament has started." };
+  }
+  if (!/^[A-L]$/.test(groupLetter)) {
+    return { ok: false, error: `Invalid group letter: ${groupLetter}` };
+  }
+
+  const ids = [picks[1], picks[2], picks[3], picks[4]];
+  if (ids.some((id) => !id)) {
+    return { ok: false, error: "Pick a team for all four positions." };
+  }
+  if (new Set(ids).size !== 4) {
+    return { ok: false, error: "Each team can only appear once per group." };
+  }
+
+  const supabase = await createSupabaseServer();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Sign in to lock your group picks." };
+
+  // Upsert all four rows in one network round-trip.
+  const rows = [1, 2, 3, 4].map((pos) => ({
+    user_id: user.id,
+    group_letter: groupLetter,
+    position: pos,
+    picked_team_id: picks[pos as 1 | 2 | 3 | 4],
+    updated_at: new Date().toISOString(),
+  }));
+
+  const { error } = await supabase
+    .from("wc_group_predictions")
+    .upsert(rows, { onConflict: "user_id,group_letter,position" });
+
+  if (error) return { ok: false, error: error.message };
+
+  // Touch meta so the leaderboard shows this user as "active" even before
+  // the bracket page is opened.
+  await supabase
+    .from("wc_bracket_meta")
+    .upsert(
+      { user_id: user.id, updated_at: new Date().toISOString() },
+      { onConflict: "user_id" }
+    );
+
+  revalidatePath("/world-cup");
+  revalidatePath("/world-cup/groups-predictor");
+  return { ok: true };
+}
+
 /**
  * Lock the bracket — recorded for audit. After global lock fires, this is a
  * no-op (the bracket is implicitly locked anyway). Optionally accept the

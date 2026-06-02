@@ -5,7 +5,11 @@ import Link from "next/link";
 import { Trophy, Users, ChevronLeft } from "lucide-react";
 
 import { getWorldCupFixtures } from "@/lib/world-cup";
-import { loadUserBracket, isBracketLocked } from "@/lib/wc-bracket";
+import {
+  loadUserBracket,
+  isBracketLocked,
+  PERCENTILE_DISPLAY_THRESHOLD,
+} from "@/lib/wc-bracket";
 import { WCBracketBoard } from "@/components/wc-bracket-board";
 
 export const metadata: Metadata = {
@@ -34,6 +38,28 @@ function teamsFromFixtures(fixtures: ReturnType<typeof getWorldCupFixtures> exte
     if (!m.has(f.away.id)) m.set(f.away.id, { id: f.away.id, name: f.away.name, logo: f.away.logo });
   }
   return Array.from(m.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Choose the right rank pill to render. Pulled out of BracketPage so the
+ * top-level component stays under the complexity cap. */
+function MetaRankPill({
+  rank,
+  percentile,
+}: {
+  rank: number | null;
+  percentile: number | null | undefined;
+}) {
+  if (percentile != null && (rank ?? 0) > PERCENTILE_DISPLAY_THRESHOLD) {
+    return (
+      <span className="text-muted-foreground">
+        Top {Math.max(1, Math.round(100 - percentile))}%
+      </span>
+    );
+  }
+  if (rank != null) {
+    return <span className="text-muted-foreground">Rank #{rank}</span>;
+  }
+  return null;
 }
 
 export default async function BracketPage() {
@@ -85,11 +111,17 @@ export default async function BracketPage() {
         {meta && (
           <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-white/[0.06] pt-3 text-xs">
             <span className="rounded-full bg-primary/15 px-2.5 py-0.5 font-semibold text-primary">
-              Score: {meta.currentScore}
+              Total: {meta.totalScore ?? meta.currentScore} pt
             </span>
-            {meta.currentRank != null && (
-              <span className="text-muted-foreground">Rank #{meta.currentRank}</span>
-            )}
+            <span className="text-muted-foreground">
+              Bracket {meta.currentScore} · Groups {meta.groupStandingsScore ?? 0}
+            </span>
+            {/* Percentile vs absolute rank — handled in MetaRankPill. */}
+            <MetaRankPill
+              rank={meta.currentRank}
+              percentile={meta.currentPercentile}
+            />
+
             {meta.goldenBootPlayer && (
               <span className="text-muted-foreground">
                 Golden Boot: <span className="text-foreground">{meta.goldenBootPlayer}</span>
@@ -97,6 +129,14 @@ export default async function BracketPage() {
             )}
           </div>
         )}
+        <div className="mt-3 flex flex-wrap gap-2 border-t border-white/[0.06] pt-3 text-xs">
+          <Link
+            href="/world-cup/groups-predictor"
+            className="inline-flex items-center gap-1 rounded-lg border border-white/[0.08] bg-card/40 px-3 py-2 font-semibold text-foreground hover:border-white/[0.16]"
+          >
+            Pick group standings (48 picks · +192 pt)
+          </Link>
+        </div>
       </header>
 
       <WCBracketBoard

@@ -49,4 +49,27 @@ export interface BracketMeta {
   lockedAt: string | null;
   currentScore: number;
   currentRank: number | null;
+  groupStandingsScore?: number;
+  totalScore?: number;
+  currentPercentile?: number | null;
 }
+
+// ── Group-standings predictor (WC-GROUP-PREDICTOR — 2026-06-02) ────────────
+
+export interface GroupPick {
+  groupLetter: string;       // 'A' .. 'L'
+  position: number;          // 1..4 (1st .. 4th)
+  pickedTeamId: string;
+}
+
+// Per-group scoring (server-authoritative — keep in sync with
+// workers/jobs/wc_bracket_scoring.py).
+export const GROUP_POSITION_POINTS: Record<number, number> = {
+  1: 5,
+  2: 3,
+  3: 2,
+  4: 1,
+};
+export const PERFECT_GROUP_BONUS = 5;
+export const MAX_PER_GROUP_SCORE = 16;   // 5+3+2+1 + 5
+export const MAX_GROUP_STANDINGS_SCORE = 192; // 16 × 12 groups

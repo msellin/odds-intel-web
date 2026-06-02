@@ -45,7 +45,9 @@ import { WCGroupCard } from "@/components/wc-group-card";
 import { WCScorecard } from "@/components/wc-scorecard";
 import { WCTabStrip, type WCTab } from "@/components/wc-tab-strip";
 import { WCSchedule } from "@/components/wc-schedule";
+import { WCActivityTiles } from "@/components/wc-activity-tiles";
 import { CLVTrustBanner } from "@/components/clv-trust-banner";
+import { loadWcActivityStats } from "@/lib/wc-bracket";
 
 // ── SEO ──────────────────────────────────────────────────────────────────────
 export const metadata: Metadata = {
@@ -455,8 +457,10 @@ export default async function WorldCupPage({
   const tab = resolveTab(rawTab);
 
   const { isAuthed, isPro } = await readAuthAndTier();
-  const { fixtures, groups, predictions, advancement, scorecard, previews } =
-    await loadPageData();
+  const [
+    { fixtures, groups, predictions, advancement, scorecard, previews },
+    activityStats,
+  ] = await Promise.all([loadPageData(), loadWcActivityStats()]);
 
   const nowMs = getServerNowMs();
   const featured = pickFeaturedFixture(fixtures, nowMs);
@@ -469,6 +473,9 @@ export default async function WorldCupPage({
   return (
     <div className="space-y-4 sm:space-y-6">
       <FeaturedBannerSlot featured={featured} prediction={featuredPrediction} />
+
+      {/* Activity tiles — humans + AI ghost counts on the leaderboard. */}
+      <WCActivityTiles stats={activityStats} />
 
       {/* Tab strip — sticky at top of viewport */}
       <WCTabStrip tabs={TABS} active={tab} />
