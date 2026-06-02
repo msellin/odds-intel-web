@@ -1,8 +1,24 @@
 import Link from "next/link";
-import { Check, X, Minus } from "lucide-react";
+import { Check, X, Minus, Trophy } from "lucide-react";
 import { PricingCards } from "@/components/pricing-cards";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+
+// World Cup promo banner — auto-hides one week post-final (2026-07-26).
+// To pull earlier or extend, edit WC_BANNER_HIDE_AT_MS directly.
+const WC_BANNER_HIDE_AT_MS = new Date("2026-07-26T00:00:00Z").getTime();
+const WC_FIRST_KICKOFF_MS = new Date("2026-06-11T19:00:00Z").getTime();
+const showWcBanner = Date.now() < WC_BANNER_HIDE_AT_MS;
+function wcBannerHeadline(): string {
+  const now = Date.now();
+  if (now < WC_FIRST_KICKOFF_MS) {
+    const days = Math.max(0, Math.ceil((WC_FIRST_KICKOFF_MS - now) / 86400000));
+    return days === 0
+      ? "World Cup 2026 kicks off today — play the bracket challenge"
+      : `World Cup 2026 starts in ${days} day${days === 1 ? "" : "s"} — play the bracket challenge`;
+  }
+  return "World Cup 2026 — bracket challenge live";
+}
 
 const brokenTabs = [
   "SoccerStats",
@@ -94,6 +110,25 @@ function CellIcon({ value }: { value: boolean }) {
 export default function LandingPage() {
   return (
     <div className="min-h-dvh bg-background text-foreground">
+      {/* ───────── World Cup promo banner (auto-hides 2026-07-26) ───────── */}
+      {showWcBanner && (
+        <Link
+          href="/world-cup"
+          className="block border-b border-amber-500/30 bg-gradient-to-r from-amber-600/15 via-amber-500/10 to-emerald-600/15 transition-colors hover:from-amber-600/25 hover:via-amber-500/20 hover:to-emerald-600/25"
+        >
+          <div className="mx-auto flex h-10 max-w-7xl items-center justify-center gap-2 px-4 sm:px-6">
+            <Trophy className="h-4 w-4 text-amber-400" aria-hidden />
+            <span className="text-xs font-semibold text-amber-100 sm:text-sm">
+              {wcBannerHeadline()}
+            </span>
+            <span className="hidden rounded-full bg-emerald-600/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-300 ring-1 ring-emerald-500/30 sm:inline">
+              Top 10 win Elite
+            </span>
+            <span className="hidden text-xs font-medium text-amber-400 sm:inline">→</span>
+          </div>
+        </Link>
+      )}
+
       {/* ───────── Nav ───────── */}
       <nav className="sticky top-0 z-50 border-b border-white/[0.06] bg-background/90 backdrop-blur-lg">
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6">

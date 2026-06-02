@@ -7,6 +7,7 @@ import {
   BarChart3,
   Target,
   TrendingUp,
+  Trophy,
   Menu,
   X,
   LogOut,
@@ -23,9 +24,19 @@ import { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/auth-provider";
 
+// WC nav link auto-hides one week post-final (2026-07-19). After 2026-07-26
+// the spread becomes empty and the link disappears without code changes.
+// To pull it earlier (or extend), edit WC_NAV_HIDE_AT_MS directly.
+const WC_NAV_HIDE_AT_MS = new Date("2026-07-26T00:00:00Z").getTime();
+const wcNavLink =
+  Date.now() < WC_NAV_HIDE_AT_MS
+    ? [{ href: "/world-cup", label: "World Cup", icon: Trophy }]
+    : [];
+
 const primaryLinks = [
   { href: "/matches", label: "Matches", icon: Activity },
   { href: "/value-bets", label: "Value Bets", icon: Target },
+  ...wcNavLink,
   { href: "/performance", label: "Performance", icon: BarChart3 },
   { href: "/predictions", label: "Predictions", icon: TrendingUp },
 ];
