@@ -39,10 +39,12 @@ export default async function PlaceBetPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Place real bets</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          SELF-USE-VALIDATION superadmin view. Pending paper bets on matches that haven&apos;t kicked off,
-          with Unibet (Coolbet proxy, both run on Kambi) + Bet365 odds at pick time.
-          Place €1–3 manually at coolbet.ee or bet365.com, then log via &quot;Place&quot; button.
-          Manual placement only — friction is a feature.
+          SELF-USE-VALIDATION superadmin view. All pending paper bets for today —
+          matches that haven&apos;t kicked off <span className="text-foreground">and</span> in-progress ones
+          (look for the &quot;Started Nm&quot; tag). The live edge column reflects the most
+          recent Coolbet/Unibet snapshot, so for started matches you&apos;re seeing the
+          current in-play edge — useful for early-minute drift testing.
+          Place €1–3 manually at coolbet.ee or bet365.com, then log via &quot;Place&quot;.
         </p>
       </div>
       <PlaceBetTable candidates={candidates} />

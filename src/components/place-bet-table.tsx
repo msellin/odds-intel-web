@@ -111,6 +111,17 @@ function fmtPct(o: number | null | undefined) {
 }
 function fmtKickoff(iso: string) {
   const d = new Date(iso);
+  const ms = d.getTime() - Date.now();
+  // INPLAY-PLACEABLE (2026-06-02): kickoff-passed matches now appear on
+  // this table for in-play placement consideration. Surface that with a
+  // "Started Nm" tag instead of the static "Jun 2, 19:00" the future-only
+  // version of this list always rendered.
+  if (ms <= 0) {
+    const minsAgo = Math.floor(-ms / 60000);
+    if (minsAgo < 60) return `Started ${minsAgo}m`;
+    const hAgo = Math.floor(minsAgo / 60);
+    return `Started ${hAgo}h ${minsAgo % 60}m`;
+  }
   return d.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
 }
 

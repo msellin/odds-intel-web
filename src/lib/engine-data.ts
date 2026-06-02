@@ -1571,29 +1571,34 @@ function _mapPaperToSnapshotKey(market: string, selection: string): { market: st
  *  Used by /admin/place. */
 export async function getPlaceableBets(): Promise<PlaceableBet[]> {
   const admin = createSupabaseAdmin();
-  const nowIso = new Date().toISOString();
 
-  // 1) pending paper bets on upcoming matches
+  // INPLAY-PLACEABLE (2026-06-02): drop the future-only kickoff filter.
+  // Started matches still have placeable in-play markets — and if the live
+  // edge has *widened* in the first 5–20 minutes (early-game drift theory),
+  // these are the rows most worth showing. The kickoff timestamp surfaces
+  // up to the UI so the table can render a "Started Nm" badge instead of a
+  // future countdown. Combos retain the all-legs-future check below
+  // because Coolbet rejects combos with any started leg.
   const { data: bets } = await admin
     .from("simulated_bets")
     .select(
       `id, match_id, market, selection, odds_at_pick, pick_time, stake,
        model_probability, calibrated_prob, edge_percent, combo_legs, admin_offered_at,
        bot:bot_id(id, name),
-       match:match_id(id, date,
+       match:match_id(id, date, status,
          home_team:home_team_id(name),
          away_team:away_team_id(name),
          league:league_id(name, country))`
     )
     .eq("result", "pending")
-    .gt("match.date", nowIso)
     .order("pick_time", { ascending: false })
     .range(0, 999);
 
   if (!bets || bets.length === 0) return [];
 
-  // Filter to those whose match really is in the future (the .gt filter on
-  // an embedded relation doesn't always behave the way we want via PostgREST).
+  // INPLAY-PLACEABLE (2026-06-02): keep both upcoming AND in-progress
+  // matches. We drop only matches that are FINISHED — those can't be
+  // placed and there's no live-edge calculation to do.
   //
   // COMBO-LEG-FUTURE-FILTER (2026-05-24): for combo rows the bet's match_id is
   // just a placeholder pointing to one of the 5 legs (arbitrary which one). We
@@ -1606,7 +1611,13 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
   const upcoming = rows.filter((b) => {
     if (Array.isArray(b.combo_legs) && b.combo_legs.length > 0) return true;
     const m = Array.isArray(b.match) ? b.match[0] : b.match;
-    return m && new Date(m.date) > new Date();
+    if (!m) return false;
+    const status = String(m.status ?? "").toLowerCase();
+    // Allow anything that isn't finished. AF status codes: 'finished', 'ft',
+    // 'aet', 'pen', 'awd', 'wo', 'pst', 'cncl', 'abd', 'susp'. We keep PST
+    // and friends visible (manual decision to skip / void). The placer
+    // already void-handles postponed-real-bets via SETTLEMENT-POSTPONED-VOID.
+    return !["finished", "ft", "aet", "pen", "awd", "wo"].includes(status);
   });
 
   if (upcoming.length === 0) return [];
