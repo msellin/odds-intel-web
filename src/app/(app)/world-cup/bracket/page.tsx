@@ -69,6 +69,10 @@ export default async function BracketPage() {
               R32 → Final. Compete against the OddsIntel model and the community. Locks at kick-off
               of the first match (Jun 11, 19:00 UTC).
             </p>
+            <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[color:var(--color-tournament-gold)]/15 px-2.5 py-1 text-[11px] font-semibold text-[color:var(--color-tournament-gold)] ring-1 ring-[color:var(--color-tournament-gold)]/30">
+              <Trophy className="size-3" />
+              Top 3 brackets win 1 month Elite — free
+            </p>
           </div>
           <Link
             href="/world-cup/bracket/leaderboard"

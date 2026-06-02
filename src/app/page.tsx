@@ -137,7 +137,7 @@ export default async function LandingPage() {
               {wcBannerHeadline()}
             </span>
             <span className="hidden rounded-full bg-emerald-600/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-300 ring-1 ring-emerald-500/30 sm:inline">
-              Top 10 win Elite
+              Top 3 win Elite
             </span>
             <span className="hidden text-xs font-medium text-amber-400 sm:inline">→</span>
           </div>
