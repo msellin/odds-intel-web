@@ -49,11 +49,24 @@ const nextConfig: NextConfig = {
   },
 };
 
+// SENTRY-FEEDBACK-ONLY (2026-06-02): keep withSentryConfig because it
+// wires the client-side bundle to load sentry.client.config.ts (which
+// is now feedback-widget-only). tracesSampleRate is 0 in the client
+// config, so transactions no longer cost free-tier quota. tunnelRoute
+// stays — feedback POSTs go through `/monitoring` so ad blockers don't
+// swallow them.
+//
+// If you ever re-add server-side error tracking, restore
+// sentry.server.config.ts + sentry.edge.config.ts + src/instrumentation.ts
+// (see git history for the previous shape).
 export default withSentryConfig(nextConfig, {
   org: "margus-sellin",
   project: "odds-intel",
   silent: !process.env.CI,
-  widenClientFileUpload: true,
+  // No source-map uploads — we removed captureException everywhere; the
+  // only Sentry events we ship are user-submitted feedback (which doesn't
+  // benefit from source maps).
+  widenClientFileUpload: false,
   disableLogger: true,
   tunnelRoute: "/monitoring",
 });

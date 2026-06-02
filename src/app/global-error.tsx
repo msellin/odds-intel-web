@@ -1,7 +1,10 @@
 "use client";
 
-import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
+
+// SENTRY-FEEDBACK-ONLY (2026-06-02): error capture removed. The previous
+// implementation called Sentry.captureException here; we now log to
+// console only. The user-facing UX (the "Try again" button) is unchanged.
 
 export default function GlobalError({
   error,
@@ -11,7 +14,7 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    Sentry.captureException(error);
+    console.error("global error boundary", error);
   }, [error]);
 
   return (

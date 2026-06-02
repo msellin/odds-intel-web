@@ -2,8 +2,11 @@ import { NextResponse } from "next/server";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { getUserTier } from "@/lib/get-user-tier";
 import { createClient } from "@supabase/supabase-js";
-import * as Sentry from "@sentry/nextjs";
 import { checkRateLimit } from "@/lib/rate-limit";
+// SENTRY-FEEDBACK-ONLY (2026-06-02): Sentry SDK kept only for the
+// client-side feedback widget. Server-side error capture removed —
+// console.error is good enough until we have a real observability
+// need that justifies the free-tier transaction quota.
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -199,9 +202,7 @@ Write a 2-3 sentence explanation of why this pick was placed. Translate any tech
           { status: 503 }
         );
       }
-      Sentry.captureException(new Error(`Gemini API error ${resp.status}: ${errText.slice(0, 500)}`), {
-        extra: { betId, status: resp.status },
-      });
+      console.error(`Gemini API error ${resp.status}: ${errText.slice(0, 500)}`, { betId, status: resp.status });
       return NextResponse.json(
         { error: "AI service error — please try again." },
         { status: 502 }
@@ -221,7 +222,7 @@ Write a 2-3 sentence explanation of why this pick was placed. Translate any tech
 
     return NextResponse.json({ explanation: trimmed });
   } catch (err) {
-    Sentry.captureException(err, { extra: { betId } });
+    console.error("bet-explain failed", { betId, err: err instanceof Error ? err.message : String(err) });
     return NextResponse.json(
       { error: "AI request failed — please try again." },
       { status: 502 }
