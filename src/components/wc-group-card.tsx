@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { ChevronRight, MapPin } from "lucide-react";
+import { ChevronRight, MapPin, Calendar, ChevronDown, ChevronUp } from "lucide-react";
 
 import { flagForTeam } from "@/lib/wc-flags";
 import type {
@@ -15,6 +15,14 @@ interface WCGroupCardProps {
   predictions: Record<string, WCPredictionSlot>;
   /** Advancement % per team — empty object renders the "computing" placeholder. */
   advancement: Record<string, GroupAdvancementProb>;
+  /**
+   * Server-side "now" snapshot — used to decide which fixtures are next vs. past.
+   * Callers must pass a server-snapshot (via getServerNowMs) — the lint rule
+   * forbids Date.now() in render code.
+   */
+  nowMs: number;
+  /** Force open/closed state — overrides the auto "has the tournament started" check. */
+  defaultOpen?: boolean;
 }
 
 function formatTime(iso: string): string {
@@ -133,7 +141,37 @@ function FixtureRow({
   );
 }
 
-export function WCGroupCard({ group, predictions, advancement }: WCGroupCardProps) {
+function formatDayShort(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+export function WCGroupCard({
+  group,
+  predictions,
+  advancement,
+  nowMs,
+  defaultOpen,
+}: WCGroupCardProps) {
+  // Default-open once the first group fixture has kicked off, otherwise show
+  // only the next 1-2 with a "show all" expand affordance.
+  const tournamentStarted =
+    defaultOpen ??
+    group.fixtures.some((f) => new Date(f.date).getTime() < nowMs);
+
+  // For the collapsed-state summary line: pick the next 1-2 upcoming fixtures
+  // (or the very first one if everything is in the past — should rarely happen
+  // pre-tournament, but defends against bad clock skew).
+  const sorted = group.fixtures
+    .slice()
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const upcomingIdx = sorted.findIndex((f) => new Date(f.date).getTime() >= nowMs);
+  const startIdx = upcomingIdx === -1 ? 0 : upcomingIdx;
+  const preview = sorted.slice(startIdx, startIdx + 2);
+
   return (
     <section className="overflow-hidden rounded-xl border border-white/[0.08] bg-card/40 shadow-sm">
       <header className="flex items-center justify-between border-b border-white/[0.06] bg-gradient-to-r from-white/[0.03] to-transparent px-3 py-2.5 sm:px-4">
@@ -212,12 +250,43 @@ export function WCGroupCard({ group, predictions, advancement }: WCGroupCardProp
         </table>
       </div>
 
-      {/* Group fixtures */}
-      <div className="space-y-1.5 px-2.5 py-2.5 sm:px-3 sm:py-3">
-        {group.fixtures.map((f) => (
-          <FixtureRow key={f.id} fixture={f} prediction={predictions[f.id]} />
-        ))}
-      </div>
+      {/* Group fixtures — collapsible.
+          Pre-tournament: show next 1-2 fixtures, "show all" expands the rest.
+          Post-kickoff: render all fixtures expanded by default (so users see results). */}
+      {tournamentStarted ? (
+        <div className="space-y-1.5 px-2.5 py-2.5 sm:px-3 sm:py-3">
+          {sorted.map((f) => (
+            <FixtureRow key={f.id} fixture={f} prediction={predictions[f.id]} />
+          ))}
+        </div>
+      ) : (
+        <details className="group/expand">
+          <summary className="flex min-h-[44px] cursor-pointer list-none items-center justify-between gap-2 border-t border-white/[0.04] bg-white/[0.02] px-3 py-2.5 text-[11px] font-medium text-muted-foreground hover:text-foreground sm:px-4">
+            <span className="inline-flex min-w-0 items-center gap-1.5">
+              <Calendar className="size-3 shrink-0" />
+              <span className="truncate">
+                <span className="uppercase tracking-wider text-muted-foreground/80">Up next:</span>{" "}
+                {preview[0]
+                  ? `${formatDayShort(preview[0].date)} · ${preview[0].home.name} v ${preview[0].away.name}`
+                  : "TBD"}
+              </span>
+            </span>
+            <span className="inline-flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground/80 group-open/expand:hidden">
+              Show all {group.fixtures.length}
+              <ChevronDown className="size-3 transition-transform" />
+            </span>
+            <span className="hidden shrink-0 items-center gap-1 text-[10px] text-muted-foreground/80 group-open/expand:inline-flex">
+              Hide
+              <ChevronUp className="size-3" />
+            </span>
+          </summary>
+          <div className="space-y-1.5 px-2.5 py-2.5 sm:px-3 sm:py-3">
+            {sorted.map((f) => (
+              <FixtureRow key={f.id} fixture={f} prediction={predictions[f.id]} />
+            ))}
+          </div>
+        </details>
+      )}
     </section>
   );
 }
