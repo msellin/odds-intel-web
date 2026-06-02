@@ -4,44 +4,25 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Trophy, Users, ChevronLeft } from "lucide-react";
 
-import { getWorldCupFixtures } from "@/lib/world-cup";
 import {
   loadUserBracket,
   isBracketLocked,
+  loadBracketState,
+  currentOpenRound,
+  nextRound,
   PERCENTILE_DISPLAY_THRESHOLD,
 } from "@/lib/wc-bracket";
+import { ROUND_LABELS } from "@/lib/wc-bracket-types";
 import { WCBracketBoard } from "@/components/wc-bracket-board";
 
 export const metadata: Metadata = {
   title: "World Cup 2026 Bracket Challenge | OddsIntel",
   description:
-    "Pick your bracket for FIFA World Cup 2026 — every round, every match. Compete against OddsIntel's model and the community.",
+    "Pick your bracket for FIFA World Cup 2026 stage-by-stage — each knockout round opens when the previous one finishes. Compete against OddsIntel's model and the community.",
   alternates: { canonical: "https://oddsintel.app/world-cup/bracket" },
 };
 
-interface Team {
-  id: string;
-  name: string;
-  logo: string | null;
-}
-
-/**
- * Build the candidate-team pool from the WC fixture list. Every team that
- * appears as home or away in a group-stage fixture qualifies for the pool.
- * Once Phase 3 knockout fixtures land, the pool will already include those
- * teams (no special-casing needed).
- */
-function teamsFromFixtures(fixtures: ReturnType<typeof getWorldCupFixtures> extends Promise<infer T> ? T : never): Team[] {
-  const m = new Map<string, Team>();
-  for (const f of fixtures) {
-    if (!m.has(f.home.id)) m.set(f.home.id, { id: f.home.id, name: f.home.name, logo: f.home.logo });
-    if (!m.has(f.away.id)) m.set(f.away.id, { id: f.away.id, name: f.away.name, logo: f.away.logo });
-  }
-  return Array.from(m.values()).sort((a, b) => a.name.localeCompare(b.name));
-}
-
-/** Choose the right rank pill to render. Pulled out of BracketPage so the
- * top-level component stays under the complexity cap. */
+/** Choose the right rank pill to render. */
 function MetaRankPill({
   rank,
   percentile,
@@ -63,10 +44,13 @@ function MetaRankPill({
 }
 
 export default async function BracketPage() {
-  const fixtures = await getWorldCupFixtures();
-  const teams = teamsFromFixtures(fixtures);
-  const { picks, meta, isAuthed } = await loadUserBracket();
-  const locked = isBracketLocked();
+  const [{ picks, meta, isAuthed }, roundStates] = await Promise.all([
+    loadUserBracket(),
+    loadBracketState(),
+  ]);
+  const goldenBootLocked = isBracketLocked();
+  const open = currentOpenRound(roundStates);
+  const upcoming = nextRound(roundStates);
 
   return (
     <div className="space-y-4 pb-12 sm:space-y-6">
@@ -89,12 +73,21 @@ export default async function BracketPage() {
               </span>
             </div>
             <h1 className="text-2xl font-black tracking-tight text-foreground sm:text-3xl">
-              Pick the whole bracket.
+              Pick each round when it opens.
             </h1>
             <p className="max-w-md text-xs text-muted-foreground sm:text-sm">
-              R32 → Final. Compete against the OddsIntel model and the community. Locks at kick-off
-              of the first match (Jun 11, 19:00 UTC).
+              Stage-gated like BBC / ESPN. Each knockout round opens after the previous one
+              finishes — you pick the winner of each matchup, then the next round seeds.
             </p>
+            {open ? (
+              <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-primary/15 px-2.5 py-1 text-[11px] font-semibold text-primary ring-1 ring-primary/30">
+                Now open: {ROUND_LABELS[open.round]}
+              </p>
+            ) : upcoming ? (
+              <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-white/[0.04] px-2.5 py-1 text-[11px] font-semibold text-muted-foreground ring-1 ring-white/[0.06]">
+                Next round: {ROUND_LABELS[upcoming.round]}
+              </p>
+            ) : null}
             <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[color:var(--color-tournament-gold)]/15 px-2.5 py-1 text-[11px] font-semibold text-[color:var(--color-tournament-gold)] ring-1 ring-[color:var(--color-tournament-gold)]/30">
               <Trophy className="size-3" />
               Top 3 brackets win 1 month Elite — free
@@ -116,12 +109,7 @@ export default async function BracketPage() {
             <span className="text-muted-foreground">
               Bracket {meta.currentScore} · Groups {meta.groupStandingsScore ?? 0}
             </span>
-            {/* Percentile vs absolute rank — handled in MetaRankPill. */}
-            <MetaRankPill
-              rank={meta.currentRank}
-              percentile={meta.currentPercentile}
-            />
-
+            <MetaRankPill rank={meta.currentRank} percentile={meta.currentPercentile} />
             {meta.goldenBootPlayer && (
               <span className="text-muted-foreground">
                 Golden Boot: <span className="text-foreground">{meta.goldenBootPlayer}</span>
@@ -141,15 +129,15 @@ export default async function BracketPage() {
 
       <WCBracketBoard
         isAuthed={isAuthed}
-        isLocked={locked}
-        teams={teams}
+        roundStates={roundStates}
         initialPicks={picks}
         goldenBoot={meta?.goldenBootPlayer ?? null}
+        isGoldenBootLocked={goldenBootLocked}
       />
 
       {/* Scoring legend */}
       <section className="rounded-xl border border-white/[0.06] bg-card/40 p-3 text-xs text-muted-foreground">
-        <h3 className="mb-2 font-semibold text-foreground">Scoring</h3>
+        <h3 className="mb-2 font-semibold text-foreground">Scoring (per correct matchup)</h3>
         <ul className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <li>R32: <span className="font-mono text-foreground">+1</span></li>
           <li>R16: <span className="font-mono text-foreground">+2</span></li>
@@ -160,7 +148,9 @@ export default async function BracketPage() {
           <li>Golden Boot: <span className="font-mono text-foreground">+10</span></li>
         </ul>
         <p className="mt-2 text-[10px] text-muted-foreground/60">
-          Max possible: 83 pts. Scoring runs after each settled match.
+          Max possible: 122 pts (bracket 112 + Golden Boot 10). Scoring runs after each
+          settled match. You pick the winner of each specific matchup — not a generic
+          team-advances pool.
         </p>
       </section>
     </div>

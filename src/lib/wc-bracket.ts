@@ -24,16 +24,36 @@ function createSupabaseAdmin() {
   );
 }
 
-export type { BracketRound, BracketPick, BracketMeta, GroupPick };
+export type {
+  BracketRound,
+  BracketPick,
+  BracketMeta,
+  GroupPick,
+  BracketSlotAssignment,
+  BracketRoundState,
+  BracketRoundLockState,
+};
 export {
   ROUND_POINTS,
   ROUND_SLOTS,
   ROUND_LABELS,
   ROUNDS_ORDER,
+  KNOCKOUT_ROUNDS_ORDER,
+  PRIOR_ROUND_LABEL,
   GROUP_POSITION_POINTS,
   PERFECT_GROUP_BONUS,
   MAX_PER_GROUP_SCORE,
   MAX_GROUP_STANDINGS_SCORE,
+} from "./wc-bracket-types";
+
+import type {
+  BracketSlotAssignment,
+  BracketRoundState,
+  BracketRoundLockState,
+} from "./wc-bracket-types";
+import {
+  KNOCKOUT_ROUNDS_ORDER,
+  ROUND_SLOTS,
 } from "./wc-bracket-types";
 
 /** Did the global lock fire? */
@@ -116,6 +136,163 @@ export async function loadUserGroupPicks(): Promise<GroupPick[]> {
       position: r.position,
       pickedTeamId: r.picked_team_id,
     })
+  );
+}
+
+// ─── Stage-gated bracket state (WC-BRACKET-STAGE-GATED — 2026-06-02) ────────
+
+/**
+ * Load the full per-round bracket state: slot assignments, lock state, and
+ * round-level kickoff/settlement progress. Anonymous-readable — the slot
+ * map is public (it's just AF's published knockout schedule).
+ *
+ * Returns one entry per knockout round (r32, r16, qf, sf, final). Each
+ * entry includes ALL its slots — slots with no seeded `match_id` are
+ * returned with state="unseeded" so the FE can render "Opens after the
+ * prior round" placeholders.
+ */
+export async function loadBracketState(
+  nowMs: number = Date.now()
+): Promise<BracketRoundState[]> {
+  const supabase = await createSupabaseServer();
+  const { data: slotData, error: slotErr } = await supabase
+    .from("wc_bracket_slot_assignments")
+    .select(
+      `round, position, match_id, locked_at,
+       matches:match_id(
+         id, date, status, result,
+         home_team_id, away_team_id,
+         home_team:home_team_id(id, name),
+         away_team:away_team_id(id, name)
+       )`
+    );
+
+  // Pre-migration safety — table missing or RLS rejecting = empty bracket.
+  if (slotErr || !slotData) return emptyBracketState();
+
+  type MatchEmbed = {
+    id: string;
+    date: string;
+    status: string;
+    result: string | null;
+    home_team_id: string;
+    away_team_id: string;
+    home_team: { id: string; name: string } | { id: string; name: string }[] | null;
+    away_team: { id: string; name: string } | { id: string; name: string }[] | null;
+  };
+  type SlotRow = {
+    round: string;
+    position: number;
+    match_id: string | null;
+    locked_at: string | null;
+    // Supabase returns a single row as either an object or a single-element
+    // array depending on how it infers the FK; both shapes are valid here.
+    matches: MatchEmbed | MatchEmbed[] | null;
+  };
+
+  const byRound = new Map<string, BracketSlotAssignment[]>();
+  for (const r of slotData as unknown as SlotRow[]) {
+    const m = Array.isArray(r.matches) ? r.matches[0] ?? null : r.matches;
+    const hTeam = m ? (Array.isArray(m.home_team) ? m.home_team[0] : m.home_team) : null;
+    const aTeam = m ? (Array.isArray(m.away_team) ? m.away_team[0] : m.away_team) : null;
+    const slot: BracketSlotAssignment = {
+      round: r.round as Exclude<BracketSlotAssignment["round"], "champion">,
+      position: r.position,
+      matchId: r.match_id,
+      lockedAt: r.locked_at,
+      homeTeam: hTeam ?? null,
+      awayTeam: aTeam ?? null,
+      status: m?.status ?? null,
+      result: m?.result ?? null,
+      kickoff: m?.date ?? null,
+    };
+    const arr = byRound.get(r.round) ?? [];
+    arr.push(slot);
+    byRound.set(r.round, arr);
+  }
+
+  const out: BracketRoundState[] = [];
+  for (const round of KNOCKOUT_ROUNDS_ORDER) {
+    const slots = (byRound.get(round) ?? []).sort((a, b) => a.position - b.position);
+    // Pad missing positions with empty placeholders so the FE always renders
+    // the full skeleton even if migration seeding hasn't run.
+    const filled: BracketSlotAssignment[] = [];
+    for (let i = 0; i < ROUND_SLOTS[round]; i++) {
+      const existing = slots.find((s) => s.position === i);
+      filled.push(
+        existing ?? {
+          round,
+          position: i,
+          matchId: null,
+          lockedAt: null,
+          homeTeam: null,
+          awayTeam: null,
+          status: null,
+          result: null,
+          kickoff: null,
+        }
+      );
+    }
+    out.push({ round, state: deriveLockState(filled, nowMs), lockedAt: firstLockedAt(filled), slots: filled });
+  }
+  return out;
+}
+
+function emptyBracketState(): BracketRoundState[] {
+  return KNOCKOUT_ROUNDS_ORDER.map((round) => ({
+    round,
+    state: "unseeded" as BracketRoundLockState,
+    lockedAt: null,
+    slots: Array.from({ length: ROUND_SLOTS[round] }, (_, i) => ({
+      round,
+      position: i,
+      matchId: null,
+      lockedAt: null,
+      homeTeam: null,
+      awayTeam: null,
+      status: null,
+      result: null,
+      kickoff: null,
+    })),
+  }));
+}
+
+function firstLockedAt(slots: BracketSlotAssignment[]): string | null {
+  for (const s of slots) {
+    if (s.lockedAt) return s.lockedAt;
+  }
+  return null;
+}
+
+function deriveLockState(
+  slots: BracketSlotAssignment[],
+  nowMs: number
+): BracketRoundLockState {
+  // Any slot with no match_id → unseeded (still waiting on AF).
+  if (slots.some((s) => !s.matchId)) return "unseeded";
+  const lockTs = slots
+    .map((s) => (s.lockedAt ? new Date(s.lockedAt).getTime() : null))
+    .filter((t): t is number => t != null);
+  const lockMs = lockTs.length ? Math.min(...lockTs) : null;
+  if (lockMs == null || nowMs < lockMs) return "open";
+  // Past lock — check if every slot has a finished match.
+  const allDone = slots.every((s) => s.status === "finished");
+  return allDone ? "settled" : "locked";
+}
+
+/** Convenience — returns the round currently active for picks (first round
+ *  in "open" state), or null if none. */
+export function currentOpenRound(states: BracketRoundState[]): BracketRoundState | null {
+  return states.find((s) => s.state === "open") ?? null;
+}
+
+/** Convenience — returns the next round expected to open, for activity tile
+ *  copy. Returns null when bracket is fully settled. */
+export function nextRound(states: BracketRoundState[]): BracketRoundState | null {
+  return (
+    states.find((s) => s.state === "open") ??
+    states.find((s) => s.state === "unseeded") ??
+    null
   );
 }
 
@@ -247,6 +424,12 @@ export interface WCActivityStats {
   bracketsLockedIn: number;        // distinct entries with at least one pick (humans + AI)
   picksMadeToday: number;          // group + bracket + 1x2 picks in last 24h
   groupStandingsPredicted: number; // distinct entries with at least one group pick
+  /** WC-BRACKET-STAGE-GATED: round currently open for picks (or null). */
+  currentBracketRound?: {
+    round: string;     // 'r32' | 'r16' | 'qf' | 'sf' | 'final'
+    label: string;     // human label
+    locksAt: string;   // ISO
+  } | null;
 }
 
 /**
@@ -309,6 +492,23 @@ export async function loadWcActivityStats(): Promise<WCActivityStats> {
     distinctGroupEntries = seen.size;
   }
 
+  // WC-BRACKET-STAGE-GATED: surface the round currently open for picks.
+  // Single query — cheap.
+  let currentBracketRound: WCActivityStats["currentBracketRound"] = null;
+  try {
+    const states = await loadBracketState();
+    const open = states.find((s) => s.state === "open");
+    if (open && open.lockedAt) {
+      currentBracketRound = {
+        round: open.round,
+        label: open.round.toUpperCase(),
+        locksAt: open.lockedAt,
+      };
+    }
+  } catch {
+    // Migration 171 not applied yet — silently omit the tile.
+  }
+
   return {
     bracketsLockedIn: brackets.count ?? 0,
     picksMadeToday:
@@ -316,6 +516,7 @@ export async function loadWcActivityStats(): Promise<WCActivityStats> {
       (bracketToday.count ?? 0) +
       (userPicksToday.count ?? 0),
     groupStandingsPredicted: distinctGroupEntries,
+    currentBracketRound,
   };
 }
 

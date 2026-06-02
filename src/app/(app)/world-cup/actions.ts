@@ -73,21 +73,43 @@ function bracketLocked(): boolean {
 }
 
 /**
- * Save (or replace) one bracket slot. Lock fires at the global WC kickoff
- * (2026-06-11 19:00 UTC). After lock, all writes refuse.
+ * Save (or replace) one bracket slot. WC-BRACKET-STAGE-GATED:
+ *   • r32..final picks lock per-round at the round's first kickoff —
+ *     pulled from `wc_bracket_slot_assignments.locked_at`. Until the round
+ *     is seeded by AF (locked_at IS NULL), writes ARE allowed so users can
+ *     pre-stage picks (we want the engagement curve).
+ *   • Champion picks: still gated by the global WC kickoff for legacy
+ *     compatibility — the new FE doesn't surface a separate champion slot.
+ *   • Golden boot: unchanged — gates via `lockBracket()` at WC kickoff.
  */
 export async function saveBracketPick(
   round: BracketRound,
   position: number,
   teamId: string
 ): Promise<SaveBracketResult> {
-  if (bracketLocked()) return { ok: false, error: "Bracket is locked." };
-
   const supabase = await createSupabaseServer();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Sign in to play." };
+
+  // Champion is now derived from the (final, 0) pick in the new FE, but
+  // legacy clients may still write it. Use the global WC-kickoff gate.
+  if (round === "champion") {
+    if (bracketLocked()) return { ok: false, error: "Bracket is locked." };
+  } else {
+    // Per-round lock — read locked_at from slot_assignments.
+    const { data: slotRow } = await supabase
+      .from("wc_bracket_slot_assignments")
+      .select("locked_at")
+      .eq("round", round)
+      .eq("position", position)
+      .maybeSingle();
+    const lockedAt = slotRow?.locked_at as string | null | undefined;
+    if (lockedAt && Date.now() >= new Date(lockedAt).getTime()) {
+      return { ok: false, error: `${round.toUpperCase()} picks are locked.` };
+    }
+  }
 
   const { error } = await supabase
     .from("wc_bracket_picks")

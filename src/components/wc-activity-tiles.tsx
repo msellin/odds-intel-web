@@ -17,38 +17,60 @@ import type { WCActivityStats } from "@/lib/wc-bracket";
 interface Tile {
   icon: typeof Target;
   label: string;
-  value: number;
+  value: string;
   emoji: string;
 }
 
+function roundDisplayLabel(round: string): string {
+  const map: Record<string, string> = {
+    r32: "Round of 32",
+    r16: "Round of 16",
+    qf: "Quarter-finals",
+    sf: "Semi-finals",
+    final: "Final",
+  };
+  return map[round] ?? round.toUpperCase();
+}
+
 export function WCActivityTiles({ stats }: { stats: WCActivityStats }) {
-  // Don't render the row at all if every counter is zero — pre-launch we'd
-  // rather show nothing than three goose-eggs that imply the game is dead.
+  // Don't render the row at all if every counter is zero AND no round is
+  // currently open — pre-launch we'd rather show nothing than three
+  // goose-eggs that imply the game is dead.
   const total =
     stats.bracketsLockedIn +
     stats.picksMadeToday +
     stats.groupStandingsPredicted;
-  if (total === 0) return null;
+  if (total === 0 && !stats.currentBracketRound) return null;
 
+  // WC-BRACKET-STAGE-GATED: when a bracket round is open, swap the
+  // "group standings predicted" tile for a round-status tile — it's the
+  // more actionable signal at that point.
   const tiles: Tile[] = [
     {
       icon: Target,
       emoji: "🎯",
       label: "brackets locked in",
-      value: stats.bracketsLockedIn,
+      value: stats.bracketsLockedIn.toLocaleString(),
     },
     {
       icon: Activity,
       emoji: "📊",
       label: "picks made today",
-      value: stats.picksMadeToday,
+      value: stats.picksMadeToday.toLocaleString(),
     },
-    {
-      icon: Users,
-      emoji: "👥",
-      label: "group standings predicted",
-      value: stats.groupStandingsPredicted,
-    },
+    stats.currentBracketRound
+      ? {
+          icon: Users,
+          emoji: "🏆",
+          label: `bracket round · locks ${new Date(stats.currentBracketRound.locksAt).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })}`,
+          value: roundDisplayLabel(stats.currentBracketRound.round),
+        }
+      : {
+          icon: Users,
+          emoji: "👥",
+          label: "group standings predicted",
+          value: stats.groupStandingsPredicted.toLocaleString(),
+        },
   ];
 
   return (
@@ -66,7 +88,7 @@ export function WCActivityTiles({ stats }: { stats: WCActivityStats }) {
             <span className="truncate">{t.label}</span>
           </div>
           <div className="mt-1 font-mono text-lg font-bold text-foreground tabular-nums sm:text-2xl">
-            {t.value.toLocaleString()}
+            {t.value}
           </div>
         </div>
       ))}
