@@ -220,28 +220,33 @@ function OverviewPanel({
   totalFixtures: number;
 }) {
   return (
-    <div className="space-y-5 sm:space-y-6">
-      {/* Hero */}
-      <section className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-br from-card via-card to-primary/5 p-5 sm:p-8">
+    <div className="space-y-3 sm:space-y-6">
+      {/* WC-MOBILE-COMPRESS (2026-06-02): hero was eating ~75% of mobile
+          viewport before any content. Smaller h1, tighter padding, drop
+          the redundant location/leaderboard pills on mobile (countdown
+          + 1 primary CTA is what people need above the fold). The richer
+          layout returns at sm:+. */}
+      <section className="relative overflow-hidden rounded-xl border border-white/[0.08] bg-gradient-to-br from-card via-card to-primary/5 p-3 sm:rounded-2xl sm:p-8">
         <span
           aria-hidden
           className="pointer-events-none absolute -right-16 -top-16 size-48 rounded-full bg-[color:var(--color-tournament-gold)]/10 blur-3xl"
         />
-        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-3">
+        <div className="relative flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-5">
+          <div className="space-y-2 sm:space-y-3">
             <div className="flex items-center gap-2 text-muted-foreground">
-              <Trophy className="size-4 text-[color:var(--color-tournament-gold)]" />
+              <Trophy className="size-3.5 text-[color:var(--color-tournament-gold)] sm:size-4" />
               <span className="text-[10px] font-semibold uppercase tracking-wider sm:text-xs">
                 Tournament hub
               </span>
             </div>
-            <h1 className="text-3xl font-black leading-tight tracking-tight text-foreground sm:text-5xl">
+            <h1 className="text-2xl font-black leading-tight tracking-tight text-foreground sm:text-5xl">
               FIFA World Cup 2026
             </h1>
-            <p className="max-w-md text-sm text-muted-foreground sm:text-base">
-              June 11 — July 19, 2026 · 48 teams · 12 groups · USA · Canada · Mexico
+            <p className="max-w-md text-xs text-muted-foreground sm:text-base">
+              June 11 — July 19 · 48 teams · 12 groups · USA · Canada · Mexico
             </p>
-            <div className="flex flex-wrap items-center gap-2 pt-1 text-[10px] text-muted-foreground sm:text-xs">
+            {/* Location chips: desktop only — mobile keeps the hero tight. */}
+            <div className="hidden flex-wrap items-center gap-2 pt-1 text-[10px] text-muted-foreground sm:flex sm:text-xs">
               <span className="inline-flex items-center gap-1 rounded-full border border-white/[0.08] bg-background/40 px-2.5 py-1">
                 <Calendar className="size-3" />
                 Opens with Mexico v South Africa
@@ -251,17 +256,19 @@ function OverviewPanel({
                 Estadio Azteca, Mexico City
               </span>
             </div>
-            <div className="flex flex-wrap gap-2 pt-2">
+            <div className="flex flex-wrap gap-2 pt-1 sm:pt-2">
               <Link
                 href="/world-cup/bracket"
-                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg bg-[color:var(--color-tournament-gold)] px-3 py-2 text-xs font-bold text-background hover:brightness-110 sm:px-4 sm:py-2.5 sm:text-sm"
+                className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg bg-[color:var(--color-tournament-gold)] px-3 py-1.5 text-xs font-bold text-background hover:brightness-110 sm:min-h-[44px] sm:px-4 sm:py-2.5 sm:text-sm"
               >
                 <Trophy className="size-3.5" />
                 Play bracket challenge
               </Link>
+              {/* Leaderboard button: desktop only — on mobile users tap
+                  the Leaderboard tab instead. */}
               <Link
                 href="/world-cup/bracket/leaderboard"
-                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-white/[0.08] bg-card/40 px-3 py-2 text-xs font-semibold text-foreground hover:border-white/[0.16] sm:px-4 sm:py-2.5 sm:text-sm"
+                className="hidden min-h-[44px] items-center gap-1.5 rounded-lg border border-white/[0.08] bg-card/40 px-4 py-2.5 text-sm font-semibold text-foreground hover:border-white/[0.16] sm:inline-flex"
               >
                 <Users className="size-3.5" />
                 Leaderboard
@@ -269,9 +276,9 @@ function OverviewPanel({
             </div>
           </div>
 
-          <div className="flex flex-col items-start gap-2 sm:items-end">
+          <div className="flex items-center gap-2 sm:flex-col sm:items-end sm:gap-2">
             <WCCountdown targetIso={WC_FIRST_KICKOFF_ISO} variant="card" liveLabel="Tournament live" />
-            <span className="text-[10px] text-muted-foreground sm:text-[11px]">
+            <span className="hidden text-[10px] text-muted-foreground sm:inline sm:text-[11px]">
               {new Date(WC_FIRST_KICKOFF_ISO).toLocaleString(undefined, {
                 month: "short",
                 day: "numeric",
