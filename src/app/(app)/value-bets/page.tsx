@@ -195,6 +195,42 @@ async function ValueBetsContent({ userId }: { userId: string }) {
 
   return (
     <div className="space-y-6">
+      {/* COHORT-TRANSPARENCY (2026-06-02): make the Pro/Elite distinction
+          unmissable. Free users get a teaser ("here's what's in here").
+          Pro users get the curated calibrated-bot feed and a clear Elite
+          upgrade hook. Elite users get the firehose and a "this is the
+          full feed" confirmation. */}
+      {!isPro && (
+        <section className="rounded-xl border border-white/[0.06] bg-card/40 p-4 text-sm text-muted-foreground sm:p-5">
+          <p className="font-semibold text-foreground">What you'd see as Pro or Elite</p>
+          <p className="mt-1.5 text-xs leading-relaxed">
+            <span className="font-semibold text-foreground">Pro</span> — every pick from our 4 calibrated AI bots (the ones with proven track record). Side, odds, model probability, edge%.
+            {" "}
+            <span className="font-semibold text-foreground">Elite</span> — every pick from all 39 active bots (calibrated + experimental + niche specialists). Plus Kelly stake sizing per pick.
+          </p>
+        </section>
+      )}
+      {isPro && !isElite && (
+        <section className="flex items-start gap-3 rounded-xl border border-blue-500/20 bg-blue-500/[0.06] p-3 text-xs sm:p-4 sm:text-sm">
+          <div className="flex-1 leading-relaxed">
+            <p className="font-semibold text-foreground">You're seeing the calibrated-bot feed</p>
+            <p className="mt-1 text-muted-foreground">
+              These are picks from our 4 calibrated AI bots — promoted only after proving statistically significant ROI. Quality over quantity. Elite tier unlocks picks from all 39 active bots (~3× the daily pick volume) plus per-bot tracking on /performance.
+            </p>
+          </div>
+        </section>
+      )}
+      {isElite && (
+        <section className="flex items-start gap-3 rounded-xl border border-purple-500/20 bg-purple-500/[0.06] p-3 text-xs sm:p-4 sm:text-sm">
+          <div className="flex-1 leading-relaxed">
+            <p className="font-semibold text-foreground">You're seeing the full feed</p>
+            <p className="mt-1 text-muted-foreground">
+              Every pick from all 39 active bots — calibrated, experimental, niche specialists. Per-bot ROI + CLV tracking on /performance.
+            </p>
+          </div>
+        </section>
+      )}
+
       {/* CLV trust banner — Pro+ only; replaces the old PRO-TIER-V2 hero so
           /value-bets, /world-cup and / all read from a single component. */}
       {isPro && <CLVTrustBanner variant="value-bets" cohort={clvCohort} />}

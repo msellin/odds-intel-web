@@ -49,6 +49,23 @@ const CLV_MIN_N = 30;
 const CLV_EXPLAINER =
   "Closing Line Value (CLV) measures whether our picks beat where the market settled. Sustained +CLV is the cleanest signal a model is finding real value, independent of variance.";
 
+// COHORT-TRANSPARENCY (2026-06-02): every CLV claim ships with the cohort it
+// was computed from. "Calibrated" = our promoted bots that have a proven
+// track record (n≥50 settled, statistically significant ROI). "All active"
+// includes calibrated + experimental + niche bots — higher pick volume,
+// noisier individual track record. Pro tier shows calibrated picks
+// exclusively; Elite tier sees the full feed.
+const COHORT_LABEL: Record<Cohort, string> = {
+  pro: "Our calibrated AI bots",
+  elite: "All active AI bots",
+  all: "All active AI bots",
+};
+const COHORT_SUBTITLE: Record<Cohort, string> = {
+  pro: "Proven track record. Pro tier feed.",
+  elite: "Full pick volume. Elite tier feed.",
+  all: "Full bot portfolio.",
+};
+
 function fmtSignedPct(v: number | null): string {
   if (v == null) return "—";
   return `${v > 0 ? "+" : ""}${v.toFixed(1)}%`;
@@ -84,12 +101,12 @@ export async function CLVTrustBanner({ variant, cohort = "all" }: Props) {
   const hasEnoughData = stats != null && stats.n >= CLV_MIN_N && stats.clv_pct != null;
 
   if (variant === "landing") {
-    return <LandingVariant stats={hasEnoughData ? stats : null} />;
+    return <LandingVariant stats={hasEnoughData ? stats : null} cohort={cohort} />;
   }
   if (variant === "world-cup") {
-    return <WorldCupVariant stats={hasEnoughData ? stats : null} />;
+    return <WorldCupVariant stats={hasEnoughData ? stats : null} cohort={cohort} />;
   }
-  return <ValueBetsVariant stats={hasEnoughData ? stats : null} />;
+  return <ValueBetsVariant stats={hasEnoughData ? stats : null} cohort={cohort} />;
 }
 
 // ─────────────────────────── Landing variant ──────────────────────────────────
@@ -97,7 +114,7 @@ export async function CLVTrustBanner({ variant, cohort = "all" }: Props) {
 // "broken tabs" section. Mobile-first: number must be readable on 375px without
 // the supporting copy wrapping awkwardly.
 
-function LandingVariant({ stats }: { stats: Stats | null }) {
+function LandingVariant({ stats, cohort }: { stats: Stats | null; cohort: Cohort }) {
   return (
     <section
       aria-label="Closing Line Value — 30 day trust metric"
@@ -119,7 +136,7 @@ function LandingVariant({ stats }: { stats: Stats | null }) {
                   Avg CLV · last 30 days
                 </p>
                 <p className="mt-0.5 text-[11px] text-muted-foreground sm:text-xs">
-                  on {stats.n.toLocaleString()} settled picks
+                  on {stats.n.toLocaleString()} settled picks · {COHORT_LABEL[cohort]}
                 </p>
               </div>
               <div className="max-w-md text-sm leading-relaxed text-muted-foreground sm:text-[15px]">
@@ -154,7 +171,7 @@ function LandingVariant({ stats }: { stats: Stats | null }) {
 // Compact card. Sized to slot inside the Overview tab between the featured
 // banner / hero and the scorecard. Same data, smaller footprint.
 
-function WorldCupVariant({ stats }: { stats: Stats | null }) {
+function WorldCupVariant({ stats, cohort }: { stats: Stats | null; cohort: Cohort }) {
   return (
     <section
       aria-label="Closing Line Value — 30 day trust metric"
@@ -176,7 +193,7 @@ function WorldCupVariant({ stats }: { stats: Stats | null }) {
                   Avg CLV · 30d
                 </span>
                 <span className="text-[11px] text-muted-foreground">
-                  {stats.n.toLocaleString()} settled picks
+                  {stats.n.toLocaleString()} picks · {COHORT_LABEL[cohort]}
                 </span>
               </div>
             </div>
@@ -204,7 +221,7 @@ function WorldCupVariant({ stats }: { stats: Stats | null }) {
 // Keeps the supporting ROI / win-rate / settled grid, but the CLV cell is the
 // hero with bigger weight + amber accent.
 
-function ValueBetsVariant({ stats }: { stats: Stats | null }) {
+function ValueBetsVariant({ stats, cohort }: { stats: Stats | null; cohort: Cohort }) {
   if (!stats) {
     return (
       <section className="rounded-xl border border-amber-500/20 bg-gradient-to-br from-amber-500/[0.05] to-card/40 px-4 py-3 sm:px-5 sm:py-4">
@@ -237,7 +254,7 @@ function ValueBetsVariant({ stats }: { stats: Stats | null }) {
           </h2>
         </div>
         <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-200">
-          {stats.n.toLocaleString()} settled picks
+          {stats.n.toLocaleString()} picks · {COHORT_LABEL[cohort]}
         </span>
       </div>
 

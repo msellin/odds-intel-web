@@ -202,6 +202,13 @@ export interface LiveBet {
   // separate "Live now" section on /value-bets. Inplay bots write xg_source
   // and/or have name LIKE 'inplay_%' — either is sufficient.
   isInplay: boolean;
+  // COHORT-TRANSPARENCY (2026-06-02): is the source bot in the calibrated
+  // subset (maturity_label='calibrated' AND is_active=true)? On Elite view,
+  // calibrated picks get a "Pro pick" badge so the user can tell at a glance
+  // which bets they'd also see on Pro tier vs which are Elite-only extras.
+  // Always true when fetched via cohort='calibrated' (Pro view); mixed on
+  // cohort='active' (Elite view).
+  isCalibrated: boolean;
 }
 
 // ─── Supabase row types ─────────────────────────────────────────────────────
@@ -1116,7 +1123,7 @@ export async function getTodayBets(cohort: BetCohort = "prematch"): Promise<Live
        model_probability, calibrated_prob, edge_percent, closing_odds, clv, result, pnl,
        bankroll_after, news_triggered, reasoning, recommended_bookmaker, strategy_profile,
        xg_source,
-       bot:bot_id(id, name, strategy),
+       bot:bot_id(id, name, strategy, maturity_label, is_active),
        match:match_id(id, date,
          home_team:home_team_id(name),
          away_team:away_team_id(name),
@@ -1463,6 +1470,11 @@ function toBet(
     // (live-poller writes it on every inplay bet); bot name prefix is a
     // belt-and-braces fallback for any future variant.
     isInplay: row.xg_source != null || String(bot?.name ?? "").startsWith("inplay_"),
+    // COHORT-TRANSPARENCY (2026-06-02): pre-compute the "is this bet from
+    // a calibrated bot" flag. Pro tier sees only calibrated picks; Elite
+    // tier sees all active bots, but renders a "Pro pick" badge on rows
+    // where isCalibrated=true so the user can tell them apart.
+    isCalibrated: bot?.maturity_label === "calibrated" && bot?.is_active === true,
   };
 }
 
