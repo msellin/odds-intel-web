@@ -123,6 +123,46 @@ function urgency(kickoff: string, result: string, mounted: boolean) {
   return { gutter: "border-l-emerald-500/40", timeColor: "text-muted-foreground", isLive: false };
 }
 
+// UNIFIED-STATUS (2026-06-02): turn the bet's `result` field into a small
+// status chip rendered top-right of the row when the bet is settled. The
+// "LIVE" pulse / countdown handle the pending states; this only fires
+// when result !== "pending". Returns null for pending so the existing
+// time/LIVE render path is unchanged.
+function settledChip(result: string, pnl: number): {
+  label: string;
+  classes: string;
+} | null {
+  switch (result) {
+    case "won":
+      return {
+        label: pnl > 0 ? `✓ Won +${pnl.toFixed(1)}` : "✓ Won",
+        classes: "bg-emerald-500/10 text-emerald-400 ring-emerald-500/20",
+      };
+    case "half_won":
+      return {
+        label: pnl > 0 ? `½ Won +${pnl.toFixed(1)}` : "½ Won",
+        classes: "bg-amber-500/10 text-amber-400 ring-amber-500/20",
+      };
+    case "lost":
+      return {
+        label: "✗ Lost",
+        classes: "bg-red-500/10 text-red-400 ring-red-500/20",
+      };
+    case "half_lost":
+      return {
+        label: pnl < 0 ? `½ Lost ${pnl.toFixed(1)}` : "½ Lost",
+        classes: "bg-amber-500/10 text-amber-400 ring-amber-500/20",
+      };
+    case "void":
+      return {
+        label: "○ Void",
+        classes: "bg-white/[0.04] text-muted-foreground ring-white/[0.08]",
+      };
+    default:
+      return null;
+  }
+}
+
 function lineDrift(entry: BookOddsEntry | undefined, postOdds: number, result: string) {
   if (result !== "pending" || !entry || postOdds <= 0) return null;
   const best = getBestNow(entry);
@@ -412,6 +452,21 @@ function ValueBetRow({
               {bet.match.replace(" vs ", " — ")}
             </p>
             <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              {/* UNIFIED-STATUS (2026-06-02): type chip — distinguishes a
+                  prematch pick (placed before kickoff) from an inplay pick
+                  (placed during the match by an inplay bot). Without it the
+                  list mixed both with no visual cue. */}
+              <span
+                className={cn(
+                  "shrink-0 rounded-sm border px-1 py-px text-[8px] font-bold uppercase tracking-wider",
+                  bet.isInplay
+                    ? "border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-300"
+                    : "border-sky-500/30 bg-sky-500/10 text-sky-300",
+                )}
+                title={bet.isInplay ? "Placed during the match by an inplay bot" : "Placed before kick-off by a prematch bot"}
+              >
+                {bet.isInplay ? "In-play" : "Pre-match"}
+              </span>
               <span className="truncate">{pickLine}</span>
               <ConsensusDots count={bet.botCount} />
               {/* COHORT-TRANSPARENCY (2026-06-02): Elite users see picks from
@@ -433,15 +488,28 @@ function ValueBetRow({
             )}
           </div>
 
-          {/* Right: KO time + drift + chevron */}
+          {/* Right: status chip (settled) OR LIVE pulse OR countdown */}
           <div className="shrink-0 flex flex-col items-end gap-1 min-w-[36px]">
-            {isLive ? (
-              <span className="text-[11px] font-bold text-red-400 animate-pulse">LIVE</span>
-            ) : (
-              <span suppressHydrationWarning className={cn("text-[12px] tabular-nums", timeColor)}>
-                {mounted ? fmtKoTime(bet.kickoff) : ""}
-              </span>
-            )}
+            {(() => {
+              const chip = mounted ? settledChip(bet.result, bet.pnl) : null;
+              if (chip) {
+                return (
+                  <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1", chip.classes)}>
+                    {chip.label}
+                  </span>
+                );
+              }
+              if (isLive) {
+                return (
+                  <span className="text-[11px] font-bold text-red-400 animate-pulse">LIVE</span>
+                );
+              }
+              return (
+                <span suppressHydrationWarning className={cn("text-[12px] tabular-nums", timeColor)}>
+                  {mounted ? fmtKoTime(bet.kickoff) : ""}
+                </span>
+              );
+            })()}
             <div className="flex items-center gap-0.5">
               <DriftIcon dir={mounted ? (drift?.dir ?? null) : null} />
               <ChevronDown className={cn("h-3 w-3 text-muted-foreground/30 transition-transform", expanded && "rotate-180")} />

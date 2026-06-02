@@ -162,18 +162,35 @@ async function ValueBetsContent({ userId }: { userId: string }) {
   // render in its own "Live now" section with auto-refresh + stale gating.
   // Free tier never sees the live section.
   const inplayBets = isPro ? allBets.filter((b) => b.isInplay && b.result === "pending") : [];
-  // ACTIVE-FEED-PENDING-ONLY (2026-06-02): prematch used to include settled
-  // bets from today (won/lost/void), which rendered as a muted static "LIVE"
-  // because urgency() only animates when result === "pending". Filter them
-  // out — the active feed should be future + in-progress picks only.
-  const prematchBets = allBets.filter((b) => !b.isInplay && b.result === "pending");
+  // UNIFIED-FEED (2026-06-02): the main scan now shows ALL of today's bets
+  // that aren't being rendered in the Live now section — including settled
+  // (won/lost/void) and inplay bets that have finished. The per-row chips
+  // (Pre-match / In-play type + status pill on the right) tell the user
+  // what they're looking at. Prior versions filtered to pending-only +
+  // prematch-only, which (a) hid bets the user might still want to follow
+  // and (b) created a confusing "LIVE on /value-bets but missing on
+  // /admin/place" gap.
+  //
+  // We still exclude inplay-pending here to avoid duplicating Live now
+  // entries on Pro+. On Free (no Live now) they fall through naturally.
+  const mainBets = allBets.filter((b) => {
+    if (isPro && b.isInplay && b.result === "pending") return false;
+    return true;
+  });
 
-  // Sort: edge descending (highest value first), KO time ascending as tiebreak
-  // so among equal-edge bets, earlier matches surface first.
-  const sorted = [...prematchBets].sort((a, b) => {
-    const edgeDiff = b.edge - a.edge;
-    if (Math.abs(edgeDiff) > 0.001) return edgeDiff;
-    return new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime();
+  // Sort: pending first (by edge desc, then KO asc), then settled (by KO desc
+  // so today's recent results sit near the top of the settled tail).
+  const sorted = [...mainBets].sort((a, b) => {
+    const aPending = a.result === "pending";
+    const bPending = b.result === "pending";
+    if (aPending !== bPending) return aPending ? -1 : 1;
+    if (aPending) {
+      const edgeDiff = b.edge - a.edge;
+      if (Math.abs(edgeDiff) > 0.001) return edgeDiff;
+      return new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime();
+    }
+    // settled: most recent kickoff first
+    return new Date(b.kickoff).getTime() - new Date(a.kickoff).getTime();
   });
   const { bets, totalCount } = sanitizeBets(sorted, isPro);
 
