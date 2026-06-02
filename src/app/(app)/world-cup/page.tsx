@@ -97,13 +97,26 @@ function resolveTab(raw: string | undefined): string {
 }
 
 // ── Knockout placeholder (kept inline — used in the Knockouts tab) ───────────
+// WC-KO-PLACEHOLDER-V2 (2026-06-02): the previous version rendered 31 dashed
+// "TBD" cards in a justify-around horizontal tree. The Final column had 1
+// card with ~750px of dead space above and below it (the column inherited
+// R32's 16-card height). Pre-tournament those identical TBDs carry no info.
+//
+// New design: a compact 5-row schedule (one row per round) showing dates +
+// match count, plus a tiny mini-bracket SVG on the right that visually
+// echoes the tree without faking 31 empty cards. Dense, mobile-friendly,
+// and the user actually learns *when* each round runs.
 function BracketPlaceholder({ isPro }: { isPro: boolean }) {
-  const rounds: Array<{ label: string; slots: number }> = [
-    { label: "Round of 32", slots: 16 },
-    { label: "Round of 16", slots: 8 },
-    { label: "Quarter-finals", slots: 4 },
-    { label: "Semi-finals", slots: 2 },
-    { label: "Final", slots: 1 },
+  const rounds: Array<{
+    label: string;
+    matches: number;
+    window: string;
+  }> = [
+    { label: "Round of 32", matches: 16, window: "Jun 28 – Jul 3" },
+    { label: "Round of 16", matches: 8, window: "Jul 4 – Jul 7" },
+    { label: "Quarter-finals", matches: 4, window: "Jul 9 – Jul 11" },
+    { label: "Semi-finals", matches: 2, window: "Jul 14 – Jul 15" },
+    { label: "Final", matches: 1, window: "Jul 19" },
   ];
 
   return (
@@ -111,42 +124,100 @@ function BracketPlaceholder({ isPro }: { isPro: boolean }) {
       <header className="flex items-center justify-between border-b border-white/[0.06] bg-white/[0.02] px-4 py-2.5">
         <div className="flex items-center gap-2">
           <Trophy className="size-4 text-[color:var(--color-tournament-gold)]" />
-          <h2 className="text-sm font-semibold text-foreground">Knockout bracket</h2>
+          <h2 className="text-sm font-semibold text-foreground">Knockout schedule</h2>
         </div>
-        <span className="text-xs text-muted-foreground">populates after the group stage</span>
+        <span className="text-[10px] text-muted-foreground sm:text-xs">
+          fixtures seed after group stage
+        </span>
       </header>
 
-      <div className="overflow-x-auto p-4">
-        <div className="flex min-w-max gap-3">
-          {rounds.map((round) => (
-            <div key={round.label} className="flex flex-col gap-2">
-              <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                {round.label}
-              </h4>
-              <div className="flex flex-1 flex-col justify-around gap-2">
-                {Array.from({ length: round.slots }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="w-32 rounded border border-dashed border-white/[0.08] bg-background/40 px-2 py-2 text-[11px] text-muted-foreground/40"
-                  >
-                    <div className="flex items-center gap-1">
-                      <div className="size-2 rounded-full bg-white/10" />
-                      <span className="truncate">TBD</span>
-                    </div>
-                    <div className="mt-1 flex items-center gap-1">
-                      <div className="size-2 rounded-full bg-white/10" />
-                      <span className="truncate">TBD</span>
-                    </div>
-                  </div>
-                ))}
+      <div className="grid grid-cols-1 gap-0 sm:grid-cols-[1fr_auto]">
+        <ol className="divide-y divide-white/[0.04]">
+          {rounds.map((r) => (
+            <li
+              key={r.label}
+              className="flex items-center justify-between gap-3 px-4 py-2.5"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <span
+                  aria-hidden
+                  className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-tournament-gold)]/15 text-[10px] font-bold text-[color:var(--color-tournament-gold)]"
+                >
+                  {r.matches}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[13px] font-semibold text-foreground truncate">
+                    {r.label}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground sm:text-[11px]">
+                    {r.matches} {r.matches === 1 ? "match" : "matches"} · {r.window}
+                  </p>
+                </div>
               </div>
-            </div>
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60">
+                TBD
+              </span>
+            </li>
           ))}
+        </ol>
+
+        {/* Mini-bracket SVG — desktop only. Keeps the tree visual identity
+            without the empty-card stacks. */}
+        <div className="hidden border-l border-white/[0.06] px-4 py-3 sm:flex sm:items-center">
+          <svg
+            viewBox="0 0 120 100"
+            className="h-24 w-32 text-muted-foreground/30"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1"
+            aria-hidden
+          >
+            {/* R32 hint — 8 short lines on far left */}
+            {[10, 22, 34, 46, 58, 70, 82, 94].map((y) => (
+              <line key={`l-${y}`} x1="0" y1={y} x2="14" y2={y} />
+            ))}
+            {/* R16 connectors */}
+            {[
+              [10, 22],
+              [34, 46],
+              [58, 70],
+              [82, 94],
+            ].map(([y1, y2]) => (
+              <g key={`g-${y1}`}>
+                <line x1="14" y1={y1} x2="22" y2={y1} />
+                <line x1="14" y1={y2} x2="22" y2={y2} />
+                <line x1="22" y1={y1} x2="22" y2={y2} />
+                <line x1="22" y1={(y1 + y2) / 2} x2="40" y2={(y1 + y2) / 2} />
+              </g>
+            ))}
+            {/* QF connectors */}
+            {[
+              [16, 40],
+              [64, 88],
+            ].map(([y1, y2]) => (
+              <g key={`qf-${y1}`}>
+                <line x1="40" y1={y2} x2="40" y2={y1} />
+                <line x1="40" y1={(y1 + y2) / 2} x2="60" y2={(y1 + y2) / 2} />
+              </g>
+            ))}
+            {/* SF connectors */}
+            <line x1="60" y1="28" x2="60" y2="76" />
+            <line x1="60" y1="52" x2="90" y2="52" />
+            {/* Final / trophy node */}
+            <circle
+              cx="100"
+              cy="52"
+              r="7"
+              className="text-[color:var(--color-tournament-gold)]/60"
+              stroke="currentColor"
+              fill="none"
+            />
+          </svg>
         </div>
       </div>
 
       {!isPro && (
-        <footer className="flex items-center gap-2 border-t border-white/[0.06] bg-white/[0.02] px-4 py-2.5">
+        <footer className="flex items-center gap-2 border-t border-white/[0.06] bg-white/[0.02] px-4 py-2">
           <Lock className="size-3 text-blue-400" />
           <span className="text-[11px] text-muted-foreground">
             Knockout-stage AI predictions unlock on{" "}
