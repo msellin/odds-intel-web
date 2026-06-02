@@ -354,3 +354,232 @@ function mergePredictionRow(
   else if (m.endsWith(":away") || m === "away") slot.awayProb = row.model_probability;
   if (row.reasoning && !slot.reasoning) slot.reasoning = row.reasoning;
 }
+
+// ─── Featured match-of-the-day ───────────────────────────────────────────────
+
+/**
+ * Pick the next scheduled WC fixture within the next 48 hours. Used by the
+ * sticky banner above the hero. Returns null when no match is upcoming (e.g.
+ * between the group stage and the R32).
+ */
+export function pickFeaturedFixture(
+  fixtures: WCFixture[],
+  nowMs: number
+): WCFixture | null {
+  const horizonMs = nowMs + 48 * 3600 * 1000;
+  const upcoming = fixtures
+    .filter((f) => {
+      const t = new Date(f.date).getTime();
+      return t >= nowMs && t <= horizonMs && f.status !== "finished";
+    })
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  if (upcoming.length === 0) {
+    const live = fixtures.find(
+      (f) => f.status === "live" || f.status === "1h" || f.status === "2h" || f.status === "ht"
+    );
+    return live ?? null;
+  }
+  return upcoming[0] ?? null;
+}
+
+// ─── International ELO (PHASE-3 ingest target) ───────────────────────────────
+
+/**
+ * Pull the latest ELO rating per team from `team_elo_international`. Populated
+ * by `scripts/compute_international_elo.py` once Phase 3 ships — until then,
+ * returns an empty map and the advancement Monte Carlo gracefully degrades.
+ */
+export async function getInternationalElos(
+  teamIds: string[]
+): Promise<Record<string, number>> {
+  if (teamIds.length === 0) return {};
+
+  const supabase = createSupabasePublic();
+  const { data, error } = await supabase
+    .from("team_elo_international")
+    .select("team_id, elo_rating, match_date")
+    .in("team_id", teamIds)
+    .order("match_date", { ascending: false })
+    .limit(2000);
+
+  if (error || !data) return {};
+
+  const latest: Record<string, number> = {};
+  for (const row of data as Array<{ team_id: string; elo_rating: string | number }>) {
+    if (latest[row.team_id] != null) continue;
+    latest[row.team_id] =
+      typeof row.elo_rating === "string" ? parseFloat(row.elo_rating) : row.elo_rating;
+  }
+  return latest;
+}
+
+// ─── Advancement probability (Monte Carlo, group stage) ──────────────────────
+
+export interface GroupAdvancementProb {
+  teamId: string;
+  pAdvance: number;
+  pWinner: number;
+  pRunnerUp: number;
+  pBestThird: number;
+}
+
+/**
+ * ELO-based 1X2 helper used when Phase 3 predictions aren't present. Logistic
+ * on rating_diff/400, softened by 1.3 to stretch the win/loss tail and leave
+ * room for a 0.30 draw mass. WC matches are neutral venues so no home bonus.
+ */
+function eloOneXTwo(
+  eloHome: number,
+  eloAway: number,
+  drawBase = 0.30,
+  softening = 1.3
+): { home: number; draw: number; away: number } {
+  const diff = (eloHome - eloAway) / 400;
+  const rawHome = 1 / (1 + Math.pow(10, -diff / softening));
+  const rawAway = 1 - rawHome;
+  const remaining = 1 - drawBase;
+  return {
+    home: rawHome * remaining,
+    draw: drawBase,
+    away: rawAway * remaining,
+  };
+}
+
+/**
+ * Per-fixture 1X2 probability — prefers national_team_v1 predictions when
+ * present, falls back to ELO, finally falls back to a neutral 0.34/0.32/0.34
+ * sentinel so the sim always produces *some* number.
+ */
+function fixtureProbs(
+  fixture: WCFixture,
+  predictions: Record<string, WCPredictionSlot>,
+  elos: Record<string, number>
+): { home: number; draw: number; away: number } {
+  const p = predictions[fixture.id];
+  if (p?.homeProb != null && p.drawProb != null && p.awayProb != null) {
+    const total = p.homeProb + p.drawProb + p.awayProb;
+    if (total > 0) {
+      return { home: p.homeProb / total, draw: p.drawProb / total, away: p.awayProb / total };
+    }
+  }
+  const eh = elos[fixture.home.id];
+  const ea = elos[fixture.away.id];
+  if (eh != null && ea != null) return eloOneXTwo(eh, ea);
+  return { home: 0.34, draw: 0.32, away: 0.34 };
+}
+
+function sampleResult(probs: { home: number; draw: number; away: number }): {
+  hPts: number;
+  aPts: number;
+} {
+  const r = Math.random();
+  if (r < probs.home) return { hPts: 3, aPts: 0 };
+  if (r < probs.home + probs.draw) return { hPts: 1, aPts: 1 };
+  return { hPts: 0, aPts: 3 };
+}
+
+export interface GroupSimSummary {
+  byTeam: Record<string, GroupAdvancementProb>;
+  thirdPlacePointsDistribution: Record<string, number[]>;
+}
+
+export function simulateGroup(
+  group: WCGroup,
+  predictions: Record<string, WCPredictionSlot>,
+  elos: Record<string, number>,
+  iterations = 10_000
+): GroupSimSummary {
+  const teamIds = group.teams.map((t) => t.id);
+  const baseStats: Record<string, { pts: number; gd: number; gf: number }> = {};
+  for (const s of group.standings) {
+    baseStats[s.team.id] = { pts: s.points, gd: s.goalDiff, gf: s.goalsFor };
+  }
+  const unfinished = group.fixtures.filter((f) => f.status !== "finished");
+
+  const winnerCount: Record<string, number> = {};
+  const runnerCount: Record<string, number> = {};
+  const thirdCount: Record<string, number> = {};
+  const thirdPointsSamples: Record<string, number[]> = {};
+  for (const id of teamIds) {
+    winnerCount[id] = 0;
+    runnerCount[id] = 0;
+    thirdCount[id] = 0;
+    thirdPointsSamples[id] = [];
+  }
+
+  for (let iter = 0; iter < iterations; iter += 1) {
+    const stats: Record<string, { pts: number; gd: number; gf: number }> = {};
+    for (const id of teamIds) stats[id] = { ...baseStats[id] };
+
+    for (const f of unfinished) {
+      const probs = fixtureProbs(f, predictions, elos);
+      const { hPts, aPts } = sampleResult(probs);
+      stats[f.home.id].pts += hPts;
+      stats[f.away.id].pts += aPts;
+      const gdSurrogate = hPts === 3 ? 1 : hPts === 0 ? -1 : 0;
+      stats[f.home.id].gd += gdSurrogate;
+      stats[f.away.id].gd -= gdSurrogate;
+    }
+    const ranked = teamIds.slice().sort((a, b) => {
+      const sa = stats[a];
+      const sb = stats[b];
+      if (sb.pts !== sa.pts) return sb.pts - sa.pts;
+      if (sb.gd !== sa.gd) return sb.gd - sa.gd;
+      if (sb.gf !== sa.gf) return sb.gf - sa.gf;
+      return Math.random() - 0.5;
+    });
+    winnerCount[ranked[0]] += 1;
+    runnerCount[ranked[1]] += 1;
+    thirdCount[ranked[2]] += 1;
+    thirdPointsSamples[ranked[2]].push(stats[ranked[2]].pts);
+  }
+
+  const byTeam: Record<string, GroupAdvancementProb> = {};
+  for (const id of teamIds) {
+    const pWinner = winnerCount[id] / iterations;
+    const pRunnerUp = runnerCount[id] / iterations;
+    byTeam[id] = {
+      teamId: id,
+      pAdvance: pWinner + pRunnerUp,
+      pWinner,
+      pRunnerUp,
+      pBestThird: 0,
+    };
+  }
+  return { byTeam, thirdPlacePointsDistribution: thirdPointsSamples };
+}
+
+/**
+ * Cross-group pass — approximates "best 8 of 12 third-place" via the mean
+ * points achieved when each team finishes 3rd. A full correlated simulation
+ * needs iteration-aligned samples across all 12 groups; v1 uses an empirical
+ * rule (≥4 mean pts when 3rd => stronger advance signal). Good enough for UI;
+ * Phase 3 backend will replace with a proper joint sim.
+ */
+export function computeAdvancement(
+  groups: WCGroup[],
+  predictions: Record<string, WCPredictionSlot>,
+  elos: Record<string, number>,
+  iterations = 10_000
+): Record<string, GroupAdvancementProb> {
+  const out: Record<string, GroupAdvancementProb> = {};
+  const groupSims = groups.map((g) => ({ group: g, sim: simulateGroup(g, predictions, elos, iterations) }));
+  const ADV_VIA_THIRD_RATE = 0.45;
+
+  for (const { sim } of groupSims) {
+    for (const id of Object.keys(sim.byTeam)) {
+      const tp = sim.thirdPlacePointsDistribution[id] ?? [];
+      const pFinish3rd = tp.length / iterations;
+      const meanPts = tp.length > 0 ? tp.reduce((a, b) => a + b, 0) / tp.length : 0;
+      const pAdvanceAsThird = pFinish3rd * (meanPts >= 4 ? ADV_VIA_THIRD_RATE * 1.5 : ADV_VIA_THIRD_RATE);
+      const base = sim.byTeam[id];
+      out[id] = {
+        ...base,
+        pBestThird: Math.min(pAdvanceAsThird, 1),
+        pAdvance: Math.min(base.pWinner + base.pRunnerUp + pAdvanceAsThird, 1),
+      };
+    }
+  }
+  return out;
+}

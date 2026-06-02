@@ -52,6 +52,47 @@
   --color-edge-high: #22c55e;
   --color-edge-medium: #f59e0b;
   --color-edge-low: #6b7280;
+  /* World Cup tournament accents — sparingly applied on /world-cup. */
+  --color-tournament-gold: #ffd166;
+  --color-tournament-green: #06d6a0;
+}
+
+/* ── /world-cup motion utilities — keep small, reusable, no JS ────────────── */
+@keyframes wc-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.wc-fade-in {
+  animation: wc-fade-in 150ms ease-out both;
+}
+@keyframes wc-slide-in {
+  from { opacity: 0; transform: translateX(8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.wc-slide-in {
+  animation: wc-slide-in 200ms ease-out both;
+}
+/* Hover lift — desktop only via media query. Mobile uses :active feedback. */
+@media (hover: hover) and (pointer: fine) {
+  .wc-row-hover {
+    transition: transform 150ms ease-out, border-color 150ms ease-out, background-color 150ms ease-out;
+  }
+  .wc-row-hover:hover {
+    transform: translateY(-1px);
+  }
+}
+.wc-row-hover:active {
+  transform: scale(0.99);
+}
+/* Horizontal scroll-snap helper for mobile group carousels. */
+.wc-snap-x {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.wc-snap-x::-webkit-scrollbar { display: none; }
+.wc-snap-item {
+  scroll-snap-align: start;
 }
 
 :root {

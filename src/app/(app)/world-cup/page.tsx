@@ -2,27 +2,40 @@ export const dynamic = "force-dynamic";
 
 import type { Metadata } from "next";
 import Link from "next/link";
-import Image from "next/image";
-import { Trophy, MapPin, Calendar, ChevronRight, Lock, Flag } from "lucide-react";
+import { Trophy, MapPin, Calendar, Lock, Flag, Users } from "lucide-react";
 
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { getUserTier } from "@/lib/get-user-tier";
 import {
   getWorldCupFixtures,
   getWorldCupPredictions,
+  getInternationalElos,
   getServerNowMs,
+  computeAdvancement,
+  pickFeaturedFixture,
   deriveGroups,
   WC_FIRST_KICKOFF_ISO,
-  type WCFixture,
-  type WCGroup,
-  type WCPredictionSlot,
 } from "@/lib/world-cup";
+import type {
+  WCFixture,
+  WCPredictionSlot,
+  GroupAdvancementProb,
+  WCGroup,
+} from "@/lib/world-cup";
+import { getUserWcPicks, buildScorecard } from "@/lib/wc-vs-you";
+import type { WCPick, WCScorecard as WCScorecardType } from "@/lib/wc-vs-you";
+
+import { WCCountdown } from "@/components/wc-countdown";
+import { WCFeaturedBanner } from "@/components/wc-featured-banner";
+import { WCGroupTabs } from "@/components/wc-group-tabs";
+import { WCGroupCard } from "@/components/wc-group-card";
+import { WCScorecard } from "@/components/wc-scorecard";
 
 // ── SEO ──────────────────────────────────────────────────────────────────────
 export const metadata: Metadata = {
   title: "FIFA World Cup 2026 — Schedule, Groups & AI Predictions | OddsIntel",
   description:
-    "FIFA World Cup 2026 in USA, Canada and Mexico — June 11 to July 19. All 12 groups, every group-stage fixture, standings, and AI-driven match predictions from OddsIntel.",
+    "FIFA World Cup 2026 in USA, Canada and Mexico — June 11 to July 19. All 12 groups, every group-stage fixture, advancement %, bracket challenge, and AI predictions from OddsIntel.",
   alternates: { canonical: "https://oddsintel.app/world-cup" },
   openGraph: {
     title: "FIFA World Cup 2026 — Schedule, Groups & AI Predictions",
@@ -34,304 +47,11 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "FIFA World Cup 2026 on OddsIntel",
-    description: "All 12 groups, every fixture, AI predictions.",
+    description: "All 12 groups, every fixture, AI predictions, bracket challenge.",
   },
 };
 
-// ── helpers ──────────────────────────────────────────────────────────────────
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function formatDateHeader(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
-}
-
-function dateKey(iso: string): string {
-  // UTC day bucket — keeps fixtures grouped consistently regardless of viewer TZ.
-  return iso.slice(0, 10);
-}
-
-// ── small inline components ──────────────────────────────────────────────────
-function TeamCrest({ logo, name, size = "md" }: { logo: string | null; name: string; size?: "sm" | "md" | "lg" }) {
-  const px = size === "lg" ? "size-8" : size === "sm" ? "size-4" : "size-5";
-  const text = size === "lg" ? "text-xs" : "text-[10px]";
-  if (logo) {
-    return (
-      <div className={`relative ${px} shrink-0 overflow-hidden rounded-full bg-white/[0.06]`}>
-        <Image
-          src={logo}
-          alt={name}
-          fill
-          sizes="32px"
-          className="object-contain p-0.5"
-          unoptimized
-        />
-      </div>
-    );
-  }
-  return (
-    <div className={`${px} shrink-0 rounded-full bg-white/[0.08] flex items-center justify-center`}>
-      <span className={`${text} font-bold text-muted-foreground`}>{name.charAt(0).toUpperCase()}</span>
-    </div>
-  );
-}
-
-function Countdown({ targetIso, nowMs }: { targetIso: string; nowMs: number }) {
-  // Server-rendered snapshot. nowMs is captured once in the page server fn and
-  // passed in — Countdown stays pure so the React rules-of-hooks lint is happy.
-  const target = new Date(targetIso).getTime();
-  const ms = Math.max(0, target - nowMs);
-
-  const totalSec = Math.floor(ms / 1000);
-  const days = Math.floor(totalSec / 86_400);
-  const hours = Math.floor((totalSec % 86_400) / 3600);
-  const mins = Math.floor((totalSec % 3600) / 60);
-
-  if (ms === 0) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2.5 py-1 text-xs font-semibold text-green-400">
-        Kicked off
-      </span>
-    );
-  }
-
-  return (
-    <div className="inline-flex items-center gap-2 rounded-lg border border-white/[0.08] bg-card/60 px-3 py-2 text-sm">
-      <span className="text-muted-foreground">Kick-off in</span>
-      <span className="font-mono font-semibold text-foreground tabular-nums">
-        {days}d {hours}h {mins}m
-      </span>
-    </div>
-  );
-}
-
-function PredictionTriple({ prediction }: { prediction: WCPredictionSlot | undefined }) {
-  // Phase 3 plug-in point — until predictions.source='national_team_v1' rows
-  // start landing, this returns null and the row stays clean.
-  if (!prediction || prediction.homeProb == null || prediction.awayProb == null) {
-    return null;
-  }
-  const pct = (v: number | null) => Math.round((v ?? 0) * 100);
-  return (
-    <div className="hidden sm:flex shrink-0 items-center gap-1 font-mono text-[10px] text-muted-foreground">
-      <span>{pct(prediction.homeProb)}</span>
-      <span className="text-muted-foreground/40">·</span>
-      <span>{pct(prediction.drawProb)}</span>
-      <span className="text-muted-foreground/40">·</span>
-      <span>{pct(prediction.awayProb)}</span>
-    </div>
-  );
-}
-
-function FixtureKickoffOrScore({ fixture }: { fixture: WCFixture }) {
-  const hasScore =
-    fixture.status === "finished" && fixture.scoreHome != null && fixture.scoreAway != null;
-  return (
-    <div className="w-12 shrink-0 text-center font-mono text-[11px] text-muted-foreground">
-      {hasScore ? (
-        <span className="font-semibold text-foreground">
-          {fixture.scoreHome}–{fixture.scoreAway}
-        </span>
-      ) : (
-        formatTime(fixture.date)
-      )}
-    </div>
-  );
-}
-
-function FixtureRow({
-  fixture,
-  prediction,
-}: {
-  fixture: WCFixture;
-  prediction: WCPredictionSlot | undefined;
-}) {
-  return (
-    <Link
-      href={`/matches/${fixture.id}`}
-      className="group flex items-center gap-3 rounded-lg border border-white/[0.06] bg-card/40 px-3 py-2.5 transition-colors hover:border-white/[0.12] hover:bg-card/60"
-    >
-      <FixtureKickoffOrScore fixture={fixture} />
-
-      <div className="flex flex-1 items-center justify-end gap-2 text-right min-w-0">
-        <span className="truncate text-sm text-foreground">{fixture.home.name}</span>
-        <TeamCrest logo={fixture.home.logo} name={fixture.home.name} />
-      </div>
-
-      <span className="text-[10px] text-muted-foreground/60">v</span>
-
-      <div className="flex flex-1 items-center gap-2 min-w-0">
-        <TeamCrest logo={fixture.away.logo} name={fixture.away.name} />
-        <span className="truncate text-sm text-foreground">{fixture.away.name}</span>
-      </div>
-
-      <PredictionTriple prediction={prediction} />
-
-      {fixture.venueName && (
-        <div className="hidden md:flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground/60 max-w-[180px]">
-          <MapPin className="size-3" />
-          <span className="truncate">{fixture.venueName}</span>
-        </div>
-      )}
-
-      <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5" />
-    </Link>
-  );
-}
-
-function GroupCard({
-  group,
-  predictions,
-}: {
-  group: WCGroup;
-  predictions: Record<string, WCPredictionSlot>;
-}) {
-  return (
-    <section className="overflow-hidden rounded-xl border border-white/[0.08] bg-card/40">
-      <header className="flex items-center justify-between border-b border-white/[0.06] bg-white/[0.02] px-4 py-2.5">
-        <div className="flex items-center gap-2">
-          <span className="rounded bg-primary/15 px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-primary">
-            Group {group.label}
-          </span>
-          <span className="text-xs text-muted-foreground">{group.teams.length} teams · {group.fixtures.length} fixtures</span>
-        </div>
-      </header>
-
-      {/* Standings */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
-          <thead className="border-b border-white/[0.06] text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2 text-left font-medium">Team</th>
-              <th className="px-2 py-2 text-center font-medium">P</th>
-              <th className="px-2 py-2 text-center font-medium">W</th>
-              <th className="px-2 py-2 text-center font-medium">D</th>
-              <th className="px-2 py-2 text-center font-medium">L</th>
-              <th className="px-2 py-2 text-center font-medium">GF</th>
-              <th className="px-2 py-2 text-center font-medium">GA</th>
-              <th className="px-2 py-2 text-center font-medium">GD</th>
-              <th className="px-2 py-2 text-center font-medium">Pts</th>
-              {/* Advancement % placeholder — populates from predictions table once Phase 3 ships */}
-              <th className="px-2 py-2 text-center font-medium text-muted-foreground/40" title="Advancement probability — coming soon">Adv%</th>
-            </tr>
-          </thead>
-          <tbody>
-            {group.standings.map((s, i) => (
-              <tr
-                key={s.team.id}
-                className={`border-b border-white/[0.04] last:border-0 ${i < 2 ? "bg-green-500/[0.03]" : ""}`}
-              >
-                <td className="px-3 py-2">
-                  <div className="flex items-center gap-2">
-                    <span className="w-4 text-center text-muted-foreground tabular-nums">{i + 1}</span>
-                    <TeamCrest logo={s.team.logo} name={s.team.name} size="sm" />
-                    <span className="truncate text-foreground">{s.team.name}</span>
-                  </div>
-                </td>
-                <td className="px-2 py-2 text-center text-muted-foreground tabular-nums">{s.played}</td>
-                <td className="px-2 py-2 text-center text-muted-foreground tabular-nums">{s.wins}</td>
-                <td className="px-2 py-2 text-center text-muted-foreground tabular-nums">{s.draws}</td>
-                <td className="px-2 py-2 text-center text-muted-foreground tabular-nums">{s.losses}</td>
-                <td className="px-2 py-2 text-center text-muted-foreground tabular-nums">{s.goalsFor}</td>
-                <td className="px-2 py-2 text-center text-muted-foreground tabular-nums">{s.goalsAgainst}</td>
-                <td className="px-2 py-2 text-center text-muted-foreground tabular-nums">
-                  {s.goalDiff > 0 ? `+${s.goalDiff}` : s.goalDiff}
-                </td>
-                <td className="px-2 py-2 text-center font-semibold text-foreground tabular-nums">{s.points}</td>
-                {/* Advancement % slot — empty until Phase 3 lands national_team_v1 predictions */}
-                <td className="px-2 py-2 text-center text-muted-foreground/30 tabular-nums">—</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Group fixtures */}
-      <div className="space-y-1.5 px-3 py-3">
-        {group.fixtures.map((f) => (
-          <FixtureRow key={f.id} fixture={f} prediction={predictions[f.id]} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function GroupsSection({
-  groups,
-  predictions,
-}: {
-  groups: WCGroup[];
-  predictions: Record<string, WCPredictionSlot>;
-}) {
-  if (groups.length === 0) {
-    return (
-      <div className="rounded-xl border border-white/[0.06] bg-card/40 p-8 text-center text-sm text-muted-foreground">
-        Group draw not loaded yet — fixtures arrive daily.
-      </div>
-    );
-  }
-  return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      {groups.map((g) => (
-        <GroupCard key={g.label} group={g} predictions={predictions} />
-      ))}
-    </div>
-  );
-}
-
-function FixturesByDate({
-  fixtures,
-  predictions,
-}: {
-  fixtures: WCFixture[];
-  predictions: Record<string, WCPredictionSlot>;
-}) {
-  if (fixtures.length === 0) {
-    return (
-      <div className="rounded-xl border border-white/[0.06] bg-card/40 p-8 text-center text-sm text-muted-foreground">
-        Fixtures not loaded yet.
-      </div>
-    );
-  }
-
-  // Group by UTC date
-  const buckets = new Map<string, WCFixture[]>();
-  for (const f of fixtures) {
-    const k = dateKey(f.date);
-    if (!buckets.has(k)) buckets.set(k, []);
-    buckets.get(k)!.push(f);
-  }
-  const sortedKeys = Array.from(buckets.keys()).sort();
-
-  return (
-    <div className="space-y-5">
-      {sortedKeys.map((k) => {
-        const items = buckets.get(k)!;
-        return (
-          <div key={k} className="space-y-2">
-            <h3 className="px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              {formatDateHeader(k + "T12:00:00Z")}
-            </h3>
-            <div className="space-y-1.5">
-              {items.map((f) => (
-                <FixtureRow key={f.id} fixture={f} prediction={predictions[f.id]} />
-              ))}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
+// ── KnockoutPlaceholder (kept inline — used at the bottom) ───────────────────
 function BracketPlaceholder({ isPro }: { isPro: boolean }) {
   const rounds: Array<{ label: string; slots: number }> = [
     { label: "Round of 32", slots: 16 },
@@ -345,14 +65,14 @@ function BracketPlaceholder({ isPro }: { isPro: boolean }) {
     <section className="overflow-hidden rounded-xl border border-white/[0.08] bg-card/40">
       <header className="flex items-center justify-between border-b border-white/[0.06] bg-white/[0.02] px-4 py-2.5">
         <div className="flex items-center gap-2">
-          <Trophy className="size-4 text-amber-400" />
+          <Trophy className="size-4 text-[color:var(--color-tournament-gold)]" />
           <h2 className="text-sm font-semibold text-foreground">Knockout bracket</h2>
         </div>
         <span className="text-xs text-muted-foreground">populates after the group stage</span>
       </header>
 
       <div className="overflow-x-auto p-4">
-        <div className="flex gap-3 min-w-max">
+        <div className="flex min-w-max gap-3">
           {rounds.map((round) => (
             <div key={round.label} className="flex flex-col gap-2">
               <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -385,7 +105,9 @@ function BracketPlaceholder({ isPro }: { isPro: boolean }) {
           <Lock className="size-3 text-blue-400" />
           <span className="text-[11px] text-muted-foreground">
             Knockout-stage AI predictions unlock on{" "}
-            <Link href="/welcome" className="text-blue-400 underline-offset-2 hover:underline">Pro</Link>{" "}
+            <Link href="/welcome" className="text-blue-400 underline-offset-2 hover:underline">
+              Pro
+            </Link>{" "}
             once the bracket is set.
           </span>
         </footer>
@@ -394,49 +116,102 @@ function BracketPlaceholder({ isPro }: { isPro: boolean }) {
   );
 }
 
-// ── page ────────────────────────────────────────────────────────────────────
-export default async function WorldCupPage() {
-  // Tier read — server-side only. isElite reserved for v2 (bracket-vs-model challenge).
-  let isPro = false;
+async function readAuthAndTier(): Promise<{ isAuthed: boolean; isPro: boolean }> {
   try {
     const supabase = await createSupabaseServer();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const result = await getUserTier(user.id, supabase);
-      isPro = result.isPro;
-    }
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { isAuthed: false, isPro: false };
+    const result = await getUserTier(user.id, supabase);
+    return { isAuthed: true, isPro: result.isPro };
   } catch {
-    // Anonymous viewers get the free experience — non-fatal.
+    return { isAuthed: false, isPro: false };
   }
+}
 
-  // Snapshot "now" once — handed to Countdown as a prop. Lives behind a util
-  // so the React purity lint doesn't fire on the page server function.
-  const nowMs = getServerNowMs();
+interface PageData {
+  fixtures: WCFixture[];
+  groups: WCGroup[];
+  predictions: Record<string, WCPredictionSlot>;
+  advancement: Record<string, GroupAdvancementProb>;
+  userPicks: Record<string, WCPick>;
+  scorecard: WCScorecardType;
+}
 
+async function loadPageData(): Promise<PageData> {
   const fixtures = await getWorldCupFixtures();
   const groups = deriveGroups(fixtures);
 
-  // Predictions slot — empty today; populates once Phase 3 writes
-  // predictions.source='national_team_v1' rows.
   const predictions = await getWorldCupPredictions(fixtures.map((f) => f.id));
+  const allTeamIds = Array.from(new Set(fixtures.flatMap((f) => [f.home.id, f.away.id])));
+  const elos = await getInternationalElos(allTeamIds);
+
+  const haveAnyProb = Object.keys(predictions).length > 0 || Object.keys(elos).length > 0;
+  const advancement = haveAnyProb ? computeAdvancement(groups, predictions, elos, 5_000) : {};
+
+  const userPicks = await getUserWcPicks(fixtures.map((f) => f.id));
+  const scorecard = buildScorecard(fixtures, predictions, userPicks);
+
+  return { fixtures, groups, predictions, advancement, userPicks, scorecard };
+}
+
+export default async function WorldCupPage() {
+  const { isAuthed, isPro } = await readAuthAndTier();
+  const { fixtures, groups, predictions, advancement, scorecard } = await loadPageData();
+
+  // Featured banner — next match within 48h. getServerNowMs lives behind a
+  // util so the React-purity lint doesn't flag Date.now in the server fn.
+  const nowMs = getServerNowMs();
+  const featured = pickFeaturedFixture(fixtures, nowMs);
+  const featuredPrediction = featured ? predictions[featured.id] : undefined;
 
   return (
-    <div className="space-y-8">
-      {/* ── HERO ───────────────────────────────────────────────────────── */}
-      <section className="overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-br from-card via-card to-primary/5 p-6 sm:p-8">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div className="space-y-6 sm:space-y-8">
+      {/* ── FEATURED BANNER (sticky) ─────────────────────────────────────── */}
+      {featured && (
+        <WCFeaturedBanner
+          matchId={featured.id}
+          homeName={featured.home.name}
+          homeLogo={featured.home.logo}
+          awayName={featured.away.name}
+          awayLogo={featured.away.logo}
+          kickoffIso={featured.date}
+          venueName={featured.venueName}
+          predictionTriple={
+            featuredPrediction?.homeProb != null && featuredPrediction.awayProb != null
+              ? {
+                  home: featuredPrediction.homeProb,
+                  draw: featuredPrediction.drawProb ?? 0,
+                  away: featuredPrediction.awayProb,
+                }
+              : null
+          }
+        />
+      )}
+
+      {/* ── HERO ─────────────────────────────────────────────────────────── */}
+      <section className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-br from-card via-card to-primary/5 p-5 sm:p-8">
+        {/* gold corner glint */}
+        <span
+          aria-hidden
+          className="pointer-events-none absolute -right-16 -top-16 size-48 rounded-full bg-[color:var(--color-tournament-gold)]/10 blur-3xl"
+        />
+        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-muted-foreground">
-              <Trophy className="size-4 text-amber-400" />
-              <span className="text-xs font-semibold uppercase tracking-wider">Tournament hub</span>
+              <Trophy className="size-4 text-[color:var(--color-tournament-gold)]" />
+              <span className="text-[10px] font-semibold uppercase tracking-wider sm:text-xs">
+                Tournament hub
+              </span>
             </div>
-            <h1 className="text-3xl font-black tracking-tight text-foreground sm:text-4xl">
+            <h1 className="text-3xl font-black leading-tight tracking-tight text-foreground sm:text-5xl">
               FIFA World Cup 2026
             </h1>
-            <p className="text-sm text-muted-foreground sm:text-base">
+            <p className="max-w-md text-sm text-muted-foreground sm:text-base">
               June 11 — July 19, 2026 · 48 teams · 12 groups · USA · Canada · Mexico
             </p>
-            <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-2 pt-1 text-[10px] text-muted-foreground sm:text-xs">
               <span className="inline-flex items-center gap-1 rounded-full border border-white/[0.08] bg-background/40 px-2.5 py-1">
                 <Calendar className="size-3" />
                 Opens with Mexico v South Africa
@@ -446,54 +221,82 @@ export default async function WorldCupPage() {
                 Estadio Azteca, Mexico City
               </span>
             </div>
+            <div className="flex flex-wrap gap-2 pt-2">
+              <Link
+                href="/world-cup/bracket"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--color-tournament-gold)] px-3 py-2 text-xs font-bold text-background hover:brightness-110 sm:px-4 sm:py-2.5 sm:text-sm"
+              >
+                <Trophy className="size-3.5" />
+                Play bracket challenge
+              </Link>
+              <Link
+                href="/world-cup/bracket/leaderboard"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-card/40 px-3 py-2 text-xs font-semibold text-foreground hover:border-white/[0.16] sm:px-4 sm:py-2.5 sm:text-sm"
+              >
+                <Users className="size-3.5" />
+                Leaderboard
+              </Link>
+            </div>
           </div>
 
           <div className="flex flex-col items-start gap-2 sm:items-end">
-            <Countdown targetIso={WC_FIRST_KICKOFF_ISO} nowMs={nowMs} />
-            <span className="text-[11px] text-muted-foreground">
+            <WCCountdown targetIso={WC_FIRST_KICKOFF_ISO} variant="card" liveLabel="Tournament live" />
+            <span className="text-[10px] text-muted-foreground sm:text-[11px]">
               {new Date(WC_FIRST_KICKOFF_ISO).toLocaleString(undefined, {
-                month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+                month: "short",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
               })}
             </span>
           </div>
         </div>
       </section>
 
-      {/* ── GROUP STAGE ────────────────────────────────────────────────── */}
+      {/* ── SCORECARD (only when matches have settled) ───────────────────── */}
+      <WCScorecard card={scorecard} isAuthed={isAuthed} />
+
+      {/* ── GROUP STAGE ──────────────────────────────────────────────────── */}
       <section className="space-y-3">
         <header className="flex items-end justify-between border-b border-white/[0.06] pb-2">
           <div>
-            <h2 className="text-lg font-bold text-foreground">Group stage</h2>
-            <p className="text-xs text-muted-foreground">
-              12 groups · 4 teams each · top 2 + best 8 third-place teams advance to the Round of 32.
+            <h2 className="text-base font-bold text-foreground sm:text-lg">Group stage</h2>
+            <p className="text-[10px] text-muted-foreground sm:text-xs">
+              12 groups · 4 teams each · top 2 + best 8 third-place advance to the Round of 32.
             </p>
           </div>
-          <span className="text-xs text-muted-foreground">{groups.length} groups</span>
+          <span className="text-[10px] text-muted-foreground sm:text-xs">{groups.length} groups</span>
         </header>
 
-        <GroupsSection groups={groups} predictions={predictions} />
-      </section>
-
-      {/* ── ALL FIXTURES ───────────────────────────────────────────────── */}
-      <section className="space-y-3">
-        <header className="flex items-end justify-between border-b border-white/[0.06] pb-2">
-          <div>
-            <h2 className="text-lg font-bold text-foreground">All fixtures</h2>
-            <p className="text-xs text-muted-foreground">Chronological. Tap any match for full intel.</p>
+        {groups.length === 0 ? (
+          <div className="rounded-xl border border-white/[0.06] bg-card/40 p-6 text-center text-sm text-muted-foreground">
+            Group draw not loaded yet — fixtures arrive daily.
           </div>
-          <span className="text-xs text-muted-foreground">{fixtures.length} matches</span>
-        </header>
-
-        <FixturesByDate fixtures={fixtures} predictions={predictions} />
+        ) : (
+          <WCGroupTabs
+            labels={groups.map((g) => g.label)}
+            panels={groups.map((g) => (
+              <WCGroupCard
+                key={g.label}
+                group={g}
+                predictions={predictions}
+                advancement={advancement}
+              />
+            ))}
+          />
+        )}
       </section>
 
-      {/* ── KNOCKOUT BRACKET PLACEHOLDER ───────────────────────────────── */}
+      {/* ── KNOCKOUT BRACKET PLACEHOLDER ─────────────────────────────────── */}
       <section className="space-y-3">
         <header className="flex items-end justify-between border-b border-white/[0.06] pb-2">
           <div>
-            <h2 className="text-lg font-bold text-foreground">Knockout bracket</h2>
-            <p className="text-xs text-muted-foreground">
-              Round of 32 → Final · seeded after the group stage.
+            <h2 className="text-base font-bold text-foreground sm:text-lg">Knockout bracket</h2>
+            <p className="text-[10px] text-muted-foreground sm:text-xs">
+              Round of 32 → Final · seeded after the group stage.{" "}
+              <Link href="/world-cup/bracket" className="text-primary hover:underline">
+                Pick yours →
+              </Link>
             </p>
           </div>
         </header>
@@ -501,14 +304,15 @@ export default async function WorldCupPage() {
         <BracketPlaceholder isPro={isPro} />
       </section>
 
-      {/* ── PREDICTIONS NOTICE ─────────────────────────────────────────── */}
+      {/* ── PREDICTIONS NOTICE ───────────────────────────────────────────── */}
       {Object.keys(predictions).length === 0 && (
         <section className="rounded-xl border border-white/[0.06] bg-card/40 p-4 text-xs text-muted-foreground">
           <div className="flex items-start gap-2">
-            <Flag className="size-3.5 mt-0.5 text-amber-400 shrink-0" />
+            <Flag className="size-3.5 mt-0.5 text-[color:var(--color-tournament-gold)] shrink-0" />
             <p>
-              National-team AI predictions are training on six WCs of historical data and arrive before kick-off.
-              Once live, every fixture above will carry a probability triple and group advancement odds.
+              National-team AI predictions are training on six WCs of historical data and arrive
+              before kick-off. Advancement % above is computed from international ELO ratings until
+              full predictions land.
             </p>
           </div>
         </section>
