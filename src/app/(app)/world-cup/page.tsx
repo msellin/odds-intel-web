@@ -232,17 +232,21 @@ function BracketPlaceholder({ isPro }: { isPro: boolean }) {
   );
 }
 
-async function readAuthAndTier(): Promise<{ isAuthed: boolean; isPro: boolean }> {
+async function readAuthAndTier(): Promise<{
+  isAuthed: boolean;
+  isPro: boolean;
+  userId: string | null;
+}> {
   try {
     const supabase = await createSupabaseServer();
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return { isAuthed: false, isPro: false };
+    if (!user) return { isAuthed: false, isPro: false, userId: null };
     const result = await getUserTier(user.id, supabase);
-    return { isAuthed: true, isPro: result.isPro };
+    return { isAuthed: true, isPro: result.isPro, userId: user.id };
   } catch {
-    return { isAuthed: false, isPro: false };
+    return { isAuthed: false, isPro: false, userId: null };
   }
 }
 
@@ -527,16 +531,29 @@ function KnockoutsPanel({ isAuthed, isPro }: { isAuthed: boolean; isPro: boolean
 // order is essentially alphabetical-by-ai_label until matches start
 // resolving — that's fine; the page is here so users can see WHO'S
 // playing, not just rankings.
-async function LeaderboardPanel() {
+//
+// LEADERBOARD-USER-PIN (2026-06-02): the loader appends the signed-in
+// user when they're outside the top-N. We render that row at the bottom
+// of the table with a divider, so users always see "I'm #47" with one
+// glance regardless of where they actually sit. When they're inside the
+// top 20 we just highlight their natural row.
+async function LeaderboardPanel({ currentUserId }: { currentUserId: string | null }) {
   const { loadBracketLeaderboard } = await import("@/lib/wc-bracket");
-  const entries = await loadBracketLeaderboard({ limit: 20 });
+  const entries = await loadBracketLeaderboard({ limit: 20, currentUserId });
+
+  const meIndex = entries.findIndex((e) => e.isCurrentUser);
+  const meInTop = meIndex >= 0 && meIndex < 20;
+  const topEntries = entries.slice(0, 20);
+  // Loader appends the user row at position 20 when they're outside top-N.
+  const pinnedMe = !meInTop && meIndex >= 20 ? entries[meIndex] : null;
+
   return (
     <section className="space-y-3">
       <header className="flex items-end justify-between border-b border-white/[0.06] pb-2">
         <div>
           <h2 className="text-base font-bold text-foreground sm:text-lg">Leaderboard</h2>
           <p className="text-[10px] text-muted-foreground sm:text-xs">
-            Combined score: group standings + knockout bracket. Updates after each settled match.
+            Group standings + knockout bracket. Top 3 humans win 1 month Elite.
           </p>
         </div>
         <Link
@@ -562,35 +579,61 @@ async function LeaderboardPanel() {
               </tr>
             </thead>
             <tbody>
-              {entries.map((e, i) => {
-                const isAnon = e.isAi && /^Player \d+$/.test(e.aiLabel ?? "");
-                const name = e.isAi ? e.aiLabel : (e.displayName ?? "Anonymous");
-                return (
-                  <tr key={e.key} className={`border-b border-white/[0.04] last:border-0 ${e.isAi ? "bg-white/[0.01]" : ""}`}>
-                    <td className="px-3 py-2 text-left text-muted-foreground tabular-nums">{i + 1}</td>
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-1.5">
-                        {e.isAi && !isAnon && (
-                          <span className="rounded-full bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground ring-1 ring-white/[0.06]">
-                            AI
-                          </span>
-                        )}
-                        <span className={isAnon ? "text-muted-foreground/60" : (e.isAi ? "text-muted-foreground" : "text-foreground")}>{name}</span>
-                      </div>
+              {topEntries.map((e, i) => (
+                <LeaderboardInlineRow key={e.key} e={e} rank={i + 1} />
+              ))}
+              {pinnedMe && (
+                <>
+                  <tr aria-hidden>
+                    <td colSpan={3} className="border-y border-dashed border-white/[0.08] px-3 py-1.5 text-center text-[10px] uppercase tracking-wider text-muted-foreground/60">
+                      Your position
                     </td>
-                    <td className="px-3 py-2 text-right font-mono font-semibold text-foreground tabular-nums">{e.totalScore}</td>
                   </tr>
-                );
-              })}
+                  <LeaderboardInlineRow e={pinnedMe} rank={pinnedMe.currentRank ?? meIndex + 1} />
+                </>
+              )}
             </tbody>
           </table>
         </div>
       )}
-
-      <p className="text-[10px] text-muted-foreground/60">
-        🤖 AI ghost entries are our model running in different configurations. Not eligible for prizes — beat them to claim a top-3 human spot (1 month Elite, free).
-      </p>
     </section>
+  );
+}
+
+function LeaderboardInlineRow({
+  e,
+  rank,
+}: {
+  e: Awaited<ReturnType<typeof import("@/lib/wc-bracket").loadBracketLeaderboard>>[number];
+  rank: number;
+}) {
+  const isAnon = e.isAi && /^Player \d+$/.test(e.aiLabel ?? "");
+  const name = e.isAi ? e.aiLabel : (e.displayName ?? "Anonymous");
+  const rowBg = e.isCurrentUser
+    ? "bg-primary/[0.08]"
+    : e.isAi
+    ? "bg-white/[0.01]"
+    : "";
+  return (
+    <tr className={`border-b border-white/[0.04] last:border-0 ${rowBg}`}>
+      <td className="px-3 py-2 text-left text-muted-foreground tabular-nums">{rank}</td>
+      <td className="px-3 py-2">
+        <div className="flex items-center gap-1.5">
+          {e.isAi && !isAnon && (
+            <span className="rounded-full bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground ring-1 ring-white/[0.06]">
+              AI
+            </span>
+          )}
+          {e.isCurrentUser && (
+            <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
+              you
+            </span>
+          )}
+          <span className={isAnon ? "text-muted-foreground/60" : (e.isAi ? "text-muted-foreground" : "text-foreground")}>{name}</span>
+        </div>
+      </td>
+      <td className="px-3 py-2 text-right font-mono font-semibold text-foreground tabular-nums">{e.totalScore}</td>
+    </tr>
   );
 }
 
@@ -663,7 +706,7 @@ export default async function WorldCupPage({
   const { tab: rawTab } = await searchParams;
   const tab = resolveTab(rawTab);
 
-  const { isAuthed, isPro } = await readAuthAndTier();
+  const { isAuthed, isPro, userId } = await readAuthAndTier();
   const [
     { fixtures, groups, predictions, advancement, scorecard, previews },
     activityStats,
@@ -697,6 +740,7 @@ export default async function WorldCupPage({
         scorecard={scorecard}
         isAuthed={isAuthed}
         isPro={isPro}
+        userId={userId}
         nowMs={nowMs}
         nextFixture={nextFixture}
         previews={previews}
@@ -760,6 +804,7 @@ function ActiveTabPanel({
   scorecard,
   isAuthed,
   isPro,
+  userId,
   nowMs,
   nextFixture,
   previews,
@@ -772,6 +817,7 @@ function ActiveTabPanel({
   scorecard: WCScorecardType;
   isAuthed: boolean;
   isPro: boolean;
+  userId: string | null;
   nowMs: number;
   nextFixture: WCFixture | null;
   previews: Record<string, WCMatchPreview>;
@@ -799,7 +845,7 @@ function ActiveTabPanel({
     case "knockouts":
       return <KnockoutsPanel isAuthed={isAuthed} isPro={isPro} />;
     case "leaderboard":
-      return <LeaderboardPanel />;
+      return <LeaderboardPanel currentUserId={userId} />;
     // Legacy /world-cup?tab=bracket URLs still route to the bracket page.
     case "bracket":
       return <BracketChallengePanel isAuthed={isAuthed} />;

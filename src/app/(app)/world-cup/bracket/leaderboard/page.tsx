@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Bot, ChevronLeft, Trophy } from "lucide-react";
+import { Bot, ChevronLeft } from "lucide-react";
 
 import {
   loadBracketLeaderboard,
@@ -62,23 +62,25 @@ export default async function BracketLeaderboardPage() {
     // Pre-migration safety — render the page without badges.
   }
 
-  // Total population — drives percentile vs absolute-rank display.
-  // Use the largest rank we see as a proxy for N when it's available;
-  // any entry whose rank is null fall back to entries.length.
-  const maxRank = entries.reduce(
-    (m, e) => Math.max(m, e.currentRank ?? 0),
-    0
-  );
+  // LEADERBOARD-DECLUTTER (2026-06-02): percentile mode is meaningless
+  // pre-tournament when every score is 0 — "Top 1%" / "Top 50%" labels
+  // were just noise. We now always show absolute rank. Population check
+  // kept so the constant import isn't dead code; once the tournament fills
+  // the board we can reintroduce a tighter percentile threshold.
+  const maxRank = entries.reduce((m, e) => Math.max(m, e.currentRank ?? 0), 0);
   const populationN = Math.max(maxRank, entries.length);
-  const usePercentile = populationN < PERCENTILE_DISPLAY_THRESHOLD;
+  const hasMeaningfulScores = entries.some((e) => (e.totalScore ?? 0) > 0);
+  const usePercentile =
+    hasMeaningfulScores && populationN < PERCENTILE_DISPLAY_THRESHOLD;
 
-  // Top-of-list pin: if the current user is in `entries` but outside the
-  // top 50, pull a copy of them to render at the very top (as well as in
-  // their natural row). When they're in the top 50, no pinning needed.
+  // LEADERBOARD-USER-PIN (2026-06-02): pin the current user at the BOTTOM
+  // (not the top) of the visible page when they're outside the rendered
+  // window — most users will scroll the table looking for their row, so
+  // a tail-pin reads as "this is where you are" rather than a strange
+  // top duplicate.
   const topN = 50;
   const meIndex = entries.findIndex((e) => e.isCurrentUser);
-  const pinnedMe =
-    meIndex >= topN ? entries[meIndex] : null;
+  const pinnedMe = meIndex >= topN ? entries[meIndex] : null;
 
   return (
     <div className="space-y-4 pb-12">
@@ -95,28 +97,15 @@ export default async function BracketLeaderboardPage() {
       </div>
 
       <header className="space-y-1">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Trophy className="size-4 text-[color:var(--color-tournament-gold)]" />
-          <span className="text-[10px] font-semibold uppercase tracking-wider sm:text-xs">
-            Bracket Leaderboard
-          </span>
-        </div>
         <h1 className="text-2xl font-black tracking-tight text-foreground sm:text-3xl">
-          Combined leaderboard
+          Leaderboard
         </h1>
         <p className="text-xs text-muted-foreground sm:text-sm">
-          Total = group standings + knockout bracket. Updates after each settled
-          match.
-        </p>
-        <p className="mt-1 flex items-start gap-1.5 text-[11px] text-muted-foreground/80">
-          <Bot className="mt-0.5 size-3 shrink-0" />
-          <span>
-            <span className="text-foreground">🤖 AI ghost</span> entries are our
-            model running in 5 different configurations. They compete on the
-            same board but are{" "}
-            <span className="font-semibold">not eligible for prizes</span> — top
-            3 humans win 1 month of Elite, free.
-          </span>
+          Group standings + knockout bracket · top 3 humans win 1 month Elite ·{" "}
+          <span className="inline-flex items-center gap-0.5">
+            <Bot className="size-3" /> AI
+          </span>{" "}
+          ghosts not eligible for prizes.
         </p>
       </header>
 
@@ -150,19 +139,6 @@ export default async function BracketLeaderboardPage() {
               </tr>
             </thead>
             <tbody>
-              {pinnedMe && (
-                <LeaderboardRow
-                  e={pinnedMe}
-                  i={meIndex}
-                  usePercentile={usePercentile}
-                  achievements={
-                    pinnedMe.userId
-                      ? achievementsByUser.get(pinnedMe.userId) ?? []
-                      : []
-                  }
-                  isPinnedView
-                />
-              )}
               {entries.slice(0, topN).map((e, i) => (
                 <LeaderboardRow
                   key={e.key}
@@ -174,15 +150,33 @@ export default async function BracketLeaderboardPage() {
                   }
                 />
               ))}
+              {pinnedMe && (
+                <>
+                  <tr aria-hidden>
+                    <td
+                      colSpan={5}
+                      className="border-y border-dashed border-white/[0.08] px-3 py-1.5 text-center text-[10px] uppercase tracking-wider text-muted-foreground/60"
+                    >
+                      Your position
+                    </td>
+                  </tr>
+                  <LeaderboardRow
+                    e={pinnedMe}
+                    i={meIndex}
+                    usePercentile={usePercentile}
+                    achievements={
+                      pinnedMe.userId
+                        ? achievementsByUser.get(pinnedMe.userId) ?? []
+                        : []
+                    }
+                    isPinnedView
+                  />
+                </>
+              )}
             </tbody>
           </table>
         </div>
       )}
-
-      <p className="text-[10px] text-muted-foreground/60">
-        🤖 = AI ghost (model entry). Not eligible for prizes; on the board for
-        benchmarking.
-      </p>
     </div>
   );
 }
