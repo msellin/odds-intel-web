@@ -198,6 +198,10 @@ export interface LiveBet {
   comboSize: number | null;
   systemType: string | null;
   strategyProfile: string | null;
+  // PRO-TIER-V2 (2026-06-02): is this pick from an inplay bot? Drives the
+  // separate "Live now" section on /value-bets. Inplay bots write xg_source
+  // and/or have name LIKE 'inplay_%' — either is sufficient.
+  isInplay: boolean;
 }
 
 // ─── Supabase row types ─────────────────────────────────────────────────────
@@ -1071,7 +1075,13 @@ export async function getMatchById(matchId: string): Promise<LiveMatch | null> {
   return matches.find((m) => m.id === matchId) || null;
 }
 
-export async function getTodayBets(): Promise<LiveBet[]> {
+// PRO-TIER-V2 (2026-06-02): cohort = which bot universe the caller wants.
+//   "calibrated" → maturity_label='calibrated' AND is_active=true (Pro tier)
+//   "active"     → is_active=true (Elite tier; includes inplay + experimental)
+//   "prematch"   → legacy: xg_source IS NULL (used by the free daily pick teaser)
+export type BetCohort = "calibrated" | "active" | "prematch";
+
+export async function getTodayBets(cohort: BetCohort = "prematch"): Promise<LiveBet[]> {
   // Use service role so RLS on simulated_bets doesn't block the server.
   // Tier-based sanitization happens in page.tsx before data reaches the client.
   const supabase = createSupabaseAdmin();
@@ -1080,19 +1090,32 @@ export async function getTodayBets(): Promise<LiveBet[]> {
   const todayStart = new Date(now);
   todayStart.setHours(0, 0, 0, 0);
 
-  // INPLAY-HIDE-VALUEBETS: prematch-only on /value-bets while inplay bots are
-  // being tuned. xg_source IS NULL ⇒ prematch bot. Inplay bets still appear on
-  // /performance (historical record) where the `live` badge differentiates them.
-  // COMBO-HIDE-FROM-PUBLIC (2026-05-18): hide combo/acca rows too — they're
+  // Step 1: resolve the bot allowlist for the requested cohort.
+  // (We can't filter on joined `bot:bot_id(...)` directly with PostgREST, so
+  // we pre-resolve the bot IDs we care about.)
+  let allowedBotIds: string[] | null = null;
+  if (cohort !== "prematch") {
+    const botQuery = supabase
+      .from("bots")
+      .select("id, maturity_label, is_active")
+      .eq("is_active", true);
+    if (cohort === "calibrated") botQuery.eq("maturity_label", "calibrated");
+    const { data: botRows } = await botQuery;
+    allowedBotIds = ((botRows ?? []) as Array<{ id: string }>).map((b) => b.id);
+    // If no bots qualify, return [] immediately rather than firing a bet query
+    // with an empty `in()` (which PostgREST treats as "all rows").
+    if (allowedBotIds.length === 0) return [];
+  }
+
+  // COMBO-HIDE-FROM-PUBLIC (2026-05-18): hide combo/acca rows — they're
   // multi-leg paper experiments, not individually-placeable value bets.
-  // Still visible on /admin/place (manual placer can build the slip at Coolbet)
-  // and /admin/bots (superadmin tracking).
-  const { data, error } = await supabase
+  let q = supabase
     .from("simulated_bets")
     .select(
       `id, match_id, market, selection, odds_at_pick, pick_time, stake,
        model_probability, calibrated_prob, edge_percent, closing_odds, clv, result, pnl,
        bankroll_after, news_triggered, reasoning, recommended_bookmaker, strategy_profile,
+       xg_source,
        bot:bot_id(id, name, strategy),
        match:match_id(id, date,
          home_team:home_team_id(name),
@@ -1101,12 +1124,17 @@ export async function getTodayBets(): Promise<LiveBet[]> {
        )`
     )
     .gte("pick_time", todayStart.toISOString())
-    .is("xg_source", null)
     .neq("market", "combo")
     .order("pick_time", { ascending: false });
 
-  if (error || !data) return [];
+  if (cohort === "prematch") {
+    // INPLAY-HIDE-VALUEBETS legacy path — used by the free teaser only.
+    q = q.is("xg_source", null);
+  }
+  if (allowedBotIds) q = q.in("bot_id", allowedBotIds);
 
+  const { data, error } = await q;
+  if (error || !data) return [];
   return (data as SimBetRow[]).map((row) => toBet(row));
 }
 
@@ -1431,6 +1459,10 @@ function toBet(
     comboSize: row.combo_size != null ? Number(row.combo_size) : null,
     systemType: row.system_type ?? null,
     strategyProfile: row.strategy_profile ?? null,
+    // PRO-TIER-V2 (2026-06-02): xg_source is the canonical inplay marker
+    // (live-poller writes it on every inplay bet); bot name prefix is a
+    // belt-and-braces fallback for any future variant.
+    isInplay: row.xg_source != null || String(bot?.name ?? "").startsWith("inplay_"),
   };
 }
 
@@ -3076,6 +3108,23 @@ export interface DashboardCache {
     markets_tied: number;
     group_deltas: Record<string, number>; // e.g. { "1x2": -10.0, "ah": -2.6 }
     holdout_n: number | null;
+  } | null;
+  // PRO-TIER-V2 (2026-06-02): rolling-30d hero stats for /value-bets. Pro card
+  // shows the calibrated cohort; Elite card shows all active bots. Either can
+  // be null on a fresh cohort with no settled bets.
+  pro_value_bets_30d: {
+    n: number;
+    won: number;
+    win_rate_pct: number | null;
+    roi_pct: number | null;
+    clv_pct: number | null;
+  } | null;
+  elite_value_bets_30d: {
+    n: number;
+    won: number;
+    win_rate_pct: number | null;
+    roi_pct: number | null;
+    clv_pct: number | null;
   } | null;
 }
 

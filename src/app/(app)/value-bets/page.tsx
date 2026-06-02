@@ -9,12 +9,16 @@ import {
   getOddsVerifiedAt,
   getValueBetBookOdds,
   getPublicPerformanceExtras,
+  getDashboardCache,
   type LiveBet,
   type BookOddsEntry,
+  type BetCohort,
 } from "@/lib/engine-data";
 import { ValueBetsScan } from "@/components/value-bets-scan";
 import { ValueBetsGate } from "@/components/value-bets-gate";
 import { TodayPicksPreview } from "@/components/today-picks-preview";
+import { ValueBetsHeroStats } from "@/components/value-bets-hero-stats";
+import { ValueBetsLiveSection } from "@/components/value-bets-live-section";
 import { getUserTier } from "@/lib/get-user-tier";
 
 export const metadata: Metadata = {
@@ -83,32 +87,25 @@ function deduplicateBets(bets: LiveBet[]): (LiveBet & { botCount: number })[] {
   return Array.from(seen.values());
 }
 
+// PRO-TIER-V2 (2026-06-02): tier sanitization on the SERVER, never trusting
+// client. Pro and Elite see the same full fields (side, odds, modelProb,
+// edge, stake) — they differ only in the BOT COHORT the server queries:
+//   Pro    → calibrated, ~18 picks/day, +8% ROI, +14% CLV (May 2026 30d)
+//   Elite  → all active, ~45 picks/day, +10% ROI, +10% CLV
+// Free keeps the old teaser: one pick, rest blurred + locked.
 function sanitizeBets(
   bets: LiveBet[],
   isPro: boolean,
-  isElite: boolean
 ): { bets: (LiveBet & { botCount: number })[]; totalCount: number } {
   const deduped = deduplicateBets(bets);
   const totalCount = deduped.length;
 
-  if (isElite) return { bets: deduped, totalCount };
-
   if (isPro) {
-    const stripped = deduped.map((b) => ({
-      ...b,
-      selection: "",
-      odds: 0,
-      modelProb: 0,
-      impliedProb: 0,
-      stake: 0,
-      pnl: 0,
-      bankrollAfter: null,
-      closingOdds: null,
-      clv: null,
-    }));
-    return { bets: stripped, totalCount };
+    // Pro AND Elite get full data — the cohort filter is the only difference.
+    return { bets: deduped, totalCount };
   }
 
+  // Free: single highlighted row, rest blurred (teaser flow).
   return { bets: deduped.slice(0, 1), totalCount };
 }
 
@@ -144,20 +141,37 @@ async function ValueBetsContent({ userId }: { userId: string }) {
   const supabase = await createSupabaseServer();
   const { tier: userTier, isPro, isElite } = await getUserTier(userId, supabase);
 
-  const [allBets, todayPicks, extras] = await Promise.all([
-    getTodayBets(),
+  // PRO-TIER-V2 (2026-06-02): cohort selection happens HERE on the server.
+  // Free still gets the prematch-only feed (matches the legacy teaser path);
+  // Pro → calibrated; Elite → all active (calibrated + active + experimental,
+  // includes inplay). The query in getTodayBets enforces this via an
+  // intermediate bots-table lookup — see lib/engine-data.ts.
+  const cohort: BetCohort =
+    isElite ? "active" : isPro ? "calibrated" : "prematch";
+
+  const [allBets, todayPicks, extras, cache] = await Promise.all([
+    getTodayBets(cohort),
     getTodayPicks(),
     // Used for the free-tier "this bot's last-30-day ROI" hook + Pro odds-movement view.
     getPublicPerformanceExtras(),
+    // Hero-stats rolling 30d (Pro+ tier only; ignored for free).
+    isPro ? getDashboardCache() : Promise.resolve(null),
   ]);
+
+  // PRO-TIER-V2 (2026-06-02): split inplay out of the main feed so it can
+  // render in its own "Live now" section with auto-refresh + stale gating.
+  // Free tier never sees the live section.
+  const inplayBets = isPro ? allBets.filter((b) => b.isInplay && b.result === "pending") : [];
+  const prematchBets = allBets.filter((b) => !b.isInplay);
+
   // Sort: edge descending (highest value first), KO time ascending as tiebreak
   // so among equal-edge bets, earlier matches surface first.
-  const sorted = [...allBets].sort((a, b) => {
+  const sorted = [...prematchBets].sort((a, b) => {
     const edgeDiff = b.edge - a.edge;
     if (Math.abs(edgeDiff) > 0.001) return edgeDiff;
     return new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime();
   });
-  const { bets, totalCount } = sanitizeBets(sorted, isPro, isElite);
+  const { bets, totalCount } = sanitizeBets(sorted, isPro);
 
   const matchIds = Array.from(new Set(bets.map((b) => b.matchId).filter(Boolean)));
   // Fetch current best book odds for Pro+ (so they get the line-movement chip),
@@ -170,8 +184,52 @@ async function ValueBetsContent({ userId }: { userId: string }) {
       ])
     : [null, {} as Record<string, BookOddsEntry>];
 
+  // Hero stats — tier-specific cohort.
+  const heroStats = !isPro
+    ? null
+    : isElite
+      ? cache?.elite_value_bets_30d ?? null
+      : cache?.pro_value_bets_30d ?? null;
+
+  // Server-anchored "now" for the live section. The client component diffs
+  // each pick's placedAt against this (NOT Date.now()) for the stale gate, so
+  // a clock-drifted browser can't fake freshness.
+  const serverNow = new Date().toISOString();
+
   return (
     <div className="space-y-6">
+      {/* Rolling-stats hero — Pro+ only */}
+      {isPro && (
+        <ValueBetsHeroStats
+          tier={isElite ? "elite" : "pro"}
+          stats={heroStats}
+        />
+      )}
+
+      {/* Live now — inplay picks, auto-refresh every 60s (Pro+ only) */}
+      {isPro && inplayBets.length > 0 && (
+        <ValueBetsLiveSection
+          initialBets={inplayBets.map((b) => ({
+            id: b.id,
+            matchId: b.matchId,
+            match: b.match,
+            league: b.league,
+            market: b.market,
+            selection: b.selection,
+            odds: b.odds,
+            modelProb: b.modelProb,
+            edge: b.edge,
+            kickoff: b.kickoff,
+            placedAt: b.placedAt,
+            recommendedBookmaker: b.recommendedBookmaker,
+            bot: b.bot,
+            stake: b.stake,
+          }))}
+          serverNow={serverNow}
+          isElite={isElite}
+        />
+      )}
+
       <TodayPicksPreview picks={todayPicks} isPro={isPro} isElite={isElite} />
       <ValueBetsScan
         bets={bets}

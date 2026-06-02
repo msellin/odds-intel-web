@@ -84,8 +84,12 @@ function fmtMarket(market: string): string {
   return labels[market] ?? market;
 }
 
-function fmtPickLine(market: string, selection: string, isElite: boolean): string {
-  if (!isElite || !selection) return fmtMarket(market);
+// PRO-TIER-V2 (2026-06-02): Pro now sees the side/selection, not just the
+// market. Stake sizing stays Elite-only (Kelly fraction is the actionable
+// element that justifies the price gap). Anything stake-related still gates
+// on isElite below; everything else gates on isPro.
+function fmtPickLine(market: string, selection: string, isPro: boolean): string {
+  if (!isPro || !selection) return fmtMarket(market);
   const sel = fmtSelection(market, selection);
   // Only append market suffix when it adds info
   const suffixes: Record<string, string> = {
@@ -197,7 +201,10 @@ function ExpandedPanel({
   const liveEdge = computeLiveEdge(bet.modelProb, entry);
   const liveImplied = best ? 1 / best.odds : bet.impliedProb;
   const drift = lineDrift(entry, bet.odds, bet.result);
-  const hasModelData = isElite && bet.modelProb > 0;
+  // PRO-TIER-V2 (2026-06-02): model probability / fair odds / edge math is
+  // now visible to Pro too. The Kelly stake row inside the table is the only
+  // Elite-only piece — gated separately below.
+  const hasModelData = isPro && bet.modelProb > 0;
 
   // KO timing signal
   const koSignal = (() => {
@@ -237,6 +244,9 @@ function ExpandedPanel({
                   )}
                 </td>
               </tr>
+              {/* PRO-TIER-V2: stake sizing remains Elite-only; Pro sees a
+                  small inline upsell row instead of the value. Keeps the
+                  rest of the model table (prob, fair odds, edge) visible. */}
               <tr>
                 <td className="py-1.5 text-muted-foreground">
                   Suggested stake
@@ -247,16 +257,21 @@ function ExpandedPanel({
                     (fractional Kelly · 0.15) ⓘ
                   </span>
                 </td>
-                <td className="py-1.5 text-right font-medium font-mono">{bet.stake.toFixed(1)}u</td>
+                <td className="py-1.5 text-right font-medium font-mono">
+                  {isElite ? (
+                    `${bet.stake.toFixed(1)}u`
+                  ) : (
+                    <a
+                      href="/profile"
+                      className="text-[11px] font-normal text-amber-400 hover:text-amber-300"
+                    >
+                      Elite →
+                    </a>
+                  )}
+                </td>
               </tr>
             </tbody>
           </table>
-        </div>
-      ) : isPro ? (
-        <div className="rounded-lg border border-border/30 bg-muted/10 px-3 py-2.5 text-[11px] text-muted-foreground">
-          <span className="font-medium text-foreground/70">Model probability, fair odds and stake sizing</span>
-          {" "}are available on Elite.{" "}
-          <a href="/profile" className="text-amber-400 hover:text-amber-300">Upgrade →</a>
         </div>
       ) : null}
 
@@ -335,7 +350,9 @@ function ValueBetRow({
   const displayEdge = liveEdge !== null ? liveEdge : bet.edge;
   const drift = lineDrift(entry, bet.odds, bet.result);
   const { gutter, timeColor, isLive } = urgency(bet.kickoff, bet.result, mounted);
-  const pickLine = fmtPickLine(bet.market, bet.selection, isElite);
+  // PRO-TIER-V2 (2026-06-02): selection/odds/book are visible to Pro too —
+  // gating these on isPro (which includes Elite). Stake stays Elite-only.
+  const pickLine = fmtPickLine(bet.market, bet.selection, isPro);
 
   // Odds display: live best if available, else posting odds+book
   const oddsLine = (() => {
@@ -343,7 +360,7 @@ function ValueBetRow({
       const stake = isElite && bet.stake > 0 ? ` · ${bet.stake.toFixed(1)}u` : "";
       return `${best.odds.toFixed(2)} ${best.name}${stake}`;
     }
-    if (isElite && bet.odds > 0 && bet.recommendedBookmaker) {
+    if (isPro && bet.odds > 0 && bet.recommendedBookmaker) {
       return `${bet.odds.toFixed(2)} ${bet.recommendedBookmaker}`;
     }
     return null;

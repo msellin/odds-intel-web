@@ -25,7 +25,10 @@ import { MatchSignalSummary } from "@/components/match-signal-summary";
 import { SignalAccordion } from "@/components/signal-accordion";
 import { SignalDelta } from "@/components/signal-delta";
 import { MatchNotes } from "@/components/match-notes";
-import { CommunityVote } from "@/components/community-vote";
+// PRO-TIER-V2 (2026-06-02): CommunityVote removed from regular match detail —
+// keeps the page focused on the value pick + signals. Component file retained
+// for potential WC use later.
+// import { CommunityVote } from "@/components/community-vote";
 import { BotConsensus } from "@/components/bot-consensus";
 import { MatchPreviewCard } from "@/components/match-preview-card";
 import { MatchVerdictCard } from "@/components/match-verdict-card";
@@ -446,14 +449,8 @@ export default async function MatchDetailPage({
         </Suspense>
       )}
 
-      {/* Community Vote */}
-      <CommunityVote
-        matchId={publicMatch.id}
-        homeTeam={publicMatch.homeTeam}
-        awayTeam={publicMatch.awayTeam}
-        matchStatus={publicMatch.status}
-        isAuthenticated={isAuthenticated}
-      />
+      {/* Community Vote removed 2026-06-02 (PRO-TIER-V2). Component file
+          kept for potential reintroduction during the World Cup. */}
 
       {/* Match notes */}
       <MatchNotes matchId={publicMatch.id} />

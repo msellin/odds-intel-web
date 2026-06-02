@@ -18,7 +18,6 @@ import {
   Crosshair,
   ChevronDown,
   User,
-  Wallet,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -181,22 +180,9 @@ export function Nav({ previewTier: initialPreviewTier = null }: NavProps) {
                       <Crosshair className="h-3.5 w-3.5" />
                       My Picks
                     </Link>
-                    {(profile?.tier === "elite" || profile?.is_superadmin) && (
-                      <Link
-                        href="/bankroll"
-                        onClick={() => setProfileOpen(false)}
-                        className={cn(
-                          "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
-                          pathname === "/bankroll"
-                            ? "bg-primary/10 text-primary"
-                            : "text-foreground hover:bg-accent"
-                        )}
-                      >
-                        <Wallet className="h-3.5 w-3.5" />
-                        Bankroll Analytics
-                        <span className="ml-auto rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-400">Elite</span>
-                      </Link>
-                    )}
+                    {/* PRO-TIER-V2 (2026-06-02): /bankroll deprecated from
+                        the user dropdown. Page still exists at /bankroll;
+                        link removed to declutter the menu. */}
                     <Link
                       href="/profile"
                       onClick={() => setProfileOpen(false)}
@@ -423,21 +409,8 @@ export function Nav({ previewTier: initialPreviewTier = null }: NavProps) {
                 <Crosshair className="h-4 w-4" />
                 My Picks
               </Link>
-              {(profile?.tier === "elite" || profile?.is_superadmin) && (
-                <Link
-                  href="/bankroll"
-                  onClick={() => setMobileOpen(false)}
-                  className={cn(
-                    "flex items-center gap-2 rounded-md px-3 py-2.5 text-sm transition-colors",
-                    pathname === "/bankroll"
-                      ? "border-l-2 border-primary bg-primary/10 text-primary"
-                      : "border-l-2 border-transparent text-muted-foreground hover:bg-accent hover:text-foreground"
-                  )}
-                >
-                  <Wallet className="h-4 w-4" />
-                  Bankroll Analytics
-                </Link>
-              )}
+              {/* PRO-TIER-V2 (2026-06-02): /bankroll deprecated from the
+                  mobile menu too. Same rationale as desktop above. */}
               <Link
                 href="/profile"
                 onClick={() => setMobileOpen(false)}
