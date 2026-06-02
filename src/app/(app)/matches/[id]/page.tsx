@@ -20,6 +20,8 @@ import type { MatchSignalRow } from "@/lib/engine-data";
 import { MatchDetailHeader } from "@/components/match-detail-header";
 import { MatchDetailTabs } from "@/components/match-detail-tabs";
 import { MatchEventTimeline } from "@/components/match-event-timeline";
+import { WinProbabilityChart } from "@/components/win-probability-chart";
+import { buildWPSeries, fetchMatchTeamMeta } from "@/lib/wp-series";
 import { MatchDetailFree } from "@/components/match-detail-free";
 import { MatchSignalSummary } from "@/components/match-signal-summary";
 import { SignalAccordion } from "@/components/signal-accordion";
@@ -165,6 +167,29 @@ export default async function MatchDetailPage({
   const initialSnapshot = liveSnapshotsArr[0] ?? null;
   const hasSignals = matchSignals.length > 0;
   const isLive = publicMatch.status === "live";
+
+  // ── Win-probability chart (FotMob-style) — show for live + finished ──
+  // For pre-match we render a teaser inside the component itself, so we only
+  // build the series when there's anything to plot.
+  let wpSeries: Awaited<ReturnType<typeof buildWPSeries>> | null = null;
+  if (publicMatch.status === "live" || publicMatch.status === "finished") {
+    const meta = await fetchMatchTeamMeta(id);
+    if (meta) {
+      wpSeries = await buildWPSeries({
+        matchId: id,
+        homeTeamId: meta.homeTeamId,
+        awayTeamId: meta.awayTeamId,
+        status: publicMatch.status,
+        scoreHome: publicMatch.score_home ?? initialSnapshot?.score_home ?? null,
+        scoreAway: publicMatch.score_away ?? initialSnapshot?.score_away ?? null,
+        minute: initialSnapshot?.minute ?? null,
+        modelHome: publicMatch.modelHome ?? null,
+        modelDraw: publicMatch.modelDraw ?? null,
+        modelAway: publicMatch.modelAway ?? null,
+        competition: meta.competition,
+      });
+    }
+  }
 
   // ── Build tab content ──
 
@@ -312,6 +337,21 @@ export default async function MatchDetailPage({
   // ── MATCH TAB — events, lineups, injuries, stats ──
   const matchContent = (
     <>
+      {/* Live win-probability curve (FotMob-style) — all tiers see it; Pro
+          additionally gets event markers (goals + red cards) on the chart. */}
+      {wpSeries && (
+        <WinProbabilityChart
+          matchId={publicMatch.id}
+          series={wpSeries.series}
+          current={wpSeries.current}
+          homeTeam={publicMatch.homeTeam}
+          awayTeam={publicMatch.awayTeam}
+          status={publicMatch.status}
+          isPro={isPro}
+          matchEvents={matchEvents}
+        />
+      )}
+
       {/* Visual event timeline — shown to all tiers */}
       {matchEvents.length > 0 && (
         <MatchEventTimeline
