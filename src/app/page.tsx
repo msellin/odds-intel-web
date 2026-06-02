@@ -3,6 +3,8 @@ import { Check, X, Minus, Trophy } from "lucide-react";
 import { PricingCards } from "@/components/pricing-cards";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { CLVTrustBanner } from "@/components/clv-trust-banner";
+import { getDashboardCache } from "@/lib/engine-data";
 
 // World Cup promo banner — auto-hides one week post-final (2026-07-26).
 // To pull earlier or extend, edit WC_BANNER_HIDE_AT_MS directly.
@@ -107,7 +109,20 @@ function CellIcon({ value }: { value: boolean }) {
   );
 }
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  // CLV-TRUST-BANNER (2026-06-02): pull cache for the SEO <dl> stats block.
+  // CLVTrustBanner does its own fetch — this second read is for the inline
+  // metric numbers in the structured-data list. Same cache row, no extra cost.
+  const heroCache = await getDashboardCache().catch(() => null);
+  const heroCLV = heroCache?.elite_value_bets_30d;
+  const heroHasData = heroCLV != null && heroCLV.n >= 30 && heroCLV.clv_pct != null;
+  const heroCLVPct =
+    heroHasData && heroCLV
+      ? `${heroCLV.clv_pct! > 0 ? "+" : ""}${heroCLV.clv_pct!.toFixed(1)}%`
+      : "tracking";
+  const heroCLVN =
+    heroHasData && heroCLV ? heroCLV.n.toLocaleString() : "building (need 30)";
+
   return (
     <div className="min-h-dvh bg-background text-foreground">
       {/* ───────── World Cup promo banner (auto-hides 2026-07-26) ───────── */}
@@ -246,6 +261,54 @@ export default function LandingPage() {
       </section>
 
       <Separator />
+
+      {/* ───────── CLV trust banner (CLV-as-hero-metric) ───────── */}
+      <CLVTrustBanner variant="landing" cohort="all" />
+
+      {/* SEO structured-data list — picked up by Google rich snippets.
+          Sits directly under the trust banner; mobile-first two-column grid
+          collapses to single column at narrow widths. */}
+      <section
+        aria-label="OddsIntel coverage at a glance"
+        className="border-b border-white/[0.04] bg-background"
+      >
+        <div className="mx-auto max-w-5xl px-4 py-4 sm:px-6 sm:py-5">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-center sm:grid-cols-4 sm:text-left">
+            <div>
+              <dt className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                Coverage
+              </dt>
+              <dd className="mt-0.5 font-mono text-sm font-bold text-foreground sm:text-base">
+                280+ leagues
+              </dd>
+            </div>
+            <div>
+              <dt className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                Bookmakers compared
+              </dt>
+              <dd className="mt-0.5 font-mono text-sm font-bold text-foreground sm:text-base">
+                13
+              </dd>
+            </div>
+            <div>
+              <dt className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                30-day CLV
+              </dt>
+              <dd className="mt-0.5 font-mono text-sm font-bold text-amber-300 sm:text-base">
+                {heroCLVPct}
+              </dd>
+            </div>
+            <div>
+              <dt className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                Picks tracked (30d)
+              </dt>
+              <dd className="mt-0.5 font-mono text-sm font-bold text-foreground sm:text-base">
+                {heroCLVN}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </section>
 
       {/* ───────── Problem / 8 tabs ───────── */}
       <section className="bg-card/20 py-14">

@@ -9,7 +9,6 @@ import {
   getOddsVerifiedAt,
   getValueBetBookOdds,
   getPublicPerformanceExtras,
-  getDashboardCache,
   type LiveBet,
   type BookOddsEntry,
   type BetCohort,
@@ -17,7 +16,7 @@ import {
 import { ValueBetsScan } from "@/components/value-bets-scan";
 import { ValueBetsGate } from "@/components/value-bets-gate";
 import { TodayPicksPreview } from "@/components/today-picks-preview";
-import { ValueBetsHeroStats } from "@/components/value-bets-hero-stats";
+import { CLVTrustBanner } from "@/components/clv-trust-banner";
 import { ValueBetsLiveSection } from "@/components/value-bets-live-section";
 import { getUserTier } from "@/lib/get-user-tier";
 
@@ -149,13 +148,14 @@ async function ValueBetsContent({ userId }: { userId: string }) {
   const cohort: BetCohort =
     isElite ? "active" : isPro ? "calibrated" : "prematch";
 
-  const [allBets, todayPicks, extras, cache] = await Promise.all([
+  // CLV-TRUST-BANNER (2026-06-02): the hero CLV stats now come from
+  // <CLVTrustBanner variant="value-bets" />, which does its own dashboard_cache
+  // read. We no longer need to pre-fetch cache here for the hero. Kept the
+  // public performance extras for the bot-ROI hook + odds-movement view.
+  const [allBets, todayPicks, extras] = await Promise.all([
     getTodayBets(cohort),
     getTodayPicks(),
-    // Used for the free-tier "this bot's last-30-day ROI" hook + Pro odds-movement view.
     getPublicPerformanceExtras(),
-    // Hero-stats rolling 30d (Pro+ tier only; ignored for free).
-    isPro ? getDashboardCache() : Promise.resolve(null),
   ]);
 
   // PRO-TIER-V2 (2026-06-02): split inplay out of the main feed so it can
@@ -184,27 +184,20 @@ async function ValueBetsContent({ userId }: { userId: string }) {
       ])
     : [null, {} as Record<string, BookOddsEntry>];
 
-  // Hero stats — tier-specific cohort.
-  const heroStats = !isPro
-    ? null
-    : isElite
-      ? cache?.elite_value_bets_30d ?? null
-      : cache?.pro_value_bets_30d ?? null;
-
   // Server-anchored "now" for the live section. The client component diffs
   // each pick's placedAt against this (NOT Date.now()) for the stale gate, so
   // a clock-drifted browser can't fake freshness.
   const serverNow = new Date().toISOString();
 
+  // CLV banner cohort follows the user's tier: Pro sees the calibrated cohort,
+  // Elite sees all-active (matches what they're actually consuming on this page).
+  const clvCohort = isElite ? "elite" : "pro";
+
   return (
     <div className="space-y-6">
-      {/* Rolling-stats hero — Pro+ only */}
-      {isPro && (
-        <ValueBetsHeroStats
-          tier={isElite ? "elite" : "pro"}
-          stats={heroStats}
-        />
-      )}
+      {/* CLV trust banner — Pro+ only; replaces the old PRO-TIER-V2 hero so
+          /value-bets, /world-cup and / all read from a single component. */}
+      {isPro && <CLVTrustBanner variant="value-bets" cohort={clvCohort} />}
 
       {/* Live now — inplay picks, auto-refresh every 60s (Pro+ only) */}
       {isPro && inplayBets.length > 0 && (

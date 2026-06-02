@@ -43,6 +43,7 @@ import { WCGroupCard } from "@/components/wc-group-card";
 import { WCScorecard } from "@/components/wc-scorecard";
 import { WCTabStrip, type WCTab } from "@/components/wc-tab-strip";
 import { WCSchedule } from "@/components/wc-schedule";
+import { CLVTrustBanner } from "@/components/clv-trust-banner";
 
 // ── SEO ──────────────────────────────────────────────────────────────────────
 export const metadata: Metadata = {
@@ -260,6 +261,10 @@ function OverviewPanel({
           </div>
         </div>
       </section>
+
+      {/* CLV trust banner — compact world-cup variant. Sits between the
+          tournament hero (above) and the vs-you scorecard (below). */}
+      <CLVTrustBanner variant="world-cup" cohort="all" />
 
       {/* Scorecard (vs-You) */}
       <WCScorecard card={scorecard} isAuthed={isAuthed} />
