@@ -14,6 +14,9 @@ import {
 } from "@/lib/wc-bracket";
 import { ROUND_LABELS } from "@/lib/wc-bracket-types";
 import { WCBracketBoard } from "@/components/wc-bracket-board";
+import { loadUserAchievements } from "@/lib/wc-achievements";
+import { WCAchievementRow } from "@/components/wc-achievement-badge";
+import { createSupabaseServer } from "@/lib/supabase-server";
 
 export const metadata: Metadata = {
   title: "World Cup 2026 Bracket Challenge | OddsIntel",
@@ -43,11 +46,32 @@ function MetaRankPill({
   return null;
 }
 
+/**
+ * Load the signed-in user's WC achievements. Returns [] for anon viewers
+ * or when the table/RLS is missing (pre-migration safety).
+ */
+async function loadAchievementsForSignedInUser(): Promise<
+  Awaited<ReturnType<typeof loadUserAchievements>>
+> {
+  try {
+    const supabase = await createSupabaseServer();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return [];
+    return await loadUserAchievements(user.id);
+  } catch {
+    return [];
+  }
+}
+
 export default async function BracketPage() {
-  const [{ picks, meta, isAuthed }, roundStates] = await Promise.all([
-    loadUserBracket(),
-    loadBracketState(),
-  ]);
+  const [{ picks, meta, isAuthed }, roundStates, achievements] =
+    await Promise.all([
+      loadUserBracket(),
+      loadBracketState(),
+      loadAchievementsForSignedInUser(),
+    ]);
   const goldenBootLocked = isBracketLocked();
   const open = currentOpenRound(roundStates);
   const upcoming = nextRound(roundStates);
@@ -126,6 +150,25 @@ export default async function BracketPage() {
           </Link>
         </div>
       </header>
+
+      {achievements.length > 0 && (
+        <section
+          className="rounded-xl border border-white/[0.06] bg-card/40 p-3 sm:p-4"
+          aria-label="Your World Cup achievements"
+        >
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h2 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground sm:text-xs">
+              Your badges · {achievements.length}
+            </h2>
+          </div>
+          <WCAchievementRow
+            achievements={achievements}
+            max={8}
+            size="sm"
+            className="gap-1.5"
+          />
+        </section>
+      )}
 
       <WCBracketBoard
         isAuthed={isAuthed}

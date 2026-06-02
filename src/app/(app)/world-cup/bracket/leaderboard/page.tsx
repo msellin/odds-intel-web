@@ -9,6 +9,11 @@ import {
   PERCENTILE_DISPLAY_THRESHOLD,
 } from "@/lib/wc-bracket";
 import { createSupabaseServer } from "@/lib/supabase-server";
+import { loadLeaderboardAchievements } from "@/lib/wc-achievements";
+import {
+  WCAchievementRow,
+  type UserAchievement,
+} from "@/components/wc-achievement-badge";
 
 export const metadata: Metadata = {
   title: "Bracket Leaderboard | World Cup 2026 | OddsIntel",
@@ -43,6 +48,19 @@ export default async function BracketLeaderboardPage() {
     limit: 100,
     currentUserId,
   });
+
+  // WC-ACHIEVEMENTS: batch-load badges for every human row on the page.
+  // AI ghosts are skipped (userId is null). Returns an empty Map if the
+  // table is missing — rows render without badges, no errors.
+  const humanIds = entries
+    .map((e) => e.userId)
+    .filter((id): id is string => !!id);
+  let achievementsByUser = new Map<string, UserAchievement[]>();
+  try {
+    achievementsByUser = await loadLeaderboardAchievements(humanIds);
+  } catch {
+    // Pre-migration safety — render the page without badges.
+  }
 
   // Total population — drives percentile vs absolute-rank display.
   // Use the largest rank we see as a proxy for N when it's available;
@@ -137,6 +155,11 @@ export default async function BracketLeaderboardPage() {
                   e={pinnedMe}
                   i={meIndex}
                   usePercentile={usePercentile}
+                  achievements={
+                    pinnedMe.userId
+                      ? achievementsByUser.get(pinnedMe.userId) ?? []
+                      : []
+                  }
                   isPinnedView
                 />
               )}
@@ -146,6 +169,9 @@ export default async function BracketLeaderboardPage() {
                   e={e}
                   i={i}
                   usePercentile={usePercentile}
+                  achievements={
+                    e.userId ? achievementsByUser.get(e.userId) ?? [] : []
+                  }
                 />
               ))}
             </tbody>
@@ -165,6 +191,7 @@ interface RowProps {
   e: Awaited<ReturnType<typeof loadBracketLeaderboard>>[number];
   i: number;
   usePercentile: boolean;
+  achievements: UserAchievement[];
   isPinnedView?: boolean;
 }
 
@@ -211,11 +238,54 @@ function isAnonymousVariant(aiLabel: string | undefined | null): boolean {
   return /^Player \d+$/.test(aiLabel);
 }
 
-function LeaderboardRow({ e, i, usePercentile, isPinnedView }: RowProps) {
-  const rank = e.currentRank ?? i + 1;
-  const rowKey = isPinnedView ? `pin-${e.key}` : e.key;
+function nameClass(isAi: boolean, anonymousVariant: boolean): string {
+  if (anonymousVariant) return "text-muted-foreground/60";
+  if (isAi) return "text-muted-foreground";
+  return "";
+}
+
+function PlayerCell({
+  e,
+  achievements,
+}: {
+  e: RowProps["e"];
+  achievements: UserAchievement[];
+}) {
   const name = e.isAi ? e.aiLabel : (e.displayName ?? "Anonymous player");
   const anonymousVariant = e.isAi && isAnonymousVariant(e.aiLabel);
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {e.isAi && !anonymousVariant && (
+        <span
+          aria-label="AI ghost"
+          className="inline-flex items-center gap-1 rounded-full bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground ring-1 ring-white/[0.06]"
+        >
+          <Bot className="size-2.5" />
+          AI
+        </span>
+      )}
+      {e.isCurrentUser && (
+        <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
+          you
+        </span>
+      )}
+      <span className={nameClass(e.isAi, anonymousVariant)}>{name}</span>
+      {achievements.length > 0 && (
+        <WCAchievementRow achievements={achievements} max={3} size="xs" />
+      )}
+    </div>
+  );
+}
+
+function LeaderboardRow({
+  e,
+  i,
+  usePercentile,
+  achievements,
+  isPinnedView,
+}: RowProps) {
+  const rank = e.currentRank ?? i + 1;
+  const rowKey = isPinnedView ? `pin-${e.key}` : e.key;
 
   return (
     <tr
@@ -231,33 +301,7 @@ function LeaderboardRow({ e, i, usePercentile, isPinnedView }: RowProps) {
         />
       </td>
       <td className="px-3 py-2 text-foreground">
-        <div className="flex items-center gap-1.5">
-          {e.isAi && !anonymousVariant && (
-            <span
-              aria-label="AI ghost"
-              className="inline-flex items-center gap-1 rounded-full bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground ring-1 ring-white/[0.06]"
-            >
-              <Bot className="size-2.5" />
-              AI
-            </span>
-          )}
-          {e.isCurrentUser && (
-            <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
-              you
-            </span>
-          )}
-          <span
-            className={
-              anonymousVariant
-                ? "text-muted-foreground/60"
-                : e.isAi
-                ? "text-muted-foreground"
-                : ""
-            }
-          >
-            {name}
-          </span>
-        </div>
+        <PlayerCell e={e} achievements={achievements} />
       </td>
       <td className="hidden px-3 py-2 text-right font-mono text-muted-foreground tabular-nums sm:table-cell">
         {e.groupScore}
