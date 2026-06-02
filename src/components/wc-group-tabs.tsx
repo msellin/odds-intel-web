@@ -25,6 +25,10 @@ export function WCGroupTabs({ labels, panels }: WCGroupTabsProps) {
   const [active, setActive] = useState(0);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const mobileScrollRef = useRef<HTMLDivElement | null>(null);
+  // Tracks whether the next carousel scroll event was triggered by a tab
+  // click (programmatic) vs. a user swipe. Without this, the scroll handler
+  // races the click handler and snaps the tab back to whatever's centered.
+  const programmaticScrollRef = useRef(false);
 
   // Programmatic scroll on tab change (mobile only — the snap container only
   // exists at <md). We feature-detect by checking the ref.
@@ -33,9 +37,48 @@ export function WCGroupTabs({ labels, panels }: WCGroupTabsProps) {
     if (!container) return;
     const child = container.children[active] as HTMLElement | undefined;
     if (!child) return;
-    // smooth scroll into view horizontally
+    programmaticScrollRef.current = true;
     container.scrollTo({ left: child.offsetLeft, behavior: "smooth" });
+    // Clear the flag once smooth-scroll has had time to settle.
+    const t = window.setTimeout(() => {
+      programmaticScrollRef.current = false;
+    }, 450);
+    return () => window.clearTimeout(t);
   }, [active]);
+
+  // User-swipe sync: when the carousel is scrolled by hand, figure out which
+  // panel is closest to centred and update `active` so the tab rail follows.
+  useEffect(() => {
+    const container = mobileScrollRef.current;
+    if (!container) return;
+    let raf = 0;
+    const handler = () => {
+      if (programmaticScrollRef.current) return;
+      // throttle via rAF so we run at most once per frame
+      if (raf) return;
+      raf = window.requestAnimationFrame(() => {
+        raf = 0;
+        const centre = container.scrollLeft + container.clientWidth / 2;
+        let bestIdx = 0;
+        let bestDist = Infinity;
+        for (let i = 0; i < container.children.length; i++) {
+          const child = container.children[i] as HTMLElement;
+          const childCentre = child.offsetLeft + child.offsetWidth / 2;
+          const dist = Math.abs(childCentre - centre);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestIdx = i;
+          }
+        }
+        setActive((curr) => (curr === bestIdx ? curr : bestIdx));
+      });
+    };
+    container.addEventListener("scroll", handler, { passive: true });
+    return () => {
+      container.removeEventListener("scroll", handler);
+      if (raf) window.cancelAnimationFrame(raf);
+    };
+  }, []);
 
   // Keep active tab in view inside the tab rail (handy on mobile with 12 groups)
   useEffect(() => {

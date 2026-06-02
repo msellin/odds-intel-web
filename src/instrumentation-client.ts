@@ -31,14 +31,14 @@ if (dsn) {
         colorScheme: "dark",                  // matches our shell
         showBranding: false,                  // we're a self-serve product
         autoInject: true,                     // floats the right-edge tab
-        buttonLabel: "Feedback",
+        buttonLabel: "Give feedback",
         submitButtonLabel: "Send",
         cancelButtonLabel: "Cancel",
-        formTitle: "Send us feedback",
-        messageLabel: "What's on your mind?",
+        formTitle: "Tell us what to change",
+        messageLabel: "What would you change, add, or fix?",
         messagePlaceholder:
-          "Bug, idea, missing feature, pricing question — whatever. We read every one.",
-        successMessageText: "Thanks — we read every one of these.",
+          "What's missing? What's confusing? What would make this 10× better for you? We read every message — and your input directly shapes what ships next.",
+        successMessageText: "Thank you — your feedback shapes what ships next.",
         emailLabel: "Email (optional)",
         isEmailRequired: false,
         showName: false,
