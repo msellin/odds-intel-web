@@ -79,6 +79,19 @@ export interface WCPredictionSlot {
   reasoning: string | null;
 }
 
+/**
+ * WC-AI-PREVIEW (2026-06-02): batch-loaded pre-match preview keyed by
+ * fixture id. Written by `workers/jobs/wc_match_previews.py` daily at
+ * 07:30 UTC (gated to the WC window). Stored in `match_previews` —
+ * same table as the daily club previews; distinct match_ids so no clash.
+ */
+export interface WCMatchPreview {
+  matchId: string;
+  previewShort: string; // 30-50 words — surfaces in collapsed-state expander
+  previewText: string;  // 80-120 words — full preview, free to everyone (lead-gen)
+  generatedAt: string;
+}
+
 interface RawFixtureRow {
   id: string;
   date: string;
@@ -146,6 +159,47 @@ export async function getWorldCupFixtures(): Promise<WCFixture[]> {
       };
     })
     .filter((f): f is WCFixture => f !== null);
+}
+
+/**
+ * WC-AI-PREVIEW (2026-06-02): batch-load Gemini-generated previews for a
+ * set of WC fixture ids. Returns a `Record<matchId, WCMatchPreview>` for
+ * O(1) lookup in render. Missing rows are simply absent — the UI omits
+ * the expander when no preview exists yet.
+ *
+ * The engine job writes one row per (match_id, match_date) into
+ * `match_previews`. We pick the most-recent row per fixture in case a
+ * preview gets regenerated on a later day.
+ */
+export async function getWorldCupPreviews(
+  matchIds: string[],
+): Promise<Record<string, WCMatchPreview>> {
+  if (matchIds.length === 0) return {};
+  const supabase = createSupabasePublic();
+  const { data, error } = await supabase
+    .from("match_previews")
+    .select("match_id, preview_short, preview_text, generated_at, match_date")
+    .in("match_id", matchIds)
+    .order("match_date", { ascending: false });
+  if (error || !data) return {};
+
+  const out: Record<string, WCMatchPreview> = {};
+  for (const row of data as Array<{
+    match_id: string;
+    preview_short: string;
+    preview_text: string;
+    generated_at: string;
+  }>) {
+    // First row wins (ordered by match_date DESC) — keeps the freshest.
+    if (out[row.match_id]) continue;
+    out[row.match_id] = {
+      matchId: row.match_id,
+      previewShort: row.preview_short,
+      previewText: row.preview_text,
+      generatedAt: row.generated_at,
+    };
+  }
+  return out;
 }
 
 /**

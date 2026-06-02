@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { ChevronRight, MapPin, Calendar, ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronRight, MapPin, Calendar, ChevronDown, ChevronUp, Sparkles } from "lucide-react";
 
 import { flagForTeam } from "@/lib/wc-flags";
 import type {
@@ -8,6 +8,7 @@ import type {
   WCGroup,
   WCPredictionSlot,
   GroupAdvancementProb,
+  WCMatchPreview,
 } from "@/lib/world-cup";
 
 interface WCGroupCardProps {
@@ -23,6 +24,8 @@ interface WCGroupCardProps {
   nowMs: number;
   /** Force open/closed state — overrides the auto "has the tournament started" check. */
   defaultOpen?: boolean;
+  /** WC-AI-PREVIEW (2026-06-02) — Gemini previews keyed by fixture id. */
+  previews?: Record<string, WCMatchPreview>;
 }
 
 function formatTime(iso: string): string {
@@ -84,60 +87,77 @@ function AdvancementBar({ p }: { p: number | undefined }) {
 function FixtureRow({
   fixture,
   prediction,
+  preview,
 }: {
   fixture: WCFixture;
   prediction: WCPredictionSlot | undefined;
+  preview?: WCMatchPreview;
 }) {
   const hasScore =
     fixture.status === "finished" && fixture.scoreHome != null && fixture.scoreAway != null;
   const pct = (v: number | null) => Math.round((v ?? 0) * 100);
 
   return (
-    <Link
-      href={`/matches/${fixture.id}`}
-      className="wc-row-hover group flex items-center gap-2 rounded-lg border border-white/[0.06] bg-card/40 px-2.5 py-2 hover:border-white/[0.12] hover:bg-card/60 sm:px-3 sm:py-2.5"
-    >
-      <div className="w-10 shrink-0 text-center font-mono text-[10px] text-muted-foreground sm:w-12 sm:text-[11px]">
-        {hasScore ? (
-          <span className="font-semibold text-foreground">
-            {fixture.scoreHome}–{fixture.scoreAway}
-          </span>
-        ) : (
-          formatTime(fixture.date)
+    <div className="rounded-lg border border-white/[0.06] bg-card/40 hover:border-white/[0.12] hover:bg-card/60">
+      <Link
+        href={`/matches/${fixture.id}`}
+        className="wc-row-hover group flex items-center gap-2 rounded-lg px-2.5 py-2 sm:px-3 sm:py-2.5"
+      >
+        <div className="w-10 shrink-0 text-center font-mono text-[10px] text-muted-foreground sm:w-12 sm:text-[11px]">
+          {hasScore ? (
+            <span className="font-semibold text-foreground">
+              {fixture.scoreHome}–{fixture.scoreAway}
+            </span>
+          ) : (
+            formatTime(fixture.date)
+          )}
+        </div>
+
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 text-right">
+          <span className="truncate text-xs text-foreground sm:text-sm">{fixture.home.name}</span>
+          <TeamFlag logo={fixture.home.logo} name={fixture.home.name} size={16} />
+        </div>
+
+        <span className="text-[9px] text-muted-foreground/60">v</span>
+
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+          <TeamFlag logo={fixture.away.logo} name={fixture.away.name} size={16} />
+          <span className="truncate text-xs text-foreground sm:text-sm">{fixture.away.name}</span>
+        </div>
+
+        {prediction?.homeProb != null && prediction.awayProb != null && (
+          <div className="hidden shrink-0 items-center gap-1 font-mono text-[10px] text-muted-foreground sm:flex">
+            <span>{pct(prediction.homeProb)}</span>
+            <span className="text-muted-foreground/40">·</span>
+            <span>{pct(prediction.drawProb)}</span>
+            <span className="text-muted-foreground/40">·</span>
+            <span>{pct(prediction.awayProb)}</span>
+          </div>
         )}
-      </div>
 
-      <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 text-right">
-        <span className="truncate text-xs text-foreground sm:text-sm">{fixture.home.name}</span>
-        <TeamFlag logo={fixture.home.logo} name={fixture.home.name} size={16} />
-      </div>
+        {fixture.venueName && (
+          <div className="hidden max-w-[180px] shrink-0 items-center gap-1 text-[10px] text-muted-foreground/60 lg:flex">
+            <MapPin className="size-3" />
+            <span className="truncate">{fixture.venueName}</span>
+          </div>
+        )}
 
-      <span className="text-[9px] text-muted-foreground/60">v</span>
+        <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5" />
+      </Link>
 
-      <div className="flex min-w-0 flex-1 items-center gap-1.5">
-        <TeamFlag logo={fixture.away.logo} name={fixture.away.name} size={16} />
-        <span className="truncate text-xs text-foreground sm:text-sm">{fixture.away.name}</span>
-      </div>
-
-      {prediction?.homeProb != null && prediction.awayProb != null && (
-        <div className="hidden shrink-0 items-center gap-1 font-mono text-[10px] text-muted-foreground sm:flex">
-          <span>{pct(prediction.homeProb)}</span>
-          <span className="text-muted-foreground/40">·</span>
-          <span>{pct(prediction.drawProb)}</span>
-          <span className="text-muted-foreground/40">·</span>
-          <span>{pct(prediction.awayProb)}</span>
-        </div>
+      {preview && (
+        <details className="group/preview border-t border-white/[0.04]">
+          <summary className="flex min-h-[36px] cursor-pointer list-none items-center gap-1.5 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-purple-400/80 hover:text-purple-300 sm:text-[11px]">
+            <Sparkles className="size-3 shrink-0" />
+            AI preview
+            <ChevronDown className="ml-auto size-3 shrink-0 transition-transform group-open/preview:rotate-180" />
+          </summary>
+          <div className="px-3 pb-3 text-xs leading-relaxed text-muted-foreground sm:text-[13px]">
+            {preview.previewText}
+          </div>
+        </details>
       )}
-
-      {fixture.venueName && (
-        <div className="hidden max-w-[180px] shrink-0 items-center gap-1 text-[10px] text-muted-foreground/60 lg:flex">
-          <MapPin className="size-3" />
-          <span className="truncate">{fixture.venueName}</span>
-        </div>
-      )}
-
-      <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5" />
-    </Link>
+    </div>
   );
 }
 
@@ -155,6 +175,7 @@ export function WCGroupCard({
   advancement,
   nowMs,
   defaultOpen,
+  previews,
 }: WCGroupCardProps) {
   // Default-open once the first group fixture has kicked off, otherwise show
   // only the next 1-2 with a "show all" expand affordance.
@@ -282,7 +303,12 @@ export function WCGroupCard({
           </summary>
           <div className="space-y-1.5 px-2.5 py-2.5 sm:px-3 sm:py-3">
             {sorted.map((f) => (
-              <FixtureRow key={f.id} fixture={f} prediction={predictions[f.id]} />
+              <FixtureRow
+                key={f.id}
+                fixture={f}
+                prediction={predictions[f.id]}
+                preview={previews?.[f.id]}
+              />
             ))}
           </div>
         </details>

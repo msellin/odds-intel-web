@@ -25,6 +25,7 @@ import {
   computeAdvancement,
   pickFeaturedFixture,
   deriveGroups,
+  getWorldCupPreviews,
   WC_FIRST_KICKOFF_ISO,
 } from "@/lib/world-cup";
 import type {
@@ -32,6 +33,7 @@ import type {
   WCPredictionSlot,
   GroupAdvancementProb,
   WCGroup,
+  WCMatchPreview,
 } from "@/lib/world-cup";
 import { getUserWcPicks, buildScorecard } from "@/lib/wc-vs-you";
 import type { WCPick, WCScorecard as WCScorecardType } from "@/lib/wc-vs-you";
@@ -166,6 +168,7 @@ interface PageData {
   advancement: Record<string, GroupAdvancementProb>;
   userPicks: Record<string, WCPick>;
   scorecard: WCScorecardType;
+  previews: Record<string, WCMatchPreview>;
 }
 
 async function loadPageData(): Promise<PageData> {
@@ -182,7 +185,11 @@ async function loadPageData(): Promise<PageData> {
   const userPicks = await getUserWcPicks(fixtures.map((f) => f.id));
   const scorecard = buildScorecard(fixtures, predictions, userPicks);
 
-  return { fixtures, groups, predictions, advancement, userPicks, scorecard };
+  // WC-AI-PREVIEW: Gemini-generated previews for fixtures in the next 7d.
+  // Stored in `match_previews`; lookup is O(1) by match_id at render time.
+  const previews = await getWorldCupPreviews(fixtures.map((f) => f.id));
+
+  return { fixtures, groups, predictions, advancement, userPicks, scorecard, previews };
 }
 
 // ── Tab panels ───────────────────────────────────────────────────────────────
@@ -314,11 +321,13 @@ function GroupsPanel({
   predictions,
   advancement,
   nowMs,
+  previews,
 }: {
   groups: WCGroup[];
   predictions: Record<string, WCPredictionSlot>;
   advancement: Record<string, GroupAdvancementProb>;
   nowMs: number;
+  previews: Record<string, WCMatchPreview>;
 }) {
   if (groups.length === 0) {
     return (
@@ -348,6 +357,7 @@ function GroupsPanel({
             predictions={predictions}
             advancement={advancement}
             nowMs={nowMs}
+            previews={previews}
           />
         ))}
       />
@@ -445,7 +455,8 @@ export default async function WorldCupPage({
   const tab = resolveTab(rawTab);
 
   const { isAuthed, isPro } = await readAuthAndTier();
-  const { fixtures, groups, predictions, advancement, scorecard } = await loadPageData();
+  const { fixtures, groups, predictions, advancement, scorecard, previews } =
+    await loadPageData();
 
   const nowMs = getServerNowMs();
   const featured = pickFeaturedFixture(fixtures, nowMs);
@@ -474,6 +485,7 @@ export default async function WorldCupPage({
         isPro={isPro}
         nowMs={nowMs}
         nextFixture={nextFixture}
+        previews={previews}
       />
 
       {/* Predictions notice — kept site-wide, last (small, low-impact). */}
@@ -536,6 +548,7 @@ function ActiveTabPanel({
   isPro,
   nowMs,
   nextFixture,
+  previews,
 }: {
   tab: string;
   groups: WCGroup[];
@@ -547,10 +560,18 @@ function ActiveTabPanel({
   isPro: boolean;
   nowMs: number;
   nextFixture: WCFixture | null;
+  previews: Record<string, WCMatchPreview>;
 }) {
   switch (tab) {
     case "schedule":
-      return <WCSchedule fixtures={fixtures} predictions={predictions} nowMs={nowMs} />;
+      return (
+        <WCSchedule
+          fixtures={fixtures}
+          predictions={predictions}
+          nowMs={nowMs}
+          previews={previews}
+        />
+      );
     case "groups":
       return (
         <GroupsPanel
@@ -558,6 +579,7 @@ function ActiveTabPanel({
           predictions={predictions}
           advancement={advancement}
           nowMs={nowMs}
+          previews={previews}
         />
       );
     case "knockouts":

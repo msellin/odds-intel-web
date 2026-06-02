@@ -1,14 +1,16 @@
 import Link from "next/link";
 import Image from "next/image";
-import { ChevronRight, MapPin } from "lucide-react";
+import { ChevronRight, MapPin, Sparkles, ChevronDown } from "lucide-react";
 
 import { flagForTeam } from "@/lib/wc-flags";
-import type { WCFixture, WCPredictionSlot } from "@/lib/world-cup";
+import type { WCFixture, WCPredictionSlot, WCMatchPreview } from "@/lib/world-cup";
 
 interface WCScheduleProps {
   fixtures: WCFixture[];
   predictions: Record<string, WCPredictionSlot>;
   nowMs: number;
+  /** WC-AI-PREVIEW (2026-06-02) — Gemini previews keyed by fixture id. */
+  previews?: Record<string, WCMatchPreview>;
 }
 
 function dateKey(iso: string): string {
@@ -58,7 +60,7 @@ function TeamFlag({ logo, name, size = 16 }: { logo: string | null; name: string
   );
 }
 
-export function WCSchedule({ fixtures, predictions, nowMs }: WCScheduleProps) {
+export function WCSchedule({ fixtures, predictions, nowMs, previews }: WCScheduleProps) {
   if (fixtures.length === 0) {
     return (
       <div className="rounded-xl border border-white/[0.06] bg-card/40 p-6 text-center text-sm text-muted-foreground">
@@ -112,11 +114,15 @@ export function WCSchedule({ fixtures, predictions, nowMs }: WCScheduleProps) {
                 const pct = (v: number | null) => Math.round((v ?? 0) * 100);
                 const hasScore =
                   f.status === "finished" && f.scoreHome != null && f.scoreAway != null;
+                const preview = previews?.[f.id];
                 return (
-                  <li key={f.id}>
+                  <li
+                    key={f.id}
+                    className="rounded-lg border border-white/[0.06] bg-card/40 hover:border-white/[0.12] hover:bg-card/60"
+                  >
                     <Link
                       href={`/matches/${f.id}`}
-                      className="wc-row-hover group flex min-h-[56px] items-center gap-2 rounded-lg border border-white/[0.06] bg-card/40 px-2.5 py-2 hover:border-white/[0.12] hover:bg-card/60 sm:px-3 sm:py-2.5"
+                      className="wc-row-hover group flex min-h-[56px] items-center gap-2 rounded-lg px-2.5 py-2 sm:px-3 sm:py-2.5"
                     >
                       <div className="w-12 shrink-0 text-center font-mono text-[10px] text-muted-foreground sm:w-14 sm:text-[11px]">
                         {hasScore ? (
@@ -159,6 +165,19 @@ export function WCSchedule({ fixtures, predictions, nowMs }: WCScheduleProps) {
 
                       <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5" />
                     </Link>
+
+                    {preview && (
+                      <details className="group/preview border-t border-white/[0.04]">
+                        <summary className="flex min-h-[36px] cursor-pointer list-none items-center gap-1.5 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-purple-400/80 hover:text-purple-300 sm:text-[11px]">
+                          <Sparkles className="size-3 shrink-0" />
+                          AI preview
+                          <ChevronDown className="ml-auto size-3 shrink-0 transition-transform group-open/preview:rotate-180" />
+                        </summary>
+                        <div className="px-3 pb-3 text-xs leading-relaxed text-muted-foreground sm:text-[13px]">
+                          {preview.previewText}
+                        </div>
+                      </details>
+                    )}
                   </li>
                 );
               })}
