@@ -224,9 +224,11 @@ export function WCGroupCard({
               <th className="px-1.5 py-1.5 text-center font-medium sm:px-2 sm:py-2">Pts</th>
               <th
                 className="px-2 py-1.5 text-right font-medium text-muted-foreground sm:px-3 sm:py-2"
-                title="Advancement probability — Monte Carlo over remaining group fixtures"
+                title="Adv % — our model's probability this team advances from group stage. Computed via Monte Carlo (5,000 simulations of remaining group fixtures) using ELO and our predictions."
               >
-                Adv
+                <span className="hidden sm:inline">Adv %</span>
+                <span className="sm:hidden">Adv</span>
+                <span className="ml-0.5 text-muted-foreground/50 cursor-help" aria-hidden>ⓘ</span>
               </th>
             </tr>
           </thead>

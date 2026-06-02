@@ -70,12 +70,24 @@ export const metadata: Metadata = {
 };
 
 // ── Tab registry ─────────────────────────────────────────────────────────────
+// WC-TAB-RESTRUCTURE (2026-06-02): clearer mental model than the original
+// six tabs. Each tab now has a focused purpose:
+//   Overview     — at-a-glance: hero + countdown + featured next match
+//   Schedule     — chronological fixtures (date-grouped)
+//   Groups       — group standings + CTA → group-predictor game
+//   Knockouts    — knockout-stage info + CTA → bracket-challenge game
+//   Leaderboard  — inline top players + AI ghosts; full list link
+//   Top Scorers  — placeholder (no player-goal data yet)
+//
+// Bracket Challenge tab → repurposed as Leaderboard (showing scores is
+// more useful than another CTA — users follow the Knockouts-tab CTA to
+// /world-cup/bracket where they actually make picks).
 const TABS: WCTab[] = [
   { id: "overview", label: "Overview", icon: Home },
   { id: "schedule", label: "Schedule", icon: Calendar },
   { id: "groups", label: "Groups", icon: LayoutGrid },
   { id: "knockouts", label: "Knockouts", icon: Trophy },
-  { id: "bracket", label: "Bracket Challenge", icon: Target },
+  { id: "leaderboard", label: "Leaderboard", icon: Target },
   { id: "scorers", label: "Top Scorers", icon: Activity },
 ];
 
@@ -350,6 +362,26 @@ function GroupsPanel({
         <span className="text-[10px] text-muted-foreground sm:text-xs">{groups.length} groups</span>
       </header>
 
+      {/* WC-TAB-CLEANUP (2026-06-02): surface the group-standings predictor
+          right here on the Groups tab. Previously only reachable via the
+          Bracket page CTA — users browsing groups didn't know it existed. */}
+      <Link
+        href="/world-cup/groups-predictor"
+        className="block rounded-lg border border-[color:var(--color-tournament-gold)]/30 bg-gradient-to-r from-[color:var(--color-tournament-gold)]/10 via-[color:var(--color-tournament-gold)]/5 to-transparent px-3 py-2.5 transition-colors hover:from-[color:var(--color-tournament-gold)]/20 hover:to-[color:var(--color-tournament-gold)]/5"
+      >
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-foreground sm:text-sm">
+              Predict the group standings · 48 picks · +192 pt
+            </p>
+            <p className="mt-0.5 text-[10px] text-muted-foreground sm:text-[11px]">
+              Pick 1st, 2nd, 3rd, 4th in every group before kick-off. Counts toward your bracket-challenge total.
+            </p>
+          </div>
+          <span className="shrink-0 text-xs text-[color:var(--color-tournament-gold)]">→</span>
+        </div>
+      </Link>
+
       <WCGroupTabs
         labels={groups.map((g) => g.label)}
         panels={groups.map((g) => (
@@ -367,22 +399,119 @@ function GroupsPanel({
   );
 }
 
-function KnockoutsPanel({ isPro }: { isPro: boolean }) {
+function KnockoutsPanel({ isAuthed, isPro }: { isAuthed: boolean; isPro: boolean }) {
   return (
     <section className="space-y-3">
       <header className="flex items-end justify-between border-b border-white/[0.06] pb-2">
         <div>
           <h2 className="text-base font-bold text-foreground sm:text-lg">Knockout bracket</h2>
           <p className="text-[10px] text-muted-foreground sm:text-xs">
-            Round of 32 → Final · seeded after the group stage.{" "}
-            <Link href="/world-cup/bracket" className="text-primary hover:underline">
-              Pick yours →
-            </Link>
+            Round of 32 → Final · seeded after the group stage.
           </p>
         </div>
       </header>
 
+      {/* WC-TAB-RESTRUCTURE (2026-06-02): primary CTA — open the bracket
+          picker. Same prominence + copy as the old Bracket Challenge tab
+          since this is now where users go to play. */}
+      <Link
+        href="/world-cup/bracket"
+        className="block rounded-xl border border-[color:var(--color-tournament-gold)]/30 bg-gradient-to-r from-[color:var(--color-tournament-gold)]/15 via-[color:var(--color-tournament-gold)]/8 to-transparent p-4 transition-colors hover:from-[color:var(--color-tournament-gold)]/25 sm:p-5"
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <Trophy className="size-4 text-[color:var(--color-tournament-gold)] shrink-0" />
+              <p className="text-sm font-bold text-foreground sm:text-base">
+                {isAuthed ? "Open my bracket" : "Pick the bracket"}
+              </p>
+              <span className="hidden sm:inline rounded-full bg-emerald-600/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-300 ring-1 ring-emerald-500/30">
+                Top 3 win Elite
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] text-muted-foreground sm:text-xs">
+              R32 → Final. Each round opens after the previous resolves. Compete vs OddsIntel AI and the community.
+            </p>
+          </div>
+          <span className="shrink-0 text-base text-[color:var(--color-tournament-gold)]">→</span>
+        </div>
+      </Link>
+
       <BracketPlaceholder isPro={isPro} />
+    </section>
+  );
+}
+
+// WC-TAB-RESTRUCTURE (2026-06-02): inline leaderboard panel that lives
+// on the Leaderboard tab. Top 20 entries (humans + AI ghosts) with a
+// link to the full /world-cup/bracket/leaderboard for the rest of the
+// 100-row table + filtering. Pre-tournament every score is 0, so the
+// order is essentially alphabetical-by-ai_label until matches start
+// resolving — that's fine; the page is here so users can see WHO'S
+// playing, not just rankings.
+async function LeaderboardPanel() {
+  const { loadBracketLeaderboard } = await import("@/lib/wc-bracket");
+  const entries = await loadBracketLeaderboard({ limit: 20 });
+  return (
+    <section className="space-y-3">
+      <header className="flex items-end justify-between border-b border-white/[0.06] pb-2">
+        <div>
+          <h2 className="text-base font-bold text-foreground sm:text-lg">Leaderboard</h2>
+          <p className="text-[10px] text-muted-foreground sm:text-xs">
+            Combined score: group standings + knockout bracket. Updates after each settled match.
+          </p>
+        </div>
+        <Link
+          href="/world-cup/bracket/leaderboard"
+          className="text-xs text-primary hover:underline"
+        >
+          Full ranking →
+        </Link>
+      </header>
+
+      {entries.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-white/[0.08] bg-card/40 p-6 text-center text-sm text-muted-foreground">
+          No brackets yet. <Link href="/world-cup/bracket" className="font-semibold text-primary hover:underline">Be the first to pick yours</Link>.
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-card/40">
+          <table className="w-full text-xs sm:text-sm">
+            <thead className="border-b border-white/[0.06] text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2 text-left font-medium w-10">#</th>
+                <th className="px-3 py-2 text-left font-medium">Player</th>
+                <th className="px-3 py-2 text-right font-medium">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((e, i) => {
+                const isAnon = e.isAi && /^Player \d+$/.test(e.aiLabel ?? "");
+                const name = e.isAi ? e.aiLabel : (e.displayName ?? "Anonymous");
+                return (
+                  <tr key={e.key} className={`border-b border-white/[0.04] last:border-0 ${e.isAi ? "bg-white/[0.01]" : ""}`}>
+                    <td className="px-3 py-2 text-left text-muted-foreground tabular-nums">{i + 1}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-1.5">
+                        {e.isAi && !isAnon && (
+                          <span className="rounded-full bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground ring-1 ring-white/[0.06]">
+                            AI
+                          </span>
+                        )}
+                        <span className={isAnon ? "text-muted-foreground/60" : (e.isAi ? "text-muted-foreground" : "text-foreground")}>{name}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono font-semibold text-foreground tabular-nums">{e.totalScore}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <p className="text-[10px] text-muted-foreground/60">
+        🤖 AI ghost entries are our model running in different configurations. Not eligible for prizes — beat them to claim a top-3 human spot (1 month Elite, free).
+      </p>
     </section>
   );
 }
@@ -590,7 +719,10 @@ function ActiveTabPanel({
         />
       );
     case "knockouts":
-      return <KnockoutsPanel isPro={isPro} />;
+      return <KnockoutsPanel isAuthed={isAuthed} isPro={isPro} />;
+    case "leaderboard":
+      return <LeaderboardPanel />;
+    // Legacy /world-cup?tab=bracket URLs still route to the bracket page.
     case "bracket":
       return <BracketChallengePanel isAuthed={isAuthed} />;
     case "scorers":
