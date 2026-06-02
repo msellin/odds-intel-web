@@ -3,6 +3,7 @@ import Image from "next/image";
 import { ChevronRight, MapPin, Calendar, ChevronDown, ChevronUp, Sparkles } from "lucide-react";
 
 import { flagForTeam } from "@/lib/wc-flags";
+import { displayProb, CONFIDENCE_CEILING_EXPLAINER } from "@/lib/probability-display";
 import type {
   WCFixture,
   WCGroup,
@@ -95,7 +96,10 @@ function FixtureRow({
 }) {
   const hasScore =
     fixture.status === "finished" && fixture.scoreHome != null && fixture.scoreAway != null;
-  const pct = (v: number | null) => Math.round((v ?? 0) * 100);
+  // CALIBRATION-DISPLAY-CAP: cap per-match prediction probs at 70% to avoid
+  // overclaiming (model is structurally overconfident at the high-conf tail).
+  // Returns the display string (e.g. "70%+" when capped) rather than a number.
+  const pct = (v: number | null) => (v == null ? "0" : displayProb(v));
 
   return (
     <div className="rounded-lg border border-white/[0.06] bg-card/40 hover:border-white/[0.12] hover:bg-card/60">

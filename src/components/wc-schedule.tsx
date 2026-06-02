@@ -4,6 +4,7 @@ import { ChevronRight, MapPin, Sparkles, ChevronDown } from "lucide-react";
 
 import { flagForTeam } from "@/lib/wc-flags";
 import type { WCFixture, WCPredictionSlot, WCMatchPreview } from "@/lib/world-cup";
+import { displayProb } from "@/lib/probability-display";
 
 interface WCScheduleProps {
   fixtures: WCFixture[];
@@ -111,7 +112,8 @@ export function WCSchedule({ fixtures, predictions, nowMs, previews }: WCSchedul
             <ul className="space-y-1.5">
               {dayFixtures.map((f) => {
                 const p = predictions[f.id];
-                const pct = (v: number | null) => Math.round((v ?? 0) * 100);
+                // CALIBRATION-DISPLAY-CAP — cap per-match prediction probs at 70%.
+                const pct = (v: number | null) => (v == null ? "0" : displayProb(v));
                 const hasScore =
                   f.status === "finished" && f.scoreHome != null && f.scoreAway != null;
                 const preview = previews?.[f.id];

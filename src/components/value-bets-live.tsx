@@ -13,6 +13,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { LiveBet, BookOddsEntry } from "@/lib/engine-data";
+import {
+  displayProb,
+  CONFIDENCE_CEILING,
+  CONFIDENCE_CEILING_EXPLAINER,
+} from "@/lib/probability-display";
 
 interface ValueBetsLiveProps {
   bets: (LiveBet & { botCount: number })[];
@@ -232,7 +237,7 @@ function BetCard({
             </span>
             <span>
               <span className="opacity-70 mr-0.5">p=</span>
-              <span className="font-mono text-foreground/80">{(bet.modelProb * 100).toFixed(0)}%</span>
+              <span className="font-mono text-foreground/80" title={bet.modelProb >= CONFIDENCE_CEILING ? CONFIDENCE_CEILING_EXPLAINER : undefined}>{displayProb(bet.modelProb)}</span>
             </span>
             <span>
               <span className="opacity-70 mr-0.5">stake</span>
@@ -821,7 +826,7 @@ function BetRow({
       {/* Model prob + stake — Elite only */}
       {isElite && (
         <>
-          <td className="py-3 px-2 text-center font-mono">{(bet.modelProb * 100).toFixed(1)}%</td>
+          <td className="py-3 px-2 text-center font-mono" title={bet.modelProb >= CONFIDENCE_CEILING ? CONFIDENCE_CEILING_EXPLAINER : undefined}>{displayProb(bet.modelProb)}</td>
           <td className="py-3 px-2 text-center font-mono">{bet.stake.toFixed(1)}<span className="opacity-40 text-[10px]">u</span></td>
         </>
       )}

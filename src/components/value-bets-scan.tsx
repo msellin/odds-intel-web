@@ -13,6 +13,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { LiveBet, BookOddsEntry } from "@/lib/engine-data";
+import {
+  displayProb,
+  displayProbNumber,
+  CONFIDENCE_CEILING,
+  CONFIDENCE_CEILING_EXPLAINER,
+} from "@/lib/probability-display";
 
 interface ValueBetsScanProps {
   bets: (LiveBet & { botCount: number })[];
@@ -158,17 +164,27 @@ function DriftIcon({ dir }: { dir: "shorter" | "drifted" | "steady" | null }) {
   return <TrendingUp className="h-3 w-3 text-blue-400" />;
 }
 
-// Probability bar: [market░░░░░░░ edge-gap model] with labels
+// Probability bar: [market░░░░░░░ edge-gap model] with labels.
+// CALIBRATION-DISPLAY-CAP: model label says "70%+" once the underlying
+// probability exceeds the calibration ceiling. The BAR ITSELF still uses
+// the raw probability (visual proportion) — what we cap is the LABEL.
 function EdgeBar({ modelProb, liveImplied }: { modelProb: number; liveImplied: number }) {
   const mPct = Math.round(modelProb * 100);
   const iPct = Math.round(liveImplied * 100);
   const ePct = mPct - iPct;
   const fairOdds = (1 / modelProb).toFixed(2);
+  const capped = modelProb >= CONFIDENCE_CEILING;
 
   return (
     <div>
       <div className="flex justify-between text-[11px] font-medium mb-1.5">
-        <span className="text-emerald-400">{mPct}% model</span>
+        <span
+          className="text-emerald-400"
+          title={capped ? CONFIDENCE_CEILING_EXPLAINER : undefined}
+        >
+          {displayProb(modelProb)} model
+          {capped && <span className="ml-0.5 text-emerald-400/60 cursor-help" aria-label="display capped">ⓘ</span>}
+        </span>
         <span className="text-muted-foreground">{iPct}% market</span>
       </div>
       <div className="relative h-3.5 rounded-full bg-muted/20 overflow-hidden">
@@ -229,7 +245,7 @@ function ExpandedPanel({
             <tbody className="divide-y divide-border/20">
               <tr>
                 <td className="py-1.5 text-muted-foreground">Model win probability</td>
-                <td className="py-1.5 text-right font-medium text-emerald-400">{(bet.modelProb * 100).toFixed(1)}%</td>
+                <td className="py-1.5 text-right font-medium text-emerald-400" title={bet.modelProb >= CONFIDENCE_CEILING ? CONFIDENCE_CEILING_EXPLAINER : undefined}>{displayProb(bet.modelProb)}</td>
               </tr>
               <tr>
                 <td className="py-1.5 text-muted-foreground">Market implied{best ? " (live)" : " (at post)"}</td>
