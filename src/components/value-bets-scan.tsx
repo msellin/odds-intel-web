@@ -370,14 +370,19 @@ function ValueBetRow({
   // gating these on isPro (which includes Elite). Stake stays Elite-only.
   const pickLine = fmtPickLine(bet.market, bet.selection, isPro);
 
-  // Odds display: live best if available, else posting odds+book
+  // Odds display: live best if available, else posting odds+book.
+  // UNITS-CONSISTENCY (2026-06-02): stake suffix used to only attach in
+  // the live-odds branch, so rows with no live entry dropped the units.
+  // Now shared across both branches — Elite users with stake > 0 always
+  // see the suggested size.
   const oddsLine = (() => {
+    const stakeSuffix =
+      isElite && bet.stake > 0 ? ` · ${bet.stake.toFixed(1)}u` : "";
     if (best) {
-      const stake = isElite && bet.stake > 0 ? ` · ${bet.stake.toFixed(1)}u` : "";
-      return `${best.odds.toFixed(2)} ${best.name}${stake}`;
+      return `${best.odds.toFixed(2)} ${best.name}${stakeSuffix}`;
     }
     if (isPro && bet.odds > 0 && bet.recommendedBookmaker) {
-      return `${bet.odds.toFixed(2)} ${bet.recommendedBookmaker}`;
+      return `${bet.odds.toFixed(2)} ${bet.recommendedBookmaker}${stakeSuffix}`;
     }
     return null;
   })();

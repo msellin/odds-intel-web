@@ -162,7 +162,11 @@ async function ValueBetsContent({ userId }: { userId: string }) {
   // render in its own "Live now" section with auto-refresh + stale gating.
   // Free tier never sees the live section.
   const inplayBets = isPro ? allBets.filter((b) => b.isInplay && b.result === "pending") : [];
-  const prematchBets = allBets.filter((b) => !b.isInplay);
+  // ACTIVE-FEED-PENDING-ONLY (2026-06-02): prematch used to include settled
+  // bets from today (won/lost/void), which rendered as a muted static "LIVE"
+  // because urgency() only animates when result === "pending". Filter them
+  // out — the active feed should be future + in-progress picks only.
+  const prematchBets = allBets.filter((b) => !b.isInplay && b.result === "pending");
 
   // Sort: edge descending (highest value first), KO time ascending as tiebreak
   // so among equal-edge bets, earlier matches surface first.
