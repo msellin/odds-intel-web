@@ -97,9 +97,19 @@ function flatten<T>(v: T | T[] | null): T | null {
 
 /**
  * Fetch all FIFA World Cup 2026 fixtures (group stage today, knockout later
- * once AF seeds them). Filtered by league.api_football_id=1 — DO NOT filter
- * by season (WC group-stage rows are stored with season=2025 by the football-
- * season convention, so a season filter would yield 0 rows).
+ * once AF seeds them).
+ *
+ * Filtered by:
+ *   - `league.api_football_id = 1` (the World Cup league row)
+ *   - `date >= 2026-06-01` (isolates the 2026 edition from historical WC
+ *     2022 / WC 2018 finished matches that WC-PHASE-2 backfilled into
+ *     `matches` for training the national-team model — without this date
+ *     guard the page renders 2022 group standings with real results)
+ *
+ * Note: a `season` filter would NOT work for the 2026 edition because
+ * WC group-stage fixtures land with `season=2025` under the football-
+ * season convention (June = previous year). The date guard is the
+ * portable filter that survives the convention.
  */
 export async function getWorldCupFixtures(): Promise<WCFixture[]> {
   const supabase = createSupabasePublic();
@@ -113,6 +123,7 @@ export async function getWorldCupFixtures(): Promise<WCFixture[]> {
        league:league_id!inner(api_football_id)`
     )
     .eq("league.api_football_id", WORLD_CUP_LEAGUE_API_ID)
+    .gte("date", "2026-06-01")
     .order("date", { ascending: true })
     .limit(200);
 
