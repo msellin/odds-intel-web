@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Lock, Loader2, Trophy, Check } from "lucide-react";
+import { ChevronLeft, ChevronRight, Lock, Loader2, Trophy, Check, Share2 } from "lucide-react";
 
 import { flagForTeam } from "@/lib/wc-flags";
 import {
@@ -98,6 +98,55 @@ export function WCBracketBoard(props: WCBracketBoardProps) {
   const [mobileRoundIdx, setMobileRoundIdx] = useState(0);
   const [goldenBoot, setGoldenBoot] = useState<string>(props.goldenBoot ?? "");
   const [savedToast, setSavedToast] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
+
+  // Share button visibility — only meaningful once champion is picked.
+  // (Server action enforces the same; this is just a UX gate.)
+  const hasChampion = Boolean(picks[pickKey("champion", 0)]);
+
+  const handleShare = async () => {
+    if (!isAuthed || sharing) return;
+    setError(null);
+    setSharing(true);
+    try {
+      const res = await fetch("/api/wc-bracket/share", { method: "POST" });
+      const body = (await res.json()) as { url?: string; error?: string };
+      if (!res.ok || !body.url) {
+        setError(body.error ?? "Could not generate share link.");
+        return;
+      }
+      const url = body.url;
+      const shareData: ShareData = {
+        title: "My World Cup 2026 bracket",
+        text: "Check out my World Cup 2026 bracket on OddsIntel",
+        url,
+      };
+      // Native share sheet on mobile (iMessage, WhatsApp, Slack, etc.).
+      const nav = typeof navigator !== "undefined" ? navigator : undefined;
+      if (nav && typeof nav.share === "function" && typeof nav.canShare === "function" && nav.canShare(shareData)) {
+        try {
+          await nav.share(shareData);
+          setSavedToast("Shared.");
+          setTimeout(() => setSavedToast(null), 1200);
+          return;
+        } catch {
+          // User cancelled the native share sheet — fall through to clipboard.
+        }
+      }
+      if (nav?.clipboard?.writeText) {
+        await nav.clipboard.writeText(url);
+        setSavedToast("Link copied — paste anywhere");
+        setTimeout(() => setSavedToast(null), 1800);
+      } else {
+        // Last-resort fallback — show the URL inline.
+        setError(`Copy this link: ${url}`);
+      }
+    } catch {
+      setError("Network error generating share link.");
+    } finally {
+      setSharing(false);
+    }
+  };
 
   const teamsById = useMemo(() => {
     const m: Record<string, Team> = {};
@@ -247,6 +296,29 @@ export function WCBracketBoard(props: WCBracketBoardProps) {
           })}
         </div>
       </div>
+
+      {/* Share button — visible once user has at least a champion pick */}
+      {hasChampion && (
+        <div className="flex items-center justify-between rounded-xl border border-primary/30 bg-primary/10 px-3 py-3">
+          <div className="min-w-0 pr-2">
+            <p className="text-xs font-semibold text-foreground">
+              Share your bracket
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              Brag a bit. Pull friends in to compete.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleShare}
+            disabled={sharing}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+          >
+            {sharing ? <Loader2 className="size-3 animate-spin" /> : <Share2 className="size-3" />}
+            Share my bracket
+          </button>
+        </div>
+      )}
 
       {/* Golden boot input */}
       <div className="rounded-xl border border-white/[0.06] bg-card/40 p-3">

@@ -115,6 +115,72 @@ export async function saveBracketPick(
   return { ok: true };
 }
 
+// ─── Bracket: generate / fetch the shareable URL token ─────────────────────
+
+export interface ShareTokenResult {
+  ok: boolean;
+  token?: string;
+  url?: string;
+  error?: string;
+}
+
+const SHARE_BASE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ?? "https://oddsintel.app";
+
+/**
+ * Return the user's share token, creating one on first call. The user must
+ * have at least picked a champion — sharing an empty bracket is pointless and
+ * we don't want zombie tokens in the table.
+ */
+export async function getOrCreateShareToken(): Promise<ShareTokenResult> {
+  const supabase = await createSupabaseServer();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Sign in to share your bracket." };
+
+  // Require a champion pick — the most prominent piece of the share card.
+  const { data: champion } = await supabase
+    .from("wc_bracket_picks")
+    .select("picked_team_id")
+    .eq("user_id", user.id)
+    .eq("round", "champion")
+    .maybeSingle();
+  if (!champion) {
+    return { ok: false, error: "Pick your champion before sharing." };
+  }
+
+  // Try to read existing token first — avoids generating a new UUID per call.
+  const { data: existing } = await supabase
+    .from("wc_bracket_meta")
+    .select("share_token")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  let token: string | null = (existing?.share_token as string | null) ?? null;
+
+  if (!token) {
+    token = crypto.randomUUID();
+    const { error } = await supabase
+      .from("wc_bracket_meta")
+      .upsert(
+        {
+          user_id: user.id,
+          share_token: token,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id" }
+      );
+    if (error) return { ok: false, error: error.message };
+  }
+
+  return {
+    ok: true,
+    token,
+    url: `${SHARE_BASE_URL}/world-cup/bracket/share/${token}`,
+  };
+}
+
 /**
  * Lock the bracket — recorded for audit. After global lock fires, this is a
  * no-op (the bracket is implicitly locked anyway). Optionally accept the
