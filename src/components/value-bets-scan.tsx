@@ -413,18 +413,28 @@ function ValueBetRow({
   // Odds display: live best if available, else posting odds+book.
   // UNITS-CONSISTENCY (2026-06-02): stake suffix used to only attach in
   // the live-odds branch, so rows with no live entry dropped the units.
-  // Now shared across both branches — Elite users with stake > 0 always
-  // see the suggested size.
+  // Now shared across all three branches — Elite users with stake > 0
+  // always see the suggested size, regardless of whether we have live
+  // odds, a stored bookmaker, or only a paper stake (Asian handicap rows
+  // commonly fall into this last bucket because the bookOdds map keys
+  // on (market, selection) and AH selections carry the handicap line,
+  // so the join misses).
   const oddsLine = (() => {
     const stakeSuffix =
       isElite && bet.stake > 0 ? ` · ${bet.stake.toFixed(1)}u` : "";
+    const stakeOnly = isElite && bet.stake > 0 ? `${bet.stake.toFixed(1)}u` : null;
     if (best) {
       return `${best.odds.toFixed(2)} ${best.name}${stakeSuffix}`;
     }
     if (isPro && bet.odds > 0 && bet.recommendedBookmaker) {
       return `${bet.odds.toFixed(2)} ${bet.recommendedBookmaker}${stakeSuffix}`;
     }
-    return null;
+    if (isPro && bet.odds > 0) {
+      // Have a posted odds but no recommended bookmaker (older rows / some AH).
+      return `${bet.odds.toFixed(2)}${stakeSuffix}`;
+    }
+    // No odds line at all — but Elite still wants to see the stake hint.
+    return stakeOnly;
   })();
 
   return (
