@@ -20,6 +20,11 @@ import {
   CONFIDENCE_CEILING_EXPLAINER,
 } from "@/lib/probability-display";
 
+interface LeagueHitRate {
+  hitRate: number;   // 0..1
+  settled: number;
+}
+
 interface ValueBetsScanProps {
   bets: (LiveBet & { botCount: number })[];
   totalCount: number;
@@ -27,7 +32,14 @@ interface ValueBetsScanProps {
   oddsVerifiedAt?: string | null;
   bookOdds?: Record<string, BookOddsEntry>;
   botRecentRoi?: Record<string, { roi: number; settled: number }>;
+  // ELITE-LEAGUE-FILTER (2026-06-03): map keyed by `"${country} / ${name}"`
+  // matching LiveBet.league. Only populated for Elite users; Pro/Free see {}.
+  leagueHitRates?: Record<string, LeagueHitRate>;
 }
+
+// Threshold for the "Strong leagues only" pill. Matches the original task
+// entry: leagues where the model hit rate >= 45% over the rolling window.
+const ELITE_STRONG_LEAGUE_HIT_RATE = 0.45;
 
 const ALL = "__all__";
 const BANNER_KEY = "vb_scan_banner_v1";
@@ -390,6 +402,7 @@ function ValueBetRow({
   entry,
   expanded,
   onToggle,
+  leagueHitRate,
 }: {
   bet: LiveBet & { botCount: number };
   isPro: boolean;
@@ -397,6 +410,9 @@ function ValueBetRow({
   entry?: BookOddsEntry;
   expanded: boolean;
   onToggle: () => void;
+  // ELITE-LEAGUE-FILTER: per-row league-strength data (Elite only — Pro/Free
+  // never receives a value here).
+  leagueHitRate?: LeagueHitRate;
 }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
@@ -519,6 +535,32 @@ function ValueBetRow({
                   Pro
                 </span>
               )}
+              {/* ELITE-LEAGUE-FILTER (2026-06-03): per-row league strength
+                  badge. Colour-coded by 90d hit rate so Elite users can
+                  glance at how the model historically performs in this
+                  league. Pro/Free never gets a value here. */}
+              {leagueHitRate && (() => {
+                const pct = Math.round(leagueHitRate.hitRate * 100);
+                const cls =
+                  leagueHitRate.hitRate >= 0.50
+                    ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
+                    : leagueHitRate.hitRate >= 0.45
+                    ? "border-purple-500/40 bg-purple-500/10 text-purple-300"
+                    : leagueHitRate.hitRate >= 0.40
+                    ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
+                    : "border-red-500/40 bg-red-500/10 text-red-300";
+                return (
+                  <span
+                    className={cn(
+                      "shrink-0 rounded-sm border px-1 py-px text-[8px] font-bold uppercase tracking-wider",
+                      cls,
+                    )}
+                    title={`Model hit rate in ${bet.league}: ${pct}% over last 90 days (n=${leagueHitRate.settled})`}
+                  >
+                    {pct}%
+                  </span>
+                );
+              })()}
             </div>
             {oddsLine && (
               <p className="text-[11px] text-muted-foreground">{oddsLine}</p>
@@ -578,11 +620,16 @@ export function ValueBetsScan({
   userTier,
   oddsVerifiedAt,
   bookOdds,
+  leagueHitRates,
 }: ValueBetsScanProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [bannerDismissed, setBannerDismissed] = useState(true);
   const [league, setLeague] = useState(ALL);
   const [edgeFilter, setEdgeFilter] = useState<"all" | "strong" | "moderate">("all");
+  // ELITE-LEAGUE-FILTER (2026-06-03): toggle to restrict to leagues where
+  // the rolling 90d model hit rate >= 45%. Elite only — Pro/Free don't see
+  // the pill or the per-row badge.
+  const [strongLeaguesOnly, setStrongLeaguesOnly] = useState(false);
 
   const isPro = userTier === "pro" || userTier === "elite";
   const isElite = userTier === "elite";
@@ -607,12 +654,24 @@ export function ValueBetsScan({
       if (league !== ALL && b.league !== league) return false;
       if (edgeFilter === "strong" && b.edge * 100 < 10) return false;
       if (edgeFilter === "moderate" && (b.edge * 100 < 5 || b.edge * 100 >= 10)) return false;
+      if (strongLeaguesOnly && isElite) {
+        const hr = leagueHitRates?.[b.league];
+        if (!hr || hr.hitRate < ELITE_STRONG_LEAGUE_HIT_RATE) return false;
+      }
       return true;
     });
-  }, [bets, league, edgeFilter, userTier]);
+  }, [bets, league, edgeFilter, userTier, strongLeaguesOnly, isElite, leagueHitRates]);
 
   const strongCount = bets.filter((b) => b.edge * 100 >= 10).length;
   const modCount = bets.filter((b) => b.edge * 100 >= 5 && b.edge * 100 < 10).length;
+  // ELITE-LEAGUE-FILTER: count of currently-loaded picks whose league has
+  // historical hit rate at the strong threshold.
+  const strongLeagueCount = isElite && leagueHitRates
+    ? bets.filter((b) => {
+        const hr = leagueHitRates[b.league];
+        return hr && hr.hitRate >= ELITE_STRONG_LEAGUE_HIT_RATE;
+      }).length
+    : 0;
   const lockedCount = totalCount - bets.length;
 
   const toggle = useCallback((id: string) => {
@@ -671,6 +730,24 @@ export function ValueBetsScan({
             ● {modCount} moderate 5–10%
           </button>
         )}
+        {/* ELITE-LEAGUE-FILTER (2026-06-03): Elite-only pill to restrict to
+            picks in leagues where our model's 90d hit rate >= 45%. Sits in
+            the same pill row as the edge filters so it visually belongs to
+            the "narrow my list" controls. */}
+        {isElite && strongLeagueCount > 0 && (
+          <button
+            onClick={() => setStrongLeaguesOnly(!strongLeaguesOnly)}
+            title={`Restrict to leagues with model hit rate ≥ ${(ELITE_STRONG_LEAGUE_HIT_RATE * 100).toFixed(0)}% over last 90 days`}
+            className={cn(
+              "rounded-full px-3 py-1 text-xs border transition-colors",
+              strongLeaguesOnly
+                ? "bg-purple-500/20 border-purple-500/50 text-purple-300"
+                : "bg-purple-500/10 border-purple-500/30 text-purple-400 hover:bg-purple-500/20",
+            )}
+          >
+            ★ {strongLeagueCount} strong leagues
+          </button>
+        )}
       </div>
 
       {/* League filter (Pro+) */}
@@ -716,6 +793,7 @@ export function ValueBetsScan({
               entry={bookOdds?.[bet.id]}
               expanded={expandedId === bet.id}
               onToggle={() => toggle(bet.id)}
+              leagueHitRate={isElite ? leagueHitRates?.[bet.league] : undefined}
             />
           ))}
 

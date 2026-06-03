@@ -1095,6 +1095,68 @@ export async function getMatchById(matchId: string): Promise<LiveMatch | null> {
 //   "prematch"   → legacy: xg_source IS NULL (used by the free daily pick teaser)
 export type BetCohort = "calibrated" | "active" | "prematch";
 
+// ELITE-LEAGUE-FILTER (2026-06-03): per-league rolling hit-rate, surfaced
+// on /value-bets for Elite users as a league-strength badge + an optional
+// "strong leagues only" filter. Keyed by `"${country} / ${name}"` so the
+// frontend can join against `LiveBet.league` (same format as toBet's
+// `${league.country} / ${league.name}`).
+//
+// Returns leagues with at least MIN_SETTLED settled bets in the window so
+// the displayed hit-rate has any signal. Window default 90 days mirrors
+// the original task entry's 3-month threshold.
+export interface LeagueHitRate {
+  hitRate: number;       // 0..1
+  settled: number;       // count of won + lost (excludes void)
+}
+
+const LEAGUE_HIT_RATE_MIN_SETTLED = 10;
+
+export async function getLeagueHitRates(
+  daysBack: number = 90
+): Promise<Record<string, LeagueHitRate>> {
+  const supabase = createSupabaseAdmin();
+  const since = new Date(Date.now() - daysBack * 86_400_000).toISOString();
+  type Row = {
+    result: string;
+    match: {
+      league:
+        | { country: string | null; name: string | null }
+        | { country: string | null; name: string | null }[]
+        | null;
+    } | null;
+  };
+  const { data, error } = await supabase
+    .from("simulated_bets")
+    .select(
+      `result,
+       match:match_id(league:league_id(country, name))`
+    )
+    .gte("pick_time", since)
+    .in("result", ["won", "lost"])
+    .neq("market", "combo")
+    .range(0, 19999);
+  if (error || !data) return {};
+
+  const agg = new Map<string, { wins: number; settled: number }>();
+  for (const r of data as unknown as Row[]) {
+    const match = r.match;
+    if (!match) continue;
+    const lg = Array.isArray(match.league) ? match.league[0] : match.league;
+    if (!lg || !lg.country || !lg.name) continue;
+    const key = `${lg.country} / ${lg.name}`;
+    const cur = agg.get(key) ?? { wins: 0, settled: 0 };
+    cur.settled += 1;
+    if (r.result === "won") cur.wins += 1;
+    agg.set(key, cur);
+  }
+  const out: Record<string, LeagueHitRate> = {};
+  for (const [key, { wins, settled }] of agg) {
+    if (settled < LEAGUE_HIT_RATE_MIN_SETTLED) continue;
+    out[key] = { hitRate: wins / settled, settled };
+  }
+  return out;
+}
+
 export async function getTodayBets(cohort: BetCohort = "prematch"): Promise<LiveBet[]> {
   // Use service role so RLS on simulated_bets doesn't block the server.
   // Tier-based sanitization happens in page.tsx before data reaches the client.

@@ -9,9 +9,11 @@ import {
   getOddsVerifiedAt,
   getValueBetBookOdds,
   getPublicPerformanceExtras,
+  getLeagueHitRates,
   type LiveBet,
   type BookOddsEntry,
   type BetCohort,
+  type LeagueHitRate,
 } from "@/lib/engine-data";
 import { ValueBetsScan } from "@/components/value-bets-scan";
 import { ValueBetsGate } from "@/components/value-bets-gate";
@@ -152,10 +154,16 @@ async function ValueBetsContent({ userId }: { userId: string }) {
   // <CLVTrustBanner variant="value-bets" />, which does its own dashboard_cache
   // read. We no longer need to pre-fetch cache here for the hero. Kept the
   // public performance extras for the bot-ROI hook + odds-movement view.
-  const [allBets, todayPicks, extras] = await Promise.all([
+  // ELITE-LEAGUE-FILTER (2026-06-03): per-league 90d hit rate only fetched
+  // for Elite users; Pro and Free don't render the badge/filter and we don't
+  // need to pay the query cost.
+  const [allBets, todayPicks, extras, leagueHitRates] = await Promise.all([
     getTodayBets(cohort),
     getTodayPicks(),
     getPublicPerformanceExtras(),
+    isElite
+      ? getLeagueHitRates(90)
+      : Promise.resolve({} as Record<string, LeagueHitRate>),
   ]);
 
   // PRO-TIER-V2 (2026-06-02): split inplay out of the main feed so it can
@@ -288,6 +296,7 @@ async function ValueBetsContent({ userId }: { userId: string }) {
         oddsVerifiedAt={oddsVerifiedAt}
         bookOdds={bookOdds}
         botRecentRoi={extras.botRecentRoi}
+        leagueHitRates={leagueHitRates}
       />
     </div>
   );
