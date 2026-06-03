@@ -15,6 +15,7 @@ import {
   getBotConsensus,
   getMatchPreview,
   getMatchValueBet,
+  PREDICTION_LEAGUES,
 } from "@/lib/engine-data";
 import type { MatchSignalRow } from "@/lib/engine-data";
 import { MatchDetailHeader } from "@/components/match-detail-header";
@@ -544,7 +545,30 @@ export default async function MatchDetailPage({
     awayTeam: awayTeamLd,
     competitor: [homeTeamLd, awayTeamLd],
     performer: [homeTeamLd, awayTeamLd],
-    organizer: { "@type": "SportsOrganization", name: publicMatch.league },
+    organizer: {
+      "@type": "SportsOrganization",
+      name: publicMatch.league,
+      // Link to our league predictions page when this league is featured.
+      // For non-featured leagues we have no canonical URL, so omit rather
+      // than fabricate one (broken links hurt indexing).
+      ...(() => {
+        const slug = PREDICTION_LEAGUES.find((l) => l.name === publicMatch.league)?.slug;
+        return slug ? { url: `https://oddsintel.app/predictions/${slug}` } : {};
+      })(),
+    },
+    // SEO: `offers` here represents free access to OddsIntel's predictions and
+    // odds comparison for this fixture — NOT a ticket to the event. price=0,
+    // category names it explicitly so Google doesn't misclassify us as a
+    // ticket seller.
+    offers: {
+      "@type": "Offer",
+      url: matchUrl,
+      price: "0",
+      priceCurrency: "USD",
+      availability: "https://schema.org/InStock",
+      category: "Free football predictions and odds comparison",
+      validFrom: new Date(kickoffDate.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+    },
   };
   const breadcrumbLd = {
     "@context": "https://schema.org",

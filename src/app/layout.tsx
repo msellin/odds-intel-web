@@ -119,6 +119,7 @@ export default function RootLayout({
               "@type": "Organization",
               name: "OddsIntel",
               url: "https://oddsintel.app",
+              logo: "https://oddsintel.app/icon-512.png",
               description:
                 "OddsIntel uses an AI ensemble model combining Poisson regression and XGBoost to generate football predictions and value bets across 280+ leagues. Provides odds comparison, injury tracking, H2H records and standings in one platform.",
             }),
