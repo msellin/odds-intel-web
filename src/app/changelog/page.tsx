@@ -25,6 +25,42 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-06-03",
+    title: "In-play minute + score · AH stake display · NULL-bookmaker fix",
+    changes: [
+      { type: "feature", text: "In-play picks now show the match minute and score when offered — \"In-play · 23' · 0-1\" — so you can tell a 3' pick (close to prematch state, model reliable) from a 67' pick (highly path-dependent) at a glance" },
+      { type: "fix", text: "Asian Handicap picks on Elite were silently dropping the stake suggestion. Every Elite row with a recommended size now shows the units regardless of market" },
+      { type: "fix", text: "100% of Asian Handicap picks had been storing NULL recommended_bookmaker, so /admin/place rendered \"—\" instead of the actual best book. Fixed — AH rows now surface their best accessible bookmaker like every other market" },
+      { type: "model", text: "Per-bot CLV audit against Pinnacle's closing line completed (60d, n=517). bot_v10_all confirmed at +17.5% honest total ROI on n=157 — strongest signal in the lineup. Retired bots' decisions all confirmed correct. Full report in dev/active/edge-drift-morning-report.md" },
+    ],
+  },
+  {
+    date: "2026-06-02",
+    title: "World Cup 2026 hub · Pro tier overhaul · Bracket challenge · Global feedback widget",
+    changes: [
+      { type: "feature", text: "/world-cup hub launched: full tournament UI with Overview, Schedule, Groups, Knockouts, Leaderboard, and Top Scorers tabs — BBC-style top-level navigation, mobile-first carousel, country flags everywhere" },
+      { type: "feature", text: "Bracket Challenge game — pick the entire knockout bracket (R32 → Final), compete against 5 named AI ghosts + 40 anonymous \"Player NNN\" variants + the rest of the community on a combined leaderboard. Top 3 humans win 1 month of Elite, free" },
+      { type: "feature", text: "Stage-gated bracket: each round opens after the previous resolves (BBC pattern), so you don't have to guess your R16 picks before knowing who advanced from the groups" },
+      { type: "feature", text: "Shareable brackets — every saved bracket gets a unique share URL with an auto-generated OG preview card showing your top picks. Web Share API on mobile, clipboard fallback elsewhere" },
+      { type: "feature", text: "Group standings predictor: pick the order of every group + the best 8 third-place teams (48 picks · up to +192 pts toward the leaderboard)" },
+      { type: "feature", text: "15 World Cup achievements with badge icons — first to lock, all 12 groups perfect, beat the AI in R32, called the champion, vs-you streaks, and more. Detection runs every 15 minutes during the tournament window" },
+      { type: "feature", text: "Gemini-generated AI match previews (80-120 words) on each World Cup fixture, surfaced as inline expanders on /world-cup" },
+      { type: "feature", text: "Pro Tier V2: every value-bet row now shows the selection, odds, and recommended bookmaker (no more directional-only restriction). A new \"Live now\" auto-refreshing section above the main list surfaces fresh in-play picks every 60 seconds" },
+      { type: "feature", text: "Cohort transparency: Elite tier sees picks from all 39 active bots; calibrated-cohort picks (also shown to Pro) get a \"PRO\" badge so you can tell the curated subset from the wider Elite-only set" },
+      { type: "feature", text: "Live in-play win-probability chart on every match detail page — updates as the match unfolds. Pro+ feature" },
+      { type: "feature", text: "Unified Value Bets feed: every pick now carries a Pre-match or In-play chip plus a status indicator that switches between countdown (4h 45m), pulsing LIVE, and Won/Lost/Void result pills as the match progresses" },
+      { type: "feature", text: "CLV trust banner — a single CLV-first hero shown across landing, /value-bets, and /world-cup. Pulls live 30-day ROI + sample size + average closing line value from a server-side cache, no client wait" },
+      { type: "feature", text: "\"Give feedback\" button now appears on every page (was previously missing on logged-in routes). Copy rewritten to invite ideas and suggestions, not bug reports — \"Tell us what to change\"" },
+      { type: "feature", text: "Back button: a small top-left pill on every app page so you can always reverse one step without thumbs reaching for the browser chrome" },
+      { type: "model", text: "70% confidence display cap: picks at >70% calibrated probability now render as \"70%+\" instead of the raw number. Calibration audit showed the model is overconfident above this threshold on small samples" },
+      { type: "data", text: "World Cup fixtures, lineups, predictions, ELO ratings backfilled across 6,921 historical international fixtures (25 competitions). The national-team predictor runs nightly and feeds /world-cup directly" },
+      { type: "infra", text: "Sentry trimmed to feedback-only — error tracing dropped to zero sample rate so the free tier doesn't get capped. The feedback modal still ships every report" },
+      { type: "fix", text: "Mobile polish: tighter /world-cup hero so content shows above the fold, knockout placeholder now a compact 5-row schedule (was 31 stacked TBDs), leaderboard de-cluttered, group carousel sync fixed (swiping cards updates the letter tabs)" },
+      { type: "fix", text: "Started prematch picks on /admin/place no longer disappear — they stay visible with a \"Started Nm\" tag and a live in-play edge column so manual placement decisions during early minutes are possible" },
+      { type: "fix", text: "Settled bets dropped from the active Value Bets feed (they were showing as muted gray \"LIVE\" badges instead of being filtered out)" },
+    ],
+  },
+  {
     date: "2026-05-28",
     title: "426 more leagues · In-play fixes · DNB data fix",
     changes: [
