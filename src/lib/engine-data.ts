@@ -202,6 +202,13 @@ export interface LiveBet {
   // separate "Live now" section on /value-bets. Inplay bots write xg_source
   // and/or have name LIKE 'inplay_%' — either is sufficient.
   isInplay: boolean;
+  // INPLAY-METADATA-STALENESS (2026-06-03): for inplay picks, the match
+  // minute + score at the moment the bet was offered. NULL for prematch.
+  // UI uses these to render an "In-play · 23' · 0-1" chip so users can
+  // tell a 3' pick (close to prematch state) from a 67' pick.
+  matchMinuteAtPick: number | null;
+  scoreHomeAtPick: number | null;
+  scoreAwayAtPick: number | null;
   // COHORT-TRANSPARENCY (2026-06-02): is the source bot in the calibrated
   // subset (maturity_label='calibrated' AND is_active=true)? On Elite view,
   // calibrated picks get a "Pro pick" badge so the user can tell at a glance
@@ -1123,6 +1130,7 @@ export async function getTodayBets(cohort: BetCohort = "prematch"): Promise<Live
        model_probability, calibrated_prob, edge_percent, closing_odds, clv, result, pnl,
        bankroll_after, news_triggered, reasoning, recommended_bookmaker, strategy_profile,
        xg_source,
+       match_minute_at_pick, score_home_at_pick, score_away_at_pick,
        bot:bot_id(id, name, strategy, maturity_label, is_active),
        match:match_id(id, date,
          home_team:home_team_id(name),
@@ -1470,6 +1478,11 @@ function toBet(
     // (live-poller writes it on every inplay bet); bot name prefix is a
     // belt-and-braces fallback for any future variant.
     isInplay: row.xg_source != null || String(bot?.name ?? "").startsWith("inplay_"),
+    // INPLAY-METADATA-STALENESS (2026-06-03): NULL for prematch picks (the
+    // inplay bot writes these directly; everyone else leaves them unset).
+    matchMinuteAtPick: row.match_minute_at_pick != null ? Number(row.match_minute_at_pick) : null,
+    scoreHomeAtPick: row.score_home_at_pick != null ? Number(row.score_home_at_pick) : null,
+    scoreAwayAtPick: row.score_away_at_pick != null ? Number(row.score_away_at_pick) : null,
     // COHORT-TRANSPARENCY (2026-06-02): pre-compute the "is this bet from
     // a calibrated bot" flag. Pro tier sees only calibrated picks; Elite
     // tier sees all active bots, but renders a "Pro pick" badge on rows

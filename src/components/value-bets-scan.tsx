@@ -466,17 +466,44 @@ function ValueBetRow({
                   prematch pick (placed before kickoff) from an inplay pick
                   (placed during the match by an inplay bot). Without it the
                   list mixed both with no visual cue. */}
-              <span
-                className={cn(
-                  "shrink-0 rounded-sm border px-1 py-px text-[8px] font-bold uppercase tracking-wider",
-                  bet.isInplay
-                    ? "border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-300"
-                    : "border-sky-500/30 bg-sky-500/10 text-sky-300",
-                )}
-                title={bet.isInplay ? "Placed during the match by an inplay bot" : "Placed before kick-off by a prematch bot"}
-              >
-                {bet.isInplay ? "In-play" : "Pre-match"}
-              </span>
+              {(() => {
+                // INPLAY-METADATA-STALENESS (2026-06-03): when we have the
+                // pick-time minute + score, fold them into the chip so a
+                // 3' pick (close to prematch state) is visually distinct
+                // from a 67' pick (highly path-dependent).
+                if (!bet.isInplay) {
+                  return (
+                    <span
+                      className="shrink-0 rounded-sm border border-sky-500/30 bg-sky-500/10 px-1 py-px text-[8px] font-bold uppercase tracking-wider text-sky-300"
+                      title="Placed before kick-off by a prematch bot"
+                    >
+                      Pre-match
+                    </span>
+                  );
+                }
+                const minute = bet.matchMinuteAtPick;
+                const home = bet.scoreHomeAtPick;
+                const away = bet.scoreAwayAtPick;
+                const hasMeta = minute != null;
+                const scoreFragment =
+                  home != null && away != null ? ` · ${home}-${away}` : "";
+                const minuteFragment = hasMeta ? ` · ${minute}'` : "";
+                const tooltip = hasMeta
+                  ? `Placed by an inplay bot at minute ${minute}${
+                      home != null && away != null
+                        ? ` (score ${home}-${away})`
+                        : ""
+                    }`
+                  : "Placed during the match by an inplay bot";
+                return (
+                  <span
+                    className="shrink-0 rounded-sm border border-fuchsia-500/40 bg-fuchsia-500/10 px-1 py-px text-[8px] font-bold uppercase tracking-wider text-fuchsia-300"
+                    title={tooltip}
+                  >
+                    {`In-play${minuteFragment}${scoreFragment}`}
+                  </span>
+                );
+              })()}
               <span className="truncate">{pickLine}</span>
               <ConsensusDots count={bet.botCount} />
               {/* COHORT-TRANSPARENCY (2026-06-02): Elite users see picks from
