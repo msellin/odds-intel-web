@@ -26,12 +26,14 @@ interface ChangelogEntry {
 const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-06-03",
-    title: "In-play minute + score · AH stake display · NULL-bookmaker fix",
+    title: "Elite league filter · In-play minute + score · AH stake display · Bot calibration",
     changes: [
+      { type: "feature", text: "Elite tier: each value-bet row now shows a colour-coded badge with the model's 90-day hit rate in that league (emerald ≥50%, purple ≥45%, amber ≥40%, red <40%). New \"★ N strong leagues\" filter pill restricts the list to leagues where the model has historically performed at ≥45% — instant focus on the leagues where the model is sharpest" },
       { type: "feature", text: "In-play picks now show the match minute and score when offered — \"In-play · 23' · 0-1\" — so you can tell a 3' pick (close to prematch state, model reliable) from a 67' pick (highly path-dependent) at a glance" },
       { type: "fix", text: "Asian Handicap picks on Elite were silently dropping the stake suggestion. Every Elite row with a recommended size now shows the units regardless of market" },
       { type: "fix", text: "100% of Asian Handicap picks had been storing NULL recommended_bookmaker, so /admin/place rendered \"—\" instead of the actual best book. Fixed — AH rows now surface their best accessible bookmaker like every other market" },
-      { type: "model", text: "Per-bot CLV audit against Pinnacle's closing line completed (60d, n=517). bot_v10_all confirmed at +17.5% honest total ROI on n=157 — strongest signal in the lineup. Retired bots' decisions all confirmed correct. Full report in dev/active/edge-drift-morning-report.md" },
+      { type: "model", text: "Per-bot CLV audit against Pinnacle's closing line completed (60d, n=517). bot_v10_all confirmed at +17.5% honest total ROI on n=157 — strongest signal in the lineup. Retired bots' decisions all confirmed correct" },
+      { type: "model", text: "Inplay strategy calibration audit: inplay_l (Goal Contagion) cleared the 5% ECE gate at 4.96% with +25.8% ROI on n=31, promoted to the calibrated cohort. inplay_i flagged for recalibration (ECE 24.6%, n=11). inplay_j silent failure root-caused to a Bayesian prior shrinkage mismatch and unblocked — strategy now uses a local conjugate Gamma update with lighter shrinkage matching the strategy's design" },
     ],
   },
   {
