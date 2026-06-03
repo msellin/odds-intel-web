@@ -497,8 +497,58 @@ export default async function MatchDetailPage({
     </>
   );
 
+  const kickoffIso = new Date(publicMatch.kickoff).toISOString();
+  const matchUrl = `https://oddsintel.app/matches/${id}`;
+  const sportsEventLd = {
+    "@context": "https://schema.org",
+    "@type": "SportsEvent",
+    name: `${publicMatch.homeTeam} vs ${publicMatch.awayTeam}`,
+    description: `${publicMatch.homeTeam} vs ${publicMatch.awayTeam} in the ${publicMatch.league}. Odds comparison, AI predictions, H2H and injuries on OddsIntel.`,
+    startDate: kickoffIso,
+    eventStatus:
+      publicMatch.status === "finished"
+        ? "https://schema.org/EventScheduled"
+        : publicMatch.status === "postponed"
+        ? "https://schema.org/EventPostponed"
+        : "https://schema.org/EventScheduled",
+    eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
+    sport: "Soccer",
+    url: matchUrl,
+    location: publicMatch.venue_name
+      ? {
+          "@type": "Place",
+          name: publicMatch.venue_name,
+          address: { "@type": "PostalAddress", addressCountry: publicMatch.country },
+        }
+      : { "@type": "Place", name: publicMatch.country, address: { "@type": "PostalAddress", addressCountry: publicMatch.country } },
+    homeTeam: { "@type": "SportsTeam", name: publicMatch.homeTeam },
+    awayTeam: { "@type": "SportsTeam", name: publicMatch.awayTeam },
+    competitor: [
+      { "@type": "SportsTeam", name: publicMatch.homeTeam },
+      { "@type": "SportsTeam", name: publicMatch.awayTeam },
+    ],
+    organizer: { "@type": "SportsOrganization", name: publicMatch.league },
+  };
+  const breadcrumbLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: "https://oddsintel.app" },
+      { "@type": "ListItem", position: 2, name: "Matches", item: "https://oddsintel.app/matches" },
+      { "@type": "ListItem", position: 3, name: `${publicMatch.homeTeam} vs ${publicMatch.awayTeam}`, item: matchUrl },
+    ],
+  };
+
   return (
     <div className="space-y-3">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(sportsEventLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
+      />
       {/* New compact header with team logos, score, AI prediction, grade, inline odds */}
       <MatchDetailHeader
         match={publicMatch}

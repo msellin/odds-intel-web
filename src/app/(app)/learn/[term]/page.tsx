@@ -96,8 +96,22 @@ export default async function TermPage({
       }
     : null;
 
+  const breadcrumbSchema = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: "https://oddsintel.app" },
+      { "@type": "ListItem", position: 2, name: "Betting Glossary", item: "https://oddsintel.app/learn" },
+      { "@type": "ListItem", position: 3, name: term.title, item: `https://oddsintel.app/learn/${slug}` },
+    ],
+  };
+
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
+      />
       {faqSchema && (
         <script
           type="application/ld+json"

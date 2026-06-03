@@ -4382,3 +4382,28 @@ export async function getModelV2Stats(): Promise<ModelV2Stats> {
     inplayRoi:       calcRoi(inplay),
   };
 }
+
+// Sitemap helper: returns match IDs + real updated_at timestamps for an indexable window.
+// Window: 14 days forward (so Google sees upcoming fixtures early enough to crawl them)
+// + 30 days back (recently finished matches still get search traffic for results queries).
+// Limit is well below the 50k sitemap cap — typical day ≈ 200 fixtures × 44 days ≈ 9k URLs.
+export async function getMatchIdsForSitemap(): Promise<Array<{ id: string; updatedAt: string }>> {
+  const supabase = createSupabasePublic();
+  const now = new Date();
+  const windowStart = new Date(now);
+  windowStart.setUTCDate(windowStart.getUTCDate() - 30);
+  const windowEnd = new Date(now);
+  windowEnd.setUTCDate(windowEnd.getUTCDate() + 14);
+
+  const { data, error } = await supabase
+    .from("matches")
+    .select("id, updated_at, league:league_id!inner(is_active)")
+    .eq("league.is_active", true)
+    .gte("date", windowStart.toISOString())
+    .lte("date", windowEnd.toISOString())
+    .order("date", { ascending: false })
+    .limit(20000);
+
+  if (error || !data) return [];
+  return data.map((r) => ({ id: r.id as string, updatedAt: r.updated_at as string }));
+}
