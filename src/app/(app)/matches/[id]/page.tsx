@@ -497,14 +497,33 @@ export default async function MatchDetailPage({
     </>
   );
 
-  const kickoffIso = new Date(publicMatch.kickoff).toISOString();
+  const kickoffDate = new Date(publicMatch.kickoff);
+  const kickoffIso = kickoffDate.toISOString();
+  // Football matches run ~115 min wall-clock (90 reg + 15 break + ~10 stoppage).
+  // Knockout games can go longer but Google only needs an approximate endDate.
+  const endIso = new Date(kickoffDate.getTime() + 115 * 60 * 1000).toISOString();
   const matchUrl = `https://oddsintel.app/matches/${id}`;
+  const homeTeamLd = {
+    "@type": "SportsTeam",
+    name: publicMatch.homeTeam,
+    ...(publicMatch.logoHome ? { logo: publicMatch.logoHome } : {}),
+  };
+  const awayTeamLd = {
+    "@type": "SportsTeam",
+    name: publicMatch.awayTeam,
+    ...(publicMatch.logoAway ? { logo: publicMatch.logoAway } : {}),
+  };
+  // Image priority: team crests if we have both, otherwise the OG image.
+  const imageList = [publicMatch.logoHome, publicMatch.logoAway].filter(Boolean) as string[];
+  const sportsEventImages = imageList.length > 0 ? imageList : ["https://oddsintel.app/opengraph-image"];
   const sportsEventLd = {
     "@context": "https://schema.org",
     "@type": "SportsEvent",
     name: `${publicMatch.homeTeam} vs ${publicMatch.awayTeam}`,
     description: `${publicMatch.homeTeam} vs ${publicMatch.awayTeam} in the ${publicMatch.league}. Odds comparison, AI predictions, H2H and injuries on OddsIntel.`,
     startDate: kickoffIso,
+    endDate: endIso,
+    image: sportsEventImages,
     eventStatus:
       publicMatch.status === "finished"
         ? "https://schema.org/EventScheduled"
@@ -521,12 +540,10 @@ export default async function MatchDetailPage({
           address: { "@type": "PostalAddress", addressCountry: publicMatch.country },
         }
       : { "@type": "Place", name: publicMatch.country, address: { "@type": "PostalAddress", addressCountry: publicMatch.country } },
-    homeTeam: { "@type": "SportsTeam", name: publicMatch.homeTeam },
-    awayTeam: { "@type": "SportsTeam", name: publicMatch.awayTeam },
-    competitor: [
-      { "@type": "SportsTeam", name: publicMatch.homeTeam },
-      { "@type": "SportsTeam", name: publicMatch.awayTeam },
-    ],
+    homeTeam: homeTeamLd,
+    awayTeam: awayTeamLd,
+    competitor: [homeTeamLd, awayTeamLd],
+    performer: [homeTeamLd, awayTeamLd],
     organizer: { "@type": "SportsOrganization", name: publicMatch.league },
   };
   const breadcrumbLd = {
