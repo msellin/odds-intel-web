@@ -4445,6 +4445,74 @@ export async function getModelV2Stats(): Promise<ModelV2Stats> {
   };
 }
 
+// ─── WC roster strength (Wave 3 B3) ─────────────────────────────────────────
+//
+// `team_roster_strength` is engine-side (RLS on, no public read policy) — we
+// read it via the service-role admin client. Returns the highest-value squad
+// asset per team. `playerName` / `playerClub` are reserved for a future TM
+// squad-name fetch and are nullable today.
+
+export interface WCTopPlayer {
+  teamId: string;
+  /** Headline player's market value in EUR. null if no roster snapshot. */
+  topPlayerValueEur: number | null;
+  /** Optional — populated once we wire up a TM/AF squad-name fetch. */
+  playerName: string | null;
+  playerClub: string | null;
+}
+
+/**
+ * Fetch the latest `team_roster_strength` row for one or more national teams
+ * and surface the headline player. Used by the WC match-detail page to render
+ * `<WCKeyPlayerChip>` for each side. Returns `null` per team when the table
+ * has no row for that team_id (degrades gracefully — the chip itself also
+ * renders nothing when value + name are both missing).
+ *
+ * Service-role client (bypasses RLS) — must only ever be called server-side.
+ */
+export async function getWCTopPlayers(
+  teamIds: string[]
+): Promise<Record<string, WCTopPlayer | null>> {
+  const out: Record<string, WCTopPlayer | null> = {};
+  for (const id of teamIds) out[id] = null;
+  if (teamIds.length === 0) return out;
+
+  // Service-role: team_roster_strength has RLS on with no public-read policy
+  // (engine-side only — see migration 176).
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return out;
+  const admin = createClient(url, key);
+
+  const { data, error } = await admin
+    .from("team_roster_strength")
+    .select("team_id, snapshot_date, top_player_value_eur")
+    .in("team_id", teamIds)
+    .order("snapshot_date", { ascending: false })
+    .limit(teamIds.length * 4);
+
+  if (error || !data) return out;
+
+  // First row per team (data is sorted snapshot_date DESC, so the first hit is
+  // the latest snapshot).
+  type Row = { team_id: string; snapshot_date: string; top_player_value_eur: number | string | null };
+  const seen = new Set<string>();
+  for (const r of data as Row[]) {
+    if (seen.has(r.team_id)) continue;
+    seen.add(r.team_id);
+    const raw = r.top_player_value_eur;
+    const v =
+      raw == null ? null : typeof raw === "string" ? parseFloat(raw) : Number(raw);
+    out[r.team_id] = {
+      teamId: r.team_id,
+      topPlayerValueEur: v != null && Number.isFinite(v) && v > 0 ? v : null,
+      playerName: null,
+      playerClub: null,
+    };
+  }
+  return out;
+}
+
 // Sitemap helper: returns match IDs + real updated_at timestamps for an indexable window.
 // Window: 14 days forward (so Google sees upcoming fixtures early enough to crawl them)
 // + 30 days back (recently finished matches still get search traffic for results queries).

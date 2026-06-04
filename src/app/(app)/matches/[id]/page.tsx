@@ -21,8 +21,9 @@ import type { MatchSignalRow } from "@/lib/engine-data";
 import { MatchDetailHeader } from "@/components/match-detail-header";
 import { MatchDetailTabs } from "@/components/match-detail-tabs";
 import { MatchEventTimeline } from "@/components/match-event-timeline";
-import { WinProbabilityChart } from "@/components/win-probability-chart";
+import { WinProbabilityChart, type WpChartGoal } from "@/components/win-probability-chart";
 import { buildWPSeries, fetchMatchTeamMeta } from "@/lib/wp-series";
+import { WcNextTenMinGoal } from "@/components/wc-next-10-min-goal";
 import { MatchDetailFree } from "@/components/match-detail-free";
 import { MatchSignalSummary } from "@/components/match-signal-summary";
 import { SignalAccordion } from "@/components/signal-accordion";
@@ -42,6 +43,8 @@ import { createSupabaseServer } from "@/lib/supabase-server";
 import { getUserTier } from "@/lib/get-user-tier";
 import { MarketImpliedProbabilities } from "@/components/market-implied-probabilities";
 import { MatchStatsBars } from "@/components/match-stats-bars";
+import { WCModelCard } from "@/components/wc-model-card";
+import { loadWCModelCard } from "@/lib/wc-model-card-data";
 import { MatchProContent, IntelProContent, OddsProContent, ContextProContent } from "./match-pro-content";
 
 // Deduplicate between generateMetadata and page — same request, one DB call
@@ -198,6 +201,41 @@ export default async function MatchDetailPage({
     });
   }
   const isWorldCupMatch = matchMeta?.isWorldCup === true;
+
+  // WC-D3 — derive goal annotations from matchEvents. Walks events in minute
+  // order and accumulates the running scoreline so the chart hover popover
+  // can show the score *after* each goal. Empty for non-WC fixtures (or any
+  // match with no goal events yet) — the chart treats the prop as optional.
+  const wcGoalAnnotations: WpChartGoal[] = [];
+  if (isWorldCupMatch && matchEvents.length > 0) {
+    const goalTypes = new Set([
+      "goal",
+      "normal goal",
+      "penalty",
+      "penalty_scored",
+      "own_goal",
+      "own goal",
+    ]);
+    let runHome = 0;
+    let runAway = 0;
+    for (const ev of matchEvents) {
+      if (!goalTypes.has(ev.eventType.toLowerCase())) continue;
+      const team: "home" | "away" = ev.team === "away" ? "away" : "home";
+      if (team === "home") runHome += 1;
+      else runAway += 1;
+      wcGoalAnnotations.push({
+        minute: Math.min((ev.minute ?? 0) + (ev.addedTime ?? 0), 90),
+        team,
+        scorer: ev.playerName,
+        score_after_home: runHome,
+        score_after_away: runAway,
+      });
+    }
+  }
+
+  // WC-B1-B4 — per-fixture model card data (own, blended, lineup, market).
+  // Only fetched for WC fixtures; non-WC matches never pay for the round-trip.
+  const wcModelCardData = isWorldCupMatch ? await loadWCModelCard(id) : null;
 
   // ── Build tab content ──
 
