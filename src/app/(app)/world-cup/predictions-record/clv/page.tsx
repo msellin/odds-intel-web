@@ -347,9 +347,10 @@ function CLVChart({ series }: { series: CLVPoint[] }) {
         </text>
       </svg>
 
-      {/* Per-match table — collapsible visually via overflow */}
-      <div className="mt-4 max-h-64 overflow-y-auto rounded-lg border border-white/[0.04]">
-        <table className="w-full text-left text-[11px] sm:text-xs">
+      {/* Per-match table — collapsible visually via overflow.
+          Both axes scroll so long team names don't bust the page on 375px. */}
+      <div className="mt-4 max-h-64 overflow-auto rounded-lg border border-white/[0.04]">
+        <table className="w-full min-w-[420px] text-left text-[11px] sm:text-xs">
           <thead className="sticky top-0 bg-card/95 text-muted-foreground">
             <tr>
               <th className="px-2 py-1.5 font-semibold">Date</th>
@@ -373,7 +374,7 @@ function CLVChart({ series }: { series: CLVPoint[] }) {
                     <td className="whitespace-nowrap px-2 py-1.5 text-muted-foreground">
                       {fmtDate(p.date)}
                     </td>
-                    <td className="truncate px-2 py-1.5">
+                    <td className="whitespace-nowrap px-2 py-1.5">
                       {p.homeName} v {p.awayName}
                     </td>
                     <td className={`whitespace-nowrap px-2 py-1.5 text-right tabular-nums ${perColour}`}>
@@ -520,8 +521,41 @@ function MethodologyNote() {
 export default async function WCPredictionsCLVPage() {
   const series = await loadCLVSeries();
 
+  // JSON-LD: WebPage schema. Identifies this as a CLV-vs-market analysis page.
+  const SITE = "https://oddsintel.app";
+  const pageUrl = `${SITE}/world-cup/predictions-record/clv`;
+  const pageJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: "OddsIntel WC2026 CLV vs Market",
+    description:
+      "Cumulative closing line value of OddsIntel's WC2026 model against the vig-removed market consensus. Every settled match, in order.",
+    url: pageUrl,
+    isPartOf: {
+      "@type": "WebSite",
+      name: "OddsIntel",
+      url: SITE,
+    },
+    about: {
+      "@type": "SportsEvent",
+      name: "FIFA World Cup 2026",
+      url: `${SITE}/world-cup`,
+    },
+    publisher: {
+      "@type": "Organization",
+      name: "OddsIntel",
+      url: SITE,
+    },
+  };
+
   return (
     <div className="space-y-4 sm:space-y-6">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(pageJsonLd).replace(/</g, "\\u003c"),
+        }}
+      />
       <Hero series={series} />
 
       <WCRecordSubNav active="clv" />

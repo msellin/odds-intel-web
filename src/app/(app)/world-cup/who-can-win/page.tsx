@@ -198,8 +198,49 @@ export default async function WhoCanWinPage() {
   const top5 = rows.slice(0, 5);
   const age = snapshotAge(snapshotAt);
 
+  // JSON-LD: SportsEvent (FIFA World Cup 2026) with the top-5 favourite teams
+  // as sub-competitors. Helps Google understand the page is a tournament-level
+  // forecast and which teams it ranks.
+  const SITE = "https://oddsintel.app";
+  const pageUrl = `${SITE}/world-cup/who-can-win`;
+  const eventJsonLd: Record<string, unknown> = {
+    "@context": "https://schema.org",
+    "@type": "SportsEvent",
+    name: "FIFA World Cup 2026",
+    sport: "Soccer",
+    url: pageUrl,
+    startDate: "2026-06-11",
+    endDate: "2026-07-19",
+    eventStatus: "https://schema.org/EventScheduled",
+    location: [
+      { "@type": "Country", name: "United States" },
+      { "@type": "Country", name: "Canada" },
+      { "@type": "Country", name: "Mexico" },
+    ],
+    organizer: {
+      "@type": "SportsOrganization",
+      name: "FIFA",
+      url: "https://www.fifa.com",
+    },
+  };
+  if (top5.length > 0) {
+    eventJsonLd.competitor = top5.map((t) => ({
+      "@type": "SportsTeam",
+      name: t.teamName,
+      url: `${SITE}/world-cup/teams/${t.slug}`,
+    }));
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6">
+      <script
+        type="application/ld+json"
+        // SAFETY: built from static + DB-string fields only; serialize with
+        // replace to neutralise </script> escape attempts.
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(eventJsonLd).replace(/</g, "\\u003c"),
+        }}
+      />
       {/* ── Hero ─────────────────────────────────────────────────────── */}
       <section className="rounded-xl border border-white/[0.08] bg-gradient-to-br from-card via-card to-primary/5 p-4 sm:rounded-2xl sm:p-6">
         <div className="flex items-center gap-2 text-muted-foreground">

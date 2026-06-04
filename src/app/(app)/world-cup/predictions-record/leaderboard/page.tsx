@@ -165,17 +165,19 @@ function LeaderboardTable({ rows }: { rows: LeaderboardRow[] }) {
           {ranked.filter((r) => r.n > 0).length === 1 ? "source" : "sources"}
         </span>
       </header>
+      {/* 7-col table — give a min-width so columns stay legible at 375px and
+          the wrapper scrolls horizontally rather than smashing labels. */}
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-[11px] sm:text-xs">
+        <table className="w-full min-w-[560px] text-left text-[11px] sm:text-xs">
           <thead className="text-muted-foreground">
             <tr>
               <th className="px-3 py-2 font-semibold sm:px-4">#</th>
               <th className="px-2 py-2 font-semibold">Source</th>
-              <th className="px-2 py-2 text-right font-semibold">N</th>
-              <th className="px-2 py-2 text-right font-semibold">Brier</th>
-              <th className="px-2 py-2 text-right font-semibold">Log-loss</th>
-              <th className="px-2 py-2 text-right font-semibold">Hit-rate</th>
-              <th className="px-2 py-2 pr-3 text-right font-semibold sm:pr-4">CLV</th>
+              <th className="whitespace-nowrap px-2 py-2 text-right font-semibold">N</th>
+              <th className="whitespace-nowrap px-2 py-2 text-right font-semibold">Brier</th>
+              <th className="whitespace-nowrap px-2 py-2 text-right font-semibold">Log-loss</th>
+              <th className="whitespace-nowrap px-2 py-2 text-right font-semibold">Hit-rate</th>
+              <th className="whitespace-nowrap px-2 py-2 pr-3 text-right font-semibold sm:pr-4">CLV</th>
             </tr>
           </thead>
           <tbody>
@@ -291,8 +293,41 @@ export default async function WCPredictionsLeaderboardPage() {
   const rows = await loadLeaderboard();
   const settled = rows.reduce((m, r) => Math.max(m, r.n), 0);
 
+  // JSON-LD: WebPage schema. Identifies this as a leaderboard comparison page.
+  const SITE = "https://oddsintel.app";
+  const pageUrl = `${SITE}/world-cup/predictions-record/leaderboard`;
+  const pageJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: "OddsIntel WC2026 Model Leaderboard",
+    description:
+      "Daily-updated comparison of OddsIntel's FIFA World Cup 2026 model against the market consensus and Opta on identical fixtures — Brier, log-loss, hit-rate, CLV.",
+    url: pageUrl,
+    isPartOf: {
+      "@type": "WebSite",
+      name: "OddsIntel",
+      url: SITE,
+    },
+    about: {
+      "@type": "SportsEvent",
+      name: "FIFA World Cup 2026",
+      url: `${SITE}/world-cup`,
+    },
+    publisher: {
+      "@type": "Organization",
+      name: "OddsIntel",
+      url: SITE,
+    },
+  };
+
   return (
     <div className="space-y-4 sm:space-y-6">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(pageJsonLd).replace(/</g, "\\u003c"),
+        }}
+      />
       <Hero rows={rows} />
 
       <WCRecordSubNav active="leaderboard" />

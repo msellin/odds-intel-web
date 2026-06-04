@@ -828,8 +828,42 @@ export default async function TeamDetailPage({
   }
   const nowMs = getServerNowMs();
 
+  // JSON-LD: SportsTeam schema. Helps Google interpret this as a team page
+  // (rather than generic content) and surfaces the team name/sport/group in
+  // knowledge-panel entity matching.
+  const teamUrl = `${SITE}/world-cup/teams/${name}`;
+  const teamJsonLd: Record<string, unknown> = {
+    "@context": "https://schema.org",
+    "@type": "SportsTeam",
+    name: ctx.team.name,
+    sport: "Soccer",
+    url: teamUrl,
+    memberOf: {
+      "@type": "SportsEvent",
+      name: "FIFA World Cup 2026",
+      url: `${SITE}/world-cup`,
+    },
+  };
+  if (ctx.team.logo) {
+    teamJsonLd.logo = ctx.team.logo;
+  }
+  if (ctx.group) {
+    teamJsonLd.subOrganization = {
+      "@type": "SportsOrganization",
+      name: `FIFA World Cup 2026 — Group ${ctx.group.label}`,
+    };
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6">
+      <script
+        type="application/ld+json"
+        // SAFETY: jsonLd is built from static + DB-string fields only; serialize
+        // with replace to neutralise </script> escape attempts.
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(teamJsonLd).replace(/</g, "\\u003c"),
+        }}
+      />
       <Hero team={ctx.team} group={ctx.group} elo={ctx.elo} />
 
       {ctx.group && <GroupContext group={ctx.group} teamId={ctx.team.id} />}

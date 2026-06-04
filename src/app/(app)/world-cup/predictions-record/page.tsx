@@ -655,8 +655,42 @@ export default async function WCPredictionsRecordPage() {
   const { summary, byMatch, calibration } = await loadRecord();
   const settled = summary?.nSettled ?? 0;
 
+  // JSON-LD: WebPage schema. Identifies this as a content page about our
+  // WC2026 prediction record (not the tournament itself — that's /who-can-win).
+  const SITE = "https://oddsintel.app";
+  const pageUrl = `${SITE}/world-cup/predictions-record`;
+  const pageJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: "OddsIntel WC2026 Predictions Record",
+    description:
+      "Public, honest record of every WC2026 prediction OddsIntel makes — Brier, log-loss, calibration, and full hit/miss log.",
+    url: pageUrl,
+    isPartOf: {
+      "@type": "WebSite",
+      name: "OddsIntel",
+      url: SITE,
+    },
+    about: {
+      "@type": "SportsEvent",
+      name: "FIFA World Cup 2026",
+      url: `${SITE}/world-cup`,
+    },
+    publisher: {
+      "@type": "Organization",
+      name: "OddsIntel",
+      url: SITE,
+    },
+  };
+
   return (
     <div className="space-y-4 sm:space-y-6">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(pageJsonLd).replace(/</g, "\\u003c"),
+        }}
+      />
       <Hero summary={summary} />
 
       <WCRecordSubNav active="summary" />
