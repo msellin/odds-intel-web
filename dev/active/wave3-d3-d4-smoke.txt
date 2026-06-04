@@ -1,0 +1,118 @@
+WC-D3-D4 — smoke description
+============================
+
+Scope: extend the WC win-probability curve with goal annotations (D3) and a
+"next 10 minutes goal probability" widget (D4). Both surface during live WC
+matches; pre-KO they show a kickoff placeholder; post-match the widget hides.
+
+This file describes the smoke surface — it is read by humans/CI reviewing the
+commit. The actual smoke harness in the engine repo
+(`scripts/smoke_test.py`) is OUT OF SCOPE for this task per the constraints.
+
+
+1. API ROUTE — /api/matches/[id]/wp
+-----------------------------------
+Source: src/app/api/matches/[id]/wp/route.ts
+
+The route response now contains two new top-level fields:
+
+  goals: WpGoalAnnotation[]                  // always present (may be empty)
+  nextTenGoalProb: number | null             // 0..1 when live WC + has xG; else null
+
+Example response (live WC match, 2-1 at minute 67, one home goal at 23',
+one away goal at 41', one home goal at 58'):
+
+  {
+    "minute": 67,
+    "homeProb": 0.71, "drawProb": 0.18, "awayProb": 0.11,
+    "scoreHome": 2, "scoreAway": 1,
+    "goals": [
+      { "minute": 23, "team": "home", "scorer": "Mbappe",
+        "score_after_home": 1, "score_after_away": 0 },
+      { "minute": 41, "team": "away", "scorer": "Bellingham",
+        "score_after_home": 1, "score_after_away": 1 },
+      { "minute": 58, "team": "home", "scorer": "Saka",
+        "score_after_home": 2, "score_after_away": 1 }
+    ],
+    "nextTenGoalProb": 0.42,
+    "serverNow": "2026-06-04T18:42:11.123Z"
+  }
+
+Pre-tournament / non-WC / no xG yet:
+
+  {
+    ...,
+    "goals": [],
+    "nextTenGoalProb": null,
+    ...
+  }
+
+
+2. CHART BACKWARDS COMPATIBILITY
+--------------------------------
+Source: src/components/win-probability-chart.tsx
+
+The chart accepts a new OPTIONAL `goals?: WpChartGoal[]` prop. When the prop
+is omitted (every non-WC club call site) or passed as an empty array
+(pre-tournament WC, or any match with no goals yet), the SVG renders exactly
+as before — no diamonds, no extra DOM, no console noise.
+
+The two existing call sites in src/app/(app)/matches/[id]/page.tsx:
+  - Club path (line ~404): no `goals` prop → unchanged behaviour.
+  - WC path (line ~666): passes `wcGoalAnnotations` (computed from
+    matchEvents). For pre-tournament fixtures matchEvents is `[]`, so
+    wcGoalAnnotations is `[]` and the chart still renders cleanly.
+
+
+3. NEXT-10-MIN WIDGET
+---------------------
+Source: src/components/wc-next-10-min-goal.tsx
+Math helper: src/lib/next-ten-goal.ts
+  - exports nextTenGoalProb({ minute, homeXg, awayXg }): number | null
+  - exports nextTenGoalVerdict(p): "Likely" | "Even" | "Unlikely"
+
+  Formula: λ_per_min = (home_xg + away_xg) / max(minute, 1)
+           λ_10      = λ_per_min * 10
+           P(>=1)    = 1 - exp(-λ_10)
+
+  Returns null when:
+    - minute is null/undefined/≤0
+    - both home_xg and away_xg are null
+    - the accumulated total xG is 0
+    - any input is non-finite
+
+Render states:
+  - status === "scheduled": placeholder card "Goal probability tracking starts at kickoff."
+  - status === "live" + no live_xg snapshot: same placeholder
+  - status === "live" + snapshot exists: bar (0-100%) + verdict line
+  - status === "finished": component returns null (parent additionally guards)
+
+
+4. WIRING
+---------
+Source: src/app/(app)/matches/[id]/page.tsx
+
+- The WC chart render (above the tabs) now passes the goals prop.
+- The next-10-min widget renders below the chart, above the verdict card and
+  tabs, gated to `isWorldCupMatch && publicMatch.status !== "finished"`.
+- The club chart render (inside MATCH tab) is unchanged.
+
+
+5. VERIFICATION ALREADY RUN
+---------------------------
+  - npx tsc --noEmit                  → clean (exit 0)
+  - Chart still renders with `goals` undefined and `goals: []`
+    (the new code only runs when goalMarkers.length > 0, which is always
+    false for empty/omitted arrays)
+
+
+6. EDGE CASES COVERED
+---------------------
+  - Non-WC club match: goals never passed → diamonds layer no-ops; widget never rendered.
+  - WC pre-tournament: no matchEvents → wcGoalAnnotations is []; chart renders
+    its existing pre-match teaser (`series.length < 2`); widget shows
+    kickoff placeholder.
+  - WC live, no xG snapshot yet: API returns nextTenGoalProb: null; widget
+    shows kickoff copy.
+  - WC finished: widget returns null; chart still renders the historical
+    curve with diamonds at past goals.

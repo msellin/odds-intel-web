@@ -17,6 +17,19 @@ import type { MatchEvent } from "@/lib/engine-data";
 import type { WPSeriesPoint } from "@/lib/wp-series";
 import { WinProbabilityChartLive } from "@/components/win-probability-chart-live";
 
+/**
+ * WC-D3 — goal annotation surfaced as a diamond on the curve. Optional so
+ * the chart stays backwards-compatible with non-WC club callers that never
+ * pass a `goals` prop.
+ */
+export interface WpChartGoal {
+  minute: number;
+  team: "home" | "away";
+  scorer?: string | null;
+  score_after_home?: number;
+  score_after_away?: number;
+}
+
 interface WinProbabilityChartProps {
   matchId: string;
   series: WPSeriesPoint[];
@@ -28,6 +41,12 @@ interface WinProbabilityChartProps {
   /** Pro tier sees event markers + labels; Free sees the curve + pill only. */
   isPro: boolean;
   matchEvents?: MatchEvent[];
+  /**
+   * WC-D3: tournament-green/gold diamond markers at every goal minute.
+   * Optional — when omitted (every non-WC club call site) the chart still
+   * renders unchanged.
+   */
+  goals?: WpChartGoal[];
 }
 
 // ─── Geometry constants (SVG user units) ────────────────────────────────────
@@ -51,6 +70,13 @@ const PLOT_H = VB_H - PAD_TOP - PAD_BOTTOM;
 const COLOR_HOME = "#22c55e";
 const COLOR_DRAW = "#6b7280";
 const COLOR_AWAY = "#a855f7";
+
+// WC-D3 — diamond palette. Tournament green for the home scorer, gold for the
+// away scorer. Picked to read clearly against both the green/gray/purple band
+// stack and the existing Pro circle markers without colliding with either.
+const DIAMOND_HOME = "#10b981";
+const DIAMOND_AWAY = "#facc15";
+const DIAMOND_HALF = 5.5; // half-diagonal in SVG user units
 
 function xFor(minute: number): number {
   return PAD_LEFT + (Math.max(0, Math.min(90, minute)) / 90) * PLOT_W;
@@ -148,6 +174,7 @@ export function WinProbabilityChart({
   status,
   isPro,
   matchEvents,
+  goals,
 }: WinProbabilityChartProps) {
   // Pre-match: render a teaser instead of a flat line.
   if (status === "scheduled" || series.length < 2) {
@@ -166,6 +193,29 @@ export function WinProbabilityChart({
 
   const bands = buildBands(series);
   const markers = isPro ? selectMarkers(matchEvents) : [];
+
+  // WC-D3 — resolve each goal's y position by snapping to the nearest series
+  // point's homeProb (top edge of the home band). That places the diamond
+  // right on the curve at the band boundary, so the marker hugs the actual
+  // probability split at the minute the goal was scored. If the series is
+  // empty or the goal sits outside it, fall back to mid-plot.
+  function yForGoal(minute: number): number {
+    if (series.length === 0) return PAD_TOP + PLOT_H / 2;
+    let nearest = series[0];
+    let bestDist = Math.abs(nearest.minute - minute);
+    for (const p of series) {
+      const d = Math.abs(p.minute - minute);
+      if (d < bestDist) {
+        nearest = p;
+        bestDist = d;
+      }
+    }
+    return yFor(nearest.homeProb);
+  }
+  const goalMarkers = (goals ?? []).map((g) => ({
+    ...g,
+    minute: Math.max(0, Math.min(90, g.minute)),
+  }));
 
   const pill = current
     ? {
@@ -327,6 +377,41 @@ export function WinProbabilityChart({
                     {m.label.split(" ").slice(-1)[0]}
                   </text>
                 )}
+              </g>
+            );
+          })}
+
+          {/* WC-D3 — Goal diamonds. Tournament green for home, gold for away.
+              Renders on top of the bands so the marker is always visible,
+              regardless of which side has the larger probability mass. */}
+          {goalMarkers.map((g, i) => {
+            const x = xFor(g.minute);
+            const y = yForGoal(g.minute);
+            const fill = g.team === "home" ? DIAMOND_HOME : DIAMOND_AWAY;
+            const titleParts: string[] = [];
+            if (g.scorer) titleParts.push(g.scorer);
+            titleParts.push(`${g.minute}'`);
+            if (g.score_after_home != null && g.score_after_away != null) {
+              titleParts.push(`${g.score_after_home}-${g.score_after_away}`);
+            }
+            const title = `Goal — ${titleParts.join(" · ")}`;
+            // Diamond = rotated square: a 4-point polygon around (x, y).
+            const points = [
+              `${x},${y - DIAMOND_HALF}`,
+              `${x + DIAMOND_HALF},${y}`,
+              `${x},${y + DIAMOND_HALF}`,
+              `${x - DIAMOND_HALF},${y}`,
+            ].join(" ");
+            return (
+              <g key={`goal-${i}`} tabIndex={0} className="focus:outline-none">
+                <polygon
+                  points={points}
+                  fill={fill}
+                  stroke="rgba(0,0,0,0.85)"
+                  strokeWidth={1}
+                >
+                  <title>{title}</title>
+                </polygon>
               </g>
             );
           })}

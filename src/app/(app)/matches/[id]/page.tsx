@@ -649,7 +649,9 @@ export default async function MatchDetailPage({
       {/* WC2026 — surface the win-probability chart above the tabs so the
           flagship live-prob visual sits front-and-centre on every WC fixture
           (covers scheduled, live, and finished). For club matches the chart
-          stays inside the MATCH tab to keep the intel tab uncluttered. */}
+          stays inside the MATCH tab to keep the intel tab uncluttered.
+          WC-D3 — pass `goals` so the chart renders a diamond marker on the
+          curve at each goal minute. */}
       {isWorldCupMatch && wpSeries && (
         <WinProbabilityChart
           matchId={publicMatch.id}
@@ -660,7 +662,15 @@ export default async function MatchDetailPage({
           status={publicMatch.status}
           isPro={isPro}
           matchEvents={matchEvents}
+          goals={wcGoalAnnotations}
         />
+      )}
+
+      {/* WC-D4 — Next-10-min goal probability widget. Sits directly below the
+          WP chart, above the verdict card + tabs. Pre-KO it shows the kickoff
+          placeholder; post-match the component returns null. WC-only. */}
+      {isWorldCupMatch && publicMatch.status !== "finished" && (
+        <WcNextTenMinGoal matchId={publicMatch.id} status={publicMatch.status} />
       )}
 
       {/* Verdict card — above tabs, visible on every tab */}

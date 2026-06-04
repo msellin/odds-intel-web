@@ -12,7 +12,9 @@
  *   {
  *     minute, homeProb, drawProb, awayProb,
  *     scoreHome, scoreAway,
- *     serverNow   // ISO timestamp, used by clients to detect stale polling
+ *     goals,            // WC-D3: [{minute, team, scorer, score_after_home, score_after_away}]
+ *     nextTenGoalProb,  // WC-D4: P(>=1 goal next 10 min) from latest live xG, or null
+ *     serverNow         // ISO timestamp, used by clients to detect stale polling
  *   }
  *
  * Performance target: ≤50ms end-to-end (one Supabase round-trip + computeWP).
@@ -22,6 +24,30 @@ import { NextResponse } from "next/server";
 import { createSupabasePublic } from "@/lib/supabase-public";
 import { computeWP, eloFallbackPriors } from "@/lib/win-probability";
 import { WORLD_CUP_LEAGUE_API_ID } from "@/lib/world-cup";
+import { nextTenGoalProb } from "@/lib/next-ten-goal";
+
+// WC-D3: shape for the goal-annotation payload. The chart layer renders one
+// diamond per entry; the score_after_* fields let the hover popover show the
+// scoreline at that exact moment without a second lookup.
+export interface WpGoalAnnotation {
+  minute: number;
+  team: "home" | "away";
+  scorer: string | null;
+  score_after_home: number;
+  score_after_away: number;
+}
+
+// Event types we treat as a goal for D3 purposes. Mirrors the existing
+// chart-side filter in selectMarkers() so the diamond layer and the legacy
+// circle layer agree on what counts as a goal.
+const GOAL_EVENT_TYPES = new Set([
+  "goal",
+  "normal goal",
+  "penalty",
+  "penalty_scored",
+  "own_goal",
+  "own goal",
+]);
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -84,8 +110,11 @@ export async function GET(
       : "club";
 
   // Now fan out — pick the snapshot table per the WC flag.
+  // WC-D3: we also fetch match_events to surface goal annotations.
+  // WC-D4: for WC matches we pull home_xg/away_xg off the latest snapshot to
+  //         feed the next-10-min Poisson estimate.
   const snapTable = isWorldCup ? "live_xg_snapshots" : "live_match_snapshots";
-  const [snapRes, predRes] = await Promise.all([
+  const [snapRes, predRes, eventsRes] = await Promise.all([
     // live_xg_snapshots does not carry score columns (D2 schema only stores
     // xg + shots + possession). For WC we still need a score — fall back to
     // matches.score_home/score_away below.
@@ -93,7 +122,7 @@ export async function GET(
       .from(snapTable)
       .select(
         isWorldCup
-          ? "minute, captured_at"
+          ? "minute, captured_at, home_xg, away_xg"
           : "score_home, score_away, minute, captured_at"
       )
       .eq("match_id", id)
@@ -103,6 +132,15 @@ export async function GET(
       .from("predictions")
       .select("source, market, model_probability")
       .eq("match_id", id),
+    // Goals only — we filter event_type client-side here because PostgREST's
+    // `in.()` filter syntax doesn't let us pre-filter on the union cleanly
+    // without quoting headaches. The result set is tiny (≤ a dozen rows per
+    // match) so the extra bytes are noise.
+    supabase
+      .from("match_events")
+      .select("minute, added_time, event_type, team, player_name")
+      .eq("match_id", id)
+      .order("minute", { ascending: true }),
   ]);
 
   // ELO lookup (fall back to 1500 if missing).
@@ -161,6 +199,8 @@ export async function GET(
     score_away?: number;
     minute: number;
     captured_at: string;
+    home_xg?: number | string | null;
+    away_xg?: number | string | null;
   }>)[0];
 
   const isLive = match.status === "live";
@@ -195,6 +235,53 @@ export async function GET(
     isLive: isLive || isFinished,
   });
 
+  // ── WC-D3 — Build goal annotations from match_events ─────────────────────
+  //
+  // We walk the events in minute order and accumulate the running scoreline,
+  // so each diamond knows the score *after* it was scored. Own goals are
+  // attributed to the team that benefited from them (event row's `team`
+  // column is already set that way by the engine ingest).
+  const goals: WpGoalAnnotation[] = [];
+  {
+    let runHome = 0;
+    let runAway = 0;
+    const rows = (eventsRes.data ?? []) as Array<{
+      minute: number;
+      added_time: number | null;
+      event_type: string;
+      team: string;
+      player_name: string | null;
+    }>;
+    for (const ev of rows) {
+      if (!GOAL_EVENT_TYPES.has(ev.event_type.toLowerCase())) continue;
+      const team: "home" | "away" = ev.team === "away" ? "away" : "home";
+      if (team === "home") runHome += 1;
+      else runAway += 1;
+      goals.push({
+        minute: Math.min((ev.minute ?? 0) + (ev.added_time ?? 0), 90),
+        team,
+        scorer: ev.player_name,
+        score_after_home: runHome,
+        score_after_away: runAway,
+      });
+    }
+  }
+
+  // ── WC-D4 — next-10-min goal probability (live WC only) ─────────────────
+  //
+  // Requires (a) a WC fixture, (b) the match is currently live, (c) we have a
+  // fresh live_xg_snapshot row with at least one of home_xg/away_xg. Outside
+  // that envelope we return null and the widget renders its placeholder /
+  // hidden state.
+  let nextTen: number | null = null;
+  if (isWorldCup && isLive && snapRow) {
+    nextTen = nextTenGoalProb({
+      minute: snapRow.minute,
+      homeXg: snapRow.home_xg == null ? null : Number(snapRow.home_xg),
+      awayXg: snapRow.away_xg == null ? null : Number(snapRow.away_xg),
+    });
+  }
+
   return NextResponse.json({
     minute: Math.min(minute, 90),
     homeProb: wp.homeProb,
@@ -202,6 +289,8 @@ export async function GET(
     awayProb: wp.awayProb,
     scoreHome,
     scoreAway,
+    goals,
+    nextTenGoalProb: nextTen,
     serverNow: new Date().toISOString(),
   });
 }
