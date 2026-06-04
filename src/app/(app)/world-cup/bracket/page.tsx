@@ -17,6 +17,7 @@ import { WCBracketBoard } from "@/components/wc-bracket-board";
 import { loadUserAchievements } from "@/lib/wc-achievements";
 import { WCAchievementRow } from "@/components/wc-achievement-badge";
 import { createSupabaseServer } from "@/lib/supabase-server";
+import { getWorldCupPredictions } from "@/lib/world-cup";
 
 export const metadata: Metadata = {
   title: "World Cup 2026 Bracket Challenge | OddsIntel",
@@ -75,6 +76,17 @@ export default async function BracketPage() {
   const goldenBootLocked = isBracketLocked();
   const open = currentOpenRound(roundStates);
   const upcoming = nextRound(roundStates);
+
+  // WC-G1 — pull 1X2 model predictions for every seeded knockout matchup so the
+  // shared ProbBar / ProbNumbersRow / AiPickPill primitives can render on each
+  // bracket card. Unseeded slots (no match_id yet) are filtered out — only
+  // seeded matchups get visual treatment, identical to the schedule + group
+  // card rows.
+  const seededMatchIds = roundStates
+    .flatMap((rs) => rs.slots)
+    .map((s) => s.matchId)
+    .filter((id): id is string => !!id);
+  const predictions = await getWorldCupPredictions(seededMatchIds);
 
   return (
     <div className="space-y-4 pb-12 sm:space-y-6">
@@ -176,6 +188,7 @@ export default async function BracketPage() {
         initialPicks={picks}
         goldenBoot={meta?.goldenBootPlayer ?? null}
         isGoldenBootLocked={goldenBootLocked}
+        predictions={predictions}
       />
 
       {/* Scoring legend */}

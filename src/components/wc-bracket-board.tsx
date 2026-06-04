@@ -52,6 +52,14 @@ import {
   type BracketSlotAssignment,
 } from "@/lib/wc-bracket-types";
 import { saveBracketPick, lockBracket } from "@/app/(app)/world-cup/actions";
+import type { WCPredictionSlot } from "@/lib/world-cup";
+import { modelPickFromTriple } from "@/lib/wc-vs-you";
+import {
+  ProbBar,
+  ProbNumbersRow,
+  AiPickPill,
+  favouriteClass,
+} from "@/components/wc-prob-display";
 
 interface WCBracketBoardProps {
   isAuthed: boolean;
@@ -62,6 +70,11 @@ interface WCBracketBoardProps {
   goldenBoot: string | null;
   /** Whether the Golden Boot input is locked (= global WC kickoff in past). */
   isGoldenBootLocked: boolean;
+  /** WC-G1 — 1X2 model predictions keyed by match_id, for seeded matchups
+   * only. Unseeded slots simply don't appear here. Re-uses the shared
+   * ProbBar / ProbNumbersRow / AiPickPill primitives so the bracket cards
+   * read identically to the schedule + group card rows. */
+  predictions?: Record<string, WCPredictionSlot>;
 }
 
 type PicksMap = Record<string, string>;
@@ -91,6 +104,10 @@ interface MatchupCardProps {
   isHighlightFinal?: boolean;
   onPick: (teamId: string) => void;
   disabled: boolean;
+  /** WC-G1 — model 1X2 prediction for this matchup (undefined when not
+   * loaded or unseeded). When present, the card renders the shared
+   * ProbBar/ProbNumbersRow/AiPickPill primitives and bolds the favourite. */
+  prediction?: WCPredictionSlot;
 }
 
 function MatchupCard({
@@ -100,6 +117,7 @@ function MatchupCard({
   isHighlightFinal,
   onPick,
   disabled,
+  prediction,
 }: MatchupCardProps) {
   const winnerId = actualWinnerId(slot);
   const showResult = roundState === "locked" || roundState === "settled";
@@ -113,57 +131,103 @@ function MatchupCard({
     );
   }
 
+  // WC-G1 — derive model pick from the prediction triple. The shared
+  // primitives need a {home, draw, away} triple; only render the engagement
+  // strip when all three probabilities are populated.
+  const hasProbs =
+    prediction?.homeProb != null &&
+    prediction?.drawProb != null &&
+    prediction?.awayProb != null;
+  const modelPick = hasProbs ? modelPickFromTriple(prediction) : null;
+  const homeTeam = slot.homeTeam;
+  const awayTeam = slot.awayTeam;
+
   return (
     <div
       className={`rounded-md border ${
         isHighlightFinal
           ? "border-[color:var(--color-tournament-gold)]/40 bg-[color:var(--color-tournament-gold)]/5"
           : "border-white/[0.08] bg-card/40"
-      } p-1.5`}
+      } overflow-hidden`}
     >
-      {[slot.homeTeam, slot.awayTeam].map((team) => {
-        const isPicked = pickedTeamId === team.id;
-        const isWinner = winnerId === team.id;
-        const isLoser = winnerId != null && winnerId !== team.id;
-        const flag = flagForTeam(team.name);
-        return (
-          <button
-            key={team.id}
-            type="button"
-            onClick={() => !disabled && onPick(team.id)}
-            disabled={disabled}
-            className={`mt-0.5 flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-xs transition-all first:mt-0 disabled:cursor-default ${
-              isPicked
-                ? showResult && isWinner
-                  ? "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/40"
-                  : showResult && isLoser
-                    ? "bg-red-500/10 text-red-300 ring-1 ring-red-500/40 line-through opacity-70"
-                    : "bg-primary/15 text-foreground ring-1 ring-primary/40"
-                : showResult && isWinner
-                  ? "bg-white/[0.04] text-foreground"
-                  : "text-muted-foreground hover:bg-white/[0.04] hover:text-foreground"
-            }`}
-          >
-            {flag ? (
-              <span aria-hidden className="shrink-0 text-base leading-none">
-                {flag}
-              </span>
-            ) : (
-              <span className="size-4 shrink-0 rounded-full bg-white/[0.08]" />
+      <div className="p-1.5">
+        {[homeTeam, awayTeam].map((team, idx) => {
+          const isPicked = pickedTeamId === team.id;
+          const isWinner = winnerId === team.id;
+          const isLoser = winnerId != null && winnerId !== team.id;
+          const flag = flagForTeam(team.name);
+          const side: "home" | "away" = idx === 0 ? "home" : "away";
+          // WC-G1 — favouriteClass bolds the favoured side and dims the
+          // underdog so the row scans at a glance before the bar is read.
+          const favCls = hasProbs ? favouriteClass(modelPick, side) : "";
+          return (
+            <button
+              key={team.id}
+              type="button"
+              onClick={() => !disabled && onPick(team.id)}
+              disabled={disabled}
+              className={`mt-0.5 flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-xs transition-all first:mt-0 disabled:cursor-default ${
+                isPicked
+                  ? showResult && isWinner
+                    ? "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/40"
+                    : showResult && isLoser
+                      ? "bg-red-500/10 text-red-300 ring-1 ring-red-500/40 line-through opacity-70"
+                      : "bg-primary/15 text-foreground ring-1 ring-primary/40"
+                  : showResult && isWinner
+                    ? "bg-white/[0.04] text-foreground"
+                    : "text-muted-foreground hover:bg-white/[0.04] hover:text-foreground"
+              }`}
+            >
+              {flag ? (
+                <span aria-hidden className="shrink-0 text-base leading-none">
+                  {flag}
+                </span>
+              ) : (
+                <span className="size-4 shrink-0 rounded-full bg-white/[0.08]" />
+              )}
+              <span className={`truncate ${favCls}`}>{team.name}</span>
+              {showResult && isPicked && isWinner && (
+                <Check className="ml-auto size-3 shrink-0 text-emerald-300" aria-label="correct" />
+              )}
+              {showResult && isPicked && isLoser && (
+                <X className="ml-auto size-3 shrink-0 text-red-300" aria-label="incorrect" />
+              )}
+              {isHighlightFinal && isPicked && (
+                <Trophy className="ml-auto size-3 shrink-0 text-[color:var(--color-tournament-gold)]" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* WC-G1 engagement strip — same visual language as the schedule + group
+          card rows. Bar on top, colour-coded numbers + AI pick (team name)
+          below. Only renders when the model has populated all three probs.
+          The column may be narrow on mobile so we keep the AI pill on its
+          own row underneath the numbers, not side-by-side. */}
+      {hasProbs && (
+        <div className="border-t border-white/[0.04] bg-background/20 px-2 py-1.5">
+          <ProbBar
+            home={prediction!.homeProb!}
+            draw={prediction!.drawProb!}
+            away={prediction!.awayProb!}
+          />
+          <div className="mt-1 flex flex-wrap items-center justify-between gap-1.5">
+            <ProbNumbersRow
+              home={prediction!.homeProb!}
+              draw={prediction!.drawProb!}
+              away={prediction!.awayProb!}
+            />
+            {modelPick && (
+              <AiPickPill
+                pick={modelPick}
+                homeName={homeTeam.name}
+                awayName={awayTeam.name}
+              />
             )}
-            <span className="truncate">{team.name}</span>
-            {showResult && isPicked && isWinner && (
-              <Check className="ml-auto size-3 shrink-0 text-emerald-300" aria-label="correct" />
-            )}
-            {showResult && isPicked && isLoser && (
-              <X className="ml-auto size-3 shrink-0 text-red-300" aria-label="incorrect" />
-            )}
-            {isHighlightFinal && isPicked && (
-              <Trophy className="ml-auto size-3 shrink-0 text-[color:var(--color-tournament-gold)]" />
-            )}
-          </button>
-        );
-      })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -172,9 +236,10 @@ interface RoundColumnProps {
   rs: BracketRoundState;
   picks: PicksMap;
   onPick: (round: BracketRound, position: number, teamId: string) => void;
+  predictions?: Record<string, WCPredictionSlot>;
 }
 
-function RoundColumn({ rs, picks, onPick }: RoundColumnProps) {
+function RoundColumn({ rs, picks, onPick, predictions }: RoundColumnProps) {
   const isFinal = rs.round === "final";
   const lockMs = rs.lockedAt ? new Date(rs.lockedAt).getTime() : null;
   const lockCopy =
@@ -234,6 +299,8 @@ function RoundColumn({ rs, picks, onPick }: RoundColumnProps) {
       <div className={`flex flex-1 flex-col gap-1.5 ${rs.state === "unseeded" ? "opacity-40" : ""}`}>
         {rs.slots.map((slot) => {
           const pickedTeamId = picks[pickKey(rs.round, slot.position)] ?? null;
+          const prediction =
+            slot.matchId && predictions ? predictions[slot.matchId] : undefined;
           return (
             <MatchupCard
               key={slot.position}
@@ -243,6 +310,7 @@ function RoundColumn({ rs, picks, onPick }: RoundColumnProps) {
               isHighlightFinal={isFinal}
               disabled={rs.state !== "open"}
               onPick={(tid) => onPick(rs.round, slot.position, tid)}
+              prediction={prediction}
             />
           );
         })}
@@ -252,7 +320,7 @@ function RoundColumn({ rs, picks, onPick }: RoundColumnProps) {
 }
 
 export function WCBracketBoard(props: WCBracketBoardProps) {
-  const { isAuthed, roundStates, initialPicks, isGoldenBootLocked } = props;
+  const { isAuthed, roundStates, initialPicks, isGoldenBootLocked, predictions } = props;
 
   const initial: PicksMap = useMemo(() => {
     const m: PicksMap = {};
@@ -393,7 +461,13 @@ export function WCBracketBoard(props: WCBracketBoardProps) {
       <div className="hidden overflow-x-auto md:block">
         <div className="flex min-w-max items-stretch gap-3 p-2">
           {roundStates.map((rs) => (
-            <RoundColumn key={rs.round} rs={rs} picks={picks} onPick={handlePick} />
+            <RoundColumn
+              key={rs.round}
+              rs={rs}
+              picks={picks}
+              onPick={handlePick}
+              predictions={predictions}
+            />
           ))}
           {/* Champion sash on the right */}
           <div className="flex w-44 flex-col gap-2 self-center">
@@ -456,7 +530,12 @@ export function WCBracketBoard(props: WCBracketBoardProps) {
             <ChevronRight className="size-4" />
           </button>
         </div>
-        <RoundColumn rs={mobileRoundState} picks={picks} onPick={handlePick} />
+        <RoundColumn
+          rs={mobileRoundState}
+          picks={picks}
+          onPick={handlePick}
+          predictions={predictions}
+        />
 
         {/* Champion sash (mobile) — shown under the Final column */}
         {mobileRoundState.round === "final" && (
