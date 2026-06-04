@@ -1,0 +1,147 @@
+WC-F5 — smoke description
+=========================
+
+Scope: per-fixture / per-team / per-article dynamic Open Graph images for the
+World Cup 2026 surface. Twitter/Discord/Slack unfurls now show a custom 1200x630
+PNG generated server-side from Supabase data instead of the generic site OG.
+
+Out of scope (per the task constraints):
+  - scripts/smoke_test.py — NOT modified.
+  - wc-schedule / wc-group-card / wc-bracket-board / wc-prob-display /
+    wc-model-card / wc-record-subnav — NOT touched.
+  - Bracket-share OG image (the reference template) — NOT touched, still works.
+
+This file describes the smoke surface; the engine-side smoke harness is not in
+scope for this commit (lives in the other repo).
+
+
+1. FILES ADDED
+--------------
+  src/app/(app)/matches/[id]/opengraph-image.tsx
+  src/app/(app)/world-cup/teams/[name]/opengraph-image.tsx
+  src/app/(app)/world-cup/insights/[slug]/opengraph-image.tsx
+
+All three:
+  - import { ImageResponse } from "next/og"
+  - export `runtime = "nodejs"`, `alt`, `size = { width: 1200, height: 630 }`,
+    `contentType = "image/png"`
+  - default-export an async (params) => ImageResponse handler
+  - load their data inside a try/catch and fall back to a generic, on-brand
+    placeholder rather than throwing — unfurls never 500
+
+
+2. MATCH OG  (opengraph-image colocated with /matches/[id])
+-----------------------------------------------------------
+Data load:
+  - Single Supabase query against `matches` joining home_team / away_team /
+    league (api_football_id, name).
+  - WC fixtures detected via `league.api_football_id === WORLD_CUP_LEAGUE_API_ID`
+    (=== 1).
+  - Predictions read via existing helper `getWorldCupPredictions([id])`.
+    Missing predictions degrade gracefully — the image still renders with
+    "Model probabilities arrive closer to kickoff" instead of the bar.
+
+Render branches:
+  - Non-WC match OR match not found → branded generic "Match preview" card.
+  - WC match found, no predictions → flags + teams + kickoff + "AI pick locks
+    in pre-match" footer (no prob bar).
+  - WC match found, predictions present → flags + teams + kickoff + 3-band
+    probability bar with Home/Draw/Away % + "AI Pick: {team}" purple pill.
+
+Layout (1200x630):
+  Top bar:    OddsINTEL wordmark (left) · "FIFA World Cup 2026" gold pill (right)
+  Hero row:   [home flag + name]    VS  [away flag + name]
+                                    {kickoff date · HH:MM UTC}
+  Below:      3-band prob bar (blue / grey / red) + numbers row
+  Footer:     AI Pick pill (left) · oddsintel.app (right)
+  Background: dark #0a0a14 + faint green pitch grid + gold radial halo
+
+Fonts: system sans-serif + monospace (no fetch). Flags via the existing
+WC_FLAGS emoji map in `src/lib/wc-flags.ts`. Initial-letter circle fallback
+when a flag isn't mapped.
+
+
+3. TEAM OG  (opengraph-image colocated with /world-cup/teams/[name])
+--------------------------------------------------------------------
+Data load:
+  - `getWorldCupFixtures()` → resolve team by slugified name.
+  - `deriveGroups(fixtures)` → find the team's group.
+  - `getInternationalElos([team.id])` → model ELO.
+  - For advancement %: `getInternationalElos(allGroupTeamIds)` +
+    `getWorldCupPredictions(allFixtureIds)` + `computeAdvancement(...)`
+    at 3000 iterations (vs 10000 on the page) to keep OG generation under a
+    couple seconds.
+
+Slugify helper inlined (mirrors the page) to avoid pulling the heavy page
+module into the OG file.
+
+Render branches:
+  - Slug not a WC nation OR fixtures empty → branded "World Cup 2026 — team
+    preview" placeholder.
+  - Team resolved → flag + name + group pill + two stat tiles.
+
+Layout (1200x630):
+  Top bar:   OddsINTEL · WC2026 wordmark (left) · "Group X" gold pill (right)
+  Main row:  [huge flag, fontSize 280]   |   FIFA World Cup 2026
+                                         |   Team Name (84pt bold)
+                                         |   [Model ELO] [Advance from group]
+  Footer:    "Schedule · group standings · advancement %" · oddsintel.app/world-cup
+
+
+4. INSIGHTS OG  (opengraph-image colocated with /world-cup/insights/[slug])
+---------------------------------------------------------------------------
+Data load:
+  - Validates slug against the same VALID_SLUGS list as the page
+    (group-of-death / cinderella-story / squad-value-vs-model /
+    champions-favourites).
+  - Reads title from `wc_articles` via `createSupabaseServer()`.
+  - Falls back to a FALLBACK_TITLES map (mirror of the page's FALLBACK_META)
+    when the engine hasn't published the article yet — shared links still
+    unfurl with the correct framing during the deploy gap.
+
+Render branches:
+  - Slug not valid → branded generic "WC2026 Analysis" placeholder.
+  - Slug valid, no row + no fallback → same placeholder (defensive).
+  - Slug valid → headline layout below.
+
+Layout (1200x630):
+  Stripe:    Tournament-gold gradient stripe top (8px) and bottom (4px).
+  Top bar:   OddsINTEL wordmark (left) · "Data insight" gold pill (right)
+  Eyebrow:   "FIFA WORLD CUP 2026" in tournament gold.
+  Headline:  Article title at 64pt, tight tracking, wraps if long.
+  Footer:    "OddsIntel · WC2026 analysis" · oddsintel.app/world-cup/insights
+
+
+5. METADATA WIRING
+------------------
+Next.js App Router auto-detects `opengraph-image.tsx` colocated with each
+page. The existing `generateMetadata` in
+`src/app/(app)/matches/[id]/page.tsx` does not need to be edited — the
+framework attaches the colocated OG image to `metadata.openGraph.images`
+automatically.
+
+The team and insights pages already had `openGraph` blocks in their
+generateMetadata; they also pick up the colocated file automatically.
+
+The bracket-share OG image at
+`src/app/(app)/world-cup/bracket/share/[token]/opengraph-image.tsx` (the
+reference template) is untouched and still serves the bracket share unfurl.
+
+
+6. PERFORMANCE / SAFETY
+-----------------------
+  - All images use system fonts only (no fetch) → fast cold-start OG gen.
+  - All Supabase calls wrapped in try/catch → unfurls never 500.
+  - Predictions / ELO / advancement misses degrade to placeholder strings
+    rather than crashing.
+  - Monte Carlo capped at 3000 iterations inside the OG path (the page uses
+    10000 elsewhere; we don't share the result so this only affects the
+    image render).
+  - All `display: "flex"` set explicitly on every container — next/og throws
+    if a child node forgets that style on a parent with multiple children.
+
+
+7. VERIFICATION ALREADY RUN
+---------------------------
+  - npx tsc --noEmit → clean (exit 0)
+  - Bracket-share OG image source unchanged; no shared modules edited.
