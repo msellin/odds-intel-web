@@ -86,7 +86,7 @@ const TABS: WCTab[] = [
   { id: "overview", label: "Overview", icon: Home },
   { id: "schedule", label: "Schedule", icon: Calendar },
   { id: "groups", label: "Groups", icon: LayoutGrid },
-  { id: "knockouts", label: "Knockouts", icon: Trophy },
+  { id: "knockouts", label: "Bracket", icon: Trophy },
   { id: "leaderboard", label: "Leaderboard", icon: Target },
   { id: "scorers", label: "Top Scorers", icon: Activity },
 ];

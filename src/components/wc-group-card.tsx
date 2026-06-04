@@ -48,6 +48,22 @@ function formatTime(iso: string): string {
   });
 }
 
+/**
+ * Slug for the `/world-cup/teams/[name]` route. Mirrors `slugifyTeam` in the
+ * team detail page — keeping it here too so we don't drag a shared lib in
+ * just for two callers. If a third caller appears, lift this into
+ * `src/lib/wc-team-slug.ts`.
+ */
+function slugifyTeamName(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/['']/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 function TeamFlag({ logo, name, size = 18 }: { logo: string | null; name: string; size?: number }) {
   const flag = flagForTeam(name);
   if (flag) {
@@ -297,11 +313,14 @@ export function WCGroupCard({
                   }`}
                 >
                   <td className="px-2 py-1.5 sm:px-3 sm:py-2">
-                    <div className="flex items-center gap-2">
+                    <Link
+                      href={`/world-cup/teams/${slugifyTeamName(s.team.name)}`}
+                      className="flex items-center gap-2 hover:text-[color:var(--color-tournament-gold)]"
+                    >
                       <span className="w-3 text-center text-muted-foreground tabular-nums">{i + 1}</span>
                       <TeamFlag logo={s.team.logo} name={s.team.name} size={16} />
-                      <span className="truncate text-foreground">{s.team.name}</span>
-                    </div>
+                      <span className="truncate text-foreground group-hover:text-inherit">{s.team.name}</span>
+                    </Link>
                   </td>
                   <td className="px-1.5 py-1.5 text-center text-muted-foreground tabular-nums sm:px-2 sm:py-2">
                     {s.played}
