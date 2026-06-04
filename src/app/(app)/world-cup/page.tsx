@@ -13,6 +13,7 @@ import {
   Target,
   LayoutGrid,
   Home,
+  Globe,
 } from "lucide-react";
 
 import { createSupabaseServer } from "@/lib/supabase-server";
@@ -87,6 +88,7 @@ const TABS: WCTab[] = [
   { id: "schedule", label: "Schedule", icon: Calendar },
   { id: "groups", label: "Groups", icon: LayoutGrid },
   { id: "knockouts", label: "Bracket", icon: Trophy },
+  { id: "teams", label: "Teams", icon: Globe, href: "/world-cup/teams" },
   { id: "leaderboard", label: "Leaderboard", icon: Target },
   { id: "scorers", label: "Top Scorers", icon: Activity },
 ];

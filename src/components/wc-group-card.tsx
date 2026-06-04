@@ -137,14 +137,17 @@ function FixtureRow({
 
   return (
     <div className="overflow-hidden rounded-lg border border-white/[0.06] bg-card/40 hover:border-white/[0.12] hover:bg-card/60">
-      {/* Scan row — grid layout (1fr-auto-1fr on the team cells) means the
-          two team names are always equal width centred on the "v" axis no
-          matter how long the names are or what trailing chips render. */}
-      <Link
-        href={`/matches/${fixture.id}`}
-        className="wc-row-hover group grid min-h-[44px] grid-cols-[44px_1fr_auto_1fr_auto] items-center gap-2 rounded-lg px-2.5 py-2 sm:grid-cols-[56px_1fr_auto_1fr_auto] sm:gap-3 sm:px-3 sm:py-2.5"
-      >
-        <div className="text-center font-mono text-[10px] text-muted-foreground sm:text-[11px]">
+      {/* Scan row — three sibling <Link>s, same pattern as wc-schedule.tsx
+          so home/away name cells navigate to the team detail page while the
+          chevron + time + central "v" navigate to the match detail. Keeps
+          HTML valid (no nested anchors) and gives each click target a clear
+          semantic destination. */}
+      <div className="grid min-h-[44px] grid-cols-[44px_1fr_auto_1fr_auto] items-center gap-2 rounded-lg px-2.5 py-2 sm:grid-cols-[56px_1fr_auto_1fr_auto] sm:gap-3 sm:px-3 sm:py-2.5">
+        <Link
+          href={`/matches/${fixture.id}`}
+          aria-label="Open match detail"
+          className="text-center font-mono text-[10px] text-muted-foreground sm:text-[11px]"
+        >
           {hasScore ? (
             <span className="font-semibold text-foreground">
               {fixture.scoreHome}–{fixture.scoreAway}
@@ -152,22 +155,42 @@ function FixtureRow({
           ) : (
             formatTime(fixture.date)
           )}
-        </div>
+        </Link>
 
-        <div className="flex min-w-0 items-center justify-end gap-1.5 text-right">
+        <Link
+          href={`/world-cup/teams/${slugifyTeamName(fixture.home.name)}`}
+          aria-label={`${fixture.home.name} team profile`}
+          className="flex min-w-0 items-center justify-end gap-1.5 text-right hover:text-[color:var(--color-tournament-gold)]"
+        >
           <span className={`truncate text-xs sm:text-sm ${favouriteClass(modelPick, "home")}`}>{fixture.home.name}</span>
           <TeamFlag logo={fixture.home.logo} name={fixture.home.name} size={16} />
-        </div>
+        </Link>
 
-        <span className="text-[9px] text-muted-foreground/60">v</span>
+        <Link
+          href={`/matches/${fixture.id}`}
+          aria-label="Open match detail"
+          className="text-[9px] text-muted-foreground/60"
+        >
+          v
+        </Link>
 
-        <div className="flex min-w-0 items-center gap-1.5">
+        <Link
+          href={`/world-cup/teams/${slugifyTeamName(fixture.away.name)}`}
+          aria-label={`${fixture.away.name} team profile`}
+          className="flex min-w-0 items-center gap-1.5 hover:text-[color:var(--color-tournament-gold)]"
+        >
           <TeamFlag logo={fixture.away.logo} name={fixture.away.name} size={16} />
           <span className={`truncate text-xs sm:text-sm ${favouriteClass(modelPick, "away")}`}>{fixture.away.name}</span>
-        </div>
+        </Link>
 
-        <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5" />
-      </Link>
+        <Link
+          href={`/matches/${fixture.id}`}
+          aria-label="Open match detail"
+          className="group/chev"
+        >
+          <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/40 transition-transform group-hover/chev:translate-x-0.5" />
+        </Link>
+      </div>
 
       {/* Engagement strip — bar + picker on row 1; colour-coded percentages
           + AI pick (with team name) on row 2. Same pattern WCSchedule uses

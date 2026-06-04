@@ -5,6 +5,8 @@ export interface WCTab {
   id: string;
   label: string;
   icon: LucideIcon;
+  /** Optional override — if set, the tab links here instead of `?tab=<id>`. */
+  href?: string;
 }
 
 interface WCTabStripProps {
@@ -46,7 +48,7 @@ export function WCTabStrip({ tabs, active, basePath = "/world-cup" }: WCTabStrip
         >
           {tabs.map((t) => {
             const isActive = t.id === active;
-            const href = t.id === "overview" ? basePath : `${basePath}?tab=${t.id}`;
+            const href = t.href ?? (t.id === "overview" ? basePath : `${basePath}?tab=${t.id}`);
             const Icon = t.icon;
             return (
               <Link
