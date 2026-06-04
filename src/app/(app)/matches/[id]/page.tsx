@@ -673,6 +673,17 @@ export default async function MatchDetailPage({
         <WcNextTenMinGoal matchId={publicMatch.id} status={publicMatch.status} />
       )}
 
+      {/* WC-B1-B4 — per-fixture model card. Shows our 1X2, market consensus,
+          blended pick, and a callout when our model disagrees with the market.
+          WC-only — non-WC fixtures never see this block. */}
+      {isWorldCupMatch && wcModelCardData && (
+        <WCModelCard
+          homeTeam={publicMatch.homeTeam}
+          awayTeam={publicMatch.awayTeam}
+          data={wcModelCardData}
+        />
+      )}
+
       {/* Verdict card — above tabs, visible on every tab */}
       {publicMatch.hasOdds && publicMatch.bestHome > 0 && (
         <MatchVerdictCard

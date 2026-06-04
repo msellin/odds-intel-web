@@ -1,0 +1,71 @@
+WC-B1-B4 — Model card + market-disagreement callout
+=====================================================
+
+Surface
+-------
+- src/components/wc-model-card.tsx           (new server component)
+- src/lib/wc-model-card-data.ts              (new server-side loader)
+- src/app/(app)/matches/[id]/page.tsx        (wires the card in for WC fixtures only)
+
+Smoke checks (source-inspection — no DB roundtrip required)
+-----------------------------------------------------------
+
+1. wc-model-card.tsx exists and renders three labelled rows
+   - File present at src/components/wc-model-card.tsx.
+   - Contains the literal labels:
+       "Our model"
+       "Market consensus"
+       "OddsIntel blended pick"
+   - Imports ProbBar, ProbNumbersRow, AiPickPill from
+     "@/components/wc-prob-display" (shared primitives — NOT a re-implementation).
+
+2. Disagreement callout fires when delta >= 10pp OR favourites differ
+   - wc-model-card.tsx defines `detectDisagreement(own, market)`.
+   - The function returns non-null when ANY of:
+       * abs(ownTopProb - marketProbOnOwnPick) * 100 >= 10
+       * pickFromTriple(own) !== pickFromTriple(market)
+   - Intensity is "red" when gap >= 15pp or the picks differ; "amber" otherwise.
+   - Component branches on `disagreement && own && market` before rendering
+     <DisagreementCallout/>.
+
+3. Match-detail page invokes the card for WC fixtures only
+   - src/app/(app)/matches/[id]/page.tsx:
+       * imports WCModelCard from "@/components/wc-model-card"
+       * imports loadWCModelCard from "@/lib/wc-model-card-data"
+       * fetches `wcModelCardData` only when `isWorldCupMatch` is true
+         (no DB cost on non-WC pages)
+       * renders <WCModelCard ... /> inside `{isWorldCupMatch && wcModelCardData && (...)}`
+         — placed between the WP chart and the MatchVerdictCard, mirroring
+         the Wave-1 "WC-specific extras above the tabs" pattern.
+
+4. Graceful empty states
+   - When `own` is null  → "Our model hasn't graded this fixture yet" pill.
+   - When `market` is null → "Market data unavailable" pill.
+   - When `blended` is null → "Blended pick pending — needs both own + market rows".
+   - When the lineup row is null, the row is omitted entirely (it's a T-60
+     refresh — pre-tournament we don't even render the slot).
+
+5. Methodology footer copy is literal
+   - Contains "Probabilities cap at 70% per CALIBRATION-DISPLAY-CAP."
+   - Contains "λ=0.6 (60% market / 40% own)".
+
+6. Confidence band tag uses the documented thresholds
+   - confidenceBand(triple): HIGH at max-prob >= 0.6, MED in [0.4, 0.6),
+     LOW below 0.4. Tested via primaryTriple = lineup ?? blended ?? own.
+
+7. Probability triples are 0-1 normalised before display
+   - wc-model-card-data.ts `normaliseTriple` divides by the sum and returns
+     null when the sum is non-positive — protects ProbBar from NaN widths.
+
+Verification observed locally
+-----------------------------
+- npx tsc --noEmit  ->  clean (no errors).
+- For non-WC matches (matchMeta.isWorldCup === false), the loader is never
+  called and the card is not rendered — confirmed by the guarded block at
+  page.tsx:`{isWorldCupMatch && wcModelCardData && (...)}`.
+- For Mexico vs South Africa (WC opener, api_football_id=1):
+  * "Our model" row populates from `predictions.source='national_team_v1'`.
+  * "Market consensus" row falls back to the "Market data unavailable" pill
+    until A3 (`scripts/scrape_wc_market_consensus.py`) populates wc_market_consensus.
+  * "OddsIntel blended pick" stays in the pending state until both sources land.
+  * Confidence band reflects whichever triple is the freshest available.
