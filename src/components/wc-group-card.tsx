@@ -11,7 +11,7 @@ import type {
   GroupAdvancementProb,
   WCMatchPreview,
 } from "@/lib/world-cup";
-import { modelPickFromTriple, type WCPick } from "@/lib/wc-vs-you";
+import { modelPickFromTriple, type WCPick } from "@/lib/wc-vs-you-helpers";
 import { WCVsYouPicker } from "@/components/wc-vs-you-picker";
 import {
   ProbBar,

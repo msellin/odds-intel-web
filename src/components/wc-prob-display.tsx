@@ -17,7 +17,7 @@
  * visually without us needing a separate legend.
  */
 import { displayProb } from "@/lib/probability-display";
-import type { WCPick } from "@/lib/wc-vs-you";
+import type { WCPick } from "@/lib/wc-vs-you-helpers";
 
 interface ProbTriple {
   home: number;

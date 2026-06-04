@@ -53,7 +53,7 @@ import {
 } from "@/lib/wc-bracket-types";
 import { saveBracketPick, lockBracket } from "@/app/(app)/world-cup/actions";
 import type { WCPredictionSlot } from "@/lib/world-cup";
-import { modelPickFromTriple } from "@/lib/wc-vs-you";
+import { modelPickFromTriple } from "@/lib/wc-vs-you-helpers";
 import {
   ProbBar,
   ProbNumbersRow,

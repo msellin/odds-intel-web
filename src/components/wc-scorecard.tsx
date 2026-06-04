@@ -1,6 +1,6 @@
 import { Trophy, Bot, User as UserIcon } from "lucide-react";
 
-import type { WCScorecard } from "@/lib/wc-vs-you";
+import type { WCScorecard } from "@/lib/wc-vs-you-helpers";
 
 interface WCScorecardProps {
   card: WCScorecard;
