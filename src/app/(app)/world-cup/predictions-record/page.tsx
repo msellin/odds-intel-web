@@ -19,6 +19,7 @@ import {
   type CalibrationBucket,
 } from "@/lib/wc-record";
 import { WC_FIRST_KICKOFF_ISO } from "@/lib/world-cup";
+import { WCRecordSubNav } from "@/components/wc-record-subnav";
 
 // ── SEO ──────────────────────────────────────────────────────────────────────
 export const metadata: Metadata = {
@@ -657,6 +658,8 @@ export default async function WCPredictionsRecordPage() {
   return (
     <div className="space-y-4 sm:space-y-6">
       <Hero summary={summary} />
+
+      <WCRecordSubNav active="summary" />
 
       {settled === 0 ? (
         <PreTournamentPlaceholder />

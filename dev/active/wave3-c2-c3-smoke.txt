@@ -1,0 +1,118 @@
+WC-C2-C3 — CLV chart + model leaderboard sub-pages
+====================================================
+
+Surface
+-------
+- src/app/(app)/world-cup/predictions-record/clv/page.tsx           (new — C2)
+- src/app/(app)/world-cup/predictions-record/leaderboard/page.tsx   (new — C3)
+- src/components/wc-record-subnav.tsx                               (new — shared 3-tab strip)
+- src/lib/wc-record.ts                                              (extended — loadCLVSeries, loadLeaderboard)
+- src/app/(app)/world-cup/predictions-record/page.tsx               (edited — mounts <WCRecordSubNav active="summary" />)
+
+Smoke checks (source-inspection — no DB roundtrip required)
+-----------------------------------------------------------
+
+1. Both child pages exist and are server components
+   - src/app/(app)/world-cup/predictions-record/clv/page.tsx
+   - src/app/(app)/world-cup/predictions-record/leaderboard/page.tsx
+   - Both export `default async function` (server-rendered).
+   - Both declare `export const dynamic = "force-dynamic"` so they re-fetch as matches settle.
+
+2. Empty/pre-tournament placeholders render cleanly
+   - C2 (clv/page.tsx):
+       * When loadCLVSeries() returns [] (no settled fixtures with model+market overlap)
+         renders <PreTournamentPlaceholder /> with "No CLV points yet — tournament starts <date>".
+       * No chart, no summary cards — only the hero, sub-nav, placeholder, and methodology.
+   - C3 (leaderboard/page.tsx):
+       * Computes `settled = max(row.n for row in rows)`.
+       * When settled === 0, renders <PreTournamentPlaceholder /> with
+         "0 settled fixtures — tournament starts <date>".
+       * Hero, sub-nav, placeholder, and methodology still render.
+
+3. loadCLVSeries / loadLeaderboard exported from wc-record
+   - `export async function loadCLVSeries(): Promise<CLVPoint[]>` returns
+     chronologically-sorted points with `{matchId, date, homeName, awayName, clv, cumClv}`.
+     Each point's cumClv is the running sum of per-match CLV up to and including
+     that point. Reuses loadRecord() internally — does not duplicate the
+     blended-source precedence or probOnActual math.
+   - `export async function loadLeaderboard(): Promise<LeaderboardRow[]>` returns
+     four rows in deterministic order:
+       * oddsintel_own       — raw `national_team_v1` predictions only
+       * oddsintel_blended   — `national_team_v1_blended` predictions only
+       * market              — `wc_market_consensus` (CLV omitted — it IS the baseline)
+       * opta                — placeholder, n=0, note="Coming soon — scrape not yet wired up."
+     Each row carries `{source, label, note, brier, logLoss, hitRate, clv, n}`.
+     All metrics are null when n=0; ranking in the page sorts populated rows
+     ascending by Brier and pushes null-Brier rows to the end with no rank.
+
+4. Sub-nav is wired on all three pages
+   - src/components/wc-record-subnav.tsx exports `WCRecordSubNav({active})`
+     with three Link tabs:
+       * "/world-cup/predictions-record"             (label "Summary")
+       * "/world-cup/predictions-record/clv"         (label "CLV vs Market")
+       * "/world-cup/predictions-record/leaderboard" (label "vs Other Models")
+   - C1's predictions-record/page.tsx renders <WCRecordSubNav active="summary" />.
+   - C2 renders <WCRecordSubNav active="clv" />.
+   - C3 renders <WCRecordSubNav active="leaderboard" />.
+   - Active tab gets `aria-current="page"` and a gold-tinted border;
+     inactive tabs are muted.
+
+5. CLV chart works at 375px (mobile-first, inline SVG, no chart library)
+   - viewBox is 100x60 abstract units; CSS `block h-auto w-full` makes it scale.
+   - Symmetric y-axis around zero (yMax = max(abs(...)) * 1.15) so the dashed
+     zero line sits in the middle when the cumulative line crosses it.
+   - Line + filled area both colour-coded by sign of final cumClv:
+     emerald when in profit, rose when behind market.
+   - Per-match dots have <title> tooltips with date, fixture, per-match CLV,
+     and cumulative CLV — full row-level transparency.
+
+6. Per-market breakdown (1X2 only for WC)
+   - The breakdown card always renders three rows: 1X2 (live), OU 2.5, BTTS.
+   - OU and BTTS rows are stubs with n=0 and "Not yet modelled for WC" note.
+   - Brief explanation in the methodology note that "For WC2026 we only ship 1X2 today."
+
+7. Leaderboard sort + ranking
+   - rankRows() in C3 splits rows by `brier != null`, sorts populated by Brier ASC,
+     assigns ranks 1..N, then appends null-Brier rows with rank=null.
+   - Row #1 gets a gold trophy icon and a subtle gold-tinted background row.
+   - The market row's CLV column shows "baseline" instead of a number
+     (CLV vs itself is by definition zero — the page surfaces this explicitly).
+
+8. Code reuse — no duplicated math
+   - loadCLVSeries uses loadRecord() to inherit the same SQL, blended-source
+     precedence, and probOnActual semantics as the Summary page.
+   - loadLeaderboard re-queries the predictions table directly because it needs
+     to split own vs blended (loadRecord collapses them), but it reuses brierRow,
+     logLossRow, pickFromTriple, normaliseTriple, and assignSelection — the
+     C1 primitives are imported, not re-implemented.
+   - The wc-schedule, wc-group-card, wc-bracket-board, and wc-prob-display
+     components were NOT touched.
+
+9. SEO metadata complete on both new pages
+   - C2 has canonical "/world-cup/predictions-record/clv" + OG/Twitter tags.
+   - C3 has canonical "/world-cup/predictions-record/leaderboard" + OG/Twitter tags.
+
+Verification observed locally
+-----------------------------
+- npx tsc --noEmit  ->  clean (no errors).
+- Lint: 0 new warnings introduced. The two pre-existing complexity warnings
+  on wc-record.ts (buildRows + summarise from C1) remain as they were.
+- scripts/smoke_test.py was NOT modified.
+- Pre-tournament behaviour confirmed by inspection of both child page
+  components: both render Hero + SubNav + PreTournamentPlaceholder + Methodology
+  when their loader returns an empty result set.
+
+Live-tournament shape
+---------------------
+Once matches resolve:
+- C2 CLV chart will paint a line that ratchets per settled fixture. After
+  the first 8 group-stage matches the line will have 8 dots (each fixture
+  with both model + market). The colour flips emerald if final cumClv >= 0,
+  rose if behind. The per-match table below sorts newest-first.
+- C3 leaderboard will rank by Brier. With ~30 group-stage fixtures, the
+  ranking starts to mean something around round 2. Until then the table
+  is informative but small-sample. The market row will typically beat
+  raw `oddsintel_own` early — the blended row is the one that should
+  challenge market.
+- The Opta row stays as "Coming soon" until/unless we wire up an Opta
+  daily-article scrape — explicitly out of scope for v1.

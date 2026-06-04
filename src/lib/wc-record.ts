@@ -486,3 +486,278 @@ export async function loadRecord(): Promise<Record> {
 
   return { summary, byMatch, calibration };
 }
+
+// ── C2 — CLV series ──────────────────────────────────────────────────────────
+
+export interface CLVPoint {
+  matchId: string;
+  date: string;          // ISO kickoff
+  homeName: string;
+  awayName: string;
+  /** Per-match CLV = model_p_on_actual − market_p_on_actual. */
+  clv: number;
+  /** Cumulative CLV over all chronologically-prior matches (inclusive). */
+  cumClv: number;
+}
+
+/**
+ * Walk every settled match where BOTH our model and market have probabilities,
+ * compute per-match CLV, sort chronologically (ASC — oldest first, so the chart
+ * line moves left-to-right), and emit cumulative sum.
+ *
+ * Empty array when nothing's settled or no overlapping rows exist — the page
+ * treats that as the pre-tournament placeholder state.
+ *
+ * Reuses `loadRecord()` so the SQL + math (probOnActual semantics, blended
+ * source precedence, etc.) come from C1 and stay consistent.
+ */
+export async function loadCLVSeries(): Promise<CLVPoint[]> {
+  const { byMatch } = await loadRecord();
+  // byMatch is DESC by date; we want ASC for cumulative.
+  const both = byMatch
+    .filter((r) => r.model != null && r.market != null)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  let running = 0;
+  const out: CLVPoint[] = [];
+  for (const r of both) {
+    // Safe — filter guarantees both are non-null.
+    const m = r.model!;
+    const mk = r.market!;
+    const pModel = r.actual === "1" ? m.home : r.actual === "X" ? m.draw : m.away;
+    const pMarket = r.actual === "1" ? mk.home : r.actual === "X" ? mk.draw : mk.away;
+    const clv = pModel - pMarket;
+    running += clv;
+    out.push({
+      matchId: r.matchId,
+      date: r.date,
+      homeName: r.homeName,
+      awayName: r.awayName,
+      clv,
+      cumClv: running,
+    });
+  }
+  return out;
+}
+
+// ── C3 — Leaderboard ─────────────────────────────────────────────────────────
+
+export interface LeaderboardRow {
+  /** Stable id (used as the React key + slot lookup). */
+  source: "oddsintel_own" | "oddsintel_blended" | "market" | "opta";
+  /** Display label. */
+  label: string;
+  /** Optional one-line caption for the row (e.g. "Coming soon — scrape pending"). */
+  note: string | null;
+  /** Mean Brier on settled fixtures where this source had a row. Null when N=0. */
+  brier: number | null;
+  /** Mean log-loss on settled fixtures where this source had a row. Null when N=0. */
+  logLoss: number | null;
+  /** hits / N. Null when N=0. */
+  hitRate: number | null;
+  /** Avg(source_p_on_actual − market_p_on_actual). Null for the market row itself, null when N=0 vs market overlap. */
+  clv: number | null;
+  /** Number of settled matches this source has a prediction for. */
+  n: number;
+}
+
+/**
+ * Per-source metrics across all settled WC2026 fixtures. Reuses C1's loader so
+ * the math (brierRow, logLossRow, blended-source precedence) stays single-sourced.
+ *
+ * What you'll see in each row:
+ *   - `oddsintel_own`     — raw `national_team_v1` predictions (no blend).
+ *   - `oddsintel_blended` — `national_team_v1_blended` rows ONLY (blend with market).
+ *   - `market`            — `wc_market_consensus` (vig-removed Pinnacle/FotMob avg).
+ *   - `opta`              — placeholder; we don't scrape Opta yet. Returned with
+ *                           null metrics and a "Coming soon" note so the UI can
+ *                           render the row consistently.
+ *
+ * Sorting and rank assignment is a UI concern — this returns the raw rows in a
+ * deterministic order; the page sorts by Brier ASC, putting null-metric rows last.
+ *
+ * Empty/pre-tournament behaviour: every metric is null, every N is 0, but the
+ * rows are still returned so the page can show "0 matches" placeholder copy
+ * rather than a fully blank table.
+ */
+export async function loadLeaderboard(): Promise<LeaderboardRow[]> {
+  // To compute per-source metrics we need to look at raw predictions BEFORE
+  // C1's "blended-takes-precedence" collapse. We replicate the same DB query
+  // as loadRecord() but split the model rows into the two sub-sources.
+  const supabase = createSupabasePublic();
+
+  const { data: rawMatches } = await supabase
+    .from("matches")
+    .select(
+      `id, date, status, score_home, score_away,
+       home_team:home_team_id(id, name),
+       away_team:away_team_id(id, name),
+       league:league_id!inner(api_football_id)`
+    )
+    .eq("league.api_football_id", WORLD_CUP_LEAGUE_API_ID)
+    .gte("date", "2026-06-01")
+    .eq("status", "finished")
+    .order("date", { ascending: false })
+    .limit(200);
+
+  // Always return all four rows — empty/pre-tournament state is handled by
+  // null metrics, not missing rows.
+  const emptyRow = (
+    source: LeaderboardRow["source"],
+    label: string,
+    note: string | null
+  ): LeaderboardRow => ({
+    source,
+    label,
+    note,
+    brier: null,
+    logLoss: null,
+    hitRate: null,
+    clv: null,
+    n: 0,
+  });
+
+  if (!rawMatches || rawMatches.length === 0) {
+    return [
+      emptyRow("oddsintel_own", "OddsIntel (own model)", null),
+      emptyRow("oddsintel_blended", "OddsIntel (blended with market)", null),
+      emptyRow("market", "Market consensus (Pinnacle + FotMob, vig-removed)", null),
+      emptyRow("opta", "Opta supercomputer", "Coming soon — scrape not yet wired up."),
+    ];
+  }
+
+  const matches = rawMatches as RawMatchRow[];
+  const matchIds = matches.map((m) => m.id);
+
+  // Pull predictions for BOTH sources — split them per-source rather than
+  // collapsing with blended-precedence (which is what aggregatePredictions does).
+  const { data: rawPreds } = await supabase
+    .from("predictions")
+    .select("match_id, market, model_probability, source")
+    .in("source", [NATIONAL_TEAM_MODEL_SOURCE, BLENDED_MODEL_SOURCE])
+    .in("match_id", matchIds);
+
+  const { data: rawConsensus } = await supabase
+    .from("wc_market_consensus")
+    .select("match_id, home_prob, draw_prob, away_prob")
+    .in("match_id", matchIds);
+
+  // ── Helper: collapse raw rows for ONE source into matchId -> triple. ──
+  function collapseSource(sourceFilter: string): Map<string, ProbTriple> {
+    const out = new Map<string, ProbTriple>();
+    const accumulators = new Map<string, PredictionAccumulator>();
+    for (const r of (rawPreds ?? []) as RawPredictionRow[]) {
+      if (r.source !== sourceFilter) continue;
+      if (!accumulators.has(r.match_id)) {
+        accumulators.set(r.match_id, {
+          home: null,
+          draw: null,
+          away: null,
+          isBlended: sourceFilter === BLENDED_MODEL_SOURCE,
+        });
+      }
+      assignSelection(accumulators.get(r.match_id)!, r.market, r.model_probability);
+    }
+    for (const [mid, acc] of accumulators.entries()) {
+      if (acc.home == null || acc.draw == null || acc.away == null) continue;
+      out.set(mid, normaliseTriple(acc.home, acc.draw, acc.away));
+    }
+    return out;
+  }
+
+  const ownByMatch = collapseSource(NATIONAL_TEAM_MODEL_SOURCE);
+  const blendedByMatch = collapseSource(BLENDED_MODEL_SOURCE);
+  const marketByMatch = new Map<string, ProbTriple>();
+  for (const c of (rawConsensus ?? []) as RawConsensusRow[]) {
+    marketByMatch.set(
+      c.match_id,
+      normaliseTriple(asNumber(c.home_prob), asNumber(c.draw_prob), asNumber(c.away_prob))
+    );
+  }
+
+  // ── Settled match outcomes. ──
+  const settled: Array<{ id: string; actual: Outcome }> = [];
+  for (const m of matches) {
+    if (m.status !== "finished") continue;
+    if (m.score_home == null || m.score_away == null) continue;
+    settled.push({ id: m.id, actual: actualFromScore(m.score_home, m.score_away) });
+  }
+
+  // ── Per-source scorer (split into pure helpers to keep complexity low). ──
+  function clvDeltaFor(
+    triple: ProbTriple,
+    actual: Outcome,
+    matchId: string
+  ): number | null {
+    const market = marketByMatch.get(matchId);
+    if (!market) return null;
+    return probOnActual(triple, actual) - probOnActual(market, actual);
+  }
+
+  interface ScoreAcc {
+    n: number;
+    hits: number;
+    brierSum: number;
+    logSum: number;
+    clvSum: number;
+    clvN: number;
+  }
+
+  function accumulateOne(
+    acc: ScoreAcc,
+    triple: ProbTriple,
+    actual: Outcome,
+    matchId: string,
+    isMarketRow: boolean
+  ): void {
+    acc.n += 1;
+    if (pickFromTriple(triple) === actual) acc.hits += 1;
+    acc.brierSum += brierRow(triple, actual);
+    acc.logSum += logLossRow(triple, actual);
+    if (isMarketRow) return;
+    const delta = clvDeltaFor(triple, actual, matchId);
+    if (delta == null) return;
+    acc.clvSum += delta;
+    acc.clvN += 1;
+  }
+
+  function score(
+    by: Map<string, ProbTriple>,
+    label: string,
+    source: LeaderboardRow["source"],
+    isMarketRow: boolean
+  ): LeaderboardRow {
+    const acc: ScoreAcc = { n: 0, hits: 0, brierSum: 0, logSum: 0, clvSum: 0, clvN: 0 };
+    for (const s of settled) {
+      const triple = by.get(s.id);
+      if (!triple) continue;
+      accumulateOne(acc, triple, s.actual, s.id, isMarketRow);
+    }
+    return {
+      source,
+      label,
+      note: null,
+      brier: acc.n > 0 ? acc.brierSum / acc.n : null,
+      logLoss: acc.n > 0 ? acc.logSum / acc.n : null,
+      hitRate: acc.n > 0 ? acc.hits / acc.n : null,
+      clv: isMarketRow ? null : acc.clvN > 0 ? acc.clvSum / acc.clvN : null,
+      n: acc.n,
+    };
+  }
+
+  return [
+    score(ownByMatch, "OddsIntel (own model)", "oddsintel_own", false),
+    score(blendedByMatch, "OddsIntel (blended with market)", "oddsintel_blended", false),
+    score(marketByMatch, "Market consensus (Pinnacle + FotMob, vig-removed)", "market", true),
+    {
+      source: "opta",
+      label: "Opta supercomputer",
+      note: "Coming soon — scrape not yet wired up.",
+      brier: null,
+      logLoss: null,
+      hitRate: null,
+      clv: null,
+      n: 0,
+    },
+  ];
+}
