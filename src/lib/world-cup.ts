@@ -403,9 +403,16 @@ function mergePredictionRow(
   byMatch[row.match_id] = slot;
 
   const m = row.market.toLowerCase();
-  if (m.endsWith(":home") || m === "home") slot.homeProb = row.model_probability;
-  else if (m.endsWith(":draw") || m === "draw") slot.drawProb = row.model_probability;
-  else if (m.endsWith(":away") || m === "away") slot.awayProb = row.model_probability;
+  // The engine writes `1x2_home` / `1x2_draw` / `1x2_away` (underscore) on
+  // `national_team_v1`; older Phase-3 drafts used `1x2:home` (colon) and the
+  // very earliest local sketch used bare `home`. Accept all three so a future
+  // engine-side rename doesn't silently blank the Schedule prob bar again.
+  const isHome = m.endsWith(":home") || m.endsWith("_home") || m === "home";
+  const isDraw = m.endsWith(":draw") || m.endsWith("_draw") || m === "draw";
+  const isAway = m.endsWith(":away") || m.endsWith("_away") || m === "away";
+  if (isHome) slot.homeProb = row.model_probability;
+  else if (isDraw) slot.drawProb = row.model_probability;
+  else if (isAway) slot.awayProb = row.model_probability;
   if (row.reasoning && !slot.reasoning) slot.reasoning = row.reasoning;
 }
 

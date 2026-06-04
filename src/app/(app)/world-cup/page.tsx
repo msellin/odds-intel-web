@@ -708,7 +708,7 @@ export default async function WorldCupPage({
 
   const { isAuthed, isPro, userId } = await readAuthAndTier();
   const [
-    { fixtures, groups, predictions, advancement, scorecard, previews },
+    { fixtures, groups, predictions, advancement, scorecard, previews, userPicks },
     activityStats,
   ] = await Promise.all([loadPageData(), loadWcActivityStats()]);
 
@@ -719,6 +719,16 @@ export default async function WorldCupPage({
   // Next upcoming fixture (used in Overview "what's next" strip).
   const nextFixture =
     fixtures.find((f) => new Date(f.date).getTime() >= nowMs) ?? fixtures[0] ?? null;
+
+  // WC-SCHEDULE-VITALITY-V2: fixture→group letter lookup so the Schedule tab
+  // can show the same A/B/C chip the Groups tab uses. Knockouts aren't in any
+  // group, so they're absent from the map (Schedule renders a spacer).
+  const groupByFixtureId: Record<string, string> = {};
+  for (const g of groups) {
+    for (const f of g.fixtures) {
+      groupByFixtureId[f.id] = g.label;
+    }
+  }
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -744,6 +754,8 @@ export default async function WorldCupPage({
         nowMs={nowMs}
         nextFixture={nextFixture}
         previews={previews}
+        userPicks={userPicks}
+        groupByFixtureId={groupByFixtureId}
       />
 
       {/* Predictions notice — kept site-wide, last (small, low-impact). */}
@@ -808,6 +820,8 @@ function ActiveTabPanel({
   nowMs,
   nextFixture,
   previews,
+  userPicks,
+  groupByFixtureId,
 }: {
   tab: string;
   groups: WCGroup[];
@@ -821,6 +835,8 @@ function ActiveTabPanel({
   nowMs: number;
   nextFixture: WCFixture | null;
   previews: Record<string, WCMatchPreview>;
+  userPicks: Record<string, WCPick>;
+  groupByFixtureId: Record<string, string>;
 }) {
   switch (tab) {
     case "schedule":
@@ -830,6 +846,9 @@ function ActiveTabPanel({
           predictions={predictions}
           nowMs={nowMs}
           previews={previews}
+          groupByFixtureId={groupByFixtureId}
+          userPicks={userPicks}
+          isAuthed={isAuthed}
         />
       );
     case "groups":
