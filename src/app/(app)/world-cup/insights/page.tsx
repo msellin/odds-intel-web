@@ -97,7 +97,13 @@ export default async function WCInsightsIndexPage() {
       {!hasData && (
         <div className="rounded-xl border border-dashed border-white/[0.08] bg-card/40 p-6 text-center text-sm text-muted-foreground">
           <Trophy className="mx-auto mb-2 size-5 text-[color:var(--color-tournament-gold)]/70" />
-          Insight articles refresh daily once the tournament Monte Carlo has run. Check back soon.
+          <p>Insight articles refresh daily once the tournament Monte Carlo has run.</p>
+          <Link
+            href="/world-cup/who-can-win"
+            className="mt-4 inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border border-white/[0.12] bg-card/40 px-4 py-2 text-xs font-semibold text-foreground hover:border-[color:var(--color-tournament-gold)]/40 sm:text-sm"
+          >
+            See the Monte Carlo board →
+          </Link>
         </div>
       )}
 

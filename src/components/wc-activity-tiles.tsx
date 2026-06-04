@@ -83,9 +83,9 @@ export function WCActivityTiles({ stats }: { stats: WCActivityStats }) {
           key={t.label}
           className="rounded-xl border border-white/[0.06] bg-card/40 px-3 py-2 sm:px-4 sm:py-3"
         >
-          <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground sm:text-[11px]">
-            <span aria-hidden>{t.emoji}</span>
-            <span className="truncate">{t.label}</span>
+          <div className="flex min-w-0 items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground sm:text-[11px]">
+            <span aria-hidden className="shrink-0">{t.emoji}</span>
+            <span className="min-w-0 truncate">{t.label}</span>
           </div>
           <div className="mt-1 font-mono text-lg font-bold text-foreground tabular-nums sm:text-2xl">
             {t.value}

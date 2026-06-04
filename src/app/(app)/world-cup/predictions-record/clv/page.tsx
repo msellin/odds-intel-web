@@ -108,7 +108,7 @@ function PreTournamentPlaceholder() {
     { year: "numeric", month: "long", day: "numeric" }
   );
   return (
-    <section className="rounded-2xl border border-dashed border-white/[0.10] bg-card/30 p-8 text-center sm:p-12">
+    <section className="rounded-2xl border border-dashed border-white/[0.08] bg-card/30 p-8 text-center sm:p-12">
       <CalendarClock className="mx-auto size-10 text-muted-foreground/40" />
       <h2 className="mt-4 text-lg font-bold text-foreground sm:text-xl">
         No CLV points yet — tournament starts {kickoffDate}
@@ -122,6 +122,12 @@ function PreTournamentPlaceholder() {
         Why publish this? Because CLV is the cleanest single-number test of whether
         a model is actually adding information beyond the market price.
       </p>
+      <Link
+        href="/world-cup/who-can-win"
+        className="mt-5 inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border border-white/[0.12] bg-card/40 px-4 py-2 text-xs font-semibold text-foreground hover:border-[color:var(--color-tournament-gold)]/40 sm:text-sm"
+      >
+        See pre-tournament picks instead →
+      </Link>
     </section>
   );
 }

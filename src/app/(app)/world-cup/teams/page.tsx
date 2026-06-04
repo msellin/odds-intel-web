@@ -136,7 +136,13 @@ export default async function WorldCupTeamsIndexPage() {
 
       {teams.length === 0 && (
         <div className="rounded-xl border border-dashed border-white/[0.08] bg-card/40 p-6 text-center text-sm text-muted-foreground">
-          Team list not loaded yet — fixtures arrive daily.
+          <p>Team list not loaded yet — fixtures arrive daily.</p>
+          <Link
+            href="/world-cup"
+            className="mt-4 inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border border-white/[0.12] bg-card/40 px-4 py-2 text-xs font-semibold text-foreground hover:border-[color:var(--color-tournament-gold)]/40 sm:text-sm"
+          >
+            Back to the hub →
+          </Link>
         </div>
       )}
     </div>

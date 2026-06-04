@@ -625,19 +625,19 @@ function LeaderboardInlineRow({
   return (
     <tr className={`border-b border-white/[0.04] last:border-0 ${rowBg}`}>
       <td className="px-3 py-2 text-left text-muted-foreground tabular-nums">{rank}</td>
-      <td className="px-3 py-2">
-        <div className="flex items-center gap-1.5">
+      <td className="min-w-0 px-3 py-2">
+        <div className="flex min-w-0 items-center gap-1.5">
           {e.isAi && !isAnon && (
-            <span className="rounded-full bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground ring-1 ring-white/[0.06]">
+            <span className="shrink-0 rounded-full bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground ring-1 ring-white/[0.06]">
               AI
             </span>
           )}
           {e.isCurrentUser && (
-            <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
+            <span className="shrink-0 rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
               you
             </span>
           )}
-          <span className={isAnon ? "text-muted-foreground/60" : (e.isAi ? "text-muted-foreground" : "text-foreground")}>{name}</span>
+          <span className={`truncate ${isAnon ? "text-muted-foreground/60" : (e.isAi ? "text-muted-foreground" : "text-foreground")}`}>{name}</span>
         </div>
       </td>
       <td className="px-3 py-2 text-right font-mono font-semibold text-foreground tabular-nums">{e.totalScore}</td>
