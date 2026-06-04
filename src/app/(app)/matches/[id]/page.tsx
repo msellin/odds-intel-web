@@ -169,28 +169,35 @@ export default async function MatchDetailPage({
   const hasSignals = matchSignals.length > 0;
   const isLive = publicMatch.status === "live";
 
-  // ── Win-probability chart (FotMob-style) — show for live + finished ──
-  // For pre-match we render a teaser inside the component itself, so we only
-  // build the series when there's anything to plot.
+  // ── Win-probability chart (FotMob-style) ──
+  // For club matches we show the chart for live + finished only (pre-match
+  // renders an inline teaser inside the component). For WC2026 fixtures we
+  // surface it on every status — the chart's own scheduled-state teaser
+  // covers pre-tournament rendering, and the chart is one of the marquee
+  // features of the WC experience.
+  const matchMeta = await fetchMatchTeamMeta(id);
+  const showWpChart =
+    publicMatch.status === "live" ||
+    publicMatch.status === "finished" ||
+    matchMeta?.isWorldCup === true;
   let wpSeries: Awaited<ReturnType<typeof buildWPSeries>> | null = null;
-  if (publicMatch.status === "live" || publicMatch.status === "finished") {
-    const meta = await fetchMatchTeamMeta(id);
-    if (meta) {
-      wpSeries = await buildWPSeries({
-        matchId: id,
-        homeTeamId: meta.homeTeamId,
-        awayTeamId: meta.awayTeamId,
-        status: publicMatch.status,
-        scoreHome: publicMatch.score_home ?? initialSnapshot?.score_home ?? null,
-        scoreAway: publicMatch.score_away ?? initialSnapshot?.score_away ?? null,
-        minute: initialSnapshot?.minute ?? null,
-        modelHome: publicMatch.modelHome ?? null,
-        modelDraw: publicMatch.modelDraw ?? null,
-        modelAway: publicMatch.modelAway ?? null,
-        competition: meta.competition,
-      });
-    }
+  if (showWpChart && matchMeta) {
+    wpSeries = await buildWPSeries({
+      matchId: id,
+      homeTeamId: matchMeta.homeTeamId,
+      awayTeamId: matchMeta.awayTeamId,
+      status: publicMatch.status,
+      scoreHome: publicMatch.score_home ?? initialSnapshot?.score_home ?? null,
+      scoreAway: publicMatch.score_away ?? initialSnapshot?.score_away ?? null,
+      minute: initialSnapshot?.minute ?? null,
+      modelHome: publicMatch.modelHome ?? null,
+      modelDraw: publicMatch.modelDraw ?? null,
+      modelAway: publicMatch.modelAway ?? null,
+      competition: matchMeta.competition,
+      isWorldCup: matchMeta.isWorldCup,
+    });
   }
+  const isWorldCupMatch = matchMeta?.isWorldCup === true;
 
   // ── Build tab content ──
 
@@ -339,8 +346,11 @@ export default async function MatchDetailPage({
   const matchContent = (
     <>
       {/* Live win-probability curve (FotMob-style) — all tiers see it; Pro
-          additionally gets event markers (goals + red cards) on the chart. */}
-      {wpSeries && (
+          additionally gets event markers (goals + red cards) on the chart.
+          For WC2026 fixtures the chart already renders above the tabs (see
+          the page-level block), so we skip the in-tab copy to avoid a
+          duplicate render. */}
+      {wpSeries && !isWorldCupMatch && (
         <WinProbabilityChart
           matchId={publicMatch.id}
           series={wpSeries.series}
@@ -597,6 +607,23 @@ export default async function MatchDetailPage({
       />
 
       <Separator className="bg-border" />
+
+      {/* WC2026 — surface the win-probability chart above the tabs so the
+          flagship live-prob visual sits front-and-centre on every WC fixture
+          (covers scheduled, live, and finished). For club matches the chart
+          stays inside the MATCH tab to keep the intel tab uncluttered. */}
+      {isWorldCupMatch && wpSeries && (
+        <WinProbabilityChart
+          matchId={publicMatch.id}
+          series={wpSeries.series}
+          current={wpSeries.current}
+          homeTeam={publicMatch.homeTeam}
+          awayTeam={publicMatch.awayTeam}
+          status={publicMatch.status}
+          isPro={isPro}
+          matchEvents={matchEvents}
+        />
+      )}
 
       {/* Verdict card — above tabs, visible on every tab */}
       {publicMatch.hasOdds && publicMatch.bestHome > 0 && (

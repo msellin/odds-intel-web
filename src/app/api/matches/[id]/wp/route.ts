@@ -21,6 +21,7 @@
 import { NextResponse } from "next/server";
 import { createSupabasePublic } from "@/lib/supabase-public";
 import { computeWP, eloFallbackPriors } from "@/lib/win-probability";
+import { WORLD_CUP_LEAGUE_API_ID } from "@/lib/world-cup";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -32,7 +33,12 @@ interface MatchTeamRow {
   score_away: number | null;
   home_team_id: string;
   away_team_id: string;
-  league: { country: string | null } | { country: string | null }[] | null;
+  // `league` is returned as either an object or a single-element array depending
+  // on whether PostgREST treats the FK as a 1:1 or 1:N join. We normalise below.
+  league:
+    | { country: string | null; api_football_id: number | null }
+    | { country: string | null; api_football_id: number | null }[]
+    | null;
 }
 
 export async function GET(
@@ -47,19 +53,49 @@ export async function GET(
 
   const supabase = createSupabasePublic();
 
-  // Pull everything we need in parallel.
-  const [matchRes, snapRes, predRes] = await Promise.all([
+  // First fetch: match + league. We need the league.api_football_id to decide
+  // between the club path (live_match_snapshots + team_elo_daily) and the WC
+  // path (live_xg_snapshots + team_elo_international). Doing this before the
+  // parallel snapshot read keeps the WC branch from issuing a wasted query
+  // against the club snapshot table.
+  const { data: matchData, error: matchErr } = await supabase
+    .from("matches")
+    .select(
+      `status, score_home, score_away, home_team_id, away_team_id,
+       league:league_id(country, api_football_id)`
+    )
+    .eq("id", id)
+    .single();
+
+  if (matchErr || !matchData) {
+    return NextResponse.json({ error: "Match not found" }, { status: 404 });
+  }
+
+  const match = matchData as MatchTeamRow;
+  const league = Array.isArray(match.league) ? match.league[0] : match.league;
+  // WC2026 fixtures live under api_football_id=1 (FIFA World Cup). For any
+  // international league we'd still want team_elo_international, but the WC
+  // path is the only one that reads from live_xg_snapshots — that table is
+  // populated only by the WC live-xg poller (workers/jobs/wc_live_xg_poller.py).
+  const isWorldCup = league?.api_football_id === WORLD_CUP_LEAGUE_API_ID;
+  const competition: "club" | "international" =
+    isWorldCup || (league?.country ?? "").toLowerCase() === "world"
+      ? "international"
+      : "club";
+
+  // Now fan out — pick the snapshot table per the WC flag.
+  const snapTable = isWorldCup ? "live_xg_snapshots" : "live_match_snapshots";
+  const [snapRes, predRes] = await Promise.all([
+    // live_xg_snapshots does not carry score columns (D2 schema only stores
+    // xg + shots + possession). For WC we still need a score — fall back to
+    // matches.score_home/score_away below.
     supabase
-      .from("matches")
+      .from(snapTable)
       .select(
-        `status, score_home, score_away, home_team_id, away_team_id,
-         league:league_id(country)`
+        isWorldCup
+          ? "minute, captured_at"
+          : "score_home, score_away, minute, captured_at"
       )
-      .eq("id", id)
-      .single(),
-    supabase
-      .from("live_match_snapshots")
-      .select("score_home, score_away, minute, captured_at")
       .eq("match_id", id)
       .order("captured_at", { ascending: false })
       .limit(1),
@@ -68,15 +104,6 @@ export async function GET(
       .select("source, market, model_probability")
       .eq("match_id", id),
   ]);
-
-  if (matchRes.error || !matchRes.data) {
-    return NextResponse.json({ error: "Match not found" }, { status: 404 });
-  }
-
-  const match = matchRes.data as MatchTeamRow;
-  const league = Array.isArray(match.league) ? match.league[0] : match.league;
-  const competition: "club" | "international" =
-    (league?.country ?? "").toLowerCase() === "world" ? "international" : "club";
 
   // ELO lookup (fall back to 1500 if missing).
   const eloTable = competition === "international" ? "team_elo_international" : "team_elo_daily";
@@ -125,9 +152,16 @@ export async function GET(
   }
 
   // Pick the latest snapshot (or fall back to match.score_* / status).
-  const snap = (snapRes.data ?? [])[0] as
-    | { score_home: number; score_away: number; minute: number; captured_at: string }
-    | undefined;
+  // For club matches the snapshot table carries scores; for WC it doesn't,
+  // so we fall back to the canonical scoreline on `matches`. The select
+  // string is built conditionally above, so the typed-result inference is
+  // unreliable here — cast via unknown to the union shape we know we get.
+  const snapRow = ((snapRes.data ?? []) as unknown as Array<{
+    score_home?: number;
+    score_away?: number;
+    minute: number;
+    captured_at: string;
+  }>)[0];
 
   const isLive = match.status === "live";
   const isFinished = match.status === "finished";
@@ -138,10 +172,15 @@ export async function GET(
   let scoreAway = match.score_away ?? 0;
   if (isFinished) {
     minute = 90;
-  } else if (snap) {
-    minute = snap.minute;
-    scoreHome = snap.score_home;
-    scoreAway = snap.score_away;
+  } else if (snapRow) {
+    minute = snapRow.minute;
+    // For club matches the snapshot row has its own (per-tick) score; for WC
+    // (live_xg_snapshots) we only get a minute, so the score stays whatever
+    // is on `matches` (the live_tracker keeps that field fresh).
+    if (snapRow.score_home != null && snapRow.score_away != null) {
+      scoreHome = snapRow.score_home;
+      scoreAway = snapRow.score_away;
+    }
   }
 
   const wp = computeWP({

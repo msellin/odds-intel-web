@@ -3,9 +3,15 @@
  * win-probability chart.
  *
  * Sources:
- *   - `live_match_snapshots` — score + minute samples (30/60s during live)
- *   - `team_elo_daily` + `team_elo_international` — for the scoring-rate split
- *   - `predictions` (ensemble) — pre-match 1X2 priors; falls back to ELO
+ *   - `live_match_snapshots` — score + minute samples (30/60s during live) for
+ *     club matches.
+ *   - `live_xg_snapshots` — minute + xg samples (60s during live) for WC2026
+ *     matches. Score is carried from the matches table (live tracker keeps it
+ *     fresh) because the xg snapshot row doesn't store scores.
+ *   - `team_elo_daily` (club) / `team_elo_international` (WC) — for the
+ *     scoring-rate split and pre-match prior fallback.
+ *   - `predictions` (ensemble for club; national_team_v1 for WC) — pre-match
+ *     1X2 priors; falls back to ELO.
  *
  * The series is anchored by two implicit points:
  *   - minute 0      → pre-match priors (or ELO fallback)
@@ -16,40 +22,55 @@
  * the live poller can fire multiple times per minute when an event happens).
  *
  * For finished matches we draw the whole curve from historical snapshots.
+ *
+ * WC behaviour with empty live_xg_snapshots: the curve renders as just the
+ * pre-match anchor → trailing-current point (or pre-match anchor only when
+ * scheduled). The chart component handles that as a flat baseline.
  */
 
 import { createSupabasePublic } from "@/lib/supabase-public";
 import { computeWP, eloFallbackPriors, type WPInput } from "@/lib/win-probability";
+import { WORLD_CUP_LEAGUE_API_ID } from "@/lib/world-cup";
 
 /**
  * Look up the team IDs + league country for a match. Used by buildWPSeries to
  * resolve the right ELO table without making the caller plumb team_ids through
- * PublicMatch.
+ * PublicMatch. Also flags WC2026 matches so the page can render the chart
+ * (and the series builder can read live_xg_snapshots instead of the club
+ * live-snapshot table).
  */
 export async function fetchMatchTeamMeta(matchId: string): Promise<{
   homeTeamId: string;
   awayTeamId: string;
   competition: "club" | "international";
+  isWorldCup: boolean;
 } | null> {
   const supabase = createSupabasePublic();
   const { data, error } = await supabase
     .from("matches")
-    .select(`home_team_id, away_team_id, league:league_id(country)`)
+    .select(`home_team_id, away_team_id, league:league_id(country, api_football_id)`)
     .eq("id", matchId)
     .single();
   if (error || !data) return null;
   const row = data as {
     home_team_id: string;
     away_team_id: string;
-    league: { country: string | null } | { country: string | null }[] | null;
+    league:
+      | { country: string | null; api_football_id: number | null }
+      | { country: string | null; api_football_id: number | null }[]
+      | null;
   };
   const league = Array.isArray(row.league) ? row.league[0] : row.league;
+  const isWorldCup = league?.api_football_id === WORLD_CUP_LEAGUE_API_ID;
   const competition: "club" | "international" =
-    (league?.country ?? "").toLowerCase() === "world" ? "international" : "club";
+    isWorldCup || (league?.country ?? "").toLowerCase() === "world"
+      ? "international"
+      : "club";
   return {
     homeTeamId: row.home_team_id,
     awayTeamId: row.away_team_id,
     competition,
+    isWorldCup,
   };
 }
 
@@ -80,11 +101,21 @@ export interface WPSeriesInputs {
   modelAway: number | null;
   /** "club" | "international" — which ELO table to read. */
   competition: "club" | "international";
+  /**
+   * True iff this is a FIFA World Cup 2026 fixture (`leagues.api_football_id=1`).
+   * Drives the choice of live-snapshot table:
+   *   - true  → live_xg_snapshots (D2-written, minute-only; scores carry from
+   *             the matches/live_match_snapshots fall-through below)
+   *   - false → live_match_snapshots (score + minute per tick)
+   * Default false keeps the club path unchanged for non-WC callers.
+   */
+  isWorldCup?: boolean;
 }
 
 interface SnapshotRow {
-  score_home: number;
-  score_away: number;
+  // Scores are absent on live_xg_snapshots — handled by the caller.
+  score_home?: number | null;
+  score_away?: number | null;
   minute: number;
   captured_at: string;
 }
@@ -170,13 +201,28 @@ export async function buildWPSeries(inputs: WPSeriesInputs): Promise<{
 }> {
   const supabase = createSupabasePublic();
 
+  // WC fixtures sample from live_xg_snapshots (D2-written: minute only, no
+  // score). For those rows we carry the score forward from the trailing input
+  // (which the page derives from matches.score_home/score_away — kept fresh
+  // by the live tracker). Club fixtures keep the score-bearing snapshot table.
+  const useWcLiveTable = inputs.isWorldCup === true;
+
+  const snapPromise = useWcLiveTable
+    ? supabase
+        .from("live_xg_snapshots")
+        .select("minute, captured_at")
+        .eq("match_id", inputs.matchId)
+        .order("captured_at", { ascending: false })
+        .limit(500)
+    : supabase
+        .from("live_match_snapshots")
+        .select("score_home, score_away, minute, captured_at")
+        .eq("match_id", inputs.matchId)
+        .order("captured_at", { ascending: false })
+        .limit(500);
+
   const [{ data: snapData }, elos] = await Promise.all([
-    supabase
-      .from("live_match_snapshots")
-      .select("score_home, score_away, minute, captured_at")
-      .eq("match_id", inputs.matchId)
-      .order("captured_at", { ascending: false })
-      .limit(500),
+    snapPromise,
     fetchElos(inputs.homeTeamId, inputs.awayTeamId, inputs.competition),
   ]);
 
@@ -202,12 +248,25 @@ export async function buildWPSeries(inputs: WPSeriesInputs): Promise<{
 
   const snaps = dedupeByMinute((snapData ?? []) as SnapshotRow[]);
 
+  // Latest known score — used both for the curve loop (when reading
+  // live_xg_snapshots, which has no score column) and the trailing point.
+  // Carry from inputs (matches.score_home/score_away) first, else fall back to
+  // the freshest score in the snap rows (only set on live_match_snapshots).
+  const fallbackScoreHome =
+    inputs.scoreHome ??
+    (snaps.length > 0 ? snaps[snaps.length - 1].score_home ?? 0 : 0);
+  const fallbackScoreAway =
+    inputs.scoreAway ??
+    (snaps.length > 0 ? snaps[snaps.length - 1].score_away ?? 0 : 0);
+
   const series: WPSeriesPoint[] = [preMatch];
   for (const s of snaps) {
+    const scoreH = s.score_home ?? fallbackScoreHome;
+    const scoreA = s.score_away ?? fallbackScoreAway;
     const wp = computeWP({
       ...baseWPInput,
-      scoreHome: s.score_home,
-      scoreAway: s.score_away,
+      scoreHome: scoreH,
+      scoreAway: scoreA,
       minute: s.minute,
       isLive: true,
     });
@@ -216,8 +275,8 @@ export async function buildWPSeries(inputs: WPSeriesInputs): Promise<{
       homeProb: wp.homeProb,
       drawProb: wp.drawProb,
       awayProb: wp.awayProb,
-      scoreHome: s.score_home,
-      scoreAway: s.score_away,
+      scoreHome: scoreH,
+      scoreAway: scoreA,
     });
   }
 
@@ -226,8 +285,10 @@ export async function buildWPSeries(inputs: WPSeriesInputs): Promise<{
   // point so the curve runs all the way to the right edge.
   let current: WPSeriesPoint | null = null;
   if (inputs.status === "live" && inputs.minute != null) {
-    const scoreH = inputs.scoreHome ?? snaps[snaps.length - 1]?.score_home ?? 0;
-    const scoreA = inputs.scoreAway ?? snaps[snaps.length - 1]?.score_away ?? 0;
+    const scoreH =
+      inputs.scoreHome ?? snaps[snaps.length - 1]?.score_home ?? 0;
+    const scoreA =
+      inputs.scoreAway ?? snaps[snaps.length - 1]?.score_away ?? 0;
     const wp = computeWP({
       ...baseWPInput,
       scoreHome: scoreH,
