@@ -6,6 +6,12 @@ import { flagForTeam } from "@/lib/wc-flags";
 import type { WCFixture, WCPredictionSlot, WCMatchPreview } from "@/lib/world-cup";
 import { modelPickFromTriple, type WCPick } from "@/lib/wc-vs-you";
 import { WCVsYouPicker } from "@/components/wc-vs-you-picker";
+import {
+  ProbBar,
+  ProbNumbersRow,
+  AiPickPill,
+  favouriteClass,
+} from "@/components/wc-prob-display";
 
 interface WCScheduleProps {
   fixtures: WCFixture[];
@@ -86,31 +92,6 @@ function GroupChip({ letter }: { letter: string | null }) {
   );
 }
 
-// WC-SCHEDULE-VITALITY-V2: 3-band 1X2 probability bar. Replaces the three
-// small grey percentage numbers — same data, but visible at a glance from
-// across the room. Tournament-green = home, muted = draw, tournament-gold =
-// away. Width of each band is exactly proportional to its probability so the
-// favourite reads at a glance.
-function ProbBar({ home, draw, away }: { home: number; draw: number; away: number }) {
-  const total = home + draw + away;
-  if (total <= 0) return null;
-  const hPct = (home / total) * 100;
-  const dPct = (draw / total) * 100;
-  const aPct = (away / total) * 100;
-  const fmt = (p: number) => `${Math.round(p * 100)}%`;
-  return (
-    <div
-      title={`Home ${fmt(home)} · Draw ${fmt(draw)} · Away ${fmt(away)}`}
-      className="flex h-1.5 w-full overflow-hidden rounded-full bg-white/[0.04]"
-      role="img"
-      aria-label={`Win probability: home ${fmt(home)}, draw ${fmt(draw)}, away ${fmt(away)}`}
-    >
-      <div className="bg-[color:var(--color-tournament-green)]/70" style={{ width: `${hPct}%` }} />
-      <div className="bg-white/15" style={{ width: `${dPct}%` }} />
-      <div className="bg-[color:var(--color-tournament-gold)]/70" style={{ width: `${aPct}%` }} />
-    </div>
-  );
-}
 
 export function WCSchedule({
   fixtures,
@@ -208,7 +189,7 @@ export function WCSchedule({
                       </div>
 
                       <div className="flex min-w-0 items-center justify-end gap-1.5 text-right">
-                        <span className="truncate text-xs text-foreground sm:text-sm">{f.home.name}</span>
+                        <span className={`truncate text-xs sm:text-sm ${favouriteClass(modelPick, "home")}`}>{f.home.name}</span>
                         <TeamFlag logo={f.home.logo} name={f.home.name} size={16} />
                       </div>
 
@@ -216,7 +197,7 @@ export function WCSchedule({
 
                       <div className="flex min-w-0 items-center gap-1.5">
                         <TeamFlag logo={f.away.logo} name={f.away.name} size={16} />
-                        <span className="truncate text-xs text-foreground sm:text-sm">{f.away.name}</span>
+                        <span className={`truncate text-xs sm:text-sm ${favouriteClass(modelPick, "away")}`}>{f.away.name}</span>
                       </div>
 
                       <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5" />
@@ -224,35 +205,44 @@ export function WCSchedule({
 
                     {/* Engagement strip — only renders when we have model probs.
                         Lives OUTSIDE the Link wrapper so the inline picker's
-                        button clicks don't double-fire navigation. */}
+                        button clicks don't double-fire navigation. Two rows:
+                        bar + picker on top, colour-coded numbers + AI pick
+                        team name below — the numbers row is what makes the
+                        bar self-explanatory without a hover tooltip. */}
                     {hasProbs && (
-                      <div className="flex items-center gap-2.5 border-t border-white/[0.04] px-2.5 py-1.5 sm:gap-3 sm:px-3">
-                        <ProbBar
-                          home={p.homeProb!}
-                          draw={p.drawProb!}
-                          away={p.awayProb!}
-                        />
-                        {modelPick && (
-                          <span
-                            aria-label={`AI pick: ${modelPick === "1" ? f.home.name : modelPick === "2" ? f.away.name : "Draw"}`}
-                            className="inline-flex shrink-0 items-center gap-1 rounded border border-white/[0.06] bg-white/[0.02] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground"
-                          >
-                            <span className="text-muted-foreground/70">AI</span>
-                            <span className="text-foreground">
-                              {modelPick === "1" ? "H" : modelPick === "2" ? "A" : "D"}
-                            </span>
-                          </span>
-                        )}
-                        <WCVsYouPicker
-                          matchId={f.id}
-                          homeName={f.home.name}
-                          awayName={f.away.name}
-                          initialPick={userPick}
-                          isAuthed={!!isAuthed}
-                          isLocked={isLocked}
-                          modelPick={modelPick}
-                          variant="compact"
-                        />
+                      <div className="border-t border-white/[0.04] px-2.5 py-1.5 sm:px-3">
+                        <div className="flex items-center gap-2.5 sm:gap-3">
+                          <ProbBar
+                            className="flex-1"
+                            home={p.homeProb!}
+                            draw={p.drawProb!}
+                            away={p.awayProb!}
+                          />
+                          <WCVsYouPicker
+                            matchId={f.id}
+                            homeName={f.home.name}
+                            awayName={f.away.name}
+                            initialPick={userPick}
+                            isAuthed={!!isAuthed}
+                            isLocked={isLocked}
+                            modelPick={modelPick}
+                            variant="compact"
+                          />
+                        </div>
+                        <div className="mt-1 flex items-center justify-between gap-3">
+                          <ProbNumbersRow
+                            home={p.homeProb!}
+                            draw={p.drawProb!}
+                            away={p.awayProb!}
+                          />
+                          {modelPick && (
+                            <AiPickPill
+                              pick={modelPick}
+                              homeName={f.home.name}
+                              awayName={f.away.name}
+                            />
+                          )}
+                        </div>
                       </div>
                     )}
 

@@ -11,6 +11,14 @@ import type {
   GroupAdvancementProb,
   WCMatchPreview,
 } from "@/lib/world-cup";
+import { modelPickFromTriple, type WCPick } from "@/lib/wc-vs-you";
+import { WCVsYouPicker } from "@/components/wc-vs-you-picker";
+import {
+  ProbBar,
+  ProbNumbersRow,
+  AiPickPill,
+  favouriteClass,
+} from "@/components/wc-prob-display";
 
 interface WCGroupCardProps {
   group: WCGroup;
@@ -27,6 +35,10 @@ interface WCGroupCardProps {
   defaultOpen?: boolean;
   /** WC-AI-PREVIEW (2026-06-02) — Gemini previews keyed by fixture id. */
   previews?: Record<string, WCMatchPreview>;
+  /** WC-SCHEDULE-VITALITY-V2 — signed-in user's 1X2 picks keyed by fixture id. */
+  userPicks?: Record<string, WCPick>;
+  /** WC-SCHEDULE-VITALITY-V2 — needed for the inline picker's sign-in CTA. */
+  isAuthed?: boolean;
 }
 
 function formatTime(iso: string): string {
@@ -89,25 +101,34 @@ function FixtureRow({
   fixture,
   prediction,
   preview,
+  nowMs,
+  userPick,
+  isAuthed,
 }: {
   fixture: WCFixture;
   prediction: WCPredictionSlot | undefined;
   preview?: WCMatchPreview;
+  nowMs: number;
+  userPick: WCPick | null;
+  isAuthed: boolean;
 }) {
   const hasScore =
     fixture.status === "finished" && fixture.scoreHome != null && fixture.scoreAway != null;
-  // CALIBRATION-DISPLAY-CAP: cap per-match prediction probs at 70% to avoid
-  // overclaiming (model is structurally overconfident at the high-conf tail).
-  // Returns the display string (e.g. "70%+" when capped) rather than a number.
-  const pct = (v: number | null) => (v == null ? "0" : displayProb(v));
+  const isLocked = hasScore || new Date(fixture.date).getTime() <= nowMs;
+  const hasProbs =
+    prediction?.homeProb != null && prediction.drawProb != null && prediction.awayProb != null;
+  const modelPick = hasProbs ? modelPickFromTriple(prediction) : null;
 
   return (
-    <div className="rounded-lg border border-white/[0.06] bg-card/40 hover:border-white/[0.12] hover:bg-card/60">
+    <div className="overflow-hidden rounded-lg border border-white/[0.06] bg-card/40 hover:border-white/[0.12] hover:bg-card/60">
+      {/* Scan row — grid layout (1fr-auto-1fr on the team cells) means the
+          two team names are always equal width centred on the "v" axis no
+          matter how long the names are or what trailing chips render. */}
       <Link
         href={`/matches/${fixture.id}`}
-        className="wc-row-hover group flex items-center gap-2 rounded-lg px-2.5 py-2 sm:px-3 sm:py-2.5"
+        className="wc-row-hover group grid min-h-[44px] grid-cols-[44px_1fr_auto_1fr_auto] items-center gap-2 rounded-lg px-2.5 py-2 sm:grid-cols-[56px_1fr_auto_1fr_auto] sm:gap-3 sm:px-3 sm:py-2.5"
       >
-        <div className="w-10 shrink-0 text-center font-mono text-[10px] text-muted-foreground sm:w-12 sm:text-[11px]">
+        <div className="text-center font-mono text-[10px] text-muted-foreground sm:text-[11px]">
           {hasScore ? (
             <span className="font-semibold text-foreground">
               {fixture.scoreHome}–{fixture.scoreAway}
@@ -117,37 +138,68 @@ function FixtureRow({
           )}
         </div>
 
-        <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 text-right">
-          <span className="truncate text-xs text-foreground sm:text-sm">{fixture.home.name}</span>
+        <div className="flex min-w-0 items-center justify-end gap-1.5 text-right">
+          <span className={`truncate text-xs sm:text-sm ${favouriteClass(modelPick, "home")}`}>{fixture.home.name}</span>
           <TeamFlag logo={fixture.home.logo} name={fixture.home.name} size={16} />
         </div>
 
         <span className="text-[9px] text-muted-foreground/60">v</span>
 
-        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+        <div className="flex min-w-0 items-center gap-1.5">
           <TeamFlag logo={fixture.away.logo} name={fixture.away.name} size={16} />
-          <span className="truncate text-xs text-foreground sm:text-sm">{fixture.away.name}</span>
+          <span className={`truncate text-xs sm:text-sm ${favouriteClass(modelPick, "away")}`}>{fixture.away.name}</span>
         </div>
-
-        {prediction?.homeProb != null && prediction.awayProb != null && (
-          <div className="hidden shrink-0 items-center gap-1 font-mono text-[10px] text-muted-foreground sm:flex">
-            <span>{pct(prediction.homeProb)}</span>
-            <span className="text-muted-foreground/40">·</span>
-            <span>{pct(prediction.drawProb)}</span>
-            <span className="text-muted-foreground/40">·</span>
-            <span>{pct(prediction.awayProb)}</span>
-          </div>
-        )}
-
-        {fixture.venueName && (
-          <div className="hidden max-w-[180px] shrink-0 items-center gap-1 text-[10px] text-muted-foreground/60 lg:flex">
-            <MapPin className="size-3" />
-            <span className="truncate">{fixture.venueName}</span>
-          </div>
-        )}
 
         <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5" />
       </Link>
+
+      {/* Engagement strip — bar + picker on row 1; colour-coded percentages
+          + AI pick (with team name) on row 2. Same pattern WCSchedule uses
+          so the two views read identically. Sits OUTSIDE the Link so the
+          picker's button clicks don't double-fire navigation. */}
+      {hasProbs && (
+        <div className="border-t border-white/[0.04] px-2.5 py-1.5 sm:px-3">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <ProbBar
+              className="flex-1"
+              home={prediction!.homeProb!}
+              draw={prediction!.drawProb!}
+              away={prediction!.awayProb!}
+            />
+            <WCVsYouPicker
+              matchId={fixture.id}
+              homeName={fixture.home.name}
+              awayName={fixture.away.name}
+              initialPick={userPick}
+              isAuthed={isAuthed}
+              isLocked={isLocked}
+              modelPick={modelPick}
+              variant="compact"
+            />
+          </div>
+          <div className="mt-1 flex items-center justify-between gap-3">
+            <ProbNumbersRow
+              home={prediction!.homeProb!}
+              draw={prediction!.drawProb!}
+              away={prediction!.awayProb!}
+            />
+            {modelPick && (
+              <AiPickPill
+                pick={modelPick}
+                homeName={fixture.home.name}
+                awayName={fixture.away.name}
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      {fixture.venueName && (
+        <div className="hidden items-center gap-1 border-t border-white/[0.04] px-3 py-1 text-[10px] text-muted-foreground/60 lg:flex">
+          <MapPin className="size-3 shrink-0" />
+          <span className="truncate">{fixture.venueName}</span>
+        </div>
+      )}
 
       {preview && (
         <details className="group/preview border-t border-white/[0.04]">
@@ -180,6 +232,8 @@ export function WCGroupCard({
   nowMs,
   defaultOpen,
   previews,
+  userPicks,
+  isAuthed,
 }: WCGroupCardProps) {
   // Default-open once the first group fixture has kicked off, otherwise show
   // only the next 1-2 with a "show all" expand affordance.
@@ -283,7 +337,15 @@ export function WCGroupCard({
       {tournamentStarted ? (
         <div className="space-y-1.5 px-2.5 py-2.5 sm:px-3 sm:py-3">
           {sorted.map((f) => (
-            <FixtureRow key={f.id} fixture={f} prediction={predictions[f.id]} />
+            <FixtureRow
+              key={f.id}
+              fixture={f}
+              prediction={predictions[f.id]}
+              preview={previews?.[f.id]}
+              nowMs={nowMs}
+              userPick={userPicks?.[f.id] ?? null}
+              isAuthed={!!isAuthed}
+            />
           ))}
         </div>
       ) : (
@@ -314,6 +376,9 @@ export function WCGroupCard({
                 fixture={f}
                 prediction={predictions[f.id]}
                 preview={previews?.[f.id]}
+                nowMs={nowMs}
+                userPick={userPicks?.[f.id] ?? null}
+                isAuthed={!!isAuthed}
               />
             ))}
           </div>

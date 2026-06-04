@@ -418,12 +418,16 @@ function GroupsPanel({
   advancement,
   nowMs,
   previews,
+  userPicks,
+  isAuthed,
 }: {
   groups: WCGroup[];
   predictions: Record<string, WCPredictionSlot>;
   advancement: Record<string, GroupAdvancementProb>;
   nowMs: number;
   previews: Record<string, WCMatchPreview>;
+  userPicks: Record<string, WCPick>;
+  isAuthed: boolean;
 }) {
   if (groups.length === 0) {
     return (
@@ -474,6 +478,8 @@ function GroupsPanel({
             advancement={advancement}
             nowMs={nowMs}
             previews={previews}
+            userPicks={userPicks}
+            isAuthed={isAuthed}
           />
         ))}
       />
@@ -859,6 +865,8 @@ function ActiveTabPanel({
           advancement={advancement}
           nowMs={nowMs}
           previews={previews}
+          userPicks={userPicks}
+          isAuthed={isAuthed}
         />
       );
     case "knockouts":
