@@ -18,7 +18,13 @@ export const WORLD_CUP_LEAGUE_UUID = "108e7471-93af-42bb-81b6-841b9acfa985";
 
 // Phase 3 — national-team prediction source string. Engine writes to
 // predictions.source (NOT model_source — column was renamed pre-launch).
-export const NATIONAL_TEAM_MODEL_SOURCE = "national_team_v1";
+// WC-A4-FE-SWITCH (2026-06-05): flipped from `national_team_v1` (own model
+// only) to `national_team_v1_blended` (own × market consensus, Bayesian).
+// The blended source is populated by scripts/write_blended_predictions.py
+// (engine repo), runs as morning pipeline step 7/8 daily. Coexists with the
+// raw v1 source in `predictions` so this is a safe one-line revert if
+// blend quality degrades — change the literal back and re-deploy.
+export const NATIONAL_TEAM_MODEL_SOURCE = "national_team_v1_blended";
 
 // First match: 2026-06-11 19:00 UTC — Mexico v South Africa at Estadio Azteca
 export const WC_FIRST_KICKOFF_ISO = "2026-06-11T19:00:00Z";
