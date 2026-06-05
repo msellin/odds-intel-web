@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Trophy } from "lucide-react";
 import { OneScreenProof } from "@/components/one-screen-proof";
+import { CompetitorMatrix } from "@/components/competitor-matrix";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { CLVTrustBanner } from "@/components/clv-trust-banner";
@@ -264,6 +265,16 @@ export default async function LandingPage() {
           appearing all at once. Pure CSS, respects prefers-reduced-motion.
           Future upgrade path: swap to a real screen-recording video. */}
       <OneScreenProof />
+
+      <Separator />
+
+      {/* ───────── Competitor matrix (GROWTH-COMPARISON-MATRIX, Tier A #3) ────
+          Tier-based feature comparison. Each competitor column represents
+          one of 5 competitor "tiers"; killer row at the bottom is "Spans
+          all 5 tiers" — only OddsIntel ticks it. Honest about real gaps
+          (multi-bookmaker depth shown as ⏳ on roadmap; 3rd-party
+          verification same). */}
+      <CompetitorMatrix />
 
       <Separator />
 
