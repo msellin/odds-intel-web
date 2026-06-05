@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { Target, TrendingDown, TrendingUp, Minus, X, Lock, Info, ChevronDown } from "lucide-react";
 import { BetExplainButton } from "@/components/bet-explain-button";
+import { StakeSplitter } from "@/components/stake-splitter";
 import {
   Select,
   SelectContent,
@@ -340,6 +341,18 @@ function ExpandedPanel({
               </tr>
             </tbody>
           </table>
+
+          {/* GROWTH-STAKE-SPLITTER (Tier A #11) — multi-book stake split.
+              Renders for any tier (the component gates Elite internally
+              with an upgrade prompt for Pro/Free) and only when we have
+              at least one tracked book's odds for the pick. */}
+          {entry && (
+            <StakeSplitter
+              bookOdds={entry}
+              suggestedStakeUnits={bet.stake}
+              isElite={isElite}
+            />
+          )}
         </div>
       ) : null}
 
