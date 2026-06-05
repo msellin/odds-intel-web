@@ -1,9 +1,36 @@
 import { ImageResponse } from "next/og";
 import { NextRequest } from "next/server";
+import { createSupabasePublic } from "@/lib/supabase-public";
 
 export const runtime = "edge";
 
 const SIZE = { width: 1200, height: 630 };
+
+/**
+ * GROWTH-CLV-FIRST-MESSAGING (2026-06-05): pulls the current 30-day rolling
+ * CLV from dashboard_cache so the OG share card carries the same honesty
+ * signal as the landing hero / Telegram alert footer / email digest header.
+ *
+ * Best-effort: any error returns null and the caller renders a static
+ * link-only footer instead. Anon key + RLS-public table = safe to call
+ * from the edge runtime without service-role secrets.
+ */
+async function fetchCLV(): Promise<number | null> {
+  try {
+    const supabase = createSupabasePublic();
+    const { data } = await supabase
+      .from("dashboard_cache")
+      .select("elite_value_bets_30d")
+      .order("computed_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const blob = data?.elite_value_bets_30d as { clv_pct?: number | null } | null;
+    const pct = blob?.clv_pct;
+    return typeof pct === "number" ? pct : null;
+  } catch {
+    return null;
+  }
+}
 
 function selectionColor(selection: string, result: string) {
   if (result === "won") return "#22c55e";
@@ -37,6 +64,13 @@ export async function GET(request: NextRequest) {
   const selLabel = selection === "home" ? home : selection === "away" ? away : "Draw";
   const accentColor = selectionColor(selection, result);
   const bgColor = selectionBg(selection, result);
+
+  // CLV strip for the footer — current 30-day rolling CLV.
+  const clvPct = await fetchCLV();
+  const clvText =
+    clvPct != null
+      ? `${clvPct > 0 ? "+" : ""}${clvPct.toFixed(1)}% CLV (30d) — the honest scoreboard`
+      : "CLV-tracked — the honest scoreboard";
 
   return new ImageResponse(
     (
@@ -181,23 +215,50 @@ export async function GET(request: NextRequest) {
           )}
         </div>
 
-        {/* Footer */}
+        {/* Footer — CLV-first trust signal (GROWTH-CLV-FIRST-MESSAGING) */}
         <div
           style={{
             position: "absolute",
-            bottom: "36px",
+            bottom: "32px",
             left: "64px",
             right: "64px",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
+            gap: "24px",
           }}
         >
-          <div style={{ fontSize: "14px", color: "rgba(255,255,255,0.25)", fontFamily: "sans-serif" }}>
-            Track your bets at oddsintel.app
+          {/* LEFT — CLV stat strip */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "12px",
+              fontFamily: "sans-serif",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "16px",
+                fontWeight: 700,
+                color: clvPct != null && clvPct > 0 ? "#22c55e" : "rgba(255,255,255,0.6)",
+                letterSpacing: "0.5px",
+              }}
+            >
+              {clvText}
+            </div>
           </div>
-          <div style={{ fontSize: "14px", color: "rgba(255,255,255,0.2)", fontFamily: "monospace" }}>
-            oddsintel.app
+
+          {/* RIGHT — domain */}
+          <div
+            style={{
+              fontSize: "14px",
+              color: "rgba(255,255,255,0.35)",
+              fontFamily: "monospace",
+              letterSpacing: "0.5px",
+            }}
+          >
+            oddsintel.app/performance
           </div>
         </div>
       </div>
