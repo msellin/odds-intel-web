@@ -37,6 +37,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticPages: MetadataRoute.Sitemap = [
     { url: `${base}/`, lastModified: now, changeFrequency: "weekly", priority: 1 },
     { url: `${base}/matches`, lastModified: now, changeFrequency: "daily", priority: 0.9 },
+    { url: `${base}/value-bets`, lastModified: now, changeFrequency: "daily", priority: 0.85 },
+    { url: `${base}/pricing`, lastModified: now, changeFrequency: "monthly", priority: 0.9 },
     { url: `${base}/learn`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
     { url: `${base}/signup`, lastModified: now, changeFrequency: "monthly", priority: 0.7 },
     { url: `${base}/login`, lastModified: now, changeFrequency: "monthly", priority: 0.5 },
@@ -45,6 +47,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${base}/methodology`, lastModified: now, changeFrequency: "monthly", priority: 0.7 },
     { url: `${base}/how-it-works`, lastModified: now, changeFrequency: "monthly", priority: 0.7 },
     { url: `${base}/performance`, lastModified: now, changeFrequency: "daily", priority: 0.8 },
+    { url: `${base}/changelog`, lastModified: now, changeFrequency: "weekly", priority: 0.4 },
   ];
 
   // WC hub + sub-hubs. Hub + teams index get priority 0.8 (top-level destinations
@@ -111,6 +114,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     })),
   ];
 
+  // GROWTH-VS-PAGES (2026-06-05) — competitor comparison landing pages.
+  // High-intent SEO target for "[competitor] alternative" and
+  // "[competitor] vs" searches. Lazy-import VS_SLUGS to avoid pulling
+  // the full competitor data into the sitemap module budget.
+  const { VS_SLUGS } = await import("@/lib/vs-competitors");
+  const vsPages: MetadataRoute.Sitemap = [
+    { url: `${base}/vs`, lastModified: now, changeFrequency: "monthly" as const, priority: 0.7 },
+    ...VS_SLUGS.map((slug) => ({
+      url: `${base}/vs/${slug}`,
+      lastModified: now,
+      changeFrequency: "monthly" as const,
+      priority: 0.75,
+    })),
+  ];
+
   // Match detail pages — the highest-volume indexable surface.
   // Real lastModified comes from matches.updated_at (signals stale-vs-fresh accurately).
   const matchRows = await getMatchIdsForSitemap();
@@ -127,6 +145,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...wcTeamPages,
     ...wcInsightPages,
     ...predictionPages,
+    ...vsPages,
     ...glossaryPages,
     ...matchPages,
   ];
