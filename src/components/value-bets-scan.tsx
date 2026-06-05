@@ -766,7 +766,7 @@ export function ValueBetsScan({
       {/* League filter (Pro+) */}
       {isPro && leagues.length > 1 && (
         <Select value={league} onValueChange={(v) => setLeague(v ?? ALL)}>
-          <SelectTrigger className="h-8 w-[200px] text-xs" aria-label="Filter by league">
+          <SelectTrigger className="h-8 w-full text-xs sm:w-[200px]" aria-label="Filter by league">
             <SelectValue>{league === ALL ? "All leagues" : league}</SelectValue>
           </SelectTrigger>
           <SelectContent>

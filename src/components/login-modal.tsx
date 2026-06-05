@@ -80,7 +80,7 @@ export function LoginModal() {
         {/* Close button */}
         <button
           onClick={closeLoginModal}
-          className="absolute right-4 top-4 rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className="absolute right-4 top-4 rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground sm:p-1"
         >
           <X className="h-4 w-4" />
         </button>
