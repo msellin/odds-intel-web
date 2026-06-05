@@ -1,6 +1,24 @@
 import { createClient } from "@supabase/supabase-js";
+import { unstable_cache } from "next/cache";
 import { createSupabaseServer } from "./supabase-server";
 import { createSupabasePublic } from "./supabase-public";
+
+// LIGHTHOUSE-FIX-3 (2026-06-05): SSR data-fetch cache. Heavy queries used
+// by /matches + /value-bets are wrapped with unstable_cache so that bot
+// crawls (Lighthouse, Googlebot, etc.) don't pay full DB-query latency on
+// every request. Only safe for functions that use createSupabasePublic or
+// createSupabaseAdmin — anything reading cookies (createSupabaseServer)
+// can't be wrapped because the cache is request-independent.
+//
+// Revalidate windows:
+//   60s   — match data (aligns with pipeline odds-refresh cadence)
+//   120s  — today's bets / picks (refresh ~every 5-15 min in pipeline)
+//   300s  — performance extras + league hit rates (stable rollups)
+//   30s   — live snapshots (genuinely live data)
+const CACHE_60S = { revalidate: 60 };
+const CACHE_120S = { revalidate: 120 };
+const CACHE_300S = { revalidate: 300 };
+const CACHE_30S = { revalidate: 30 };
 
 // Service role client — bypasses RLS. Server-side only, never sent to browser.
 function createSupabaseAdmin() {
@@ -599,7 +617,8 @@ async function batchFetchSignalSummary(
  *   CREATE POLICY "Public read" ON odds_snapshots FOR SELECT USING (true);
  */
 // Cheap status counts — used for tab badges without fetching full match data
-export async function getMatchCounts(dayOffset = 0): Promise<{ live: number; upcoming: number; finished: number; total: number }> {
+// LIGHTHOUSE-FIX-3: wrapped with unstable_cache (60s) — see export below.
+const _getMatchCountsUncached = async (dayOffset = 0): Promise<{ live: number; upcoming: number; finished: number; total: number }> => {
   const supabase = createSupabasePublic();
   const now = new Date();
   const todayStart = new Date(now);
@@ -626,9 +645,17 @@ export async function getMatchCounts(dayOffset = 0): Promise<{ live: number; upc
   const finished = all.filter((r) => r.status === "finished").length;
   const upcoming = all.length - live - finished;
   return { live, upcoming, finished, total: all.length };
-}
+};
+export const getMatchCounts = unstable_cache(
+  _getMatchCountsUncached,
+  ["getMatchCounts_v1"],
+  CACHE_60S,
+);
 
-async function _fetchMatches(dayOffset: number, statusFilter: "all" | "active" | "finished"): Promise<PublicMatch[]> {
+// LIGHTHOUSE-FIX-3: wrapped with unstable_cache below (60s revalidate). The
+// uncached impl stays as a private helper; exports getActiveMatches /
+// getFinishedMatches / getPublicMatches are the cached entry points.
+async function _fetchMatchesUncached(dayOffset: number, statusFilter: "all" | "active" | "finished"): Promise<PublicMatch[]> {
   const supabase = createSupabasePublic();
 
   const now = new Date();
@@ -842,6 +869,14 @@ async function _fetchMatches(dayOffset: number, statusFilter: "all" | "active" |
   return deduped;
 }
 
+// LIGHTHOUSE-FIX-3: cached entry points. Cache key includes the filter so
+// active/finished/all each get their own cache slot. 60s revalidate aligns
+// with the pipeline's odds-refresh cadence.
+const _fetchMatches = unstable_cache(
+  _fetchMatchesUncached,
+  ["fetchMatches_v1"],
+  CACHE_60S,
+);
 export const getPublicMatches = (dayOffset = 0) => _fetchMatches(dayOffset, "all");
 export const getActiveMatches = (dayOffset = 0) => _fetchMatches(dayOffset, "active");
 export const getFinishedMatches = (dayOffset = 0) => _fetchMatches(dayOffset, "finished");
@@ -1111,9 +1146,10 @@ export interface LeagueHitRate {
 
 const LEAGUE_HIT_RATE_MIN_SETTLED = 10;
 
-export async function getLeagueHitRates(
+// LIGHTHOUSE-FIX-3: wrapped with unstable_cache (300s) — see export below.
+const _getLeagueHitRatesUncached = async (
   daysBack: number = 90
-): Promise<Record<string, LeagueHitRate>> {
+): Promise<Record<string, LeagueHitRate>> => {
   const supabase = createSupabaseAdmin();
   const since = new Date(Date.now() - daysBack * 86_400_000).toISOString();
   type Row = {
@@ -1155,9 +1191,15 @@ export async function getLeagueHitRates(
     out[key] = { hitRate: wins / settled, settled };
   }
   return out;
-}
+};
+export const getLeagueHitRates = unstable_cache(
+  _getLeagueHitRatesUncached,
+  ["getLeagueHitRates_v1"],
+  CACHE_300S,
+);
 
-export async function getTodayBets(cohort: BetCohort = "prematch"): Promise<LiveBet[]> {
+// LIGHTHOUSE-FIX-3: wrapped with unstable_cache (120s) — see export below.
+const _getTodayBetsUncached = async (cohort: BetCohort = "prematch"): Promise<LiveBet[]> => {
   // Use service role so RLS on simulated_bets doesn't block the server.
   // Tier-based sanitization happens in page.tsx before data reaches the client.
   const supabase = createSupabaseAdmin();
@@ -1213,7 +1255,12 @@ export async function getTodayBets(cohort: BetCohort = "prematch"): Promise<Live
   const { data, error } = await q;
   if (error || !data) return [];
   return (data as SimBetRow[]).map((row) => toBet(row));
-}
+};
+export const getTodayBets = unstable_cache(
+  _getTodayBetsUncached,
+  ["getTodayBets_v1"],
+  CACHE_120S,
+);
 
 // Top value bet for a specific match today — used in MatchVerdictCard.
 // Service role required — RLS on simulated_bets blocks anon/user reads.
@@ -1272,7 +1319,8 @@ export interface FreePick {
   result: string;
 }
 
-export async function getFreeDailyPick(): Promise<{ pick: FreePick | null; totalCount: number }> {
+// LIGHTHOUSE-FIX-3: wrapped with unstable_cache (120s) — see export below.
+const _getFreeDailyPickUncached = async (): Promise<{ pick: FreePick | null; totalCount: number }> => {
   const supabase = createSupabaseAdmin();
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
@@ -1331,7 +1379,12 @@ export async function getFreeDailyPick(): Promise<{ pick: FreePick | null; total
     },
     totalCount,
   };
-}
+};
+export const getFreeDailyPick = unstable_cache(
+  _getFreeDailyPickUncached,
+  ["getFreeDailyPick_v1"],
+  CACHE_120S,
+);
 
 export interface BotRecord {
   id: string;
@@ -4668,8 +4721,9 @@ export async function getLastLiveSnapshotAge(): Promise<string | null> {
 }
 
 /** Most recent odds_snapshots.timestamp across the given match IDs.
- *  Used by the value-bets page to show "Verified Xm ago". */
-export async function getOddsVerifiedAt(matchIds: string[]): Promise<string | null> {
+ *  Used by the value-bets page to show "Verified Xm ago".
+ *  LIGHTHOUSE-FIX-3: wrapped with unstable_cache (60s) — see export below. */
+const _getOddsVerifiedAtUncached = async (matchIds: string[]): Promise<string | null> => {
   if (matchIds.length === 0) return null;
   const admin = createSupabaseAdmin();
   const { data } = await admin
@@ -4680,7 +4734,12 @@ export async function getOddsVerifiedAt(matchIds: string[]): Promise<string | nu
     .limit(1)
     .single();
   return (data as { timestamp: string } | null)?.timestamp ?? null;
-}
+};
+export const getOddsVerifiedAt = unstable_cache(
+  _getOddsVerifiedAtUncached,
+  ["getOddsVerifiedAt_v1"],
+  CACHE_60S,
+);
 
 export interface BookOddsEntry {
   unibet: number | null;
@@ -4689,10 +4748,11 @@ export interface BookOddsEntry {
 }
 
 /** Per-bet Unibet + Bet365 odds for value-bets bookmaker display (Elite only).
- *  Returns a map keyed by bet ID. */
-export async function getValueBetBookOdds(
+ *  Returns a map keyed by bet ID.
+ *  LIGHTHOUSE-FIX-3: wrapped with unstable_cache (60s) — see export below. */
+const _getValueBetBookOddsUncached = async (
   bets: Array<{ id: string; matchId: string; market: string; selection: string }>
-): Promise<Record<string, BookOddsEntry>> {
+): Promise<Record<string, BookOddsEntry>> => {
   if (bets.length === 0) return {};
   const admin = createSupabaseAdmin();
   const matchIds = Array.from(new Set(bets.map((b) => b.matchId)));
@@ -4726,7 +4786,12 @@ export async function getValueBetBookOdds(
     };
   }
   return out;
-}
+};
+export const getValueBetBookOdds = unstable_cache(
+  _getValueBetBookOddsUncached,
+  ["getValueBetBookOdds_v1"],
+  CACHE_60S,
+);
 
 // ─── Public performance extras ─────────────────────────────────────────────
 // Feeds /performance's cumulative chart, calibration table, streak badges,
@@ -4753,7 +4818,10 @@ export interface PublicPerformanceExtras {
   botRecentRoi: Record<string, { roi: number; settled: number }>;
 }
 
-export async function getPublicPerformanceExtras(): Promise<PublicPerformanceExtras> {
+// LIGHTHOUSE-FIX-3: wrapped with unstable_cache (300s) — see export below.
+// 5-min cache is fine since this powers the cumulative-PnL chart that
+// updates once daily as bets settle.
+const _getPublicPerformanceExtrasUncached = async (): Promise<PublicPerformanceExtras> => {
   const admin = createSupabaseAdmin();
   // 90-day chart window covers the launch-to-now visual story without bloating
   // the response. Settled bets only — pending have no P&L yet.
@@ -4869,7 +4937,12 @@ export async function getPublicPerformanceExtras(): Promise<PublicPerformanceExt
   }
 
   return { cumulative, calibration, streaks, botRecentRoi };
-}
+};
+export const getPublicPerformanceExtras = unstable_cache(
+  _getPublicPerformanceExtrasUncached,
+  ["getPublicPerformanceExtras_v1"],
+  CACHE_300S,
+);
 
 // ── Model v2 era stats ────────────────────────────────────────────────────────
 
