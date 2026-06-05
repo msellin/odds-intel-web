@@ -30,26 +30,24 @@ const sampleBookmakers = [
   { name: "Unibet",      h: "2.05", d: "3.50", a: "1.90", bestH: false, bestD: true,  bestA: true  },
 ];
 
+// GROWTH-COPY-DENSITY-AUDIT Day 2 (2026-06-06): FAQ 5 → 3. Dropped:
+//   - "Which bookmakers are compared?" (answered by the SEO <dl> block
+//     which already shows "13 bookmakers" at the top of the landing)
+//   - "What is CLV tracking?" (covered by the 'CLV, not ROI' honest-
+//     numbers card with a link to /learn/closing-line-value)
+// Kept the coverage / how-picks-work / where-picks-go funnel triad.
 const faqItems = [
   {
-    q: "What sports and leagues does OddsIntel cover?",
-    a: "Football (soccer) — 280+ leagues worldwide, including the Premier League, La Liga, Bundesliga, Serie A, Ligue 1, Champions League, and hundreds of lower-division and international leagues. More sports are on the roadmap.",
-  },
-  {
-    q: "Which bookmakers are compared?",
-    a: "We track 13 major European bookmakers. Free accounts see the single best available odds; Pro unlocks the full comparison across all bookmakers.",
+    q: "What does OddsIntel cover?",
+    a: "Football — 280+ leagues including the Premier League, La Liga, Bundesliga, Serie A, Ligue 1, Champions League, plus hundreds of lower-division and international leagues. More sports are on the roadmap.",
   },
   {
     q: "How do the AI picks work?",
-    a: "Our model combines bookmaker pricing, team form, H2H records, confirmed lineups, and market movement. On Over/Under 1.5 goals our top pick hits 75% of the time across 21,831 matches. When the model also spots a market edge — where our probability beats the bookmaker line — the match is flagged as a value bet. Accuracy is not the same as profitability: even an 80%-accurate pick at 1.10 odds loses money long-term. That's why we publish CLV (closing line value), not just hit rate.",
-  },
-  {
-    q: "What is CLV tracking?",
-    a: "Closing Line Value (CLV) measures whether a bet was placed at better odds than where the market closed. It's the most reliable long-term indicator of a profitable strategy. OddsIntel Elite tracks CLV for every AI model pick, so you can see whether the model is consistently finding genuine value.",
+    a: "The model blends bookmaker pricing, form, H2H, confirmed lineups, and market movement. On Over/Under 1.5 the top pick hits 75% across 21,831 matches. Where the model also beats the bookmaker line, the match is flagged as a value bet. Accuracy alone is misleading (an 80%-accurate pick at 1.10 odds still loses money) — which is why we publish CLV (closing line value), not just hit rate.",
   },
   {
     q: "Where do the picks go?",
-    a: "Every value bet is logged immutably the moment it's identified — pre-kickoff, timestamped, never edited. You can see the running track record at /performance. We also send daily picks straight to Telegram so you don't have to remember to check.",
+    a: "Every value bet is logged immutably pre-kickoff — timestamped, never edited. Running track record at /performance. Daily picks also push to Telegram so you don't have to check.",
   },
 ];
 
@@ -123,10 +121,12 @@ export default async function LandingPage() {
             Beat the{" "}
             <span className="text-green-400">bookmakers</span>.
           </h1>
+          {/* GROWTH-COPY-DENSITY-AUDIT Day 2 (2026-06-06): hero subhead
+              28 → 13 words. The "so you can place them before the value
+              evaporates" clause was redundant with "before kickoff". */}
           <p className="mx-auto mt-6 max-w-2xl text-balance text-lg text-foreground/85 sm:text-xl">
-            AI finds where today&apos;s matches are mispriced. We send the picks
-            to your <span className="text-sky-300 font-medium">Telegram</span> before kickoff —
-            so you can place them before the value evaporates.
+            AI spots where today&apos;s matches are mispriced. Pushed to your{" "}
+            <span className="text-sky-300 font-medium">Telegram</span> before kickoff.
           </p>
 
           {/* GROWTH-COPY-DENSITY-AUDIT Day 1 (2026-06-06) — single
@@ -176,8 +176,9 @@ export default async function LandingPage() {
               See Today&apos;s Picks →
             </Button>
           </div>
+          {/* GROWTH-COPY-DENSITY-AUDIT Day 2: tightened from 12 to 5 words. */}
           <p className="mt-4 text-xs text-muted-foreground">
-            No credit card required. Free forever. Cancel any time on paid plans.
+            Free forever. No credit card.
           </p>
         </div>
 
@@ -320,17 +321,14 @@ export default async function LandingPage() {
 
       <Separator />
 
-      {/* ───────── Honest numbers — drawdown / verification / CLV ───────── */}
+      {/* ───────── Honest numbers — drawdown / verification / CLV ─────────
+          GROWTH-COPY-DENSITY-AUDIT Day 2 (2026-06-06): removed the preachy
+          preamble ("Honest about how this works" H2 + "Three things most
+          prediction sites hide. We publish them on purpose." subtitle).
+          The 3 cards each carry their own label and number — they don't
+          need narration. Saves ~16 words of meta-positioning prose. */}
       <section className="py-14">
         <div className="mx-auto max-w-5xl px-4 sm:px-6">
-          <div className="mb-8 text-center">
-            <h2 className="text-2xl font-bold tracking-tight text-foreground">
-              Honest about how this works
-            </h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Three things most prediction sites hide. We publish them on purpose.
-            </p>
-          </div>
           <div className="grid gap-4 sm:grid-cols-3">
             <Link
               href="/methodology"
@@ -371,35 +369,13 @@ export default async function LandingPage() {
 
       <Separator />
 
-      {/* ───────── Compact pricing CTA — full cards moved to /pricing 2026-06-05 ───────── */}
-      <section className="py-10" id="pricing">
-        <div className="mx-auto max-w-3xl px-4 text-center sm:px-6">
-          <p className="text-sm text-muted-foreground">
-            Free forever for fixtures, scores, and one daily AI pick.
-            Pro from <span className="font-mono text-foreground">€4.99/mo</span>.
-            Elite from <span className="font-mono text-foreground">€14.99/mo</span>.
-            Cancel any time.
-          </p>
-          <div className="mt-4">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="border border-white/[0.12] hover:bg-white/[0.05]"
-              nativeButton={false}
-              render={<Link href="/pricing" />}
-            >
-              See all plans →
-            </Button>
-          </div>
-        </div>
-      </section>
-
-      <Separator />
-
-      {/* Feature comparison matrix removed from landing 2026-06-05 — duplicated
-          the pricing cards directly above + /how-it-works. Pricing should be
-          asked for once on the landing, not three times. Full feature matrix
-          still available on /how-it-works for users who want the deep dive. */}
+      {/* GROWTH-COPY-DENSITY-AUDIT Day 2 (2026-06-06): removed the standalone
+          compact pricing CTA section (Pro €4.99 / Elite €14.99 + "See all
+          plans" button). Pricing was being asked 3× on the landing — this
+          dedicated middle slot is the redundant one. Hero CTA already links
+          to /signup; Telegram CTA mentions Pro/Elite; footer carries the
+          cancel-any-time line. Pricing-curious visitors reach /pricing via
+          the nav. Saves ~30 words + one full section. */}
 
       {/* ───────── FAQ ─────────
           GROWTH-MOBILE-LANDING-V2 (2026-06-05): switched from always-
@@ -471,10 +447,11 @@ export default async function LandingPage() {
           <h2 className="text-balance text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
             Get tomorrow&apos;s value bets in your Telegram.
           </h2>
+          {/* GROWTH-COPY-DENSITY-AUDIT Day 2: 29 → 14 words. Cut the "place it
+              before the value evaporates" tail — same idea already in the hero
+              subhead, repeated phrasing was the over-selling tell. */}
           <p className="mx-auto mt-3 max-w-xl text-balance text-sm text-muted-foreground sm:text-base">
-            Pre-kickoff · Pre-line-movement · Pre-everything. Every pick the model
-            finds, sent to your phone the moment it&apos;s identified — so you can
-            place it before the value evaporates.
+            Every pick the model finds, pushed to your phone pre-kickoff.
           </p>
           <div className="mt-7 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
             <Button
