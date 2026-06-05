@@ -3587,6 +3587,137 @@ export const PREDICTION_LEAGUES = [
 
 export type PredictionLeagueSlug = (typeof PREDICTION_LEAGUES)[number]["slug"];
 
+// ─── Per-fixture prediction pages (GROWTH-SEO-CONTENT-ENGINE Phase 1) ───────
+// One indexable URL per upcoming fixture in a covered league. URL shape:
+//   /predictions/[league-slug]/[fixture-slug]
+// where fixture-slug looks like "manchester-city-vs-arsenal-2026-12-08".
+//
+// Forebet/PredictZ pattern: programmatic content-rich pages targeting
+// long-tail "[home] vs [away] prediction" Google searches. Each page must
+// be content-rich enough to avoid the thin-content penalty — we use the
+// AI-generated match_previews + model probability + signals + crests.
+
+/** Slugify a team name for URLs: ASCII-folded, lowercased, hyphenated. */
+export function slugifyTeamName(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/'/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+/** Build a fixture slug from home / away / kickoff. */
+export function fixtureSlug(homeName: string, awayName: string, kickoff: string | Date): string {
+  const d = typeof kickoff === "string" ? new Date(kickoff) : kickoff;
+  const isoDate = d.toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
+  return `${slugifyTeamName(homeName)}-vs-${slugifyTeamName(awayName)}-${isoDate}`;
+}
+
+export interface FixtureSitemapEntry {
+  matchId: string;
+  leagueSlug: string;
+  fixtureSlug: string;
+  kickoff: string;
+  status: string;
+}
+
+/**
+ * Returns every fixture in covered prediction leagues for sitemap generation
+ * + ISR static params. Window: 30 days back, 21 days forward — matches the
+ * sitemap match-page window. Excludes matches without an ensemble prediction
+ * (would render empty pages → thin content penalty).
+ */
+export async function getPredictionFixturesForSitemap(): Promise<FixtureSitemapEntry[]> {
+  const admin = createSupabaseAdmin();
+  const leagueIds = PREDICTION_LEAGUES.map((l) => l.leagueId);
+  const leagueSlugByid = new Map(PREDICTION_LEAGUES.map((l) => [l.leagueId, l.slug]));
+  const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
+  const until = new Date(Date.now() + 21 * 86_400_000).toISOString();
+
+  const { data, error } = await admin
+    .from("matches")
+    .select("id, date, status, league_id, home_team:home_team_id(name), away_team:away_team_id(name)")
+    .in("league_id", leagueIds)
+    .gte("date", since)
+    .lte("date", until)
+    .order("date", { ascending: true })
+    .range(0, 4999);
+  if (error || !data) return [];
+
+  type Row = {
+    id: string;
+    date: string;
+    status: string;
+    league_id: string;
+    home_team: { name: string } | { name: string }[] | null;
+    away_team: { name: string } | { name: string }[] | null;
+  };
+  return (data as Row[]).flatMap((m) => {
+    const leagueSlug = leagueSlugByid.get(m.league_id);
+    const home = Array.isArray(m.home_team) ? m.home_team[0] : m.home_team;
+    const away = Array.isArray(m.away_team) ? m.away_team[0] : m.away_team;
+    if (!leagueSlug || !home?.name || !away?.name) return [];
+    return [{
+      matchId: m.id,
+      leagueSlug,
+      fixtureSlug: fixtureSlug(home.name, away.name, m.date),
+      kickoff: m.date,
+      status: m.status,
+    }];
+  });
+}
+
+/**
+ * Resolve a (league-slug, fixture-slug) URL pair to a match_id. Returns null
+ * if the slug doesn't match a known fixture. Used by the per-fixture page.
+ */
+export async function resolveFixtureSlug(
+  leagueSlug: string,
+  fixtureSlugParam: string,
+): Promise<{ matchId: string } | null> {
+  const leagueMeta = PREDICTION_LEAGUES.find((l) => l.slug === leagueSlug);
+  if (!leagueMeta) return null;
+
+  // Parse the fixture slug — last 10 chars are date, rest is home-vs-away
+  // (we don't try to round-trip the team names because slugifyTeamName is
+  // lossy; instead we filter matches in the same league on that date, then
+  // pick the one whose recomputed slug matches).
+  const match = fixtureSlugParam.match(/^(.+)-(\d{4}-\d{2}-\d{2})$/);
+  if (!match) return null;
+  const [, _teams, dateStr] = match;
+
+  const admin = createSupabaseAdmin();
+  // Pull all fixtures in this league on this UTC date — typically 0-10 rows
+  const dayStart = `${dateStr}T00:00:00Z`;
+  const dayEnd = `${dateStr}T23:59:59Z`;
+  const { data, error } = await admin
+    .from("matches")
+    .select("id, date, home_team:home_team_id(name), away_team:away_team_id(name)")
+    .eq("league_id", leagueMeta.leagueId)
+    .gte("date", dayStart)
+    .lte("date", dayEnd)
+    .range(0, 19);
+  if (error || !data || data.length === 0) return null;
+  type Row = {
+    id: string;
+    date: string;
+    home_team: { name: string } | { name: string }[] | null;
+    away_team: { name: string } | { name: string }[] | null;
+  };
+  for (const m of data as Row[]) {
+    const home = Array.isArray(m.home_team) ? m.home_team[0] : m.home_team;
+    const away = Array.isArray(m.away_team) ? m.away_team[0] : m.away_team;
+    if (!home?.name || !away?.name) continue;
+    if (fixtureSlug(home.name, away.name, m.date) === fixtureSlugParam) {
+      return { matchId: m.id };
+    }
+  }
+  return null;
+}
+
 /** Per-league fixture counts for the next 21 days, keyed by leagueId.
  * Used by the predictions index — page is ISR-cached, so this runs at most once per revalidate window. */
 export async function getPredictionLeagueCounts(): Promise<Record<string, number>> {

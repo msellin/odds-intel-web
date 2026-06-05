@@ -116,6 +116,25 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     })),
   ];
 
+  // GROWTH-SEO-CONTENT-ENGINE Phase 1 (2026-06-05): per-fixture prediction
+  // pages — every fixture in covered leagues for next 21d + past 30d gets a
+  // dedicated indexable URL. Lazy-import the helper to keep the static
+  // imports tight, and fail-safe if the DB query errors out (sitemap should
+  // never crash on per-fixture issues).
+  let predictionFixturePages: MetadataRoute.Sitemap = [];
+  try {
+    const { getPredictionFixturesForSitemap } = await import("@/lib/engine-data");
+    const fixtures = await getPredictionFixturesForSitemap();
+    predictionFixturePages = fixtures.map((f) => ({
+      url: `${base}/predictions/${f.leagueSlug}/${f.fixtureSlug}`,
+      lastModified: new Date(f.kickoff),
+      changeFrequency: "hourly" as const,
+      priority: 0.7,
+    }));
+  } catch {
+    predictionFixturePages = [];
+  }
+
   // GROWTH-VS-PAGES (2026-06-05) — competitor comparison landing pages.
   // High-intent SEO target for "[competitor] alternative" and
   // "[competitor] vs" searches. Lazy-import VS_SLUGS to avoid pulling
@@ -147,6 +166,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...wcTeamPages,
     ...wcInsightPages,
     ...predictionPages,
+    ...predictionFixturePages,
     ...vsPages,
     ...glossaryPages,
     ...matchPages,

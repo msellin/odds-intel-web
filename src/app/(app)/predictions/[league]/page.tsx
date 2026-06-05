@@ -9,6 +9,7 @@ import { ChevronLeft, TrendingUp, Calendar } from "lucide-react";
 import {
   getLeaguePredictions,
   PREDICTION_LEAGUES,
+  fixtureSlug,
 } from "@/lib/engine-data";
 import { getCountryFlag } from "@/lib/country-flags";
 import { TeamCrest } from "@/components/team-crest";
@@ -52,16 +53,22 @@ function ModelCallBadge({ call, confidence }: { call: "home" | "draw" | "away"; 
 }
 
 
-function MatchCard({ match }: { match: LeaguePredictionMatch }) {
+function MatchCard({ match, leagueSlug }: { match: LeaguePredictionMatch; leagueSlug: string }) {
   const kickoff = new Date(match.kickoff);
   const timeStr = kickoff.toLocaleTimeString("en-GB", {
     hour: "2-digit", minute: "2-digit", timeZone: "UTC",
   });
   const hasPrediction = match.homeProb !== null;
+  // GROWTH-SEO-CONTENT-ENGINE Phase 1 (2026-06-05): link to the per-fixture
+  // SEO page rather than directly to /matches/[id]. The fixture page is the
+  // indexable surface that ranks for "[home] vs [away] prediction" Google
+  // searches; from there users can click through to /matches/[id] for live
+  // odds + lineups.
+  const fixtureUrl = `/predictions/${leagueSlug}/${fixtureSlug(match.homeTeam, match.awayTeam, match.kickoff)}`;
 
   return (
     <Link
-      href={`/matches/${match.id}`}
+      href={fixtureUrl}
       className="group flex h-full flex-col rounded-xl border border-white/[0.06] bg-card/40 p-3.5 transition-colors hover:bg-white/[0.04] hover:border-white/10"
     >
       {/* Time + model badge */}
@@ -266,7 +273,7 @@ export default async function LeaguePredictionsPage({
                 </h2>
                 <div className="grid gap-3 lg:grid-cols-2">
                   {dayMatches.map((match) => (
-                    <MatchCard key={match.id} match={match} />
+                    <MatchCard key={match.id} match={match} leagueSlug={slug} />
                   ))}
                 </div>
               </section>
