@@ -57,6 +57,45 @@
   --color-tournament-green: #06d6a0;
 }
 
+/* ── GROWTH-ONE-SCREEN-PROOF — animated 8-tabs vs 1-screen loop ─────────────
+   Two tracks running on the same 14s cycle. The "tabs" track fades 8 tab
+   chips in sequentially with --osp-delay (set per chip via inline style)
+   so the visitor watches the routine accumulate. Halfway through the
+   cycle they all dim, and the "result" track lights up to show the
+   OddsIntel one-screen equivalent with the same info consolidated.
+
+   Respects prefers-reduced-motion: reduce by skipping the animation
+   entirely (both sides show their final state, which is also legible).
+*/
+@keyframes osp-tab {
+  0%, 5%   { opacity: 0; transform: translateY(6px); }
+  18%, 60% { opacity: 1; transform: translateY(0);   }
+  68%, 95% { opacity: 0.25; transform: translateY(0); }
+  100%     { opacity: 0; transform: translateY(-4px); }
+}
+@keyframes osp-result {
+  0%, 55%  { opacity: 0.1; transform: scale(0.985); }
+  68%, 92% { opacity: 1;   transform: scale(1);     }
+  100%     { opacity: 0.4; transform: scale(0.99);  }
+}
+.osp-tab {
+  animation: osp-tab 14s ease-in-out infinite both;
+  animation-delay: var(--osp-delay, 0s);
+  opacity: 0;
+}
+.osp-result {
+  animation: osp-result 14s ease-in-out infinite both;
+  opacity: 0.1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .osp-tab,
+  .osp-result {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* ── /world-cup motion utilities — keep small, reusable, no JS ────────────── */
 @keyframes wc-fade-in {
   from { opacity: 0; transform: translateY(4px); }

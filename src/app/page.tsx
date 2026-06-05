@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { X, Trophy } from "lucide-react";
+import { Trophy } from "lucide-react";
+import { OneScreenProof } from "@/components/one-screen-proof";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { CLVTrustBanner } from "@/components/clv-trust-banner";
@@ -20,17 +21,6 @@ function wcBannerHeadline(): string {
   }
   return "World Cup 2026 — bracket challenge live";
 }
-
-const brokenTabs = [
-  "SoccerStats",
-  "Transfermarkt",
-  "WhoScored",
-  "OddsPortal",
-  "PremierInjuries",
-  "Twitter / X",
-  "Weather.com",
-  "FBref",
-];
 
 const sampleBookmakers = [
   { name: "Bet365",      h: "2.10", d: "3.45", a: "1.85", bestH: false, bestD: false, bestA: false },
@@ -268,37 +258,12 @@ export default async function LandingPage() {
         </div>
       </section>
 
-      {/* ───────── Problem / 8 tabs ───────── */}
-      <section className="bg-card/20 py-14">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-12">
-            <div className="flex flex-col justify-center gap-4 rounded-xl border border-white/[0.06] bg-white/[0.02] p-8 md:col-span-4">
-              <h2 className="text-2xl font-bold tracking-tight text-foreground">
-                Stop opening 8 tabs.
-              </h2>
-              <p className="text-sm leading-relaxed text-muted-foreground">
-                By the time you&apos;ve checked injuries, lineups, and odds movement across 8 different sites, the value is already gone.
-              </p>
-            </div>
-            <div className="flex flex-col justify-center rounded-xl border border-white/[0.06] p-8 md:col-span-8">
-              <p className="mb-4 text-xs font-medium uppercase tracking-widest text-muted-foreground">
-                Your typical match-day routine
-              </p>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {brokenTabs.map((tab) => (
-                  <div key={tab} className="flex items-center gap-2 rounded-md bg-muted/30 px-3 py-2 text-sm">
-                    <X className="size-3.5 shrink-0 text-red-500/70" />
-                    <span className="text-muted-foreground">{tab}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-4 rounded-lg border border-green-500/20 bg-green-500/5 px-4 py-2.5 text-center">
-                <span className="font-mono text-sm text-green-400">OddsIntel: One screen. 2 seconds.</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+      {/* ───────── One-screen-proof (GROWTH-ONE-SCREEN-PROOF, Tier A #2) ──────
+          Replaces the static "Stop opening 8 tabs" panel with an animated
+          side-by-side: 8 tabs accumulate over ~6s vs 1 OddsIntel screen
+          appearing all at once. Pure CSS, respects prefers-reduced-motion.
+          Future upgrade path: swap to a real screen-recording video. */}
+      <OneScreenProof />
 
       <Separator />
 
