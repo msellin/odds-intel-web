@@ -515,6 +515,20 @@ export default async function LandingPage() {
                 height={54}
               />
             </a>
+            <a
+              href="https://aiboom.tools"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="opacity-80 transition-opacity hover:opacity-100"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="https://aiboom.tools/badge/badge_dark.svg"
+                alt="Featured on AIBoom.Tools"
+                width={120}
+                height={32}
+              />
+            </a>
           </div>
         </div>
       </section>

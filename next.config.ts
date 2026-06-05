@@ -40,7 +40,7 @@ const nextConfig: NextConfig = {
               // GROWTH-DIRECTORY-STACK (2026-06-05): allow directory-badge
               // sources so the reciprocal-backlink badges in the landing
               // footer render. Add new domains here as new badges land.
-              "img-src 'self' data: blob: https://*.supabase.co https://media.api-sports.io https://twelve.tools https://wired.business",
+              "img-src 'self' data: blob: https://*.supabase.co https://media.api-sports.io https://twelve.tools https://wired.business https://aiboom.tools",
               "font-src 'self'",
               "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.sentry.io https://api.stripe.com",
               "frame-src 'self' https://js.stripe.com https://hooks.stripe.com",
