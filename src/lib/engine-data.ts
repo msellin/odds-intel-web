@@ -466,6 +466,11 @@ export interface LiveSnapshot {
   score_home: number;
   score_away: number;
   minute: number;
+  /** Stoppage-time minutes — 0 in regulation, 1-10 typical during 1H+2H stoppage.
+      LIVE-STOPPAGE-TIME (2026-06-05): populated by the engine's live tracker
+      from API-Football's `status.extra`. UI uses it to render "90+5'" instead
+      of just "90'" during late-game stoppage. */
+  added_time?: number | null;
   captured_at: string;
 }
 
@@ -2454,7 +2459,7 @@ export async function getLiveSnapshots(matchIds: string[]): Promise<LiveSnapshot
   const supabase = createSupabasePublic();
   const { data, error } = await supabase
     .from("live_match_snapshots")
-    .select("match_id, score_home, score_away, minute, captured_at")
+    .select("match_id, score_home, score_away, minute, added_time, captured_at")
     .in("match_id", matchIds)
     .order("captured_at", { ascending: false });
   if (error || !data) return [];

@@ -58,7 +58,7 @@ export function MatchScoreDisplay({
           </span>
           <span className="inline-flex items-center gap-1.5 rounded bg-green-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-green-400 mt-1">
             <span className="size-1.5 animate-pulse rounded-full bg-green-400" />
-            LIVE {snapshot.minute}&apos;
+            LIVE {snapshot.minute}{snapshot.added_time ? `+${snapshot.added_time}` : ""}&apos;
           </span>
         </div>
       );
@@ -91,7 +91,7 @@ export function MatchScoreDisplay({
           </span>
           <span className="inline-flex items-center gap-1.5 rounded bg-green-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-green-400">
             <span className="size-1.5 animate-pulse rounded-full bg-green-400" />
-            LIVE {snapshot.minute}&apos;
+            LIVE {snapshot.minute}{snapshot.added_time ? `+${snapshot.added_time}` : ""}&apos;
           </span>
         </div>
         <span className="text-lg font-semibold text-foreground">{awayTeam}</span>
