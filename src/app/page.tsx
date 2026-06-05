@@ -149,7 +149,7 @@ export default async function LandingPage() {
               <span className="font-mono font-bold text-foreground/90">
                 {heroCumHasData && heroCumulative?.n_settled != null
                   ? heroCumulative.n_settled.toLocaleString()
-                  : "1,214"}
+                  : "1,176"}
               </span>{" "}
               paper bets
             </span>
@@ -158,7 +158,7 @@ export default async function LandingPage() {
               <span className="font-mono font-bold text-foreground/90">
                 {heroCumHasData && heroCumulative?.days != null
                   ? heroCumulative.days
-                  : 33}
+                  : 36}
               </span>{" "}
               days
             </span>
@@ -428,7 +428,7 @@ export default async function LandingPage() {
             className="flex items-center gap-1.5 transition-colors hover:text-foreground"
           >
             <span className="size-1.5 rounded-full bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.7)]" aria-hidden />
-            <span>Paper-bet chain unbroken since 2026-05-03 →</span>
+            <span>Paper-bet chain unbroken since 2026-05-01 →</span>
           </Link>
           <span className="text-muted-foreground/30" aria-hidden>·</span>
           <Link href="/methodology" className="transition-colors hover:text-foreground">
