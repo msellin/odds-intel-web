@@ -18,6 +18,9 @@ import {
   Crosshair,
   ChevronDown,
   User,
+  Radio,
+  Percent,
+  CreditCard,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -32,12 +35,20 @@ const wcNavLink =
     ? [{ href: "/world-cup", label: "World Cup", icon: Trophy }]
     : [];
 
+// GROWTH-APP-NAV-SYNC (2026-06-05): nav was missing /live, /accuracy, /pricing
+// — pages that exist on the landing nav but weren't reachable from the in-app
+// shell. A user landing on /live couldn't navigate sideways to /accuracy
+// without going back to the landing page. Smoke pins every entry below
+// so the same regression can't happen when new pages get added.
 const primaryLinks = [
   { href: "/matches", label: "Matches", icon: Activity },
   { href: "/value-bets", label: "Value Bets", icon: Target },
+  { href: "/live", label: "Live", icon: Radio },
+  { href: "/accuracy", label: "Accuracy", icon: Percent },
   ...wcNavLink,
   { href: "/performance", label: "Performance", icon: BarChart3 },
   { href: "/predictions", label: "Predictions", icon: TrendingUp },
+  { href: "/pricing", label: "Pricing", icon: CreditCard },
 ];
 
 interface NavProps {
