@@ -3239,6 +3239,226 @@ export async function getDashboardCache(): Promise<DashboardCache | null> {
   return data as DashboardCache;
 }
 
+// ─── Published picks (GROWTH-ACCURACY-PICKS-LOG, 2026-06-05) ───────────────
+// Powers the future /accuracy marketing surface. Pure outcome-accuracy log;
+// NOT the same as simulated_bets (which is bankroll/EV-aware). Even
+// 1.01-odds heavy-favourite picks count as hits if the outcome occurred.
+
+export type PublishedPickMarket = "1x2" | "over_under_15" | "over_under_25" | "btts";
+export type PublishedPickOutcome = "hit" | "miss" | "void" | null;
+
+export interface PublishedPickRow {
+  id: string;
+  matchId: string;
+  market: PublishedPickMarket;
+  selection: string;
+  modelProbability: number;
+  modelVersion: string;
+  pickedAt: string;        // ISO
+  kickoffAt: string;       // ISO
+  outcome: PublishedPickOutcome;
+  settledAt: string | null;
+  isBackfilled: boolean;
+  // Joined match data (when fetched via the with-match helpers)
+  homeTeam?: string;
+  awayTeam?: string;
+  leagueName?: string;
+  scoreHome?: number | null;
+  scoreAway?: number | null;
+}
+
+export interface AccuracyStats {
+  total: number;          // count of settled picks (excludes void + pending)
+  hits: number;
+  hitRate: number;        // hits / total — 0..1, or 0 when total === 0
+  // Backfilled vs live-published split. Public page renders these
+  // separately because they have different credibility weights.
+  backfilledTotal: number;
+  backfilledHits: number;
+  livePublishedTotal: number;
+  livePublishedHits: number;
+  // Per-market breakdown
+  byMarket: Record<PublishedPickMarket, { total: number; hits: number; hitRate: number }>;
+  // Per-confidence-bucket breakdown (≥50% / ≥60% / ≥70% / ≥80%)
+  byBucket: Array<{ threshold: number; total: number; hits: number; hitRate: number }>;
+}
+
+/**
+ * Roll up published_picks into headline accuracy stats for the public
+ * /accuracy page. Window-bounded by daysBack — pass null for all-time.
+ *
+ * Excludes:
+ *   - Pending picks (outcome IS NULL)
+ *   - Void picks (cancelled / postponed matches)
+ *
+ * Splits backfilled vs live-published so the page can label them honestly.
+ */
+export async function getAccuracyStats(
+  daysBack: number | null = 30,
+): Promise<AccuracyStats> {
+  const supabase = createSupabasePublic();
+  let query = supabase
+    .from("published_picks")
+    .select("market, outcome, model_probability, is_backfilled, kickoff_at")
+    .in("outcome", ["hit", "miss"]);
+  if (daysBack !== null) {
+    const since = new Date(Date.now() - daysBack * 86_400_000).toISOString();
+    query = query.gte("kickoff_at", since);
+  }
+  const { data, error } = await query.range(0, 49999);
+  if (error || !data) {
+    return {
+      total: 0, hits: 0, hitRate: 0,
+      backfilledTotal: 0, backfilledHits: 0,
+      livePublishedTotal: 0, livePublishedHits: 0,
+      byMarket: {
+        "1x2": { total: 0, hits: 0, hitRate: 0 },
+        "over_under_15": { total: 0, hits: 0, hitRate: 0 },
+        "over_under_25": { total: 0, hits: 0, hitRate: 0 },
+        "btts": { total: 0, hits: 0, hitRate: 0 },
+      },
+      byBucket: [],
+    };
+  }
+  type Row = { market: string; outcome: string; model_probability: number; is_backfilled: boolean };
+  const rows = data as Row[];
+  let hits = 0, backfilledTotal = 0, backfilledHits = 0, liveTotal = 0, liveHits = 0;
+  const byMarket: AccuracyStats["byMarket"] = {
+    "1x2": { total: 0, hits: 0, hitRate: 0 },
+    "over_under_15": { total: 0, hits: 0, hitRate: 0 },
+    "over_under_25": { total: 0, hits: 0, hitRate: 0 },
+    "btts": { total: 0, hits: 0, hitRate: 0 },
+  };
+  const buckets = [0.5, 0.6, 0.7, 0.8, 0.85];
+  const bucketAgg: Map<number, { total: number; hits: number }> = new Map(
+    buckets.map((b) => [b, { total: 0, hits: 0 }])
+  );
+  for (const r of rows) {
+    const isHit = r.outcome === "hit";
+    if (isHit) hits++;
+    if (r.is_backfilled) {
+      backfilledTotal++;
+      if (isHit) backfilledHits++;
+    } else {
+      liveTotal++;
+      if (isHit) liveHits++;
+    }
+    const m = byMarket[r.market as PublishedPickMarket];
+    if (m) {
+      m.total++;
+      if (isHit) m.hits++;
+    }
+    // Cumulative buckets — a 0.78 confidence pick counts toward ≥0.5 / ≥0.6 / ≥0.7
+    for (const b of buckets) {
+      if (r.model_probability >= b) {
+        const agg = bucketAgg.get(b)!;
+        agg.total++;
+        if (isHit) agg.hits++;
+      }
+    }
+  }
+  // Compute hitRates
+  for (const key of Object.keys(byMarket) as PublishedPickMarket[]) {
+    const m = byMarket[key];
+    m.hitRate = m.total > 0 ? m.hits / m.total : 0;
+  }
+  const byBucket = buckets.map((threshold) => {
+    const agg = bucketAgg.get(threshold)!;
+    return {
+      threshold,
+      total: agg.total,
+      hits: agg.hits,
+      hitRate: agg.total > 0 ? agg.hits / agg.total : 0,
+    };
+  });
+  const total = rows.length;
+  return {
+    total, hits, hitRate: total > 0 ? hits / total : 0,
+    backfilledTotal, backfilledHits,
+    livePublishedTotal: liveTotal, livePublishedHits: liveHits,
+    byMarket,
+    byBucket,
+  };
+}
+
+/**
+ * Fetch recent published picks with joined match data for display on
+ * the public accuracy page or per-match detail. Limit defaults to 20.
+ */
+export async function getRecentPublishedPicks(
+  limit: number = 20,
+  opts: { outcomeOnly?: boolean } = {},
+): Promise<PublishedPickRow[]> {
+  const supabase = createSupabasePublic();
+  let query = supabase
+    .from("published_picks")
+    .select(
+      `id, match_id, market, selection, model_probability, model_version,
+       picked_at, kickoff_at, outcome, settled_at, is_backfilled,
+       match:match_id(score_home, score_away,
+         home_team:home_team_id(name),
+         away_team:away_team_id(name),
+         league:league_id(name))`
+    )
+    .order("kickoff_at", { ascending: false })
+    .limit(limit);
+  if (opts.outcomeOnly) {
+    query = query.in("outcome", ["hit", "miss"]);
+  }
+  const { data, error } = await query;
+  if (error || !data) return [];
+  type Row = {
+    id: string;
+    match_id: string;
+    market: string;
+    selection: string;
+    model_probability: number;
+    model_version: string;
+    picked_at: string;
+    kickoff_at: string;
+    outcome: string | null;
+    settled_at: string | null;
+    is_backfilled: boolean;
+    match:
+      | {
+          score_home: number | null;
+          score_away: number | null;
+          home_team: { name: string } | { name: string }[] | null;
+          away_team: { name: string } | { name: string }[] | null;
+          league: { name: string } | { name: string }[] | null;
+        }
+      | { score_home: number | null; score_away: number | null;
+          home_team: { name: string } | { name: string }[] | null;
+          away_team: { name: string } | { name: string }[] | null;
+          league: { name: string } | { name: string }[] | null }[]
+      | null;
+  };
+  return (data as Row[]).map((r) => {
+    const m = Array.isArray(r.match) ? r.match[0] : r.match;
+    const home = m ? (Array.isArray(m.home_team) ? m.home_team[0] : m.home_team) : null;
+    const away = m ? (Array.isArray(m.away_team) ? m.away_team[0] : m.away_team) : null;
+    const league = m ? (Array.isArray(m.league) ? m.league[0] : m.league) : null;
+    return {
+      id: r.id,
+      matchId: r.match_id,
+      market: r.market as PublishedPickMarket,
+      selection: r.selection,
+      modelProbability: Number(r.model_probability),
+      modelVersion: r.model_version,
+      pickedAt: r.picked_at,
+      kickoffAt: r.kickoff_at,
+      outcome: r.outcome as PublishedPickOutcome,
+      settledAt: r.settled_at,
+      isBackfilled: r.is_backfilled,
+      homeTeam: home?.name,
+      awayTeam: away?.name,
+      leagueName: league?.name,
+      scoreHome: m?.score_home ?? null,
+      scoreAway: m?.score_away ?? null,
+    };
+  });
+}
+
 export interface SimpleSettledBet {
   id: string;
   match: string;
