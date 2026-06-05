@@ -94,8 +94,13 @@ export function PricingCards() {
         </div>
 
         {/* Pro */}
-        <div className="relative flex flex-col rounded-xl border-2 border-green-500 bg-card/60 p-7 shadow-2xl shadow-green-500/5">
-          <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-green-500 px-4 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-black">
+        <div className="relative flex flex-col rounded-xl border-2 border-green-500 bg-card/60 p-7 pt-9 shadow-2xl shadow-green-500/5 sm:pt-7">
+          {/* GROWTH-MOBILE-FIRST-AUDIT P0-3 (2026-06-05): badge can clip behind the
+              sticky nav on mobile when scrolling past. Solution: on mobile,
+              push the badge inside the card (no negative top offset) and
+              compensate with extra pt-9 on the card so it doesn't crowd
+              the price below. Desktop keeps the floating -top-3 look. */}
+          <div className="absolute left-1/2 top-2 -translate-x-1/2 rounded-full bg-green-500 px-4 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-black sm:-top-3 sm:top-auto z-10">
             Most Popular
           </div>
           <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Pro</div>

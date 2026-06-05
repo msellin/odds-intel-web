@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Trophy } from "lucide-react";
 import { OneScreenProof } from "@/components/one-screen-proof";
 import { CompetitorMatrix } from "@/components/competitor-matrix";
+import { LandingMobileMenu } from "@/components/landing-mobile-menu";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { CLVTrustBanner } from "@/components/clv-trust-banner";
@@ -96,7 +97,7 @@ export default async function LandingPage() {
             </span>
             <span className="rounded text-[10px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-400 px-1.5 py-0.5 border border-amber-500/30">Beta</span>
           </Link>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 sm:gap-4">
             <Link href="/matches" className="hidden text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:block">
               Matches
             </Link>
@@ -109,12 +110,16 @@ export default async function LandingPage() {
             <Link href="/pricing" className="hidden text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:block">
               Pricing
             </Link>
-            <Link href="/login" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+            <Link href="/login" className="hidden text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:block">
               Log In
             </Link>
             <Button size="sm" className="bg-green-700 text-white hover:bg-green-800" nativeButton={false} render={<Link href="/signup" />}>
               Sign Up Free
             </Button>
+            {/* Mobile hamburger — surfaces all the desktop nav links on small screens.
+                Before this component, those links had `hidden sm:block` and disappeared
+                entirely on mobile (GROWTH-MOBILE-FIRST-AUDIT P0-1). */}
+            <LandingMobileMenu />
           </div>
         </div>
       </nav>

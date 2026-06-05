@@ -127,7 +127,73 @@ export function CompetitorMatrix() {
           </p>
         </div>
 
-        <div className="mt-8 overflow-x-auto rounded-xl border border-white/[0.06]">
+        {/* Mobile stack view — table requires ~265px of horizontal scroll
+            at 375px viewport. The mobile version flattens each feature
+            into a card with OddsIntel always visible.
+            GROWTH-MOBILE-FIRST-AUDIT P0-2. */}
+        <div className="mt-8 space-y-3 md:hidden">
+          {SECTIONS.map((section) => (
+            <div key={section.heading}>
+              <p className="px-1 pb-1.5 font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
+                {section.heading}
+              </p>
+              <div className="rounded-xl border border-white/[0.06] divide-y divide-white/[0.04]">
+                {section.rows.map((row, i) => (
+                  <div key={`${section.heading}-${i}`} className="flex items-center gap-3 px-4 py-3">
+                    <div className="flex-1 text-sm text-foreground/85">{row.label}</div>
+                    <div className="flex items-center gap-2.5 text-xs">
+                      {COMPETITORS.map((c, j) => (
+                        <div
+                          key={c.name}
+                          className="flex w-7 flex-col items-center"
+                          title={c.name}
+                        >
+                          <CellGlyph value={row.cells[j]} />
+                        </div>
+                      ))}
+                      <div className="flex w-7 flex-col items-center rounded bg-green-500/[0.08] py-0.5">
+                        <CellGlyph value={row.cells[COMPETITORS.length]} />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          {/* Killer row at the bottom of the mobile stack */}
+          <div className="rounded-xl border border-green-500/30 bg-green-500/[0.05] px-4 py-3">
+            <div className="flex items-center gap-3">
+              <div className="flex-1 text-sm font-bold text-foreground">
+                {KILLER_ROW.label}
+              </div>
+              <div className="flex items-center gap-2.5 text-xs">
+                {COMPETITORS.map((c, j) => (
+                  <div key={c.name} className="flex w-7 flex-col items-center" title={c.name}>
+                    <CellGlyph value={KILLER_ROW.cells[j]} />
+                  </div>
+                ))}
+                <div className="flex w-7 flex-col items-center rounded bg-green-500/[0.15] py-0.5">
+                  <CellGlyph value={KILLER_ROW.cells[COMPETITORS.length]} />
+                </div>
+              </div>
+            </div>
+          </div>
+          {/* Compact column-key legend so users know what each column glyph maps to */}
+          <div className="rounded-lg border border-white/[0.04] bg-white/[0.02] px-4 py-2 text-[10px] text-muted-foreground/70">
+            <span className="font-mono uppercase tracking-widest text-muted-foreground/50">Columns: </span>
+            {COMPETITORS.map((c, idx) => (
+              <span key={c.name}>
+                {idx > 0 && " · "}
+                <span className="text-foreground/80">{c.name}</span>
+              </span>
+            ))}
+            {" · "}
+            <span className="font-bold text-green-400">OddsIntel</span>
+          </div>
+        </div>
+
+        {/* Desktop / tablet table view — hidden on mobile, where the stack above takes over */}
+        <div className="mt-8 hidden overflow-x-auto rounded-xl border border-white/[0.06] md:block">
           <table className="w-full min-w-[640px]">
             <thead>
               <tr className="border-b border-white/[0.06] bg-muted/30">
