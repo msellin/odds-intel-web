@@ -100,6 +100,9 @@ export default async function LandingPage() {
             <Link href="/matches" className="hidden text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:block">
               Matches
             </Link>
+            <Link href="/live" className="hidden text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:block">
+              Live
+            </Link>
             <Link href="/pricing" className="hidden text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:block">
               Pricing
             </Link>

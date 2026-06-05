@@ -236,6 +236,13 @@ export function CompetitorMatrix() {
           >
             See our methodology →
           </Link>
+          {" · "}
+          <Link
+            href="/live"
+            className="underline underline-offset-2 hover:text-foreground"
+          >
+            Try our in-play scanner →
+          </Link>
         </p>
       </div>
     </section>
