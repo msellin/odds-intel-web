@@ -453,7 +453,7 @@ export default function HowItWorksPage() {
             Start Free
           </Link>
           <Link
-            href="/track-record"
+            href="/performance"
             className="rounded-md border border-border px-5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
             View Track Record

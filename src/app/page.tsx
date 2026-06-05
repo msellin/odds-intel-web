@@ -89,7 +89,7 @@ const faqItems = [
   },
   {
     q: "How do the AI picks work?",
-    a: "Our model combines bookmaker pricing, team form, H2H records, confirmed lineups, and market movement. When it spots a statistical edge it flags the match as a value bet — something you can act on or simply track.",
+    a: "Our model combines bookmaker pricing, team form, H2H records, confirmed lineups, and market movement. On Over/Under 1.5 goals our top pick hits 75% of the time across 21,831 matches. When the model also spots a market edge — where our probability beats the bookmaker line — the match is flagged as a value bet. Accuracy is not the same as profitability: even an 80%-accurate pick at 1.10 odds loses money long-term. That's why we publish CLV (closing line value), not just hit rate.",
   },
   {
     q: "What is CLV tracking?",
@@ -402,7 +402,7 @@ export default async function LandingPage() {
             {[
               { stat: "280+", label: "leagues tracked worldwide" },
               { stat: "13",   label: "bookmakers compared" },
-              { stat: "16",   label: "AI strategies running live" },
+              { stat: "75%",  label: "accuracy on Over/Under 1.5 goals" },
               { stat: "100+",  label: "European leagues covered" },
             ].map((item) => (
               <div key={item.label} className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-5 py-6 text-center">
@@ -412,10 +412,13 @@ export default async function LandingPage() {
             ))}
           </div>
           <p className="mt-6 text-center text-xs text-muted-foreground">
-            AI strategies have been placing paper bets daily since April 2026.{" "}
-            <Link href="/track-record" className="text-green-400 underline underline-offset-2 hover:text-green-300">
+            Tracked across 21,831 finished matches since 2023. AI strategies place paper bets daily since April 2026.{" "}
+            <Link href="/performance" className="text-green-400 underline underline-offset-2 hover:text-green-300">
               View track record →
             </Link>
+          </p>
+          <p className="mt-3 text-center text-xs text-muted-foreground/80">
+            Built on 10+ years of historical match data. No tipsters, no human bias — just statistical models updated continuously.
           </p>
         </div>
       </section>

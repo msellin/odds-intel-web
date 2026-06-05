@@ -104,7 +104,7 @@ export function ValueBetsGate() {
 
       <p className="text-center text-xs text-muted-foreground/60">
         Model accuracy and full track record are{" "}
-        <Link href="/track-record" className="text-primary underline-offset-2 hover:underline">
+        <Link href="/performance" className="text-primary underline-offset-2 hover:underline">
           publicly visible
         </Link>
         {" "}— judge for yourself before signing up.

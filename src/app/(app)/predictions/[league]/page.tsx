@@ -285,7 +285,7 @@ export default async function LeaguePredictionsPage({
               methodology
             </Link>{" "}
             or the full{" "}
-            <Link href="/track-record" className="underline underline-offset-2 hover:text-foreground transition-colors">
+            <Link href="/performance" className="underline underline-offset-2 hover:text-foreground transition-colors">
               track record
             </Link>.
           </p>
