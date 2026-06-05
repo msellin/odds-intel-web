@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Check, X, Minus, Trophy } from "lucide-react";
+import { X, Trophy } from "lucide-react";
 import { PricingCards } from "@/components/pricing-cards";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -39,41 +39,6 @@ const sampleBookmakers = [
   { name: "Unibet",      h: "2.05", d: "3.50", a: "1.90", bestH: false, bestD: true,  bestA: true  },
 ];
 
-/* ── Comparison matrix rows, grouped by tier ── */
-type ComparisonRow =
-  | { type: "category"; label: string }
-  | { type: "row"; feature: string; free: boolean; pro: boolean; elite: boolean };
-
-const comparisonRows: ComparisonRow[] = [
-  { type: "category", label: "Always available — no account needed" },
-  { type: "row", feature: "All fixtures across 280+ leagues", free: true, pro: true, elite: true },
-  { type: "row", feature: "Live scores (auto-refresh)", free: true, pro: true, elite: true },
-  { type: "row", feature: "Best available odds (across all bookmakers)", free: true, pro: true, elite: true },
-  { type: "row", feature: "H2H, standings & team form", free: true, pro: true, elite: true },
-
-  { type: "category", label: "Free account" },
-  { type: "row", feature: "Favourite teams & leagues", free: true, pro: true, elite: true },
-  { type: "row", feature: "\"My Matches\" personalised feed", free: true, pro: true, elite: true },
-  { type: "row", feature: "Prediction tracker & hit rate", free: true, pro: true, elite: true },
-  { type: "row", feature: "Match notes & saved matches", free: true, pro: true, elite: true },
-  { type: "row", feature: "Community match voting", free: true, pro: true, elite: true },
-  { type: "row", feature: "1 AI value pick per day", free: true, pro: true, elite: true },
-
-  { type: "category", label: "Pro — real-time edge" },
-  { type: "row", feature: "Full odds — 13 bookmakers compared", free: false, pro: true, elite: true },
-  { type: "row", feature: "Odds movement chart", free: false, pro: true, elite: true },
-  { type: "row", feature: "Injury & suspension reports", free: false, pro: true, elite: true },
-  { type: "row", feature: "Confirmed lineups + formations", free: false, pro: true, elite: true },
-  { type: "row", feature: "Post-match stats (xG, shots, possession)", free: false, pro: true, elite: true },
-
-  { type: "category", label: "Elite — serious analytics" },
-  { type: "row", feature: "All AI value bets (full daily list)", free: false, pro: false, elite: true },
-  { type: "row", feature: "AI probability & market edge % (vs bookmaker)", free: false, pro: false, elite: true },
-  { type: "row", feature: "CLV tracking (did you beat the closing line?)", free: false, pro: false, elite: true },
-  { type: "row", feature: "Track record & ROI analytics", free: false, pro: false, elite: true },
-  { type: "row", feature: "AI strategy performance data", free: false, pro: false, elite: true },
-];
-
 const faqItems = [
   {
     q: "What sports and leagues does OddsIntel cover?",
@@ -84,10 +49,6 @@ const faqItems = [
     a: "We track 13 major European bookmakers. Free accounts see the single best available odds; Pro unlocks the full comparison across all bookmakers.",
   },
   {
-    q: "Is the free plan really free forever?",
-    a: "Yes. No credit card, no trial period that expires. The free tier gives you fixtures across 280+ leagues, live scores, personalisation, and 1 AI value pick per day — permanently.",
-  },
-  {
     q: "How do the AI picks work?",
     a: "Our model combines bookmaker pricing, team form, H2H records, confirmed lineups, and market movement. On Over/Under 1.5 goals our top pick hits 75% of the time across 21,831 matches. When the model also spots a market edge — where our probability beats the bookmaker line — the match is flagged as a value bet. Accuracy is not the same as profitability: even an 80%-accurate pick at 1.10 odds loses money long-term. That's why we publish CLV (closing line value), not just hit rate.",
   },
@@ -96,18 +57,10 @@ const faqItems = [
     a: "Closing Line Value (CLV) measures whether a bet was placed at better odds than where the market closed. It's the most reliable long-term indicator of a profitable strategy. OddsIntel Elite tracks CLV for every AI model pick, so you can see whether the model is consistently finding genuine value.",
   },
   {
-    q: "What are the founding member rates?",
-    a: "The first 500 Pro subscribers lock in €3.99/mo forever (vs the regular €4.99/mo). The first 200 Elite subscribers lock in €9.99/mo forever. Your rate never increases as long as you stay subscribed.",
+    q: "Where do the picks go?",
+    a: "Every value bet is logged immutably the moment it's identified — pre-kickoff, timestamped, never edited. You can see the running track record at /performance. We also send daily picks straight to Telegram so you don't have to remember to check.",
   },
 ];
-
-function CellIcon({ value }: { value: boolean }) {
-  return value ? (
-    <Check className="mx-auto size-4 text-green-500" />
-  ) : (
-    <Minus className="mx-auto size-4 text-muted-foreground/30" />
-  );
-}
 
 export default async function LandingPage() {
   // CLV-TRUST-BANNER (2026-06-02): pull cache for the SEO <dl> stats block.
@@ -425,6 +378,57 @@ export default async function LandingPage() {
 
       <Separator />
 
+      {/* ───────── Honest numbers — drawdown / verification / CLV ───────── */}
+      <section className="py-14">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6">
+          <div className="mb-8 text-center">
+            <h2 className="text-2xl font-bold tracking-tight text-foreground">
+              Honest about how this works
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Three things most prediction sites hide. We publish them on purpose.
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Link
+              href="/methodology"
+              className="group rounded-xl border border-white/[0.06] bg-white/[0.02] p-6 transition-colors hover:border-amber-500/30 hover:bg-amber-500/[0.04]"
+            >
+              <p className="font-mono text-[10px] uppercase tracking-widest text-amber-400/80">Drawdown</p>
+              <p className="mt-2 font-mono text-2xl font-black text-amber-300">−€398</p>
+              <p className="mt-1 text-xs text-muted-foreground">worst 9-day stretch (May 2026). Wiped the prior peak.</p>
+              <p className="mt-3 text-xs font-medium text-amber-400 group-hover:text-amber-300">
+                Why we publish drawdowns →
+              </p>
+            </Link>
+            <Link
+              href="/methodology"
+              className="group rounded-xl border border-white/[0.06] bg-white/[0.02] p-6 transition-colors hover:border-blue-500/30 hover:bg-blue-500/[0.04]"
+            >
+              <p className="font-mono text-[10px] uppercase tracking-widest text-blue-400/80">Verification</p>
+              <p className="mt-2 font-mono text-2xl font-black text-blue-300">Self-reported</p>
+              <p className="mt-1 text-xs text-muted-foreground">Bet-Analytix / SBC verification on roadmap. We&apos;d rather wait than fake it.</p>
+              <p className="mt-3 text-xs font-medium text-blue-400 group-hover:text-blue-300">
+                Why no &quot;verified&quot; badge yet →
+              </p>
+            </Link>
+            <Link
+              href="/learn/clv"
+              className="group rounded-xl border border-white/[0.06] bg-white/[0.02] p-6 transition-colors hover:border-green-500/30 hover:bg-green-500/[0.04]"
+            >
+              <p className="font-mono text-[10px] uppercase tracking-widest text-green-400/80">Honest metric</p>
+              <p className="mt-2 font-mono text-2xl font-black text-green-300">CLV, not ROI</p>
+              <p className="mt-1 text-xs text-muted-foreground">ROI is variance-confounded. Closing-line value is the only metric that proves edge early.</p>
+              <p className="mt-3 text-xs font-medium text-green-400 group-hover:text-green-300">
+                Why CLV beats ROI →
+              </p>
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      <Separator />
+
       {/* ───────── Pricing Cards ───────── */}
       <section className="py-14" id="pricing">
         <div className="mx-auto max-w-4xl px-4 sm:px-6">
@@ -444,65 +448,10 @@ export default async function LandingPage() {
 
       <Separator />
 
-      {/* ───────── Feature Comparison Matrix ───────── */}
-      <section className="py-14">
-        <div className="mx-auto max-w-4xl px-4 sm:px-6">
-          <div className="mb-8 text-center">
-            <h2 className="text-2xl font-bold tracking-tight text-foreground">
-              What you get at each level
-            </h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Free account unlocks personalisation, tracking, and daily AI picks. No credit card needed.
-            </p>
-          </div>
-
-          <div className="overflow-x-auto rounded-xl border border-white/[0.06]">
-            <table className="w-full min-w-[500px]">
-              <thead>
-                <tr className="border-b border-white/[0.06] bg-muted/30">
-                  <th className="py-3 pl-4 pr-2 text-left text-xs font-medium text-muted-foreground w-[52%]">Feature</th>
-                  <th className="py-3 px-3 text-center text-xs font-medium text-foreground w-[16%]">
-                    <div>Free</div>
-                    <div className="font-mono text-[10px] text-green-400">€0</div>
-                  </th>
-                  <th className="py-3 px-3 text-center text-xs font-medium w-[16%]">
-                    <div className="text-green-400">Pro</div>
-                    <div className="font-mono text-[10px] text-green-400">€4.99/mo</div>
-                  </th>
-                  <th className="py-3 pl-3 pr-4 text-center text-xs font-medium w-[16%]">
-                    <div className="text-amber-400">Elite</div>
-                    <div className="font-mono text-[10px] text-amber-400">€14.99/mo</div>
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/[0.04]">
-                {comparisonRows.map((row, i) => {
-                  if (row.type === "category") {
-                    return (
-                      <tr key={i} className="bg-white/[0.02]">
-                        <td colSpan={4} className="py-2 pl-4 pr-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
-                          {row.label}
-                        </td>
-                      </tr>
-                    );
-                  }
-                  return (
-                    <tr key={i} className="hover:bg-white/[0.02]">
-                      <td className="py-2.5 pl-4 pr-2 text-sm text-foreground/80">{row.feature}</td>
-                      <td className="py-2.5 px-3"><CellIcon value={row.free} /></td>
-                      <td className="py-2.5 px-3"><CellIcon value={row.pro} /></td>
-                      <td className="py-2.5 pl-3 pr-4"><CellIcon value={row.elite} /></td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-        </div>
-      </section>
-
-      <Separator />
+      {/* Feature comparison matrix removed from landing 2026-06-05 — duplicated
+          the pricing cards directly above + /how-it-works. Pricing should be
+          asked for once on the landing, not three times. Full feature matrix
+          still available on /how-it-works for users who want the deep dive. */}
 
       {/* ───────── FAQ ───────── */}
       <section className="bg-card/20 py-14">
@@ -531,6 +480,8 @@ export default async function LandingPage() {
           </div>
           <div className="flex flex-wrap items-center justify-center gap-6 text-xs text-muted-foreground">
             <span>&copy; {new Date().getFullYear()} OddsIntel</span>
+            <Link href="/methodology" className="transition-colors hover:text-green-400">Methodology</Link>
+            <Link href="/performance" className="transition-colors hover:text-green-400">Performance</Link>
             <Link href="/changelog" className="transition-colors hover:text-green-400">Changelog</Link>
             <Link href="/terms" className="transition-colors hover:text-green-400">Terms of Service</Link>
             <Link href="/privacy" className="transition-colors hover:text-green-400">Privacy Policy</Link>
