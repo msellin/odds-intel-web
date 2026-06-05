@@ -204,9 +204,9 @@ export default async function LandingPage() {
                 <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[10px] font-bold text-amber-400">⚡ High market activity</span>
               </div>
               <div className="mt-3 flex items-center justify-between">
-                <span className="text-base font-bold sm:text-lg">Manchester City</span>
+                <span className="text-lg font-bold sm:text-xl">Manchester City</span>
                 <span className="font-mono text-xs text-muted-foreground">vs</span>
-                <span className="text-base font-bold sm:text-lg">Arsenal</span>
+                <span className="text-lg font-bold sm:text-xl">Arsenal</span>
               </div>
               {/* Odds comparison */}
               <div className="mt-4 overflow-hidden rounded-lg border border-white/[0.06]">
@@ -475,7 +475,7 @@ export default async function LandingPage() {
             Get tomorrow&apos;s value bets in your Telegram.
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-balance text-sm text-muted-foreground sm:text-base">
-            Pre-kickoff. Pre-line-movement. Pre-everything. Every pick the model
+            Pre-kickoff · Pre-line-movement · Pre-everything. Every pick the model
             finds, sent to your phone the moment it&apos;s identified — so you can
             place it before the value evaporates.
           </p>
