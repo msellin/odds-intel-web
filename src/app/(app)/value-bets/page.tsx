@@ -225,6 +225,26 @@ async function ValueBetsContent({ userId }: { userId: string }) {
 
   return (
     <div className="space-y-6">
+      {/* GROWTH-CLV-FIRST-MESSAGING (2026-06-05): page-level header that leads
+          with CLV before the tier-explainer block. Visible to all tiers — the
+          CLV-first honesty positioning is our actual moat, so /value-bets
+          must lead with it the same way the landing hero does. */}
+      <header className="space-y-2">
+        <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+          Today&apos;s value bets — <span className="text-green-400">CLV-tracked</span>, not just hit-rate.
+        </h1>
+        <p className="text-sm text-muted-foreground sm:text-base">
+          Every pick is logged before kickoff and scored against the closing line.
+          ROI is variance-confounded; CLV is the honest scoreboard.{" "}
+          <Link
+            href="/learn/closing-line-value"
+            className="text-foreground underline underline-offset-2 hover:text-green-400"
+          >
+            Why CLV beats ROI →
+          </Link>
+        </p>
+      </header>
+
       {/* COHORT-TRANSPARENCY (2026-06-02): make the Pro/Elite distinction
           unmissable. Free users get a teaser ("here's what's in here").
           Pro users get the curated calibrated-bot feed and a clear Elite

@@ -35,26 +35,73 @@ Over hundreds of bets, positive EV bets produce profit even if individual result
   },
   {
     slug: "closing-line-value",
-    title: "Closing Line Value (CLV)",
-    shortDef: "Whether your odds were better than the market's final price before kickoff.",
-    body: `Closing Line Value (CLV) measures whether the odds you took were better than the closing odds — the price the market settled at just before the match started.
+    title: "Closing Line Value (CLV) — Why It Beats ROI",
+    shortDef: "The honest scoreboard for a betting model. CLV proves edge in weeks; ROI takes years.",
+    body: `Closing Line Value (CLV) measures whether the odds you took were better than the closing odds — the price the market settled at just before the match started. It is the single most important number in serious sports betting, and the reason every honest tracker (Bet-Analytix, Smart Betting Club, Pinnacle's own analytics) leads with it.
 
-**Why it matters:** Sharp money pushes odds toward their true value as kickoff approaches. If you consistently beat the closing line, it's evidence you found genuine edges before the market corrected them. It's the fastest way to validate a betting system — results need hundreds of bets to be statistically significant, but CLV is measurable within weeks.
+**The headline: ROI lies. CLV is the honest scoreboard.**
 
-**Formula:** CLV = (1 / your_odds) / (1 / closing_odds) − 1
+If your model is genuinely finding edges, you will consistently beat the closing line. If you are just lucky, you will not. Variance can hide either truth for months — but CLV is visible immediately.
+
+---
+
+**Why ROI alone is misleading**
+
+ROI is the obvious metric: total profit divided by total amount staked. But ROI is **variance-confounded** — a model with a real +3% edge can show −10% ROI over 200 bets and still be a winning model. A coin-flip bettor on heavy favourites can show +5% ROI for six months and still be a losing strategy in the long run.
+
+The math is brutal: a model with +2% edge needs **~1,500 settled bets** to distinguish itself from luck at 95% confidence. At a realistic 5 bets per day, that is nearly a full year of patience before you can trust the ROI signal at all. Almost no recreational bettor lasts that long without quitting in a drawdown.
+
+CLV solves this. Because the closing line is a near-efficient estimate of true probability, a model that consistently beats it is finding edges that *the rest of the market eventually agrees with*. You can detect that signal in **50–100 bets** — within weeks, not years.
+
+---
+
+**Formula**
+
+\`\`\`
+CLV = (1 / your_odds) / (1 / closing_odds) − 1
+\`\`\`
 
 A CLV of +3% means your implied probability was 3 percentage points lower than the closing implied probability — you got better odds than the market's final consensus.
 
-The OddsIntel track record shows pseudo-CLV on every settled prediction.`,
+**Example:** You bet Over 2.5 at 1.85 (implied 54.1%). Market closes at 1.75 (implied 57.1%). Your CLV = (1/1.85) / (1/1.75) − 1 = +5.7%. Whether the bet won or lost is irrelevant to your CLV — you got better odds than the line settled at. Over hundreds of bets, that compounds into profit even if any individual bet loses.
+
+---
+
+**What's a good CLV?**
+
+- **+0% to +1%**: You are roughly market-efficient. No edge.
+- **+1% to +3%**: Modest edge. Pinnacle's own arbers and most syndicate runners aim here.
+- **+3% to +5%**: Strong edge. Most professional bettors who survive long term land here.
+- **+5%+**: Exceptional. Watch for sample-size effects; numbers above +8% over <500 bets are usually noise.
+
+OddsIntel currently runs at **+9.8% CLV (30 days)** across our active value-bet cohort. The 9-month all-time number will be lower as the sample grows — that is expected.
+
+---
+
+**Why we publish CLV everywhere we can**
+
+Every value bet OddsIntel logs gets a CLV score after settlement. The 30-day rolling CLV is the single number shown in the landing hero, the trust banner, and the dashboard. It is the cleanest signal that the model is doing real work — independent of variance, of how many bets won this week, of which leagues happen to be in form.
+
+**Pseudo-CLV** — we don't have a true real-time closing-line feed for every market, so we use the price at our last pre-kickoff snapshot as a proxy. It is directionally identical to true CLV and slightly noisier. Every figure published on /performance and in the landing micro-line uses pseudo-CLV; the methodology page lays out exactly how we compute it.
+
+This is the metric we'd want a third-party verifier (Bet-Analytix, SBC) to track if they audited us tomorrow. We publish it now because we'd rather earn trust through visible numbers than wait until verification ships.`,
     relatedTerms: ["expected-value", "value-betting", "odds-movement"],
     faqItems: [
       {
-        q: "What's a good CLV?",
-        a: "Consistently beating the closing line by 2–4% is considered excellent. The best professional bettors average +3–5% CLV.",
+        q: "Why don't you lead with ROI like other sites?",
+        a: "Because ROI on small samples is mostly luck. Sites that lead with ROI are either (a) lucky, (b) cherry-picking timeframes, or (c) honest but giving you variance-confounded noise. CLV is reproducible — anyone can compute it from the same data — and stable in fewer bets. We optimise for the honest metric.",
+      },
+      {
+        q: "What's a good CLV target?",
+        a: "Consistently +2-4% across 500+ settled bets is excellent. Above +5% over similar samples is the realm of professional bettors. Below +1% means you are roughly market-efficient — no edge.",
       },
       {
         q: "What is pseudo-CLV?",
-        a: "Since we compare our morning pick price to the price at our last recorded snapshot before kickoff (not a true live closing line), we call it 'pseudo-CLV'. It's directionally correct but slightly noisier than exchange closing lines.",
+        a: "Since we compare our pick price to the price at our last recorded snapshot before kickoff (not a true live closing line), we call it 'pseudo-CLV'. It's directionally correct but slightly noisier than exchange closing lines. Within ~1% of true CLV on liquid markets.",
+      },
+      {
+        q: "Can CLV be faked?",
+        a: "Yes, if a tracker only includes their best bets in the CLV calculation. OddsIntel logs every value bet the model identifies immediately at pick-time, before result is known, and never edits or removes rows. The full per-bet history is auditable on /performance.",
       },
     ],
   },

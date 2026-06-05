@@ -342,7 +342,7 @@ export default async function LandingPage() {
               </p>
             </Link>
             <Link
-              href="/learn/clv"
+              href="/learn/closing-line-value"
               className="group rounded-xl border border-green-500/20 bg-green-500/[0.03] p-6 transition-colors hover:border-green-500/50 hover:bg-green-500/[0.08]"
             >
               <p className="font-mono text-[10px] uppercase tracking-widest text-green-400">Honest metric</p>

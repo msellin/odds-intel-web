@@ -10,6 +10,15 @@ const nextConfig: NextConfig = {
       { source: "/ingest/:path*", destination: "https://us.i.posthog.com/:path*" },
     ];
   },
+  async redirects() {
+    return [
+      // GROWTH-CLV-FIRST-MESSAGING (2026-06-05): the natural short URL for the
+      // CLV pillar page is /learn/clv; the canonical slug is /learn/closing-
+      // line-value. Permanent redirect so the short URL works for inbound
+      // marketing links + the landing honest-numbers card.
+      { source: "/learn/clv", destination: "/learn/closing-line-value", permanent: true },
+    ];
+  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "media.api-sports.io" },
