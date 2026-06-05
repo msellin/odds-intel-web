@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import {
@@ -258,6 +259,27 @@ async function ValueBetsContent({ userId }: { userId: string }) {
             </p>
           </div>
         </section>
+      )}
+
+      {/* Telegram delivery reminder — Pro+ only. Shown to all Pro/Elite users;
+          /profile shows the active-or-inactive connect state, so this banner
+          just routes them there. */}
+      {isPro && (
+        <Link
+          href="/profile#telegram"
+          className="group flex items-center justify-between gap-3 rounded-xl border border-sky-500/20 bg-sky-500/[0.06] px-4 py-3 text-xs transition-colors hover:border-sky-500/40 hover:bg-sky-500/[0.10] sm:text-sm"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-base" aria-hidden>📲</span>
+            <span className="text-foreground">
+              <span className="font-semibold">Get these picks in Telegram</span>
+              <span className="ml-2 text-muted-foreground">
+                — sent the moment they&apos;re identified, before line movement.
+              </span>
+            </span>
+          </div>
+          <span className="text-sky-300 group-hover:text-sky-200">Manage →</span>
+        </Link>
       )}
 
       {/* CLV trust banner — Pro+ only; replaces the old PRO-TIER-V2 hero so

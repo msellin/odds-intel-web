@@ -137,6 +137,9 @@ export default async function LandingPage() {
           <p className="mx-auto mt-6 max-w-xl text-balance text-base text-muted-foreground sm:text-lg">
             Compare odds across 13 bookmakers, check confirmed lineups and injuries, get daily AI value picks — all in one place.
           </p>
+          <p className="mx-auto mt-3 max-w-xl text-balance text-sm text-sky-300/90">
+            <span aria-hidden>📲</span> Every value bet straight to your Telegram — the moment we find it.
+          </p>
           <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
             <Button
               size="lg"
@@ -471,6 +474,46 @@ export default async function LandingPage() {
       </section>
 
       <Separator />
+
+      {/* ───────── Telegram CTA strip ───────── */}
+      <section className="border-t border-sky-500/15 bg-gradient-to-b from-sky-950/40 to-background py-14">
+        <div className="mx-auto max-w-3xl px-4 text-center sm:px-6">
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1">
+            <span aria-hidden>📲</span>
+            <span className="font-mono text-[10px] uppercase tracking-widest text-sky-300">
+              Telegram delivery
+            </span>
+          </div>
+          <h2 className="text-balance text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+            Get tomorrow&apos;s value bets in your Telegram.
+          </h2>
+          <p className="mx-auto mt-3 max-w-xl text-balance text-sm text-muted-foreground sm:text-base">
+            Pre-kickoff. Pre-line-movement. Pre-everything. Every pick the model
+            finds, sent to your phone the moment it&apos;s identified — so you can
+            place it before the value evaporates.
+          </p>
+          <div className="mt-7 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+            <Button
+              size="lg"
+              className="h-12 bg-sky-500 px-8 text-base font-bold text-white hover:bg-sky-400"
+              nativeButton={false} render={<Link href="/signup" />}
+            >
+              Start Free
+            </Button>
+            <Button
+              variant="ghost"
+              size="lg"
+              className="h-12 px-8 text-base border border-white/[0.12] hover:bg-white/[0.05]"
+              nativeButton={false} render={<Link href="/profile" />}
+            >
+              Already signed up — connect Telegram →
+            </Button>
+          </div>
+          <p className="mt-4 text-xs text-muted-foreground/80">
+            Telegram alerts available on Pro and Elite. Free users get one daily pick on-site.
+          </p>
+        </div>
+      </section>
 
       {/* ───────── Footer ───────── */}
       <footer className="py-10">
