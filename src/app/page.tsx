@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { X, Trophy } from "lucide-react";
-import { PricingCards } from "@/components/pricing-cards";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { CLVTrustBanner } from "@/components/clv-trust-banner";
@@ -109,6 +108,9 @@ export default async function LandingPage() {
           <div className="flex items-center gap-4">
             <Link href="/matches" className="hidden text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:block">
               Matches
+            </Link>
+            <Link href="/pricing" className="hidden text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:block">
+              Pricing
             </Link>
             <Link href="/login" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
               Log In
@@ -432,20 +434,26 @@ export default async function LandingPage() {
 
       <Separator />
 
-      {/* ───────── Pricing Cards ───────── */}
-      <section className="py-14" id="pricing">
-        <div className="mx-auto max-w-4xl px-4 sm:px-6">
-          <div className="mb-8 text-center">
-            <h2 className="text-2xl font-bold tracking-tight text-foreground">
-              Simple pricing. Cancel anytime.
-            </h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Start free. Upgrade when you want deeper betting intelligence.
-            </p>
+      {/* ───────── Compact pricing CTA — full cards moved to /pricing 2026-06-05 ───────── */}
+      <section className="py-10" id="pricing">
+        <div className="mx-auto max-w-3xl px-4 text-center sm:px-6">
+          <p className="text-sm text-muted-foreground">
+            Free forever for fixtures, scores, and one daily AI pick.
+            Pro from <span className="font-mono text-foreground">€4.99/mo</span>.
+            Elite from <span className="font-mono text-foreground">€14.99/mo</span>.
+            Cancel any time.
+          </p>
+          <div className="mt-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="border border-white/[0.12] hover:bg-white/[0.05]"
+              nativeButton={false}
+              render={<Link href="/pricing" />}
+            >
+              See all plans →
+            </Button>
           </div>
-
-          <PricingCards />
-
         </div>
       </section>
 
