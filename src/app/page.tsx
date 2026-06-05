@@ -294,86 +294,16 @@ export default async function LandingPage() {
           verification same). */}
       <CompetitorMatrix />
 
-      <Separator />
+      {/* Live Data Preview section removed 2026-06-05 (GROWTH-LANDING-REFACTOR
+          sub-B) — sample-data table consumed a full fold without earning it.
+          Real product proof now lives in <OneScreenProof /> (animated) +
+          <CompetitorMatrix /> (per-feature tier comparison) above. */}
 
-      {/* ───────── Live Data Preview ───────── */}
-      <section className="py-14">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <div className="text-center">
-            <h2 className="text-2xl font-bold tracking-tight text-foreground">
-              Live data preview
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Football · Premier League · La Liga · Bundesliga · Serie A · Champions League · and 280+ more leagues worldwide
-            </p>
-          </div>
-
-          <div className="mt-6 overflow-hidden rounded-xl border border-white/[0.06]">
-            <div className="grid grid-cols-12 items-center border-b border-white/[0.06] bg-muted/30 px-4 py-2.5">
-              <div className="col-span-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Time</div>
-              <div className="col-span-5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Matchup</div>
-              <div className="col-span-2 text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground">1</div>
-              <div className="col-span-2 text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground">X</div>
-              <div className="col-span-2 text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground">2</div>
-            </div>
-            <div className="divide-y divide-white/[0.04]">
-              {[
-                { time: "19:45", home: "Liverpool", away: "Real Madrid", h: 2.1, d: 3.45, a: 3.1, hot: true, bestIdx: 0 },
-                { time: "20:00", home: "AC Milan", away: "Dortmund", h: 2.45, d: 3.2, a: 2.85, hot: false, bestIdx: 2 },
-                { time: "20:00", home: "PSG", away: "Newcastle", h: 1.65, d: 4.1, a: 5.5, hot: true, bestIdx: 0 },
-              ].map((m, i) => (
-                <div key={i} className="grid h-10 grid-cols-12 items-center px-4 hover:bg-white/[0.02]">
-                  <div className="col-span-1 font-mono text-xs text-muted-foreground">{m.time}</div>
-                  <div className="col-span-5 flex items-center gap-2 text-sm font-medium text-foreground">
-                    {m.hot && <span className="text-xs">🔥</span>}
-                    {m.home} vs {m.away}
-                  </div>
-                  <div className={`col-span-2 text-center font-mono text-sm ${m.bestIdx === 0 ? "font-bold text-green-400" : "text-muted-foreground"}`}>{m.h.toFixed(2)}</div>
-                  <div className={`col-span-2 text-center font-mono text-sm ${m.bestIdx === 1 ? "font-bold text-green-400" : "text-muted-foreground"}`}>{m.d.toFixed(2)}</div>
-                  <div className={`col-span-2 text-center font-mono text-sm ${m.bestIdx === 2 ? "font-bold text-green-400" : "text-muted-foreground"}`}>{m.a.toFixed(2)}</div>
-                </div>
-              ))}
-            </div>
-            <div className="border-t border-white/[0.06] bg-muted/10 px-4 py-2 text-right">
-              <span className="text-[10px] text-muted-foreground/60">Sample data — illustrative only</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ───────── Trust / Stats ───────── */}
-      <section className="bg-card/20 py-14">
-        <div className="mx-auto max-w-5xl px-4 sm:px-6">
-          <div className="mb-8 text-center">
-            <h2 className="text-2xl font-bold tracking-tight text-foreground">Built on real data, not guesswork</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Every number on OddsIntel comes from live sources — updated continuously throughout the day.
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            {[
-              { stat: "280+", label: "leagues tracked worldwide" },
-              { stat: "13",   label: "bookmakers compared" },
-              { stat: "75%",  label: "accuracy on Over/Under 1.5 goals" },
-              { stat: "100+",  label: "European leagues covered" },
-            ].map((item) => (
-              <div key={item.label} className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-5 py-6 text-center">
-                <p className="font-mono text-3xl font-black text-green-400">{item.stat}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{item.label}</p>
-              </div>
-            ))}
-          </div>
-          <p className="mt-6 text-center text-xs text-muted-foreground">
-            Tracked across 21,831 finished matches since 2023. AI strategies place paper bets daily since April 2026.{" "}
-            <Link href="/performance" className="text-green-400 underline underline-offset-2 hover:text-green-300">
-              View track record →
-            </Link>
-          </p>
-          <p className="mt-3 text-center text-xs text-muted-foreground/80">
-            Built on 10+ years of historical match data. No tipsters, no human bias — just statistical models updated continuously.
-          </p>
-        </div>
-      </section>
+      {/* Big stats block removed 2026-06-05 (GROWTH-LANDING-REFACTOR sub-B) —
+          duplicated content already in the hero trust micro-line
+          (75% / +9.8% CLV / 21,831 matches) and the SEO structured-data bar
+          above. Cross-link to /performance preserved in footer. The 10-year /
+          no-human-bias framing lives on /methodology. */}
 
       <Separator />
 
