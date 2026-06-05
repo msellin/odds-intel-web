@@ -27,7 +27,10 @@ type Cell = "have" | "roadmap" | "wont" | "partial";
 interface CompetitorCol {
   name: string;
   tier: string;
+  /** External link to the competitor's site (Linear/Notion pattern — confident attribution). */
   href?: string;
+  /** When set, renders a small in-app "Compare →" link to /vs/[slug]. Names that don't yet have a /vs page omit this. */
+  vsSlug?: string;
 }
 
 interface FeatureRow {
@@ -43,8 +46,8 @@ interface Section {
 const COMPETITORS: CompetitorCol[] = [
   { name: "SofaScore",   tier: "Stats aggregator",    href: "https://www.sofascore.com" },
   { name: "OddsChecker", tier: "Odds comparison",     href: "https://www.oddschecker.com" },
-  { name: "WinnerOdds",  tier: "Value-bet engine",    href: "https://winnerodds.com" },
-  { name: "InPlayGuru",  tier: "In-play scanner",     href: "https://inplayguru.com" },
+  { name: "WinnerOdds",  tier: "Value-bet engine",    href: "https://winnerodds.com",   vsSlug: "winnerodds" },
+  { name: "InPlayGuru",  tier: "In-play scanner",     href: "https://inplayguru.com",   vsSlug: "inplayguru" },
 ];
 
 const SECTIONS: Section[] = [
@@ -239,6 +242,14 @@ export function CompetitorMatrix() {
                     <div className="mt-0.5 font-mono text-[9px] uppercase tracking-widest text-muted-foreground/70">
                       {c.tier}
                     </div>
+                    {c.vsSlug ? (
+                      <Link
+                        href={`/vs/${c.vsSlug}`}
+                        className="mt-1 inline-block font-mono text-[9px] uppercase tracking-widest text-green-400/80 underline underline-offset-2 hover:text-green-300"
+                      >
+                        Compare →
+                      </Link>
+                    ) : null}
                   </th>
                 ))}
                 <th className="py-3 pl-2 pr-4 text-center text-xs font-medium w-[16%] bg-green-500/[0.06]">
@@ -313,6 +324,13 @@ export function CompetitorMatrix() {
 
         <p className="mt-6 text-center text-xs text-muted-foreground/70">
           Comparison verified 2026-06-05 from each competitor&apos;s public site.{" "}
+          <Link
+            href="/vs"
+            className="underline underline-offset-2 hover:text-foreground"
+          >
+            See detailed 1-on-1 comparisons →
+          </Link>
+          {" · "}
           <Link
             href="/methodology"
             className="underline underline-offset-2 hover:text-foreground"

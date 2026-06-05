@@ -197,6 +197,7 @@ export const VS_COMPETITORS: VsCompetitor[] = [
       "**Team credentials surfaced.** They publicly list backgrounds (data science / healthcare analytics / aerospace IT). Real social proof.",
     ],
     oddsIntelWins: [
+      "**Their verification reveals a negative ROI.** DeepBetting's Bet-Analytix-tracked record is **-3.7% ROI**, and our scrape of their visible free-pick history shows **-0.99% ROI** at 63.0% hit rate on 1.62 avg odds over 92 settled bets (2026-05-23 → 2026-06-04). Verified ≠ profitable. Our paper-trading chain is +€340 in May 2026 with worst drawdown -€398, transparently published.",
       "**280+ football leagues vs their ~15.** Order-of-magnitude broader football coverage. If you bet outside the top European leagues, we have you.",
       "**CLV-first metric framing.** They publish results; we publish CLV — the *honest* metric that proves edge in weeks, not years. ROI alone (which they emphasise) is variance-confounded.",
       "**Telegram delivery.** Pre-kickoff alerts to your phone. They publish via web; no live alert channel.",
@@ -218,7 +219,7 @@ export const VS_COMPETITORS: VsCompetitor[] = [
     ],
     verdict: {
       pickThem:
-        "You bet across multiple sports (NBA + NFL + NHL + MLB alongside football), you want a verified Bet-Analytix track record now (not 'on the roadmap'), or you specifically prefer French / multi-language interfaces.",
+        "You bet across multiple sports (NBA + NFL + NHL + MLB alongside football), you want a verified Bet-Analytix track record now (their -3.7% ROI is at least independently confirmed), or you specifically prefer French / multi-language interfaces.",
       pickUs:
         "You bet primarily on football (especially outside top-5 European leagues), you want CLV — not just ROI — published openly, you want picks delivered to Telegram before kickoff, and you want match context alongside the pick. €4.99-14.99/mo vs their €35-60/mo is also a meaningful difference.",
     },
@@ -234,6 +235,10 @@ export const VS_COMPETITORS: VsCompetitor[] = [
       {
         q: "Both claim 'no human bias'. What's the actual difference?",
         a: "That phrase is now a commodity claim — every AI prediction site says it. What matters is what each side actually publishes. DeepBetting publishes hit-rate + ROI by league. OddsIntel publishes CLV per pick + open methodology + per-strategy track record at /performance. CLV is the honest scoreboard; if you don't see CLV figures, the 'no human bias' claim is doing positioning work, not measurement work.",
+      },
+      {
+        q: "Is DeepBetting actually profitable?",
+        a: "Their own Bet-Analytix verification page shows a -3.7% ROI. We also scraped the visible free-pick history and computed -0.99% ROI on 92 settled bets at 63% hit rate / 1.62 avg odds. They're a coin-flip product priced at €35-60/mo. Verified track records are valuable for credibility — but only when the verified number is positive. Right now theirs isn't, and that's the load-bearing point: most paid prediction sites at this price point don't actually beat the closing line, which is why CLV (does the model beat the line?) matters more than ROI (which sample of luck did they post?).",
       },
     ],
   },
@@ -338,6 +343,189 @@ export const VS_COMPETITORS: VsCompetitor[] = [
       {
         q: "I just want a fun parlay tool. Is OddsIntel right for me?",
         a: "Probably not — soccerbot.ai is better at that specific workflow. We're built for bettors who want to maximise long-term edge, which usually means single picks with measurable CLV, not multi-leg parlays.",
+      },
+    ],
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+
+  {
+    slug: "forebet",
+    name: "Forebet",
+    tier: "Free prediction site",
+    homeUrl: "https://www.forebet.com",
+    oneliner:
+      "Ad-supported football prediction publisher with 700+ league coverage and 13.5M monthly visits, operating since 2009.",
+    traffic: "~13.5M visits/month (Similarweb Mar 2026, -13% MoM)",
+    pricing: "Free (display ads + bookmaker affiliate links)",
+    whereTheyWin: [
+      "**SEO dominance.** 16 years of programmatic prediction pages indexed since 2009. They own the long tail of \"[Team A] vs [Team B] prediction\" Google queries. We can't catch this organically in 1-2 years.",
+      "**Free + zero friction.** No signup, no paywall, no email. The lowest possible threshold for casual readers.",
+      "**League breadth.** 700-850 football leagues vs our 280+. They've solved scraping at scale.",
+      "**Brand recognition.** \"Forebet predictions\" is a Google search term in its own right.",
+      "**Free Kelly Criterion value-bet section.** Lower-quality version of what we sell — but free is free.",
+    ],
+    oddsIntelWins: [
+      "**Multi-bookmaker live odds.** We track 13 bookmakers in real time and identify pricing inefficiencies. Forebet displays generic odds against their own model probabilities — much cruder value-bet detection.",
+      "**CLV-tracked picks.** We measure closing line value on every pick; Forebet shows aggregate accuracy %. Accuracy is the wrong metric — 68% accurate at 1.40 odds loses money.",
+      "**Honest drawdown disclosure.** We publish our worst drawdown (−€398 over 9 days in May 2026). Forebet shows aggregate accuracy with no variance or risk surface.",
+      "**Telegram pre-kickoff delivery.** They're a website you visit; we push to your phone before the line moves.",
+      "**Match-detail intelligence.** Live xG + lineups + injuries + per-bookmaker odds drift alongside the pick. Forebet is prematch-only with one set of generic odds.",
+      "**Per-bet AI explanation (Elite tier).** They show probabilities; we explain why each pick was made.",
+    ],
+    matrix: [
+      { label: "700+ football leagues", competitor: "✅", oddsintel: "~ (280+)" },
+      { label: "Free, no signup", competitor: "✅", oddsintel: "✅ (Free tier)" },
+      { label: "Multi-bookmaker odds comparison", competitor: "❌", oddsintel: "~ (13 books)" },
+      { label: "Per-pick CLV tracked", competitor: "❌", oddsintel: "✅" },
+      { label: "Honest drawdown disclosure", competitor: "❌", oddsintel: "✅" },
+      { label: "Match-detail intelligence (xG / lineups / injuries)", competitor: "❌", oddsintel: "✅" },
+      { label: "Telegram pre-kickoff alerts", competitor: "❌", oddsintel: "✅" },
+      { label: "Per-bet AI explanation", competitor: "❌", oddsintel: "✅" },
+      { label: "Open methodology page", competitor: "❌", oddsintel: "✅" },
+      { label: "In-play / live xG", competitor: "❌", oddsintel: "✅" },
+    ],
+    verdict: {
+      pickThem:
+        "You want free, no-signup predictions for every fixture, you treat predictions as a casual reference (not as actionable bets you'd actually stake on), or you bet in markets we don't cover (e.g., lower-division regional football). Forebet's breadth and zero-friction price are unmatched for that use case.",
+      pickUs:
+        "You want to actually beat the bookmaker over time, you care that predictions are validated by CLV (not just aggregate hit-rate), and you want context (lineups, injuries, odds drift) alongside the pick. Forebet is a reference tool; OddsIntel is a decision tool.",
+    },
+    faq: [
+      {
+        q: "Is Forebet accurate?",
+        a: "They claim 52-58% accuracy on top European leagues. The catch: accuracy ≠ profitability. At 1.50 average odds you need 67% accuracy just to break even after the bookmaker's margin. Forebet doesn't publish ROI or CLV — the metrics that would actually tell you whether their predictions make money. The \"accuracy\" headline is doing positioning work, not measurement work.",
+      },
+      {
+        q: "Why pay when Forebet is free?",
+        a: "Free is the right price for what Forebet is — a reference publication with unverified accuracy claims, monetised via ads and bookmaker affiliate clicks. Our paid tier exists because we measure CLV per pick, deliver alerts before line movement, explain why each pick was made, and surface match context (lineups + xG + odds drift) alongside the pick. Different products doing different jobs.",
+      },
+      {
+        q: "Will Forebet's free tier kill OddsIntel's pricing?",
+        a: "No, because Forebet doesn't sell what we sell. They're an SEO + affiliate funnel: their incentive is to drive bookmaker signups, not to be honest about pick quality. We're a CLV-tracked subscription: our incentive is for our picks to actually beat the closing line over time. Casual readers go to Forebet; bettors who track ROI come to us.",
+      },
+    ],
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+
+  {
+    slug: "oddspedia",
+    name: "Oddspedia",
+    tier: "Odds aggregator",
+    homeUrl: "https://oddspedia.com",
+    oneliner:
+      "Odds comparison platform with 250+ bookmakers, free AI value-bet tool (SmartBet), and widget syndication network.",
+    traffic: "~1.89M visits/month (Similarweb Jul 2025), 12:13 avg session, 48.6% organic",
+    pricing: "Free (affiliate + widget syndication revenue, no subscription tier)",
+    whereTheyWin: [
+      "**250 bookmaker coverage.** We track 13. For pure odds comparison — the \"where can I get the best price on this pick\" use case — they win on raw volume.",
+      "**Widget syndication network.** Publishers embed Oddspedia widgets on their own sites; clicks split 50/50. A distributed traffic acquisition channel we can't easily replicate.",
+      "**Free + zero friction.** No signup, no paywall on SmartBet, value bets, or odds comparison. The floor is \"consume forever for free.\"",
+      "**12-minute average session.** Casual bettors hang around browsing odds. They've built genuine browse-time engagement.",
+      "**Multi-sport breadth.** Football + tennis + basketball + NFL etc. We're football-only by design.",
+    ],
+    oddsIntelWins: [
+      "**CLV-tracked picks.** Oddspedia's SmartBet flags \"value %\" but doesn't publish closing line value. We can't tell from their surface whether SmartBet's flagged picks actually beat the closing line. We do, and we publish per-pick CLV.",
+      "**Honest variance + drawdown disclosure.** We publish our worst drawdown (−€398, 9 days, May 2026). Oddspedia doesn't surface drawdowns at all.",
+      "**Subscription accountability.** We sell a product where every pick is timestamped and tracked. Their affiliate model rewards engagement, not pick accuracy — they have no incentive to be honest about quality.",
+      "**Per-bet AI explanation (Elite).** SmartBet flags value but doesn't explain rationale per pick. Ours does.",
+      "**Live in-play bots + xG tracking.** Prematch-focused odds comparison vs our integrated in-play tracker.",
+      "**Telegram-native delivery.** They're a destination site you visit. We push to your phone before kickoff.",
+    ],
+    matrix: [
+      { label: "Bookmaker coverage", competitor: "✅ (250)", oddsintel: "~ (13)" },
+      { label: "AI value-bet detection", competitor: "✅ (SmartBet)", oddsintel: "✅" },
+      { label: "Per-pick CLV tracked", competitor: "❌", oddsintel: "✅" },
+      { label: "Honest drawdown disclosure", competitor: "❌", oddsintel: "✅" },
+      { label: "Per-bet AI explanation", competitor: "❌", oddsintel: "✅" },
+      { label: "Telegram pre-kickoff alerts", competitor: "❌", oddsintel: "✅" },
+      { label: "In-play / live xG", competitor: "❌", oddsintel: "✅" },
+      { label: "Multi-sport coverage", competitor: "✅", oddsintel: "❌ (football-only)" },
+      { label: "Embeddable widgets", competitor: "✅", oddsintel: "❌" },
+      { label: "Free tier", competitor: "✅ (everything free)", oddsintel: "✅" },
+    ],
+    verdict: {
+      pickThem:
+        "You want odds comparison across many bookmakers (the \"where do I bet this?\" question), you want a free value-bet detection tool with no signup, or you bet multi-sport. Their widget ecosystem and bookmaker breadth are real advantages for those specific jobs.",
+      pickUs:
+        "You want the curated decision rather than the raw odds buffet, you care that value-bet detection is validated by CLV (not just a \"value %\" badge), and you want picks delivered to Telegram with rationale and match context. Oddspedia is a reference layer; OddsIntel is a decision layer.",
+    },
+    faq: [
+      {
+        q: "Is SmartBet (Oddspedia's value-bet tool) any good?",
+        a: "SmartBet identifies markets where their model's implied probability differs from the bookmaker's. The math is reasonable, but they don't publish CLV — meaning we don't know whether SmartBet's flagged value bets actually beat the closing line. Without that, you're trusting their model's calibration on faith. We publish per-pick CLV specifically because that's the only metric that proves a model has real edge in weeks, not years.",
+      },
+      {
+        q: "Why do you cover only 13 bookmakers if Oddspedia covers 250?",
+        a: "We focus on the EU bookmakers our users can actually access. The other 200+ Oddspedia indexes are mostly US/Asian books, affiliate-friendly small operators, or grey-market sites. 13 is enough to find genuine pricing inefficiencies at the books that matter for our audience. Breadth for breadth's sake serves the affiliate funnel, not the bettor.",
+      },
+      {
+        q: "Can I use both?",
+        a: "Sure. Oddspedia for odds reference + multi-bookmaker browsing. OddsIntel for curated value bets with CLV tracking, Telegram delivery, and match context. Different jobs.",
+      },
+    ],
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+
+  {
+    slug: "sportbot-ai",
+    name: "SportBot AI",
+    tier: "AI chat + bankroll",
+    homeUrl: "https://www.sportbotai.com",
+    oneliner:
+      "Conversational AI sports analyst with bankroll tracking, edge alerts, behavioural \"AI Coach\", and multi-sport coverage.",
+    traffic: "Small — exact figure unavailable in Similarweb research",
+    pricing:
+      "Free · Pro $18.99/mo · Premium $39.99/mo · Lifetime Pro $299 · Lifetime Premium $999",
+    whereTheyWin: [
+      "**Conversational chat UX.** \"Ask the AI about this match\" interface is their core product. We have per-bet AI explanations but no chat surface yet (GROWTH-CHAT-AI-SPIKE is roadmapped).",
+      "**AI Coach — behavioural coaching layer.** Weekly audits for tilt, loss-chasing, overstaking, bankroll mismanagement. Genuinely novel; we don't have this.",
+      "**Multi-sport breadth.** Soccer + NBA + NFL + NHL + EuroLeague + Tennis. We're football-only.",
+      "**Bankroll tracker with Kelly sizing built in.** They've productised the bet-log workflow.",
+      "**iOS native app.** We're web + Telegram only.",
+      "**Lifetime pricing tier.** $299 / $999 one-time — a cash-forward pricing lever we don't offer.",
+    ],
+    oddsIntelWins: [
+      "**Their published ROI is -27% over 30 days** (22W-30L at 1.71 avg odds). Chat alone isn't a profitability driver — pair our chat (when we ship it) with the +CLV detection engine for actual edge.",
+      "**CLV — not just ROI — as the honest scoreboard.** They've climbed from accuracy to ROI (good). We're one step further to CLV (better — variance-resistant). Their 30-day -27% ROI is statistically meaningless at that sample; CLV is meaningful in weeks.",
+      "**Methodology transparency.** Our /methodology page documents the model, data sources, drawdown. Theirs doesn't disclose what AI model they use, what data they ingest, or who built it.",
+      "**Named operator + engineering credentials.** Operator background is on the site. Theirs is anonymous — a credibility gap for a paid betting product.",
+      "**Honest negative-result publication.** They publish -27% ROI but don't explain it. We publish -€398 drawdown with educational context (\"this is the cost of being a +EV bettor\"). Same data, much better framing.",
+      "**Per-bet rationale on every pick.** Their chat is conversational but the picks themselves are delivered without per-bet rationale.",
+      "**Telegram delivery + EU bookmaker accessibility.** Built for EU bettors with the books they can actually access. They're US-leaning (\"$\" pricing, NBA/NFL/NHL focus).",
+    ],
+    matrix: [
+      { label: "Conversational chat UX", competitor: "✅", oddsintel: "⏳" },
+      { label: "Weekly behavioural audits (AI Coach)", competitor: "✅", oddsintel: "⏳" },
+      { label: "Bankroll tracker + Kelly sizing", competitor: "✅", oddsintel: "~" },
+      { label: "Multi-sport coverage", competitor: "✅", oddsintel: "❌" },
+      { label: "iOS native app", competitor: "✅", oddsintel: "⏳" },
+      { label: "CLV-tracked picks (publicly)", competitor: "❌", oddsintel: "✅" },
+      { label: "Open methodology page", competitor: "❌", oddsintel: "✅" },
+      { label: "Named team / operator", competitor: "❌", oddsintel: "✅" },
+      { label: "Per-bet rationale on picks", competitor: "❌", oddsintel: "✅" },
+      { label: "Telegram pre-kickoff alerts", competitor: "❌", oddsintel: "✅" },
+    ],
+    verdict: {
+      pickThem:
+        "You want a conversational chat-with-the-AI interface right now, you bet US sports (NBA + NFL + NHL alongside football), you want behavioural bankroll coaching today, or you'd consider a $299-999 lifetime tier over monthly subscriptions.",
+      pickUs:
+        "You want CLV (not just ROI) as the proof metric, you want a named operator and open methodology behind the product, you care about per-bet rationale tied to specific signals, or you bet primarily on EU bookmakers and football. Our €4.99-14.99/mo Elite tier vs their $18.99-39.99/mo is also 3-4× cheaper for the chat-AI feature once we ship it.",
+    },
+    faq: [
+      {
+        q: "SportBot AI markets itself as a profitable AI. Is it?",
+        a: "Their own published ROI is -27% over 30 days (22W-30L at 1.71 avg odds). The product is interesting — chat UX + AI Coach + bankroll tracking are all genuinely novel — but the underlying model hasn't shown edge in their published sample. We're upfront when our paper chain has bad weeks too; see /methodology for the -€398 worst drawdown.",
+      },
+      {
+        q: "Will OddsIntel build chat AI like SportBot?",
+        a: "Yes — GROWTH-CHAT-AI-SPIKE is in our roadmap. We're scoping Elite-only single-match chat, deferred until our v2 model cohort has more verified-ROI data. SportBot AI's existence confirms market demand at the $20-40/mo price point — we'll be 3-4× cheaper for the same feature.",
+      },
+      {
+        q: "What about the AI Coach feature?",
+        a: "Sunday email/Telegram analysing your last 7 days of bets, flagging behavioural patterns (tilt, loss-chasing, overstaking). It's a genuinely novel feature — added to our backlog as GROWTH-AI-COACH-WEEKLY-AUDIT. Trivial to build technically (~$0.005 per audit × users × 4 weeks), deferred until we have N≥200 paying users to make it meaningful.",
       },
     ],
   },

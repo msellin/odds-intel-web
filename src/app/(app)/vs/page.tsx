@@ -13,7 +13,7 @@ import { VS_COMPETITORS } from "@/lib/vs-competitors";
 export const metadata: Metadata = {
   title: "OddsIntel vs Competitors — Honest Comparisons",
   description:
-    "Side-by-side comparisons of OddsIntel against WinnerOdds, InPlayGuru, DeepBetting, soccer-rating, soccerbot.ai. Honest pros and cons, feature matrix, verdict for each.",
+    "Side-by-side comparisons of OddsIntel against WinnerOdds, InPlayGuru, DeepBetting, Forebet, Oddspedia, SportBot AI, soccer-rating, soccerbot.ai. Honest pros and cons, feature matrix, verdict for each.",
   alternates: { canonical: "https://oddsintel.app/vs" },
 };
 
