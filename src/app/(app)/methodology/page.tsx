@@ -217,6 +217,67 @@ export default function MethodologyPage() {
 
       <Separator className="opacity-30" />
 
+      {/* 5b. Drawdown — what value betting actually looks like */}
+      <section className="space-y-4">
+        <h2 className="text-xl font-semibold">5b. What Variance Actually Looks Like</h2>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          Every honest value-betting service shows drawdowns. WinnerOdds — one of
+          the longest-running tracked services in this space — publicly discloses a
+          worst drawdown of <span className="font-mono">−39%</span> in October 2019.
+          A model that has never had a losing month is either cherry-picking its
+          public record or hasn&apos;t been running long enough.
+        </p>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          Our current drawdown profile (sampled live from <span className="font-mono">simulated_bets</span> as of 2026-06-05):
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2 text-sm text-muted-foreground">
+          <div className="rounded-lg border border-border/40 bg-card/30 px-4 py-4">
+            <p className="font-semibold text-foreground/80 mb-1">Worst drawdown to date</p>
+            <p>
+              <span className="font-mono text-foreground/90">−€398</span> over 9 days
+              (peak 2026-05-13 <span className="font-mono">+€404</span> → trough
+              2026-05-22 <span className="font-mono">+€6</span>). One bad nine-day
+              stretch in May wiped out the cumulative May peak. Currently
+              <span className="font-mono"> ~€100</span> below the May peak; not yet recovered.
+            </p>
+          </div>
+          <div className="rounded-lg border border-border/40 bg-card/30 px-4 py-4">
+            <p className="font-semibold text-foreground/80 mb-1">Worst week</p>
+            <p>
+              Week 21 of 2026 (May 18–24): <span className="font-mono">−€204</span>
+              {" "}across 758 bets. This is what a value-betting bad week looks like —
+              normal variance, not a broken model. CLV stayed positive throughout.
+            </p>
+          </div>
+        </div>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          <span className="text-foreground/80 font-medium">Important caveat:</span>{" "}
+          our public chain only has ~35 days of settled bets so far. Drawdown numbers
+          have meaningful statistical weight only after 500+ settled bets. Numbers
+          above will move materially as the chain extends — by design. The chain is
+          published live and never edited; you can inspect every individual bet at
+          {" "}<a href="/performance" className="text-primary underline-offset-2 hover:underline">/performance</a>.
+        </p>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          <span className="text-foreground/80 font-medium">Honest disclosure on verification:</span>{" "}
+          these numbers are <em>self-reported</em>. We are the ones running the
+          database the chain lives in. Independent third-party verification —
+          via Bet-Analytix or Smart Betting Club — is on the roadmap and intentionally
+          gated until our v2-model cohort has stabilised, because the first verified
+          number we publish becomes a permanent public anchor. We&apos;d rather
+          publish a verified honest number than an unverified flattering one.
+        </p>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          <span className="text-foreground/80 font-medium">Why we publish this:</span>{" "}
+          drawdown isn&apos;t evidence the model is broken — it&apos;s the cost of being
+          a +EV bettor. CLV is the leading indicator of edge; drawdown is the lagging
+          price you pay for short-term variance. Services that hide drawdowns are
+          either lucky-sampled or fabricated.
+        </p>
+      </section>
+
+      <Separator className="opacity-30" />
+
       {/* 6. What we don't do */}
       <section className="space-y-4">
         <h2 className="text-xl font-semibold">6. What We Don&apos;t Do</h2>
