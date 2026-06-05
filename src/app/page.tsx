@@ -125,18 +125,23 @@ export default async function LandingPage() {
       </nav>
 
       {/* ───────── Hero ───────── */}
-      <section className="relative overflow-hidden pt-20 pb-16 text-center">
+      <section className="relative overflow-hidden pt-8 pb-12 text-center sm:pt-20 sm:pb-16">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_50%_-10%,rgba(34,197,94,0.08),transparent)]" />
         <div className="relative mx-auto max-w-3xl px-4 sm:px-6">
+          {/* GROWTH-MOBILE-LANDING-V2 (2026-06-05) P2-1: compress trust pill
+              on mobile (the "Tracking 280+ leagues worldwide · Football /
+              Soccer" line takes most of the row at 393px). Mobile sees the
+              short form; sm+ sees the full sentence. */}
           <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1">
             <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
             <span className="font-mono text-[10px] uppercase tracking-widest text-green-400">
-              Tracking 280+ leagues worldwide · Football / Soccer
+              <span className="sm:hidden">Football · 280+ leagues</span>
+              <span className="hidden sm:inline">Tracking 280+ leagues worldwide · Football / Soccer</span>
             </span>
           </div>
           <h1 className="text-balance text-5xl font-black leading-[1.05] tracking-tight text-foreground sm:text-6xl lg:text-7xl">
             Beat the{" "}
-            <span className="text-green-400">bookmakers.</span>
+            <span className="text-green-400">bookmakers</span>.
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-balance text-lg text-foreground/85 sm:text-xl">
             AI finds where today&apos;s matches are mispriced. We send the picks
@@ -152,7 +157,7 @@ export default async function LandingPage() {
             </span>
             <span className="text-muted-foreground/30" aria-hidden>·</span>
             <span>
-              <span className="font-mono font-bold text-amber-300">+9.8%</span>{" "}
+              <span className="font-mono font-bold text-amber-300">{heroHasData ? heroCLVPct : "+9.5%"}</span>{" "}
               CLV (30-day)
             </span>
             <span className="text-muted-foreground/30" aria-hidden>·</span>
@@ -346,7 +351,7 @@ export default async function LandingPage() {
               className="group rounded-xl border border-sky-500/20 bg-sky-500/[0.03] p-6 transition-colors hover:border-sky-500/50 hover:bg-sky-500/[0.08]"
             >
               <p className="font-mono text-[10px] uppercase tracking-widest text-sky-400">Verification</p>
-              <p className="mt-2 font-mono text-3xl font-black text-sky-300">Self-reported</p>
+              <p className="mt-2 font-mono text-xl font-black text-sky-300 sm:text-2xl">Self-reported</p>
               <p className="mt-2 text-xs leading-relaxed text-muted-foreground">Bet-Analytix / SBC verification on roadmap. We&apos;d rather wait than fake it.</p>
               <p className="mt-4 text-xs font-semibold text-sky-300 group-hover:text-sky-200">
                 Why no &quot;verified&quot; badge yet →
@@ -357,7 +362,7 @@ export default async function LandingPage() {
               className="group rounded-xl border border-green-500/20 bg-green-500/[0.03] p-6 transition-colors hover:border-green-500/50 hover:bg-green-500/[0.08]"
             >
               <p className="font-mono text-[10px] uppercase tracking-widest text-green-400">Honest metric</p>
-              <p className="mt-2 font-mono text-3xl font-black text-green-300">CLV, not ROI</p>
+              <p className="mt-2 font-mono text-xl font-black text-green-300 sm:text-2xl">CLV, not ROI</p>
               <p className="mt-2 text-xs leading-relaxed text-muted-foreground">ROI is variance-confounded. Closing-line value is the only metric that proves edge early.</p>
               <p className="mt-4 text-xs font-semibold text-green-300 group-hover:text-green-200">
                 Why CLV beats ROI →
@@ -399,18 +404,32 @@ export default async function LandingPage() {
           asked for once on the landing, not three times. Full feature matrix
           still available on /how-it-works for users who want the deep dive. */}
 
-      {/* ───────── FAQ ───────── */}
+      {/* ───────── FAQ ─────────
+          GROWTH-MOBILE-LANDING-V2 (2026-06-05): switched from always-
+          expanded divs to native <details> elements. The FAQ block was
+          consuming ~3 full mobile viewports (~2400px scroll) before users
+          reached the Telegram CTA below. Open by default on the first item
+          to keep some prose visible without forcing tap to engage. The
+          answer text is still in the DOM (under `<summary>`) so Google
+          indexes every answer — no SEO regression. */}
       <section className="bg-card/20 py-14">
         <div className="mx-auto max-w-3xl px-4 sm:px-6">
           <div className="mb-8 text-center">
             <h2 className="text-2xl font-bold tracking-tight text-foreground">Common questions</h2>
           </div>
           <div className="space-y-3">
-            {faqItems.map((item) => (
-              <div key={item.q} className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-6 py-5">
-                <p className="font-medium text-foreground">{item.q}</p>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{item.a}</p>
-              </div>
+            {faqItems.map((item, i) => (
+              <details
+                key={item.q}
+                className="group rounded-xl border border-white/[0.06] bg-white/[0.02] px-6 py-5 [&_summary::-webkit-details-marker]:hidden"
+                open={i === 0}
+              >
+                <summary className="flex cursor-pointer list-none items-start justify-between gap-3 font-medium text-foreground">
+                  <span>{item.q}</span>
+                  <span className="mt-0.5 select-none text-muted-foreground/60 transition-transform group-open:rotate-45" aria-hidden>+</span>
+                </summary>
+                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{item.a}</p>
+              </details>
             ))}
           </div>
         </div>
@@ -432,7 +451,7 @@ export default async function LandingPage() {
             className="flex items-center gap-1.5 transition-colors hover:text-foreground"
           >
             <span className="size-1.5 rounded-full bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.7)]" aria-hidden />
-            <span>Paper-bet chain unbroken since 2026-05-03</span>
+            <span>Paper-bet chain unbroken since 2026-05-03 →</span>
           </Link>
           <span className="text-muted-foreground/30" aria-hidden>·</span>
           <Link href="/methodology" className="transition-colors hover:text-foreground">
@@ -493,10 +512,12 @@ export default async function LandingPage() {
         aria-label="Featured on"
         className="border-t border-white/[0.04] py-6"
       >
+        {/* GROWTH-MOBILE-LANDING-V2 (2026-06-05): dropped the external
+            "Featured on" caption because each badge already carries it,
+            making the phrase appear 3× within ~200px on mobile. Normalised
+            all three badges to h-10 so they sit on a single deliberate
+            row instead of wrap-to-three. */}
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-3 px-4 sm:px-6">
-          <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/60">
-            Featured on
-          </p>
           <div className="flex flex-wrap items-center justify-center gap-4">
             <a
               href="https://twelve.tools"
@@ -508,8 +529,7 @@ export default async function LandingPage() {
               <img
                 src="https://twelve.tools/badge0-dark.svg"
                 alt="Featured on Twelve Tools"
-                width={200}
-                height={54}
+                className="h-10 w-auto"
               />
             </a>
             <a
@@ -522,8 +542,7 @@ export default async function LandingPage() {
               <img
                 src="https://wired.business/badge0-dark.svg"
                 alt="Featured on Wired Business"
-                width={200}
-                height={54}
+                className="h-10 w-auto"
               />
             </a>
             <a
@@ -536,8 +555,7 @@ export default async function LandingPage() {
               <img
                 src="https://aiboom.tools/badge/badge_dark.svg"
                 alt="Featured on AIBoom.Tools"
-                width={120}
-                height={32}
+                className="h-10 w-auto"
               />
             </a>
           </div>

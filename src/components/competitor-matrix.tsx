@@ -130,7 +130,10 @@ export function CompetitorMatrix() {
         {/* Mobile stack view — table requires ~265px of horizontal scroll
             at 375px viewport. The mobile version flattens each feature
             into a card with OddsIntel always visible.
-            GROWTH-MOBILE-FIRST-AUDIT P0-2. */}
+            GROWTH-MOBILE-FIRST-AUDIT P0-2.
+            GROWTH-MOBILE-LANDING-V2 (2026-06-05) P1-A: added a per-section
+            initials header row so users can map each ✓/✗ glyph to a
+            competitor without having to scroll to the legend at the bottom. */}
         <div className="mt-8 space-y-3 md:hidden">
           {SECTIONS.map((section) => (
             <div key={section.heading}>
@@ -138,6 +141,20 @@ export function CompetitorMatrix() {
                 {section.heading}
               </p>
               <div className="rounded-xl border border-white/[0.06] divide-y divide-white/[0.04]">
+                {/* Sticky column-initials header inside each section */}
+                <div className="flex items-center gap-3 bg-muted/20 px-4 py-1.5">
+                  <div className="flex-1" aria-hidden />
+                  <div className="flex items-center gap-2.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/50">
+                    {COMPETITORS.map((c) => (
+                      <div key={c.name} className="flex w-7 justify-center" title={c.name}>
+                        {c.name.replace(/[a-z]/g, "").slice(0, 2)}
+                      </div>
+                    ))}
+                    <div className="flex w-7 justify-center rounded bg-green-500/[0.08] py-0.5 font-bold text-green-400/80">
+                      OI
+                    </div>
+                  </div>
+                </div>
                 {section.rows.map((row, i) => (
                   <div key={`${section.heading}-${i}`} className="flex items-center gap-3 px-4 py-3">
                     <div className="flex-1 text-sm text-foreground/85">{row.label}</div>

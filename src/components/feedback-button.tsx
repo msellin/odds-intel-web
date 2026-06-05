@@ -10,13 +10,21 @@
 //
 // We still use Sentry's feedback form for capture — `attachTo(el)` wires
 // our button to the same modal `autoInject` would have opened.
+//
+// GROWTH-MOBILE-LANDING-V2 (2026-06-05): hidden on the landing page (`/`)
+// because the mobile audit found the floater obscured content in 11 of 13
+// landing screenshots and occupied the thumb-zone slot where the primary
+// conversion CTA should live. Landing is a conversion page, not a
+// feedback-collection page. Button still renders everywhere else.
 
 import { useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
 import * as Sentry from "@sentry/nextjs";
 import { MessageSquare } from "lucide-react";
 
 export function FeedbackButton() {
   const btnRef = useRef<HTMLButtonElement | null>(null);
+  const pathname = usePathname();
 
   useEffect(() => {
     const el = btnRef.current;
@@ -32,6 +40,9 @@ export function FeedbackButton() {
       if (typeof unsubscribe === "function") unsubscribe();
     };
   }, []);
+
+  // Hide on landing — conversion surface, not feedback-collection surface.
+  if (pathname === "/") return null;
 
   return (
     <button

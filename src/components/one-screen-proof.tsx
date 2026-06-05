@@ -26,15 +26,18 @@
  */
 import { Check, X } from "lucide-react";
 
+// GROWTH-MOBILE-LANDING-V2 (2026-06-05): names trimmed so mobile truncation
+// doesn't leave the column rendered as a string of "WhoScor..." / "Premierl..."
+// / "Transfer..." stubs. Same point, no truncation jitter.
 const ROUTINE_TABS: { name: string; what: string }[] = [
-  { name: "SoccerStats",     what: "form" },
-  { name: "Transfermarkt",   what: "lineups" },
-  { name: "WhoScored",       what: "ratings" },
-  { name: "OddsPortal",      what: "odds" },
-  { name: "PremierInjuries", what: "injuries" },
-  { name: "Twitter / X",     what: "rumours" },
-  { name: "Weather.com",     what: "weather" },
-  { name: "FBref",           what: "xG" },
+  { name: "Stats",       what: "form" },
+  { name: "Transfers",   what: "lineups" },
+  { name: "WhoScored",   what: "ratings" },
+  { name: "OddsPortal",  what: "odds" },
+  { name: "Injuries",    what: "injuries" },
+  { name: "X",           what: "rumours" },
+  { name: "Weather",     what: "weather" },
+  { name: "FBref",       what: "xG" },
 ];
 
 export function OneScreenProof() {
@@ -121,8 +124,8 @@ export function OneScreenProof() {
         </div>
 
         <p className="mx-auto mt-8 max-w-2xl text-center text-xs text-muted-foreground/80">
-          Animation loops. Replace with a real screen recording later — same
-          point, more proof.
+          Same workflow side-by-side. The OddsIntel side reflects the actual
+          product surface — see /matches.
         </p>
       </div>
     </section>
