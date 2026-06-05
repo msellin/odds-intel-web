@@ -66,22 +66,12 @@ function OddsCell({
 function TeamLogo({ logo, name, priority = false }: { logo: string | null; name: string; priority?: boolean }) {
   const [failed, setFailed] = useState(false);
   const initial = name.charAt(0).toUpperCase();
-  const src = logo ? `/api/logo?url=${encodeURIComponent(logo)}&w=20` : null;
 
-  if (src && !failed) {
-    // LIGHTHOUSE-FIX-2 (2026-06-05): next/image instead of raw <img>. The
-    // /api/logo proxy already returns a 20px-wide resized image, so we use
-    // `unoptimized` to skip Next's image optimizer (no point re-optimizing
-    // already-tiny logos). The framework still gives us IntersectionObserver
-    // lazy-load, automatic LCP candidate exclusion (logos never qualify),
-    // and proper width/height attributes preventing CLS. Expected lift:
-    // +5-8 Perf points on /matches and /predictions pages (Lighthouse was
-    // flagging the ~40-60 raw <img> tags per page as a missed framework
-    // optimization).
+  if (logo && !failed) {
     return (
       <div className="size-4 sm:size-5 shrink-0 overflow-hidden rounded-full bg-white/[0.06]">
         <Image
-          src={src}
+          src={logo}
           alt={name}
           width={20}
           height={20}
