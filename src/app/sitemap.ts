@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 import { ALL_SLUGS } from "@/lib/glossary";
-import { PREDICTION_LEAGUES, getMatchIdsForSitemap } from "@/lib/engine-data";
+import { getAllPredictionLeagues, getMatchIdsForSitemap } from "@/lib/engine-data";
 import { getWorldCupFixtures } from "@/lib/world-cup";
 
 // Revalidate hourly so new fixtures appear in the sitemap without redeploys.
@@ -106,14 +106,25 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.7,
   }));
 
-  const predictionPages: MetadataRoute.Sitemap = [
-    { url: `${base}/predictions`, lastModified: now, changeFrequency: "daily" as const, priority: 0.85 },
-    ...PREDICTION_LEAGUES.map((l) => ({
+  // GROWTH-SEO-EXPAND-LEAGUES (2026-06-05): include all qualifying leagues, not
+  // just the curated 8. Featured leagues get priority 0.8; the rest 0.65 so the
+  // curated set still surfaces first in Google's crawl. Fail-safe to keep
+  // sitemap generation robust if the RPC errors during a deploy/migrate gap.
+  let predictionLeaguePages: MetadataRoute.Sitemap = [];
+  try {
+    const allLeagues = await getAllPredictionLeagues();
+    predictionLeaguePages = allLeagues.map((l) => ({
       url: `${base}/predictions/${l.slug}`,
       lastModified: now,
       changeFrequency: "daily" as const,
-      priority: 0.8,
-    })),
+      priority: l.featured ? 0.8 : 0.65,
+    }));
+  } catch {
+    predictionLeaguePages = [];
+  }
+  const predictionPages: MetadataRoute.Sitemap = [
+    { url: `${base}/predictions`, lastModified: now, changeFrequency: "daily" as const, priority: 0.85 },
+    ...predictionLeaguePages,
   ];
 
   // GROWTH-SEO-CONTENT-ENGINE Phase 1 (2026-06-05): per-fixture prediction

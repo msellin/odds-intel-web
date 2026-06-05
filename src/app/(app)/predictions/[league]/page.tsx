@@ -8,15 +8,29 @@ import { notFound } from "next/navigation";
 import { ChevronLeft, TrendingUp, Calendar } from "lucide-react";
 import {
   getLeaguePredictions,
-  PREDICTION_LEAGUES,
+  getAllPredictionLeagues,
+  getPredictionLeagueBySlug,
   fixtureSlug,
 } from "@/lib/engine-data";
 import { getCountryFlag } from "@/lib/country-flags";
 import { TeamCrest } from "@/components/team-crest";
 import type { LeaguePredictionMatch } from "@/lib/engine-data";
 
+// GROWTH-SEO-EXPAND-LEAGUES (2026-06-05): dynamic league list. Was 8 hardcoded
+// featured leagues; now ~99 leagues with sufficient ensemble coverage. Pre-build
+// the featured 8 + top-by-prediction-volume slice; rest hydrate via ISR on first hit.
+export const dynamicParams = true;
+
 export async function generateStaticParams() {
-  return PREDICTION_LEAGUES.map((l) => ({ league: l.slug }));
+  const all = await getAllPredictionLeagues();
+  // Build featured + top 20 by prediction volume. Anything beyond renders
+  // on first request via dynamicParams=true. Keeps Vercel build time bounded.
+  const featured = all.filter((l) => l.featured);
+  const topNonFeatured = all
+    .filter((l) => !l.featured)
+    .sort((a, b) => (b.predictions ?? 0) - (a.predictions ?? 0))
+    .slice(0, 20);
+  return [...featured, ...topNonFeatured].map((l) => ({ league: l.slug }));
 }
 
 export async function generateMetadata({
@@ -25,7 +39,7 @@ export async function generateMetadata({
   params: Promise<{ league: string }>;
 }): Promise<Metadata> {
   const { league: slug } = await params;
-  const meta = PREDICTION_LEAGUES.find((l) => l.slug === slug);
+  const meta = await getPredictionLeagueBySlug(slug);
   const name = meta?.name ?? slug.replace(/-/g, " ");
   const title = `${name} Predictions This Week — OddsIntel`;
   const description = `AI model predictions for ${name} fixtures this week. Win probabilities, model calls and value picks powered by Poisson + XGBoost.`;

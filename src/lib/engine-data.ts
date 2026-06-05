@@ -3572,8 +3572,11 @@ export interface LeaguePredictionPage {
   matches: LeaguePredictionMatch[];
 }
 
-// Featured leagues for the predictions index page
-// leagueId: hardcoded Supabase UUID — skips the ilike search that often matches wrong leagues
+// FEATURED leagues for the predictions index hero grid.
+// leagueId: hardcoded Supabase UUID — skips the ilike search that often matches wrong leagues.
+// These get hand-picked short slugs ("premier-league", "la-liga") for SEO + URL stability.
+// GROWTH-SEO-EXPAND-LEAGUES (2026-06-05): not the full coverage list anymore — see
+// getAllPredictionLeagues() for the dynamic list driving sitemap + per-league SEO pages.
 export const PREDICTION_LEAGUES = [
   { slug: "premier-league",  name: "Premier League",  country: "England",     leagueId: "73c57213-6829-4c04-b5aa-04db792b98e8", searchName: undefined,              searchCountry: undefined },
   { slug: "la-liga",         name: "La Liga",          country: "Spain",       leagueId: "0cfb91ae-0f59-4278-8229-ef92118960c3", searchName: undefined,              searchCountry: undefined },
@@ -3586,6 +3589,130 @@ export const PREDICTION_LEAGUES = [
 ];
 
 export type PredictionLeagueSlug = (typeof PREDICTION_LEAGUES)[number]["slug"];
+
+// ─── GROWTH-SEO-EXPAND-LEAGUES (2026-06-05): dynamic league list ────────────
+// Drives sitemap, generateStaticParams, /predictions/[league] resolution and
+// the per-fixture page for ANY league with enough ensemble prediction coverage,
+// not just the curated 8.
+
+export interface PredictionLeagueMeta {
+  slug: string;
+  name: string;
+  country: string;
+  leagueId: string;
+  featured: boolean;       // true if in the curated PREDICTION_LEAGUES list
+  upcoming?: number;       // upcoming fixture count (next 21d), present for dynamic entries
+  predictions?: number;    // ensemble prediction count (60d back + 21d fwd window)
+}
+
+/**
+ * Slug for any league. Featured leagues keep their hand-picked short slug
+ * (preserves existing URLs + matches "premier-league" style ranking). All
+ * other leagues get a country-prefixed slug ("argentina-primera-nacional")
+ * which makes collisions impossible across countries (we have at least 2
+ * legitimate collisions on bare-name slugs — "segunda-division" exists in
+ * Spain, Venezuela, Uruguay, Chile; "premier-soccer-league" in South Africa
+ * and Zimbabwe).
+ */
+export function buildLeagueSlug(name: string, country: string, leagueId: string): string {
+  const featured = PREDICTION_LEAGUES.find((l) => l.leagueId === leagueId);
+  if (featured) return featured.slug;
+  const slugName = slugifyTeamName(name);
+  const slugCountry = slugifyTeamName(country);
+  if (!slugName || !slugCountry) return slugifyTeamName(`${country} ${name}`);
+  return `${slugCountry}-${slugName}`;
+}
+
+/**
+ * Returns every league with sufficient ensemble prediction coverage to render
+ * a non-thin /predictions/[league] SEO page. Falls back to PREDICTION_LEAGUES
+ * if the get_prediction_leagues RPC isn't available (e.g. during the brief
+ * window between a Vercel deploy and the matching migration applying via
+ * GitHub Actions). Cached for 1h via the page revalidate; consumers should
+ * NOT add a second cache layer.
+ */
+export async function getAllPredictionLeagues(
+  minPreds = 3,
+): Promise<PredictionLeagueMeta[]> {
+  const admin = createSupabaseAdmin();
+  type Row = {
+    league_id: string;
+    league_name: string;
+    country: string;
+    tier: number;
+    n_upcoming: number;
+    n_pred: number;
+  };
+  const { data, error } = await admin.rpc("get_prediction_leagues", {
+    min_preds: minPreds,
+  });
+  if (error || !data) {
+    // Fallback: feature-list-only. Keeps the SEO surface working through
+    // any deploy-migrate timing gap.
+    return PREDICTION_LEAGUES.map((l) => ({
+      slug: l.slug,
+      name: l.name,
+      country: l.country,
+      leagueId: l.leagueId,
+      featured: true,
+    }));
+  }
+  const rows = data as Row[];
+  const seenSlugs = new Set<string>();
+  const out: PredictionLeagueMeta[] = [];
+  for (const r of rows) {
+    let slug = buildLeagueSlug(r.league_name, r.country, r.league_id);
+    // Defensive: if a slug collision still slips through (e.g. duplicate
+    // league rows in the DB), suffix with the leagueId's first 6 chars.
+    if (seenSlugs.has(slug)) slug = `${slug}-${r.league_id.slice(0, 6)}`;
+    seenSlugs.add(slug);
+    out.push({
+      slug,
+      name: r.league_name,
+      country: r.country,
+      leagueId: r.league_id,
+      featured: PREDICTION_LEAGUES.some((p) => p.leagueId === r.league_id),
+      upcoming: Number(r.n_upcoming),
+      predictions: Number(r.n_pred),
+    });
+  }
+  // Make sure every featured league is represented even if the RPC excluded
+  // it (e.g. off-season Champions League has no upcoming fixtures). Keeps
+  // the predictions index hero cards intact through breaks.
+  for (const f of PREDICTION_LEAGUES) {
+    if (!out.some((l) => l.leagueId === f.leagueId)) {
+      out.push({
+        slug: f.slug,
+        name: f.name,
+        country: f.country,
+        leagueId: f.leagueId,
+        featured: true,
+      });
+    }
+  }
+  return out;
+}
+
+/** Look up a league meta object by URL slug. Featured slugs work; dynamic
+ *  "{country}-{name}" slugs work; bare names that match a featured slug also
+ *  work. Returns null for unknown slugs. */
+export async function getPredictionLeagueBySlug(
+  slug: string,
+): Promise<PredictionLeagueMeta | null> {
+  // Featured first — cheap & doesn't require an RPC call.
+  const featured = PREDICTION_LEAGUES.find((l) => l.slug === slug);
+  if (featured) {
+    return {
+      slug: featured.slug,
+      name: featured.name,
+      country: featured.country,
+      leagueId: featured.leagueId,
+      featured: true,
+    };
+  }
+  const all = await getAllPredictionLeagues();
+  return all.find((l) => l.slug === slug) ?? null;
+}
 
 // ─── Per-fixture prediction pages (GROWTH-SEO-CONTENT-ENGINE Phase 1) ───────
 // One indexable URL per upcoming fixture in a covered league. URL shape:
@@ -3632,8 +3759,10 @@ export interface FixtureSitemapEntry {
  */
 export async function getPredictionFixturesForSitemap(): Promise<FixtureSitemapEntry[]> {
   const admin = createSupabaseAdmin();
-  const leagueIds = PREDICTION_LEAGUES.map((l) => l.leagueId);
-  const leagueSlugByid = new Map(PREDICTION_LEAGUES.map((l) => [l.leagueId, l.slug]));
+  // GROWTH-SEO-EXPAND-LEAGUES: dynamic league list (was hardcoded 8).
+  const allLeagues = await getAllPredictionLeagues();
+  const leagueIds = allLeagues.map((l) => l.leagueId);
+  const leagueSlugByid = new Map(allLeagues.map((l) => [l.leagueId, l.slug]));
   const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
   const until = new Date(Date.now() + 21 * 86_400_000).toISOString();
 
@@ -3644,7 +3773,7 @@ export async function getPredictionFixturesForSitemap(): Promise<FixtureSitemapE
     .gte("date", since)
     .lte("date", until)
     .order("date", { ascending: true })
-    .range(0, 4999);
+    .range(0, 9999);
   if (error || !data) return [];
 
   type Row = {
@@ -3678,7 +3807,8 @@ export async function resolveFixtureSlug(
   leagueSlug: string,
   fixtureSlugParam: string,
 ): Promise<{ matchId: string } | null> {
-  const leagueMeta = PREDICTION_LEAGUES.find((l) => l.slug === leagueSlug);
+  // GROWTH-SEO-EXPAND-LEAGUES: works for any league slug, not just featured 8.
+  const leagueMeta = await getPredictionLeagueBySlug(leagueSlug);
   if (!leagueMeta) return null;
 
   // Parse the fixture slug — last 10 chars are date, rest is home-vs-away
@@ -3722,7 +3852,10 @@ export async function resolveFixtureSlug(
  * Used by the predictions index — page is ISR-cached, so this runs at most once per revalidate window. */
 export async function getPredictionLeagueCounts(): Promise<Record<string, number>> {
   const admin = createSupabaseAdmin();
-  const leagueIds = PREDICTION_LEAGUES.map((l) => l.leagueId);
+  // GROWTH-SEO-EXPAND-LEAGUES: count fixtures for all qualifying leagues so
+  // the "More leagues" section on the index can render counts too.
+  const allLeagues = await getAllPredictionLeagues();
+  const leagueIds = allLeagues.map((l) => l.leagueId);
   const now = new Date();
   const start = now.toISOString().split("T")[0];
   const end = new Date(now.getTime() + 21 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
@@ -3747,7 +3880,10 @@ export async function getLeaguePredictions(
 ): Promise<LeaguePredictionPage | null> {
   const supabase = await createSupabaseServer();
 
-  const meta = PREDICTION_LEAGUES.find((l) => l.slug === leagueSlug);
+  // GROWTH-SEO-EXPAND-LEAGUES: dynamic slug lookup. Featured-first (cheap path),
+  // then dynamic getAllPredictionLeagues if not in the featured list.
+  const meta = await getPredictionLeagueBySlug(leagueSlug);
+  if (!meta) return null;
 
   // Show up to 21 days ahead so next-round fixtures appear even if a bit out
   const now = new Date();
@@ -3756,31 +3892,8 @@ export async function getLeaguePredictions(
     .toISOString()
     .split("T")[0];
 
-  // Use hardcoded leagueId when available — avoids ilike matching wrong leagues
-  let leagueIds: string[];
-  let primaryLeague: { id: string; name: string; country: string };
-
-  if (meta?.leagueId) {
-    leagueIds = [meta.leagueId];
-    primaryLeague = { id: meta.leagueId, name: meta.name, country: meta.country };
-  } else {
-    // Fall back to ilike search for dynamic/unknown leagues
-    let leagueQuery = supabase.from("leagues").select("id, name, country");
-    if (meta) {
-      const searchName = meta.searchName ?? meta.name;
-      const searchCountry = meta.searchCountry ?? meta.country;
-      leagueQuery = leagueQuery
-        .ilike("name", `%${searchName}%`)
-        .ilike("country", `%${searchCountry}%`);
-    } else {
-      const parts = leagueSlug.replace(/-/g, " ").split(" ");
-      leagueQuery = leagueQuery.ilike("name", `%${parts[0]}%`);
-    }
-    const { data: leagues } = await leagueQuery.limit(3);
-    if (!leagues || leagues.length === 0) return null;
-    leagueIds = (leagues as Array<{ id: string; name: string; country: string }>).map((l) => l.id);
-    primaryLeague = leagues[0] as { id: string; name: string; country: string };
-  }
+  const leagueIds = [meta.leagueId];
+  const primaryLeague = { id: meta.leagueId, name: meta.name, country: meta.country };
 
   const { data: matchRows } = await supabase
     .from("matches")
@@ -3799,8 +3912,8 @@ export async function getLeaguePredictions(
   if (!matchRows || matchRows.length === 0) {
     return {
       leagueId: primaryLeague.id,
-      leagueName: meta?.name ?? primaryLeague.name,
-      leagueCountry: meta?.country ?? primaryLeague.country,
+      leagueName: meta.name,
+      leagueCountry: meta.country,
       leagueSlug,
       weekStart,
       weekEnd,
@@ -3878,8 +3991,8 @@ export async function getLeaguePredictions(
       awayTeam: (at as Record<string, string>)?.name ?? "Away",
       homeLogo: ((ht as Record<string, string | null>)?.logo_url as string | null) ?? null,
       awayLogo: ((at as Record<string, string | null>)?.logo_url as string | null) ?? null,
-      leagueName: meta?.name ?? primaryLeague.name,
-      leagueCountry: meta?.country ?? primaryLeague.country,
+      leagueName: meta.name,
+      leagueCountry: meta.country,
       modelCall,
       confidence,
       homeProb: hp !== null ? Math.round(hp * 100) : null,

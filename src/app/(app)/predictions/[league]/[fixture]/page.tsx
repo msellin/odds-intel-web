@@ -27,7 +27,7 @@ import {
   getPublicMatchById,
   getMatchPreview,
   getPredictionFixturesForSitemap,
-  PREDICTION_LEAGUES,
+  getPredictionLeagueBySlug,
 } from "@/lib/engine-data";
 import { TeamCrest } from "@/components/team-crest";
 
@@ -58,7 +58,7 @@ export async function generateMetadata({
   const match = await getPublicMatchById(resolved.matchId);
   if (!match) return { title: "Prediction not found — OddsIntel" };
 
-  const leagueMeta = PREDICTION_LEAGUES.find((l) => l.slug === league);
+  const leagueMeta = await getPredictionLeagueBySlug(league);
   const home = match.homeTeam;
   const away = match.awayTeam;
   const kickoff = new Date(match.kickoff);
@@ -111,7 +111,7 @@ export default async function FixturePredictionPage({
   ]);
   if (!match) notFound();
 
-  const leagueMeta = PREDICTION_LEAGUES.find((l) => l.slug === league);
+  const leagueMeta = await getPredictionLeagueBySlug(league);
   const leagueName = leagueMeta?.name ?? match.league ?? "Football";
   const kickoff = new Date(match.kickoff);
   const dateStr = kickoff.toLocaleDateString("en-GB", {
