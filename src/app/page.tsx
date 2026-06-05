@@ -123,30 +123,48 @@ export default async function LandingPage() {
               Tracking 280+ leagues worldwide · Football / Soccer
             </span>
           </div>
-          <h1 className="text-balance text-4xl font-black leading-[1.1] tracking-tight text-foreground sm:text-5xl lg:text-6xl">
-            Spot value before the market moves.{" "}
-            <span className="text-green-500">One screen.</span>
+          <h1 className="text-balance text-5xl font-black leading-[1.05] tracking-tight text-foreground sm:text-6xl lg:text-7xl">
+            Beat the{" "}
+            <span className="text-green-400">bookmakers.</span>
           </h1>
-          <p className="mx-auto mt-6 max-w-xl text-balance text-base text-muted-foreground sm:text-lg">
-            Compare odds across 13 bookmakers, check confirmed lineups and injuries, get daily AI value picks — all in one place.
+          <p className="mx-auto mt-6 max-w-2xl text-balance text-lg text-foreground/85 sm:text-xl">
+            AI finds where today&apos;s matches are mispriced. We send the picks
+            to your <span className="text-sky-300 font-medium">Telegram</span> before kickoff —
+            so you can place them before the value evaporates.
           </p>
-          <p className="mx-auto mt-3 max-w-xl text-balance text-sm text-sky-300/90">
-            <span aria-hidden>📲</span> Every value bet straight to your Telegram — the moment we find it.
-          </p>
+
+          {/* Trust micro-line — accuracy + sample + CLV in one breath */}
+          <div className="mx-auto mt-5 flex max-w-2xl flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground/90 sm:text-sm">
+            <span>
+              <span className="font-mono font-bold text-green-400">75%</span>{" "}
+              accuracy on O/U 1.5
+            </span>
+            <span className="text-muted-foreground/30" aria-hidden>·</span>
+            <span>
+              <span className="font-mono font-bold text-amber-300">+9.8%</span>{" "}
+              CLV (30-day)
+            </span>
+            <span className="text-muted-foreground/30" aria-hidden>·</span>
+            <span>
+              <span className="font-mono font-bold text-foreground/90">21,831</span>{" "}
+              matches tracked
+            </span>
+          </div>
+
           <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
             <Button
               size="lg"
-              className="h-12 bg-green-700 px-8 text-base font-bold text-white hover:bg-green-800"
+              className="h-12 bg-green-500 px-8 text-base font-bold text-black shadow-lg shadow-green-500/20 hover:bg-green-400"
               nativeButton={false} render={<Link href="/signup" />}
             >
               Start Free
             </Button>
-            <Button variant="ghost" size="lg" className="h-12 px-8 text-base border border-white/[0.12] hover:bg-white/[0.05]" nativeButton={false} render={<Link href="/matches" />}>
-              See Live Matches
+            <Button variant="ghost" size="lg" className="h-12 px-8 text-base border border-white/[0.15] text-foreground hover:bg-white/[0.05]" nativeButton={false} render={<Link href="/value-bets" />}>
+              See Today&apos;s Picks →
             </Button>
           </div>
           <p className="mt-4 text-xs text-muted-foreground">
-            No credit card required. Free forever — upgrade when you&apos;re ready.
+            No credit card required. Free forever. Cancel any time on paid plans.
           </p>
         </div>
 
