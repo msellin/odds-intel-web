@@ -472,6 +472,53 @@ export default async function LandingPage() {
         </div>
       </section>
 
+      {/* ───────── Partner badges (GROWTH-DIRECTORY-STACK 2026-06-05) ─────
+          Reciprocal backlink row for directory listings that require a
+          live badge. Add new badges here as submissions land. Several
+          directories (Twelve Tools, AIBoom free tier) automatically
+          check for this row periodically — if the badge disappears,
+          they remove our listing. */}
+      <section
+        aria-label="Featured on"
+        className="border-t border-white/[0.04] py-6"
+      >
+        <div className="mx-auto flex max-w-6xl flex-col items-center gap-3 px-4 sm:px-6">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/60">
+            Featured on
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-4">
+            <a
+              href="https://twelve.tools"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="opacity-80 transition-opacity hover:opacity-100"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="https://twelve.tools/badge0-dark.svg"
+                alt="Featured on Twelve Tools"
+                width={200}
+                height={54}
+              />
+            </a>
+            <a
+              href="https://wired.business"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="opacity-80 transition-opacity hover:opacity-100"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="https://wired.business/badge0-dark.svg"
+                alt="Featured on Wired Business"
+                width={200}
+                height={54}
+              />
+            </a>
+          </div>
+        </div>
+      </section>
+
       {/* ───────── Footer ───────── */}
       <footer className="py-10">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 sm:flex-row sm:px-6">
