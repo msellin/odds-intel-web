@@ -25,7 +25,7 @@ import { getUserTier } from "@/lib/get-user-tier";
 
 export const metadata: Metadata = {
   title: "Value Bets Today — OddsIntel",
-  description: "AI-powered value bets for today's football matches. Real edge calculated by 17 paper trading bots across 280+ leagues.",
+  description: "AI-powered value bets for today's football matches. Real edge calculated by a multi-strategy ensemble model across 280+ leagues. CLV-tracked.",
   alternates: { canonical: "https://oddsintel.app/value-bets" },
 };
 
@@ -254,18 +254,18 @@ async function ValueBetsContent({ userId }: { userId: string }) {
         <section className="rounded-xl border border-white/[0.06] bg-card/40 p-4 text-sm text-muted-foreground sm:p-5">
           <p className="font-semibold text-foreground">What you'd see as Pro or Elite</p>
           <p className="mt-1.5 text-xs leading-relaxed">
-            <span className="font-semibold text-foreground">Pro</span> — every pick from our 4 calibrated AI bots (the ones with proven track record). Side, odds, model probability, edge%.
+            <span className="font-semibold text-foreground">Pro</span> — every pick from our 4 calibrated strategies (the ones with proven track record). Side, odds, model probability, edge%.
             {" "}
-            <span className="font-semibold text-foreground">Elite</span> — every pick from all 39 active bots (calibrated + experimental + niche specialists). Plus Kelly stake sizing per pick.
+            <span className="font-semibold text-foreground">Elite</span> — every pick from all 39 strategies in the ensemble (calibrated + experimental + niche specialists). Plus Kelly stake sizing per pick.
           </p>
         </section>
       )}
       {isPro && !isElite && (
         <section className="flex items-start gap-3 rounded-xl border border-blue-500/20 bg-blue-500/[0.06] p-3 text-xs sm:p-4 sm:text-sm">
           <div className="flex-1 leading-relaxed">
-            <p className="font-semibold text-foreground">You're seeing the calibrated-bot feed</p>
+            <p className="font-semibold text-foreground">You're seeing the calibrated-strategy feed</p>
             <p className="mt-1 text-muted-foreground">
-              These are picks from our 4 calibrated AI bots — promoted only after proving statistically significant ROI. Quality over quantity. Elite tier unlocks picks from all 39 active bots (~3× the daily pick volume) plus per-bot tracking on /performance.
+              These are picks from our 4 calibrated strategies — promoted only after proving statistically significant ROI. Quality over quantity. Elite tier unlocks picks from all 39 strategies in the ensemble (~3× the daily pick volume) plus per-strategy tracking on /performance.
             </p>
           </div>
         </section>
@@ -275,7 +275,7 @@ async function ValueBetsContent({ userId }: { userId: string }) {
           <div className="flex-1 leading-relaxed">
             <p className="font-semibold text-foreground">You're seeing the full feed</p>
             <p className="mt-1 text-muted-foreground">
-              Every pick from all 39 active bots — calibrated, experimental, niche specialists. Per-bot ROI + CLV tracking on /performance.
+              Every pick from all 39 strategies in the ensemble — calibrated, experimental, niche specialists. Per-strategy ROI + CLV tracking on /performance.
             </p>
           </div>
         </section>

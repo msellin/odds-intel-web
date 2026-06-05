@@ -14,6 +14,7 @@ const proFeatures = [
   "AI injury & suspension alerts",
   "Confirmed lineups + formation view",
   "Post-match stats & xG",
+  "Telegram alerts on new picks",
 ];
 
 const eliteFeatures = [
@@ -23,7 +24,6 @@ const eliteFeatures = [
   "Edge % vs each bookmaker",
   "CLV tracking — beat the closing line",
   "AI explanation for every value bet",
-  "Telegram alerts when new picks arrive",
 ];
 
 const freeFeatures = [
@@ -196,7 +196,7 @@ export function PricingCards() {
               onClick={() => handleUpgrade("elite")}
               disabled={!!upgrading}
             >
-              {upgrading === "elite" ? "Loading…" : "Subscribe to Elite — €14.99/mo"}
+              {upgrading === "elite" ? "Loading…" : "Get Elite"}
             </Button>
             <p className="mt-2 text-center text-[10px] text-muted-foreground">
               Founding members lock in €9.99/mo · Annual €119.99/yr

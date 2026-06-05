@@ -32,7 +32,7 @@ export default function MethodologyPage() {
             ["Enrichment", "Fetch standings, H2H records, team stats, and injury reports. Runs again at 12:00 and 16:00 UTC to pick up late injury news."],
             ["Odds", "Fetch pre-match odds from 13 bookmakers via API-Football bulk endpoint. Runs every 2 hours 07:00–22:00 UTC. Closing line snapshot taken at 13:30 and 17:30 UTC."],
             ["Predictions", "Run Poisson model + XGBoost ensemble for each match. Compute ensemble probability. Store to predictions table."],
-            ["Betting", "Apply calibration + Kelly sizing. 16 paper-trading bots evaluate their configured markets. Qualifying bets stored to simulated_bets."],
+            ["Betting", "Apply calibration + Kelly sizing. 16 strategies in our ensemble evaluate their configured markets independently. Qualifying bets are stored to simulated_bets — each tagged with the originating strategy so per-strategy ROI + CLV remain auditable on /performance."],
           ].map(([step, desc], i) => (
             <li key={step} className="flex gap-3 rounded-lg border border-border/30 bg-card/30 px-4 py-3">
               <span className="mt-0.5 shrink-0 font-mono text-xs font-bold text-muted-foreground/50">{i + 1}</span>
@@ -283,7 +283,7 @@ export default function MethodologyPage() {
         <h2 className="text-xl font-semibold">6. What We Don&apos;t Do</h2>
         <div className="space-y-2 text-sm text-muted-foreground">
           {[
-            ["No survivor bias", "The track record includes every bet placed. We do not remove underperforming bots or retroactively adjust strategy based on results."],
+            ["No survivor bias", "The track record includes every bet placed. We do not remove underperforming strategies or retroactively adjust the model based on results — losing strategies stay visible on /performance for the full transparency story."],
             ["No selective publishing", "Predictions are generated and stored before kickoff. They cannot be modified after the result is known."],
             ["No guarantee of profit", "Expected value betting is long-run positive, but variance over short samples is high. Any 50-bet sample can be negative even with a genuine edge."],
             ["No single-source data", "Odds are sourced from 13 bookmakers via API-Football. Settlement results are cross-checked against ESPN as a backup. No single data source failure breaks the pipeline."],
