@@ -1,6 +1,6 @@
-import Link from "next/link";
 import type { Metadata } from "next";
 import { Badge } from "@/components/ui/badge";
+import { MarketingNav } from "@/components/marketing-nav";
 
 export const metadata: Metadata = {
   title: "Changelog — OddsIntel",
@@ -311,23 +311,7 @@ const TYPE_CLASSES: Record<EntryType, string> = {
 export default function ChangelogPage() {
   return (
     <div className="min-h-dvh bg-background text-foreground">
-      {/* Nav */}
-      <nav className="sticky top-0 z-50 border-b border-white/[0.06] bg-background/90 backdrop-blur-lg">
-        <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4 sm:px-6">
-          <Link
-            href="/"
-            className="font-mono text-xl font-black uppercase italic tracking-tight text-white"
-          >
-            ODDS<span className="text-green-500">INTEL</span>
-          </Link>
-          <Link
-            href="/matches"
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Back to matches
-          </Link>
-        </div>
-      </nav>
+      <MarketingNav />
 
       {/* Content */}
       <div className="mx-auto max-w-3xl px-4 sm:px-6 py-12">

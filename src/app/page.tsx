@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Trophy } from "lucide-react";
 import { OneScreenProof } from "@/components/one-screen-proof";
 import { CompetitorMatrix } from "@/components/competitor-matrix";
-import { LandingMobileMenu } from "@/components/landing-mobile-menu";
+import { MarketingNav } from "@/components/marketing-nav";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { CLVTrustBanner } from "@/components/clv-trust-banner";
@@ -88,41 +88,10 @@ export default async function LandingPage() {
         </Link>
       )}
 
-      {/* ───────── Nav ───────── */}
-      <nav className="sticky top-0 z-50 border-b border-white/[0.06] bg-background/90 backdrop-blur-lg">
-        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="font-mono text-xl font-black uppercase italic tracking-tight text-white whitespace-nowrap">
-              ODDS<span className="text-green-500 ml-[0.15em]">INTEL</span>
-            </span>
-            <span className="rounded text-[10px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-400 px-1.5 py-0.5 border border-amber-500/30">Beta</span>
-          </Link>
-          <div className="flex items-center gap-3 sm:gap-4">
-            <Link href="/matches" className="hidden text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:block">
-              Matches
-            </Link>
-            <Link href="/live" className="hidden text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:block">
-              Live
-            </Link>
-            <Link href="/accuracy" className="hidden text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:block">
-              Accuracy
-            </Link>
-            <Link href="/pricing" className="hidden text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:block">
-              Pricing
-            </Link>
-            <Link href="/login" className="hidden text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:block">
-              Log In
-            </Link>
-            <Button size="sm" className="bg-green-700 text-white hover:bg-green-800" nativeButton={false} render={<Link href="/signup" />}>
-              Sign Up Free
-            </Button>
-            {/* Mobile hamburger — surfaces all the desktop nav links on small screens.
-                Before this component, those links had `hidden sm:block` and disappeared
-                entirely on mobile (GROWTH-MOBILE-FIRST-AUDIT P0-1). */}
-            <LandingMobileMenu />
-          </div>
-        </div>
-      </nav>
+      {/* GROWTH-UNIFIED-NAV (2026-06-05): single nav component shared with
+          pricing/privacy/changelog/terms. Previously this was ~35 lines of
+          inline JSX duplicated across 5 pages — see src/lib/nav-links.ts. */}
+      <MarketingNav />
 
       {/* ───────── Hero ───────── */}
       <section className="relative overflow-hidden pt-8 pb-12 text-center sm:pt-20 sm:pb-16">

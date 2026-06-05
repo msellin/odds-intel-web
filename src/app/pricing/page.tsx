@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { PricingCards } from "@/components/pricing-cards";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { MarketingNav } from "@/components/marketing-nav";
 
 export const metadata: Metadata = {
   title: "Pricing — OddsIntel",
@@ -44,47 +45,7 @@ const pricingFaq = [
 export default function PricingPage() {
   return (
     <div className="min-h-dvh bg-background text-foreground">
-      {/* ───────── Nav ───────── */}
-      <nav className="sticky top-0 z-50 border-b border-white/[0.06] bg-background/90 backdrop-blur-lg">
-        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="font-mono text-xl font-black uppercase italic tracking-tight text-white whitespace-nowrap">
-              ODDS<span className="text-green-500 ml-[0.15em]">INTEL</span>
-            </span>
-            <span className="rounded text-[10px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-400 px-1.5 py-0.5 border border-amber-500/30">
-              Beta
-            </span>
-          </Link>
-          <div className="flex items-center gap-4">
-            <Link
-              href="/matches"
-              className="hidden text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:block"
-            >
-              Matches
-            </Link>
-            <Link
-              href="/pricing"
-              className="text-sm font-medium text-foreground sm:block"
-            >
-              Pricing
-            </Link>
-            <Link
-              href="/login"
-              className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-            >
-              Log In
-            </Link>
-            <Button
-              size="sm"
-              className="bg-green-700 text-white hover:bg-green-800"
-              nativeButton={false}
-              render={<Link href="/signup" />}
-            >
-              Sign Up Free
-            </Button>
-          </div>
-        </div>
-      </nav>
+      <MarketingNav />
 
       {/* ───────── Hero ───────── */}
       <section className="pt-16 pb-10 text-center">
