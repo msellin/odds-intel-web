@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Check, Info, Zap, TrendingUp, BarChart3, Star, Database, HelpCircle } from "lucide-react";
+import { Check, Zap, TrendingUp, BarChart3, Star, HelpCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 
@@ -41,39 +41,6 @@ const ELITE_FEATURES = [
   "Telegram alerts — notified the moment a new value bet is found",
 ];
 
-const SIGNAL_GROUPS = [
-  {
-    name: "Model",
-    count: 4,
-    desc: "Poisson regression, XGBoost, API-Football predictions, calibrated ensemble",
-  },
-  {
-    name: "Market",
-    count: 8,
-    desc: "Opening implied probabilities, bookmaker disagreement, overnight line moves, odds volatility, steam moves",
-  },
-  {
-    name: "Form & Strength",
-    count: 22,
-    desc: "ELO ratings, 10-match form PPG, form slope, venue splits, season goals, standings position, H2H records, rest days",
-  },
-  {
-    name: "News & Injuries",
-    count: 6,
-    desc: "Injury counts, players out, lineup confirmation status, AI news impact score (4× daily via Gemini)",
-  },
-  {
-    name: "Context",
-    count: 10,
-    desc: "Fixture importance, motivation asymmetry, referee tendencies (cards, home bias, over 2.5 rate), league meta stats",
-  },
-  {
-    name: "Live",
-    count: 8,
-    desc: "Score, minute, shots, xG, possession, live odds, red cards, goals (updated every 5 minutes during matches)",
-  },
-];
-
 function FeatureRow({ text }: { text: string }) {
   return (
     <li className="flex items-start gap-2.5">
@@ -95,69 +62,27 @@ export default function HowItWorksPage() {
         </p>
       </div>
 
-      {/* Section 1: The model */}
+      {/* GROWTH-COPY-DENSITY-AUDIT Day 3 (2026-06-06): collapsed Sections 1
+          + 2 (Prediction Model + Signal Groups) into one short summary
+          paragraph. Both were overlapping heavily with /methodology — the
+          right place for the technical detail. This page now lives as
+          the product walkthrough; /methodology is the data-scientist
+          surface. Research doc: dev/active/density-copy-research-2026-06-06.md.
+          Estimated savings: ~350 words. */}
       <section className="space-y-4">
         <div className="flex items-center gap-2">
           <BarChart3 className="h-5 w-5 text-primary" />
-          <h2 className="text-xl font-semibold">The Prediction Model</h2>
+          <h2 className="text-xl font-semibold">The Model in One Paragraph</h2>
         </div>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Every day at 05:30 UTC our pipeline runs for every match with enough data. It blends three
-          sources into a single <strong className="text-foreground/80">ensemble probability</strong>:
-        </p>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border border-border/40 bg-card/40 p-4">
-            <p className="mb-1 text-xs font-bold uppercase tracking-wider text-muted-foreground">Poisson</p>
-            <p className="text-xs text-muted-foreground">Models goals scored and conceded as independent Poisson processes. Dixon-Coles correction reduces bias on low-scoring draws.</p>
-          </div>
-          <div className="rounded-xl border border-border/40 bg-card/40 p-4">
-            <p className="mb-1 text-xs font-bold uppercase tracking-wider text-muted-foreground">XGBoost</p>
-            <p className="text-xs text-muted-foreground">Gradient boosting on 36+ features — ELO, form, standings, H2H, rest days, injuries. Learns non-linear patterns Poisson misses.</p>
-          </div>
-          <div className="rounded-xl border border-border/40 bg-card/40 p-4">
-            <p className="mb-1 text-xs font-bold uppercase tracking-wider text-muted-foreground">API-Football</p>
-            <p className="text-xs text-muted-foreground">Third-party predictions used as a cross-check signal and fallback for leagues where our historical data is thinner.</p>
-          </div>
-        </div>
-        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3">
-          <div className="flex items-start gap-2.5">
-            <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-            <p className="text-xs text-muted-foreground">
-              <strong className="text-foreground/80">What confidence % means:</strong> The algorithm&apos;s raw statistical probability for the most likely outcome. It does not compare against bookmaker odds — that comparison is what Pro and Elite add. Higher confidence matches have historically higher hit rates.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <Separator className="opacity-30" />
-
-      {/* Section 2: Signal groups */}
-      <section className="space-y-4">
-        <div className="flex items-center gap-2">
-          <Database className="h-5 w-5 text-primary" />
-          <h2 className="text-xl font-semibold">Signal Groups</h2>
-        </div>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          Our pipeline collects data across 6 groups throughout the day. Most signals are available for any match
-          with odds; some (lineups, live xG) depend on what the league supports. Data grade reflects which prediction
-          model ran — not how many signals were collected.
-        </p>
-        <div className="space-y-2">
-          {SIGNAL_GROUPS.map((g) => (
-            <div key={g.name} className="flex items-start gap-4 rounded-xl border border-border/30 bg-card/30 px-4 py-3">
-              <div className="w-8 shrink-0 text-right">
-                <span className="font-mono text-lg font-bold text-foreground">{g.count}</span>
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-foreground">{g.name}</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">{g.desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-        <p className="text-xs text-muted-foreground/70">
-          Signals are collected throughout the day. Lineups (T-1h), injury updates (4× daily), and live data
-          (every 5 min) all update the picture before and during a match.
+          Every morning the model blends a Poisson regression (goals as a statistical process),
+          an XGBoost ensemble (36+ features: form, ELO, H2H, lineups, injuries, rest days),
+          and a third-party prediction cross-check. It then collects 58 signals per match —
+          market movement, team strength, news, context, live data. The final probability is
+          calibrated weekly against actual results so it doesn&apos;t drift.{" "}
+          <Link href="/methodology" className="text-primary underline-offset-2 hover:underline">
+            Full technical methodology →
+          </Link>
         </p>
       </section>
 
@@ -402,35 +327,28 @@ export default function HowItWorksPage() {
           <h2 className="text-xl font-semibold">Common Questions</h2>
         </div>
 
+        {/* GROWTH-COPY-DENSITY-AUDIT Day 3 (2026-06-06): FAQ reduced from
+            7 → 3 items. Kept the three that answer "what am I actually
+            buying" — value bet vs prediction (the core concept), edge %
+            (the core metric), track record reliability (the trust check).
+            Dropped:
+              - Is the free tier useful? (answered by the tier-comparison cards above)
+              - What leagues are covered? (in the landing SEO dl + hero pill)
+              - When are predictions published? (operational detail, not buy-decision)
+              - Is Elite available now? (the pricing cards answer this) */}
         <div className="space-y-4">
           {[
-            {
-              q: "Is the free tier actually useful?",
-              a: "Yes. You get predictions for 280+ leagues daily, a picks tracker to build your own record, and our full transparent track record. Most bettors have never had access to this kind of data without paying for a professional tool.",
-            },
             {
               q: "What's the difference between a prediction and a value bet?",
               a: "A prediction says 'Home is most likely to win at 62%'. A value bet says 'Home is 62% likely but the bookmakers are only pricing it at 54%, so you have an 8% edge'. You can predict correctly and still lose money if you consistently bet at bad odds. Value betting solves that.",
             },
             {
               q: "What does edge % mean?",
-              a: "Edge = model probability minus bookmaker's implied probability. +8% means our model thinks the true probability is 8 percentage points higher than what the odds imply. Over a large sample, consistently finding positive edge is what produces profitable betting.",
+              a: "Edge = model probability minus bookmaker's implied probability. +8% means our model thinks the true probability is 8 percentage points higher than what the odds imply. Finding positive edge consistently is what produces profitable betting over time.",
             },
             {
               q: "How reliable are the track record numbers?",
-              a: "Every settled prediction is logged automatically when the pipeline runs — no manual curation, no removing losses. The 'Strong (60%+)' filter shows predictions the model was most confident about. You can verify every row in the table.",
-            },
-            {
-              q: "What leagues are covered?",
-              a: "280+ leagues worldwide. Premier League, La Liga, Bundesliga, Serie A, Ligue 1, Championship, Eredivisie, Primeira Liga, Scottish Premiership, Champions League, and many more. Grade A data (best signals) is available for European top leagues. Leagues with less history have Grade B–D coverage.",
-            },
-            {
-              q: "When are predictions published?",
-              a: "The pipeline runs at 05:30 UTC. Predictions are available by 06:00 UTC. Injury and lineup signals update throughout the day (4× news scans, lineups at T-1h).",
-            },
-            {
-              q: "Is Elite available now?",
-              a: "Yes. Elite is open for subscriptions. The model has 80+ settled bets across active strategies with validated positive ROI — you can verify this on the track record page before subscribing. Founding members lock in €9.99/mo forever.",
+              a: "Every settled prediction is logged automatically when the pipeline runs — no manual curation, no removing losses. You can verify every row at /performance.",
             },
           ].map(({ q, a }) => (
             <div key={q} className="rounded-xl border border-border/40 bg-card/40 px-5 py-4">

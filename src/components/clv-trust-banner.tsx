@@ -143,8 +143,8 @@ function LandingVariant({ stats, cohort }: { stats: Stats | null; cohort: Cohort
                 <p>{CLV_EXPLAINER}</p>
                 <p className="mt-2 text-xs text-muted-foreground/80">
                   Win rate {fmtPlainPct(stats.win_rate_pct)} · ROI{" "}
-                  {fmtSignedPct(stats.roi_pct)} (variance-confounded — CLV is
-                  the honest scoreboard).
+                  {fmtSignedPct(stats.roi_pct)} (swings on luck on small
+                  samples — CLV is the honest scoreboard).
                 </p>
               </div>
             </>

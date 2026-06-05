@@ -235,7 +235,7 @@ async function ValueBetsContent({ userId }: { userId: string }) {
         </h1>
         <p className="text-sm text-muted-foreground sm:text-base">
           Every pick is logged before kickoff and scored against the closing line.
-          ROI is variance-confounded; CLV is the honest scoreboard.{" "}
+          ROI swings on luck for hundreds of bets; CLV is the honest scoreboard.{" "}
           <Link
             href="/learn/closing-line-value"
             className="text-foreground underline underline-offset-2 hover:text-green-400"

@@ -199,7 +199,7 @@ export const VS_COMPETITORS: VsCompetitor[] = [
     oddsIntelWins: [
       "**Their verification reveals a negative ROI.** DeepBetting's Bet-Analytix-tracked record is **-3.7% ROI**, and our scrape of their visible free-pick history shows **-0.99% ROI** at 63.0% hit rate on 1.62 avg odds over 92 settled bets (2026-05-23 → 2026-06-04). Verified ≠ profitable. Our paper-trading chain is +€340 in May 2026 with worst drawdown -€398, transparently published.",
       "**280+ football leagues vs their ~15.** Order-of-magnitude broader football coverage. If you bet outside the top European leagues, we have you.",
-      "**CLV-first metric framing.** They publish results; we publish CLV — the *honest* metric that proves edge in weeks, not years. ROI alone (which they emphasise) is variance-confounded.",
+      "**CLV-first metric framing.** They publish results; we publish CLV — the *honest* metric that proves edge in weeks, not years. ROI alone (which they emphasise) swings on luck across hundreds of bets.",
       "**Telegram delivery.** Pre-kickoff alerts to your phone. They publish via web; no live alert channel.",
       "**Per-bet AI explanation.** LLM explains why each Elite pick was made. They give you the pick; we give you the why.",
       "**Match-detail intelligence.** Lineups, injuries, live xG, multi-bookmaker drift. They're picks-only.",
@@ -226,7 +226,7 @@ export const VS_COMPETITORS: VsCompetitor[] = [
     faq: [
       {
         q: "How is OddsIntel different from DeepBetting?",
-        a: "Three big things: (1) we cover 280+ football leagues vs their 15; (2) we publish CLV (closing line value) — the metric that actually proves edge in weeks, not just ROI that takes years and is variance-confounded; (3) we deliver value bets to your Telegram pre-kickoff so you can act before line movement.",
+        a: "Three big things: (1) we cover 280+ football leagues vs their 15; (2) we publish CLV (closing line value) — the metric that proves edge in weeks, not just ROI that takes years to settle and gets swung by luck; (3) we deliver value bets to your Telegram pre-kickoff so you can act before line movement.",
       },
       {
         q: "Should I use OddsIntel if I bet NBA / NFL?",

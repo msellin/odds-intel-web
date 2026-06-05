@@ -358,7 +358,11 @@ export default async function LandingPage() {
             >
               <p className="font-mono text-[10px] uppercase tracking-widest text-green-400">Honest metric</p>
               <p className="mt-2 font-mono text-xl font-black text-green-300 sm:text-2xl">CLV, not ROI</p>
-              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">ROI is variance-confounded. Closing-line value is the only metric that proves edge early.</p>
+              {/* GROWTH-COPY-DENSITY-AUDIT Day 3 (2026-06-06): reading-level
+                  pass — "variance-confounded" + "proves edge early" replaced
+                  with concrete plain-English phrasing. Same meaning, ~6th-
+                  grade reading level. */}
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">ROI takes hundreds of bets to settle and gets swung by luck. Closing-line value tells you in weeks whether the model is finding real edge.</p>
               <p className="mt-4 text-xs font-semibold text-green-300 group-hover:text-green-200">
                 Why CLV beats ROI →
               </p>
