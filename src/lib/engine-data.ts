@@ -3282,6 +3282,23 @@ export interface DashboardCache {
     roi_pct: number | null;
     clv_pct: number | null;
   } | null;
+  // GROWTH-COPY-DENSITY-AUDIT Day 1 (2026-06-06) — cumulative since
+  // chain_start ('2026-05-03'). Drives the landing hero load-bearing
+  // outcome line. Migration 187, settlement.py _value_bets_cumulative().
+  // Null on fresh installs / pre-migration rows.
+  elite_value_bets_cumulative: {
+    n_settled: number;
+    won: number;
+    win_rate_pct: number | null;
+    staked: number;
+    pnl: number;
+    avg_clv_pct: number | null;
+    cumulative_clv_eur: number | null;
+    chain_start: string;       // "2026-05-03"
+    first_pick: string | null; // ISO
+    last_pick: string | null;  // ISO
+    days: number | null;
+  } | null;
 }
 
 export async function getDashboardCache(): Promise<DashboardCache | null> {

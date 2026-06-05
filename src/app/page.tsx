@@ -67,6 +67,17 @@ export default async function LandingPage() {
   const heroCLVN =
     heroHasData && heroCLV ? heroCLV.n.toLocaleString() : "building (need 30)";
 
+  // GROWTH-COPY-DENSITY-AUDIT Day 1 (2026-06-06): replace the 3-stat trust
+  // micro-line with a single load-bearing cumulative outcome. Research
+  // doc: dev/active/density-copy-research-2026-06-06.md. Cumulative since
+  // 2026-05-03 (paper-trading chain start) — auto-refreshes via settlement.
+  const heroCumulative = heroCache?.elite_value_bets_cumulative;
+  const heroCumHasData =
+    heroCumulative != null &&
+    heroCumulative.n_settled >= 100 &&
+    heroCumulative.avg_clv_pct != null &&
+    heroCumulative.days != null;
+
   return (
     <div className="min-h-dvh bg-background text-foreground">
       {/* ───────── World Cup promo banner (auto-hides 2026-07-26) ───────── */}
@@ -118,21 +129,38 @@ export default async function LandingPage() {
             so you can place them before the value evaporates.
           </p>
 
-          {/* Trust micro-line — accuracy + sample + CLV in one breath */}
-          <div className="mx-auto mt-5 flex max-w-2xl flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground/90 sm:text-sm">
+          {/* GROWTH-COPY-DENSITY-AUDIT Day 1 (2026-06-06) — single
+              load-bearing cumulative outcome line replaces the previous
+              3-stat spread. The WinnerOdds anchor and SaaS gold-standard
+              pattern both lead with a single growing cumulative number,
+              not multiple disconnected rates. See research doc at
+              odds-intel-engine/dev/active/density-copy-research-2026-06-06.md. */}
+          <div className="mx-auto mt-5 flex max-w-2xl flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-muted-foreground/90 sm:text-base">
             <span>
-              <span className="font-mono font-bold text-green-400">75%</span>{" "}
-              accuracy on O/U 1.5
+              <span className="font-mono font-bold text-amber-300">
+                {heroCumHasData && heroCumulative?.avg_clv_pct != null
+                  ? `${heroCumulative.avg_clv_pct > 0 ? "+" : ""}${heroCumulative.avg_clv_pct.toFixed(1)}%`
+                  : "+9.4%"}
+              </span>{" "}
+              CLV beating the closing line
             </span>
             <span className="text-muted-foreground/30" aria-hidden>·</span>
             <span>
-              <span className="font-mono font-bold text-amber-300">{heroHasData ? heroCLVPct : "+9.5%"}</span>{" "}
-              CLV (30-day)
+              <span className="font-mono font-bold text-foreground/90">
+                {heroCumHasData && heroCumulative?.n_settled != null
+                  ? heroCumulative.n_settled.toLocaleString()
+                  : "1,214"}
+              </span>{" "}
+              paper bets
             </span>
             <span className="text-muted-foreground/30" aria-hidden>·</span>
             <span>
-              <span className="font-mono font-bold text-foreground/90">21,831</span>{" "}
-              matches tracked
+              <span className="font-mono font-bold text-foreground/90">
+                {heroCumHasData && heroCumulative?.days != null
+                  ? heroCumulative.days
+                  : 33}
+              </span>{" "}
+              days
             </span>
           </div>
 
