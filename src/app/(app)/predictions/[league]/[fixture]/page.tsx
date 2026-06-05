@@ -28,8 +28,10 @@ import {
   getMatchPreview,
   getPredictionFixturesForSitemap,
   getPredictionLeagueBySlug,
+  getPublishedPicksForMatch,
 } from "@/lib/engine-data";
 import { TeamCrest } from "@/components/team-crest";
+import { Check, X } from "lucide-react";
 
 export const revalidate = 3600; // 1h ISR — same window as fixture data refresh
 
@@ -67,8 +69,22 @@ export async function generateMetadata({
   });
   const leagueName = leagueMeta?.name ?? match.league ?? "Football";
 
-  const title = `${home} vs ${away} Prediction — ${dateStr} ${leagueName} | OddsIntel`;
-  const description = `AI prediction for ${home} vs ${away} (${leagueName}, ${dateStr}). Model probability, recent form, key signals. Powered by Poisson + XGBoost.`;
+  // GROWTH-SEO-PAST-FIXTURE-RECAPS (2026-06-05) — Phase 3: distinct metadata
+  // for finished matches so search results and OG cards show "Result: 2-1"
+  // rather than "Prediction" copy that's no longer relevant.
+  const isFinished =
+    match.status === "finished" || match.status === "ft" ||
+    (match.score_home != null && match.score_away != null);
+  const scoreStr =
+    isFinished && match.score_home != null && match.score_away != null
+      ? `${match.score_home}-${match.score_away}`
+      : null;
+  const title = isFinished && scoreStr
+    ? `${home} ${scoreStr} ${away} Result + Recap — ${dateStr} ${leagueName} | OddsIntel`
+    : `${home} vs ${away} Prediction — ${dateStr} ${leagueName} | OddsIntel`;
+  const description = isFinished && scoreStr
+    ? `${home} ${scoreStr} ${away} full-time. See whether the OddsIntel AI model called it right and how the result compared to model probabilities.`
+    : `AI prediction for ${home} vs ${away} (${leagueName}, ${dateStr}). Model probability, recent form, key signals. Powered by Poisson + XGBoost.`;
   const url = `https://oddsintel.app/predictions/${league}/${fixture}`;
   return {
     title,
@@ -105,9 +121,10 @@ export default async function FixturePredictionPage({
   const resolved = await resolveFixtureSlug(league, fixture);
   if (!resolved) notFound();
 
-  const [match, preview] = await Promise.all([
+  const [match, preview, publishedPicks] = await Promise.all([
     getPublicMatchById(resolved.matchId),
     getMatchPreview(resolved.matchId),
+    getPublishedPicksForMatch(resolved.matchId),
   ]);
   if (!match) notFound();
 
@@ -120,6 +137,58 @@ export default async function FixturePredictionPage({
   const timeStr = kickoff.toLocaleTimeString("en-GB", {
     hour: "2-digit", minute: "2-digit", timeZone: "UTC",
   });
+
+  // GROWTH-SEO-PAST-FIXTURE-RECAPS (2026-06-05) — Phase 3 of the SEO content
+  // engine. Once a match finishes, the page transforms: scoreline + hit/miss
+  // verdict on every published market the model called, with retrospective
+  // framing. The accuracy compounds in SEO value — Google indexes the "did
+  // the model call this right" content, which is more valuable post-result
+  // than the pre-match prediction was.
+  const isFinished =
+    match.status === "finished" || match.status === "ft" ||
+    (match.score_home != null && match.score_away != null);
+  const hasScore = match.score_home != null && match.score_away != null;
+
+  // Roll up picks into a tidy display set: market label, model selection,
+  // model confidence, outcome (hit/miss/void/null). Only finished + outcome'd
+  // picks get rendered; pending picks are filtered out (would be misleading).
+  type RecapPick = {
+    marketLabel: string;
+    selectionLabel: string;
+    confidencePct: number;
+    outcome: "hit" | "miss" | "void";
+  };
+  const MARKET_LABELS: Record<string, string> = {
+    "1x2": "Match Winner",
+    "over_under_15": "Over/Under 1.5",
+    "over_under_25": "Over/Under 2.5",
+    "btts": "Both Teams To Score",
+  };
+  const SELECTION_LABELS: Record<string, string> = {
+    home: match.homeTeam,
+    away: match.awayTeam,
+    draw: "Draw",
+    over_1_5: "Over 1.5",
+    under_1_5: "Under 1.5",
+    over_2_5: "Over 2.5",
+    under_2_5: "Under 2.5",
+    yes: "Yes",
+    no: "No",
+  };
+  const recapPicks: RecapPick[] = publishedPicks
+    .filter((p) => p.outcome === "hit" || p.outcome === "miss" || p.outcome === "void")
+    .map((p) => {
+      // selection comes in like "over_1.5" — normalise to lookup key
+      const key = p.selection.replace(/\./g, "_").toLowerCase();
+      return {
+        marketLabel: MARKET_LABELS[p.market] ?? p.market,
+        selectionLabel: SELECTION_LABELS[key] ?? p.selection,
+        confidencePct: Math.round(p.modelProbability * 100),
+        outcome: p.outcome as "hit" | "miss" | "void",
+      };
+    });
+  const hitCount = recapPicks.filter((p) => p.outcome === "hit").length;
+  const settledCount = recapPicks.filter((p) => p.outcome !== "void").length;
 
   // Model probabilities stored as 0-100 (per PublicMatch interface comment).
   // Convert to 0-1 for the bars + format pcts as whole numbers for display.
@@ -155,6 +224,14 @@ export default async function FixturePredictionPage({
   if (match.venue_name) {
     jsonLd.location = { "@type": "Place", name: match.venue_name };
   }
+  // Phase 3: finished-event status so Google can distinguish upcoming from
+  // past in rich-snippet rendering ("Result" vs "Prediction" chip).
+  if (isFinished) {
+    jsonLd.eventStatus = "https://schema.org/EventScheduled";
+    if (hasScore) {
+      jsonLd.description = `${match.homeTeam} ${match.score_home}-${match.score_away} ${match.awayTeam}`;
+    }
+  }
 
   // Pre-format the percent values used in the FAQ answer so the literal copy
   // doesn't have stray non-null-asserted expressions (cleaner + safer).
@@ -162,11 +239,23 @@ export default async function FixturePredictionPage({
   const drawPctRound = hasModel ? Math.round(drawPct!) : null;
   const awayPctRound = hasModel ? Math.round(awayPct!) : null;
 
-  const faqLd = {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    mainEntity: [
-      {
+  // Phase 3: FAQ pivots for finished fixtures — first question becomes the
+  // result + verdict instead of a prediction. Keeps the schema usable for
+  // Google rich snippets on both upcoming AND past fixtures.
+  const finishedFirstQ = isFinished && hasScore
+    ? {
+        "@type": "Question",
+        name: `What was the result of ${match.homeTeam} vs ${match.awayTeam}?`,
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: `Final score: ${match.homeTeam} ${match.score_home}-${match.score_away} ${match.awayTeam}.${
+            settledCount > 0
+              ? ` OddsIntel's AI model went ${hitCount}/${settledCount} on its published picks for this match.`
+              : ""
+          }`,
+        },
+      }
+    : {
         "@type": "Question",
         name: `Who will win ${match.homeTeam} vs ${match.awayTeam}?`,
         acceptedAnswer: {
@@ -175,10 +264,16 @@ export default async function FixturePredictionPage({
             ? `OddsIntel's AI model picks ${callTeam} with ${modelConfidence}% confidence. Home ${homePctRound}%, draw ${drawPctRound}%, away ${awayPctRound}%.`
             : "The OddsIntel model has not yet generated a prediction for this fixture. Predictions are typically published 24 hours before kickoff.",
         },
-      },
+      };
+
+  const faqLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: [
+      finishedFirstQ,
       {
         "@type": "Question",
-        name: `When is ${match.homeTeam} vs ${match.awayTeam} kickoff?`,
+        name: `When ${isFinished ? "was" : "is"} ${match.homeTeam} vs ${match.awayTeam} kickoff?`,
         acceptedAnswer: {
           "@type": "Answer",
           text: `${dateStr} at ${timeStr} UTC.`,
@@ -227,9 +322,81 @@ export default async function FixturePredictionPage({
           {match.homeTeam} vs {match.awayTeam}
         </h1>
         <p className="text-base text-muted-foreground sm:text-lg">
-          AI prediction · {leagueName}
+          {isFinished ? "Result + AI recap" : "AI prediction"} · {leagueName}
         </p>
       </header>
+
+      {/* GROWTH-SEO-PAST-FIXTURE-RECAPS (Phase 3) — finished-match recap.
+          Replaces "this is what we predicted" copy with the actual result
+          + retrospective verdict on each market the model called. Renders
+          ABOVE the team-vs-team card so the scoreline lands in the
+          screenful that gets indexed + previewed in OG cards. */}
+      {isFinished && hasScore && (
+        <section className="mb-6 rounded-2xl border border-green-500/20 bg-green-500/[0.04] px-5 py-5">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-green-400/80">
+            Full time
+          </p>
+          <div className="mt-2 flex items-baseline gap-3">
+            <p className="text-5xl font-black tracking-tight text-foreground tabular-nums">
+              {match.score_home}–{match.score_away}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {match.homeTeam} vs {match.awayTeam}
+            </p>
+          </div>
+          {settledCount > 0 && (
+            <p className="mt-3 text-sm text-muted-foreground">
+              The OddsIntel AI model went{" "}
+              <span className="font-semibold text-foreground tabular-nums">
+                {hitCount}/{settledCount}
+              </span>{" "}
+              on its published picks for this match.
+              {hitCount === settledCount && settledCount > 0 && " — clean sweep ✓"}
+              {hitCount === 0 && settledCount > 0 && " — the model called this one wrong."}
+            </p>
+          )}
+          {recapPicks.length > 0 && (
+            <ul className="mt-4 space-y-2">
+              {recapPicks.map((p, i) => (
+                <li
+                  key={i}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-white/[0.06] bg-card/40 px-3 py-2 text-sm"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] uppercase tracking-widest text-muted-foreground/60">
+                      {p.marketLabel}
+                    </p>
+                    <p className="truncate font-medium text-foreground">
+                      Model: <span className="text-foreground/90">{p.selectionLabel}</span>{" "}
+                      <span className="text-muted-foreground/60 tabular-nums">({p.confidencePct}%)</span>
+                    </p>
+                  </div>
+                  {p.outcome === "hit" && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-green-500/40 bg-green-500/15 px-2.5 py-0.5 text-[11px] font-semibold text-green-400">
+                      <Check className="size-3" aria-hidden /> Right
+                    </span>
+                  )}
+                  {p.outcome === "miss" && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-red-500/30 bg-red-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-red-400">
+                      <X className="size-3" aria-hidden /> Wrong
+                    </span>
+                  )}
+                  {p.outcome === "void" && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                      Void
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {recapPicks.length === 0 && settledCount === 0 && (
+            <p className="mt-3 text-xs text-muted-foreground">
+              The model did not have a settled published pick for this match.
+            </p>
+          )}
+        </section>
+      )}
 
       {/* Team-vs-team card */}
       <section className="mb-6 rounded-2xl border border-white/[0.06] bg-card/40 px-5 py-5">
@@ -252,9 +419,11 @@ export default async function FixturePredictionPage({
         </div>
       </section>
 
-      {/* Model prediction */}
+      {/* Model prediction (or retrospective view if finished) */}
       <section className="mb-6 space-y-4">
-        <h2 className="text-xl font-semibold text-foreground">Our model says</h2>
+        <h2 className="text-xl font-semibold text-foreground">
+          {isFinished ? "What the model thought before kickoff" : "Our model says"}
+        </h2>
         {hasModel ? (
           <>
             <div className="rounded-xl border border-green-500/25 bg-green-500/[0.05] px-5 py-4">

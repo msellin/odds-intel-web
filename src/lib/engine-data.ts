@@ -3459,6 +3459,46 @@ export async function getRecentPublishedPicks(
   });
 }
 
+// ─── GROWTH-SEO-PAST-FIXTURE-RECAPS (2026-06-05) — Phase 3 ───────────────────
+// Per-fixture pages render post-match recap content for finished fixtures.
+// We need every published pick for the match (1x2, OU 1.5, OU 2.5, BTTS) so
+// the recap can show "model called X right" / "model missed Y" badges.
+
+export interface PublishedPickForMatch {
+  market: string;       // raw market key: "1x2", "over_under_15", etc.
+  selection: string;    // e.g. "home", "over_1.5"
+  modelProbability: number;  // 0-1
+  outcome: "hit" | "miss" | "void" | null;
+  isBackfilled: boolean;
+}
+
+export async function getPublishedPicksForMatch(
+  matchId: string,
+): Promise<PublishedPickForMatch[]> {
+  const supabase = createSupabasePublic();
+  const { data, error } = await supabase
+    .from("published_picks")
+    .select("market, selection, model_probability, outcome, is_backfilled")
+    .eq("match_id", matchId);
+  if (error || !data) return [];
+  type Row = {
+    market: string;
+    selection: string;
+    model_probability: number;
+    outcome: string | null;
+    is_backfilled: boolean;
+  };
+  return (data as Row[]).map((r) => ({
+    market: r.market,
+    selection: r.selection,
+    modelProbability: Number(r.model_probability),
+    outcome: (r.outcome === "hit" || r.outcome === "miss" || r.outcome === "void")
+      ? r.outcome
+      : null,
+    isBackfilled: r.is_backfilled,
+  }));
+}
+
 export interface SimpleSettledBet {
   id: string;
   match: string;
