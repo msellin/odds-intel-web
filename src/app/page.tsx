@@ -321,34 +321,34 @@ export default async function LandingPage() {
           <div className="grid gap-4 sm:grid-cols-3">
             <Link
               href="/methodology"
-              className="group rounded-xl border border-white/[0.06] bg-white/[0.02] p-6 transition-colors hover:border-amber-500/30 hover:bg-amber-500/[0.04]"
+              className="group rounded-xl border border-amber-500/20 bg-amber-500/[0.03] p-6 transition-colors hover:border-amber-500/50 hover:bg-amber-500/[0.08]"
             >
-              <p className="font-mono text-[10px] uppercase tracking-widest text-amber-400/80">Drawdown</p>
-              <p className="mt-2 font-mono text-2xl font-black text-amber-300">−€398</p>
-              <p className="mt-1 text-xs text-muted-foreground">worst 9-day stretch (May 2026). Wiped the prior peak.</p>
-              <p className="mt-3 text-xs font-medium text-amber-400 group-hover:text-amber-300">
+              <p className="font-mono text-[10px] uppercase tracking-widest text-amber-400">Drawdown</p>
+              <p className="mt-2 font-mono text-3xl font-black text-amber-300">−€398</p>
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">worst 9-day stretch (May 2026). Wiped the prior peak.</p>
+              <p className="mt-4 text-xs font-semibold text-amber-300 group-hover:text-amber-200">
                 Why we publish drawdowns →
               </p>
             </Link>
             <Link
               href="/methodology"
-              className="group rounded-xl border border-white/[0.06] bg-white/[0.02] p-6 transition-colors hover:border-blue-500/30 hover:bg-blue-500/[0.04]"
+              className="group rounded-xl border border-sky-500/20 bg-sky-500/[0.03] p-6 transition-colors hover:border-sky-500/50 hover:bg-sky-500/[0.08]"
             >
-              <p className="font-mono text-[10px] uppercase tracking-widest text-blue-400/80">Verification</p>
-              <p className="mt-2 font-mono text-2xl font-black text-blue-300">Self-reported</p>
-              <p className="mt-1 text-xs text-muted-foreground">Bet-Analytix / SBC verification on roadmap. We&apos;d rather wait than fake it.</p>
-              <p className="mt-3 text-xs font-medium text-blue-400 group-hover:text-blue-300">
+              <p className="font-mono text-[10px] uppercase tracking-widest text-sky-400">Verification</p>
+              <p className="mt-2 font-mono text-3xl font-black text-sky-300">Self-reported</p>
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">Bet-Analytix / SBC verification on roadmap. We&apos;d rather wait than fake it.</p>
+              <p className="mt-4 text-xs font-semibold text-sky-300 group-hover:text-sky-200">
                 Why no &quot;verified&quot; badge yet →
               </p>
             </Link>
             <Link
               href="/learn/clv"
-              className="group rounded-xl border border-white/[0.06] bg-white/[0.02] p-6 transition-colors hover:border-green-500/30 hover:bg-green-500/[0.04]"
+              className="group rounded-xl border border-green-500/20 bg-green-500/[0.03] p-6 transition-colors hover:border-green-500/50 hover:bg-green-500/[0.08]"
             >
-              <p className="font-mono text-[10px] uppercase tracking-widest text-green-400/80">Honest metric</p>
-              <p className="mt-2 font-mono text-2xl font-black text-green-300">CLV, not ROI</p>
-              <p className="mt-1 text-xs text-muted-foreground">ROI is variance-confounded. Closing-line value is the only metric that proves edge early.</p>
-              <p className="mt-3 text-xs font-medium text-green-400 group-hover:text-green-300">
+              <p className="font-mono text-[10px] uppercase tracking-widest text-green-400">Honest metric</p>
+              <p className="mt-2 font-mono text-3xl font-black text-green-300">CLV, not ROI</p>
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">ROI is variance-confounded. Closing-line value is the only metric that proves edge early.</p>
+              <p className="mt-4 text-xs font-semibold text-green-300 group-hover:text-green-200">
                 Why CLV beats ROI →
               </p>
             </Link>
@@ -406,6 +406,31 @@ export default async function LandingPage() {
       </section>
 
       <Separator />
+
+      {/* ───────── Trust strip (GROWTH-LANDING-REFACTOR sub-C) ───────────────
+          One-line reinforcement of the credibility chain before the final
+          Telegram CTA. No new claims — every fact here is also published
+          on a destination page. Each link is a "go verify yourself" exit. */}
+      <section
+        aria-label="Trust signals"
+        className="border-y border-white/[0.04] bg-card/10 py-6"
+      >
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-center gap-x-6 gap-y-2 px-4 text-center text-xs text-muted-foreground sm:px-6 sm:text-sm">
+          <Link
+            href="/performance"
+            className="flex items-center gap-1.5 transition-colors hover:text-foreground"
+          >
+            <span className="size-1.5 rounded-full bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.7)]" aria-hidden />
+            <span>Paper-bet chain unbroken since 2026-05-03</span>
+          </Link>
+          <span className="text-muted-foreground/30" aria-hidden>·</span>
+          <Link href="/methodology" className="transition-colors hover:text-foreground">
+            Open methodology — read the model
+          </Link>
+          <span className="text-muted-foreground/30" aria-hidden>·</span>
+          <span>30-day cancel any time on paid plans</span>
+        </div>
+      </section>
 
       {/* ───────── Telegram CTA strip ───────── */}
       <section className="border-t border-sky-500/15 bg-gradient-to-b from-sky-950/40 to-background py-14">
