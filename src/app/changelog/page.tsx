@@ -25,6 +25,55 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-06-06",
+    title: "Value bets density pass · Real-money tier badge · Calibration upgrade · WC infra · Calendar correction",
+    changes: [
+      { type: "feature", text: "Value bets page redesigned for density — the previous 5-section vertical stack (h1 + subtitle + tier explainer + Telegram banner + CLV trust card) collapses to a compact 2-line header with a clickable CLV pill (links to /performance for the full breakdown) and a small Telegram icon-chip. Recovers ~500-600px of vertical space on mobile = 4+ more value-bet rows visible above the fold" },
+      { type: "feature", text: "Live in-play picks now surface on /value-bets as a compact 1-row strip showing the top 3 live edges + a \"→ /live\" link, instead of duplicating the full live grid that lives on /live. Cleaner page, same access" },
+      { type: "feature", text: "Elite-view per-row chip renamed from \"Pro\" to \"Calibrated\" — clearer that the marker indicates the underlying model + bot have cleared the calibration gate, not just that the pick is also in the Pro feed" },
+      { type: "feature", text: "Admin / real-money decision tool: each pending paper bet on /admin/place now carries a composite \"Real-Money Tier\" chip — ✅ Bet / 🟡 Cautious / 🔬 Paper only. Folds model calibration tier, bot CLV+ROI history, and per-bet warning flags into one operator-only signal with hover-revealed breakdown. Bets are NEVER filtered — pure information" },
+      { type: "model", text: "Six markets received fresh Platt sigmoid calibration today (asian_handicap_away -0.5, btts_yes/no, double_chance_1x/x2, inplay_e_under_25). Average ECE improvement: 19% → 4.5% across the six. Bot probability outputs on these markets are now materially more honest" },
+      { type: "model", text: "In-play strategy fixes: inplay_i Favourite Stall now applies a Bayesian Gamma posterior update on prematch xG (was ignoring the 0-0 score information) plus a model-vs-market gate to skip low-data-league overconfidence. inplay_n received the same model-vs-market gate. inplay_o quarantined 62 pre-fix tainted bets (€577 of inflated PnL removed)" },
+      { type: "model", text: "CLV backfill against Pinnacle's closing line (n=517, 60 days). bot_ah_home_fav promoted to calibrated cohort (+8.89% CLV). bot_ah_away_dog retired (−29.87% CLV). bot_aggressive_v2 retired (positive CLV but bad odds-band sizing). Five acca/combo bots retired (0W/42L combined)" },
+      { type: "infra", text: "World Cup 2026 odds infrastructure: daily 06:30 UTC cron sweeps The Odds API for WC fixtures during the tournament window (Jun 11 → Jul 19). First sweep landed 5,858 rows across 24 bookmakers including Pinnacle (which is available on WC specifically, unlike other Odds API soccer competitions)" },
+      { type: "infra", text: "Weekly threshold-check cron — Sunday 06:00 UTC, runs scripts/threshold_check.py and emails the gate-count snapshot via Resend. Prevents the \"Key Thresholds to Watch\" counts from going stale (the manual run had gone 13 days stale before today's audit)" },
+      { type: "fix", text: "Admin / real bets page — \"Won / lost\" tile now shows \"Won / lost / void\" when voids exist. Hit-rate denominator excludes voids (won/(won+lost) not won/settled). Surfaces the missing-bet math operator-flagged this morning" },
+      { type: "infra", text: "Calendar correction across PRIORITY_QUEUE.md + MODEL_WHITEPAPER.md — multiple body-text references confused dates with weekdays (\"Sunday 2026-06-08\" when 6/8 is actually Monday). Bundle name expectation updated: Sunday's cron output will be v20260607, not v_20260608 as some task bodies said" },
+    ],
+  },
+  {
+    date: "2026-06-05",
+    title: "Landing redesign · Mobile audit · SEO content engine · Unified marketing nav",
+    changes: [
+      { type: "feature", text: "Landing page condensed by 49% (706 visible words → 358) in a 4-day copy-density audit. Single load-bearing CLV hero stat replaces the previous 3-stat spread. Tier explainers collapsed. Telegram CTA tightened. FAQ trimmed 5 → 3. Pricing surface demoted to a single CTA on landing (full /pricing page remains)" },
+      { type: "feature", text: "Marketing pages now share a single MarketingNav component — landing, pricing, privacy, changelog, terms. Adds an auth-aware profile dropdown for logged-in users and a mobile drawer. Adding a new marketing page = one component import" },
+      { type: "feature", text: "Mobile landing redesign (P0+P1+P2 batch) — hero fits above the fold on 393px Android, FAQ uses native expanders (~2400px scroll → 1 viewport), competitor matrix gets per-section header chips, animation placeholder copy removed, featured-on badges normalized" },
+      { type: "feature", text: "Past-fixture recap pages (SEO Phase 3) — every finished fixture now has a /matches/[id]/recap surface with model-quality framing, CLV display, and bot analysis. Includes SEO slugs + quality gates" },
+      { type: "feature", text: "Two new /vs competitor comparison pages — /vs/sofascore and /vs/oddschecker. Plus 3 additional /vs entries (V2 batch). Landing competitor matrix now has every column linked to an in-app comparison page" },
+      { type: "feature", text: "Live scoreboard now shows stoppage-time minutes — \"90+5'\" instead of capping at \"90'\". Matches the BBC/ESPN convention" },
+      { type: "feature", text: "Per-bot drilldown modal on /admin/bots now has a \"Performance breakdown\" 3-row table — All-time / Since 2026-05-24 / Δ — so the post-model-batch cohort is visible alongside the all-time numbers" },
+      { type: "infra", text: "Performance improvements (Lighthouse Fix 2 + 3): team logos converted to next/image for proper optimization; 7 heavy SSR queries wrapped in unstable_cache for sub-second cold loads on /performance and /matches" },
+      { type: "fix", text: "Google Search Console Event-schema issues resolved across 6 page types — eventName, startDate.timezone, location.address structured-data fields filled out" },
+      { type: "fix", text: "Vercel image quota workaround on team-logo headers (unoptimized flag where appropriate)" },
+      { type: "fix", text: "PostHog event ingestion had been silently blocked by CSP for weeks — connect-src now allows us.i.posthog.com" },
+    ],
+  },
+  {
+    date: "2026-06-04",
+    title: "WC infrastructure complete · Model card per match · Coolbet anonymous read · Drift signal",
+    changes: [
+      { type: "feature", text: "World Cup 2026 hub fully built — Overview, Schedule, Groups, Knockouts, Teams, Leaderboard, Top Scorers tabs. Group standings with 5,000-iteration Monte Carlo advancement probabilities. Tier-gated knockout AI predictions (Pro unlock). 17 WC components, 9 supporting libs, 8 backend jobs (achievement detection, bracket scoring, slot sync, daily email, lineup refresh, live xG, match previews, recap tweets)" },
+      { type: "feature", text: "Per-match model card with reasoning protected behind a UI layer — the model's debug payload (signal breakdown, edge computation) is summarized into model + market disagreement copy on /matches/[id] without leaking raw JSON" },
+      { type: "feature", text: "Score predictions and key-player chip on match detail — Poisson top-5 scoreline distribution plus a key-player surface" },
+      { type: "feature", text: "Win-probability route + chart component for live matches — /api/matches/[id]/wp returns goal-event timestamps + next-10-min goal probability; matched widget renders the live curve" },
+      { type: "model", text: "Pinnacle drift signal landed — opening-vs-closing line move per outcome populated as a training feature. Backfilled across 219 matches via OddsPapi historical (CLV-BACKFILL groundwork). MFV columns pinnacle_drift_home/draw/away now feed the Sunday retrain" },
+      { type: "model", text: "Football-data.co.uk CSV full-extract — 118K Betfair Exchange rows + multiple bookmakers' OU 2.5 closing across 9 bookmakers across ~8.5K matches. Backbone for the OU25-dedicated-model investigation" },
+      { type: "infra", text: "Coolbet event-search now works anonymously (Imperva cookies only, no JWT) for the ingest path. Closes the silent 6-day outage that started 2026-05-28 when the manual JWT expired and ingest started returning 0 rows" },
+      { type: "infra", text: "Asian Handicap prototype model (XGBoost on football-data CSVs) — first dedicated AH bundle reaches CV AUC 0.73 on n≈3,200. Not yet wired into production but available for the OU25-DEDICATED-MODEL-INVESTIGATE follow-up" },
+      { type: "fix", text: "Coolbet snapshot ingest banner — /admin/place now surfaces an amber warning when no Coolbet odds_snapshots have arrived in the last 60 minutes. Prevents the next silent outage from masquerading as a wall of \"no event\" chips" },
+    ],
+  },
+  {
     date: "2026-06-03",
     title: "Elite league filter · In-play minute + score · AH stake display · Bot calibration",
     changes: [
