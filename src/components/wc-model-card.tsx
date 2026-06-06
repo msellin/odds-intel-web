@@ -178,6 +178,12 @@ function DisagreementCallout({
   const ownProbText = displayProb(info.ownTopProb);
   const marketTopProb = probOnPick(market, info.marketPick);
   const marketProbText = displayProb(marketTopProb);
+  // gapPp is signed: +ve means own is more confident than market on the same
+  // pick, -ve means own is less confident (the model is more skeptical of the
+  // favourite than the public is). Direction MUST be reflected in the copy —
+  // saying "more confident" when own=50% / market=70%+ is the inverse of what
+  // the data shows and breaks user trust.
+  const ownIsMoreConfident = info.gapPp >= 0;
   // The "we disagree because" pulls the reasoning JSON's first non-empty
   // string. When the engine doesn't ship a reasoning string yet, fall back
   // to a generic explainer that points at the feature drivers below.
@@ -200,7 +206,9 @@ function DisagreementCallout({
         <div className="space-y-1">
           <p className="font-semibold text-foreground">
             {info.ownPick === info.marketPick
-              ? `Our model agrees on ${ownTeam} but is more confident (${ownProbText} vs market ${displayProb(probOnPick(market, info.ownPick))}).`
+              ? ownIsMoreConfident
+                ? `Our model agrees on ${ownTeam} but is more confident (${ownProbText} vs market ${displayProb(probOnPick(market, info.ownPick))}).`
+                : `Our model agrees on ${ownTeam} but is less confident (${ownProbText} vs market ${displayProb(probOnPick(market, info.ownPick))}).`
               : `Our model leans ${ownTeam} (${ownProbText}), market favours ${marketTeam} (${marketProbText}).`}
           </p>
           <p className="text-[11px] text-foreground/75">{explanation}</p>
