@@ -115,17 +115,25 @@ function buildChartData(bets: SanitizedBotBet[], startingBankroll: number | null
   // bankroll. Was hardcoded €1000, which broke bot_aggressive_v2 (€10k start)
   // — the line jumped from 1000 to ~10000 on the first bet, looking like the
   // chart "started from the first bet's result."
+  //
+  // BOT-MODAL-CHART-VOID-BUG (2026-06-06): always recompute the running total
+  // from `pnl` of the displayed bets. Previously the chart preferred each
+  // bet's stored `bankrollAfter` snapshot, which is the bankroll at the
+  // moment THAT bet settled — written before any later void cleanup. When
+  // a sibling bet is retroactively voided (MATCH-DUPES-CLEANUP, OU odds
+  // hygiene, etc.) its pnl flips to 0 but the snapshot on neighbouring bets
+  // is not rewritten. Filtering voids out of the displayed series then
+  // produced a cliff where the next non-void bet's stale snapshot reflected
+  // the void's original loss/win. Running from pnl is internally consistent
+  // with the filtered series — the line moves only by bets the user can see.
   const origin = startingBankroll ?? 1000;
-  const hasBankroll = settled.some((b) => b.bankrollAfter != null);
   let running = origin;
 
   const series = settled.map((b, i) => {
-    const bankroll = hasBankroll && b.bankrollAfter != null
-      ? b.bankrollAfter
-      : (running += b.pnl, running);
+    running += b.pnl;
     return {
       idx: i + 1,
-      bankroll: Math.round(bankroll * 100) / 100,
+      bankroll: Math.round(running * 100) / 100,
       date: new Date(b.placedAt).toLocaleDateString("en-GB", { month: "short", day: "numeric" }),
       result: b.result as "won" | "lost" | "origin",
     };

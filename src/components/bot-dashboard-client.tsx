@@ -101,22 +101,22 @@ function resultBadge(result: string) {
 // ── Bankroll chart data ───────────────────────────────────────────────────────
 
 function buildBankrollData(bets: LiveBet[]) {
+  // BOT-MODAL-CHART-VOID-BUG (2026-06-06): always recompute running from pnl.
+  // See performance-leaderboard.tsx::buildChartData for the void-cleanup
+  // reasoning. Voids are excluded from `settled`, so a stored bankrollAfter
+  // snapshot from a sibling bet would create cliffs at retroactive voids.
   const settled = bets
-    .filter((b) => b.result !== "pending" && b.result !== "void")
+    .filter((b) => b.result === "won" || b.result === "lost")
     .sort((a, b) => new Date(a.placedAt).getTime() - new Date(b.placedAt).getTime());
 
   if (settled.length === 0) return [];
 
-  const hasBankrollData = settled.some((b) => b.bankrollAfter != null);
   let running = 1000;
-
   const series = settled.map((b, i) => {
-    const bankroll = hasBankrollData && b.bankrollAfter != null
-      ? b.bankrollAfter
-      : (running += b.pnl, running);
+    running += b.pnl;
     return {
       idx: i + 1,
-      bankroll: Math.round(bankroll * 100) / 100,
+      bankroll: Math.round(running * 100) / 100,
       date: new Date(b.placedAt).toLocaleDateString("en-GB", { month: "short", day: "numeric" }),
       result: b.result as string,
     };

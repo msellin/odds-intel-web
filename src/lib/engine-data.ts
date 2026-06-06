@@ -3032,8 +3032,16 @@ export async function getTrackRecordStats(): Promise<TrackRecordStats> {
 
   if (cache) {
     const row = Array.isArray(supabaseCounts.data) ? supabaseCounts.data[0] : supabaseCounts.data;
+    // UI-METRIC-SOT (2026-06-06): the hero's "Avg CLV · active strategies" tile
+    // must read `active_avg_clv` (active+non-experimental+non-retired cohort)
+    // not the broader `avg_clv` (which includes retired bots and drags the
+    // number down). The client `buildPerformanceStats` recompute lands at the
+    // active-only number; aligning the cache read here means the cache value
+    // matches the recompute exactly, killing the Suspense flicker on
+    // /performance. Fallback to `avg_clv` for pre-migration-157 cache rows
+    // where `active_avg_clv` is null.
     return {
-      avgClv: cache.avg_clv,
+      avgClv: cache.active_avg_clv ?? cache.avg_clv,
       totalValueBets: cache.settled_bets,
       avgEdge: 0,
       settledBets: cache.settled_bets,
@@ -3237,6 +3245,11 @@ export interface DashboardCache {
   // 30d on active+non-experimental bots, ascending by date. Nullable on
   // legacy cache rows (pre-migration 158).
   daily_pnl_curve_30d: Array<{ d: string; cum: number }> | null;
+  // UI-METRIC-SOT (2026-06-06): same series, 90-day window — read by the
+  // PerformanceExtras cumulative P&L chart. Single source of truth: the 30d
+  // curve above is the tail of this one. Nullable on legacy cache rows
+  // (pre-migration 188).
+  daily_pnl_curve_90d: Array<{ d: string; cum: number }> | null;
   // PERF-HERO-RECENT-WINS (2026-06-01): top 8 deduped wins from last 14d by
   // CLV beat. Concrete "model picked these and was right" stories for the
   // public page. Nullable on legacy cache rows (pre-migration 159).
@@ -4845,16 +4858,21 @@ export interface PublicPerformanceExtras {
 // updates once daily as bets settle.
 const _getPublicPerformanceExtrasUncached = async (): Promise<PublicPerformanceExtras> => {
   const admin = createSupabaseAdmin();
-  // 90-day chart window covers the launch-to-now visual story without bloating
-  // the response. Settled bets only — pending have no P&L yet.
+  // 90-day window covers the launch-to-now visual story. Bets are needed for
+  // calibration / streaks / per-bot recent ROI; the cumulative-P&L series is
+  // read from dashboard_cache.daily_pnl_curve_90d so the hero sparkline and
+  // this chart land on identical endpoints. UI-METRIC-SOT (2026-06-06).
   const since = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString();
-  const { data } = await admin
-    .from("simulated_bets")
-    .select("pick_time, result, pnl, stake, model_probability, calibrated_prob, bot:bot_id(name)")
-    .in("result", ["won", "lost"])
-    .gte("pick_time", since)
-    .order("pick_time", { ascending: true })
-    .range(0, 49999);
+  const [{ data }, cache] = await Promise.all([
+    admin
+      .from("simulated_bets")
+      .select("pick_time, result, pnl, stake, model_probability, calibrated_prob, bot:bot_id(name)")
+      .in("result", ["won", "lost"])
+      .gte("pick_time", since)
+      .order("pick_time", { ascending: true })
+      .range(0, 49999),
+    getDashboardCache(),
+  ]);
 
   type Row = {
     pick_time: string;
@@ -4875,18 +4893,29 @@ const _getPublicPerformanceExtrasUncached = async (): Promise<PublicPerformanceE
     return botName ? !EXPERIMENTAL_BOT_NAMES.has(botName) : true;
   });
 
-  // Cumulative daily series — bucket by UTC day of pick_time.
-  const byDay = new Map<string, number>();
-  for (const r of rows) {
-    const day = r.pick_time.slice(0, 10);
-    byDay.set(day, (byDay.get(day) ?? 0) + Number(r.pnl ?? 0));
+  // Cumulative series: read straight from cache. Same cohort as the hero
+  // sparkline (active + non-experimental + non-retired bots, won/lost only).
+  // Fallback: if the cache row is pre-migration-188 it has no 90d curve, so
+  // bucket from the bets we just loaded as a one-time transition path.
+  let cumulative: PublicPnlPoint[];
+  if (cache?.daily_pnl_curve_90d?.length) {
+    cumulative = cache.daily_pnl_curve_90d.map((p) => ({
+      date: p.d.slice(5),
+      cumPnl: Number(p.cum.toFixed(2)),
+    }));
+  } else {
+    const byDay = new Map<string, number>();
+    for (const r of rows) {
+      const day = r.pick_time.slice(0, 10);
+      byDay.set(day, (byDay.get(day) ?? 0) + Number(r.pnl ?? 0));
+    }
+    const days = Array.from(byDay.keys()).sort();
+    let cum = 0;
+    cumulative = days.map((d) => {
+      cum += byDay.get(d) ?? 0;
+      return { date: d.slice(5), cumPnl: Number(cum.toFixed(2)) };
+    });
   }
-  const days = Array.from(byDay.keys()).sort();
-  let cum = 0;
-  const cumulative: PublicPnlPoint[] = days.map((d) => {
-    cum += byDay.get(d) ?? 0;
-    return { date: d.slice(5), cumPnl: Number(cum.toFixed(2)) };
-  });
 
   // Calibration — bucket by calibrated_prob (fallback to model_probability).
   const buckets: Array<[string, number, number]> = [
