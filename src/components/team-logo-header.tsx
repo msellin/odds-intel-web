@@ -27,6 +27,7 @@ export function TeamLogoHeader({
           sizes={size === "lg" ? "48px" : "24px"}
           className="object-contain p-0.5"
           priority={size === "lg"}
+          unoptimized
           onError={() => setFailed(true)}
         />
       </div>
