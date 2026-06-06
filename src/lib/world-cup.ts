@@ -31,6 +31,38 @@ export const WC_FIRST_KICKOFF_ISO = "2026-06-11T19:00:00Z";
 export const WC_LAST_DATE_ISO = "2026-07-19T23:59:59Z";
 
 /**
+ * Full FIFA World Cup 2026 SportsEvent JSON-LD payload. Centralised here so
+ * every page that references the tournament (team pages, who-can-win,
+ * predictions-record + its subpages) emits the same complete schema —
+ * Google Search Console flags missing `location`/`startDate` even on nested
+ * `about` / `memberOf` event references, so all required + recommended
+ * fields are kept together. SITE is injected by the caller so this stays
+ * deployment-agnostic.
+ */
+export function buildWorldCup2026EventLd(site: string): Record<string, unknown> {
+  return {
+    "@type": "SportsEvent",
+    name: "FIFA World Cup 2026",
+    sport: "Soccer",
+    url: `${site}/world-cup`,
+    startDate: "2026-06-11",
+    endDate: "2026-07-19",
+    eventStatus: "https://schema.org/EventScheduled",
+    eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
+    organizer: {
+      "@type": "SportsOrganization",
+      name: "FIFA",
+      url: "https://www.fifa.com",
+    },
+    location: [
+      { "@type": "Country", name: "United States" },
+      { "@type": "Country", name: "Canada" },
+      { "@type": "Country", name: "Mexico" },
+    ],
+  };
+}
+
+/**
  * Server-side "now" snapshot. Lives here so the React purity lint doesn't
  * flag Date.now() inside the page component (server components are async
  * and render once per request — the rule is overly cautious but easier to

@@ -39,6 +39,7 @@ import {
   getServerNowMs,
   getWorldCupPreviews,
   deriveGroups,
+  buildWorldCup2026EventLd,
 } from "@/lib/world-cup";
 import type {
   WCFixture,
@@ -838,11 +839,10 @@ export default async function TeamDetailPage({
     name: ctx.team.name,
     sport: "Soccer",
     url: teamUrl,
-    memberOf: {
-      "@type": "SportsEvent",
-      name: "FIFA World Cup 2026",
-      url: `${SITE}/world-cup`,
-    },
+    // GSC flagged "Missing startDate / location" on this nested SportsEvent —
+    // Google validates embedded events the same as top-level ones. Shared
+    // helper keeps every WC page in sync.
+    memberOf: buildWorldCup2026EventLd(SITE),
   };
   if (ctx.team.logo) {
     teamJsonLd.logo = ctx.team.logo;

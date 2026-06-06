@@ -18,7 +18,7 @@ import {
   type RecordSummary,
   type CalibrationBucket,
 } from "@/lib/wc-record";
-import { WC_FIRST_KICKOFF_ISO } from "@/lib/world-cup";
+import { WC_FIRST_KICKOFF_ISO, buildWorldCup2026EventLd } from "@/lib/world-cup";
 import { WCRecordSubNav } from "@/components/wc-record-subnav";
 
 // ── SEO ──────────────────────────────────────────────────────────────────────
@@ -677,11 +677,7 @@ export default async function WCPredictionsRecordPage() {
       name: "OddsIntel",
       url: SITE,
     },
-    about: {
-      "@type": "SportsEvent",
-      name: "FIFA World Cup 2026",
-      url: `${SITE}/world-cup`,
-    },
+    about: buildWorldCup2026EventLd(SITE),
     publisher: {
       "@type": "Organization",
       name: "OddsIntel",

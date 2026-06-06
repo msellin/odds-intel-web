@@ -19,7 +19,7 @@ import Link from "next/link";
 import { Trophy, Sparkles } from "lucide-react";
 
 import { createSupabaseServer } from "@/lib/supabase-server";
-import { getWorldCupFixtures, deriveGroups } from "@/lib/world-cup";
+import { getWorldCupFixtures, deriveGroups, buildWorldCup2026EventLd } from "@/lib/world-cup";
 import { displayProb } from "@/lib/probability-display";
 import { flagForTeam } from "@/lib/wc-flags";
 import { WhoCanWinTable } from "@/components/wc-who-can-win-table";
@@ -205,23 +205,10 @@ export default async function WhoCanWinPage() {
   const pageUrl = `${SITE}/world-cup/who-can-win`;
   const eventJsonLd: Record<string, unknown> = {
     "@context": "https://schema.org",
-    "@type": "SportsEvent",
-    name: "FIFA World Cup 2026",
-    sport: "Soccer",
+    ...buildWorldCup2026EventLd(SITE),
     url: pageUrl,
-    startDate: "2026-06-11",
-    endDate: "2026-07-19",
-    eventStatus: "https://schema.org/EventScheduled",
-    location: [
-      { "@type": "Country", name: "United States" },
-      { "@type": "Country", name: "Canada" },
-      { "@type": "Country", name: "Mexico" },
-    ],
-    organizer: {
-      "@type": "SportsOrganization",
-      name: "FIFA",
-      url: "https://www.fifa.com",
-    },
+    description:
+      "OddsIntel's AI model ranks every team in the FIFA World Cup 2026 by win probability, refreshed daily from the betting markets and our Poisson + XGBoost ensemble.",
   };
   if (top5.length > 0) {
     eventJsonLd.competitor = top5.map((t) => ({

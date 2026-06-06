@@ -210,28 +210,46 @@ export default async function FixturePredictionPage({
     : modelCall === "away" ? match.awayTeam
     : modelCall === "draw" ? "Draw" : null;
 
-  // JSON-LD payload — SportsEvent for Google rich snippets
+  // JSON-LD payload — SportsEvent for Google rich snippets.
+  // All required + recommended fields are always present so Google Search
+  // Console doesn't flag "Missing location / startDate / eventStatus /
+  // organizer / description / address" — fall back to country when there's
+  // no venue and always set eventStatus (postponed vs scheduled).
+  const fixtureUrl = `https://oddsintel.app/predictions/${league}/${fixture}`;
   const jsonLd: Record<string, unknown> = {
     "@context": "https://schema.org",
     "@type": "SportsEvent",
     name: `${match.homeTeam} vs ${match.awayTeam}`,
+    description: isFinished && hasScore
+      ? `${match.homeTeam} ${match.score_home}-${match.score_away} ${match.awayTeam} — ${leagueName} result and OddsIntel AI model verdict.`
+      : `AI prediction for ${match.homeTeam} vs ${match.awayTeam} (${leagueName}). Model probability, odds comparison and key signals on OddsIntel.`,
     startDate: kickoff.toISOString(),
+    endDate: new Date(kickoff.getTime() + 115 * 60 * 1000).toISOString(),
+    eventStatus: match.status === "postponed"
+      ? "https://schema.org/EventPostponed"
+      : "https://schema.org/EventScheduled",
+    eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
     sport: "Soccer",
+    url: fixtureUrl,
+    location: match.venue_name
+      ? {
+          "@type": "Place",
+          name: match.venue_name,
+          address: { "@type": "PostalAddress", addressCountry: match.country },
+        }
+      : {
+          "@type": "Place",
+          name: match.country,
+          address: { "@type": "PostalAddress", addressCountry: match.country },
+        },
     homeTeam: { "@type": "SportsTeam", name: match.homeTeam },
     awayTeam: { "@type": "SportsTeam", name: match.awayTeam },
-    organizer: { "@type": "Organization", name: leagueName },
+    competitor: [
+      { "@type": "SportsTeam", name: match.homeTeam },
+      { "@type": "SportsTeam", name: match.awayTeam },
+    ],
+    organizer: { "@type": "SportsOrganization", name: leagueName },
   };
-  if (match.venue_name) {
-    jsonLd.location = { "@type": "Place", name: match.venue_name };
-  }
-  // Phase 3: finished-event status so Google can distinguish upcoming from
-  // past in rich-snippet rendering ("Result" vs "Prediction" chip).
-  if (isFinished) {
-    jsonLd.eventStatus = "https://schema.org/EventScheduled";
-    if (hasScore) {
-      jsonLd.description = `${match.homeTeam} ${match.score_home}-${match.score_away} ${match.awayTeam}`;
-    }
-  }
 
   // Pre-format the percent values used in the FAQ answer so the literal copy
   // doesn't have stray non-null-asserted expressions (cleaner + safer).
