@@ -171,6 +171,25 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.7,
   }));
 
+  // Match recap pages — settled A-tier matches with model coverage.
+  // Long-tail SEO: "Team A vs Team B result analysis", "betting recap", etc.
+  let recapPages: MetadataRoute.Sitemap = [];
+  try {
+    const { getRecapIndex } = await import("@/lib/engine-data");
+    const recaps = await getRecapIndex(500, 0);
+    recapPages = [
+      { url: `${base}/recaps`, lastModified: now, changeFrequency: "daily" as const, priority: 0.7 },
+      ...recaps.map((r) => ({
+        url: `${base}/recaps/${r.matchId}`,
+        lastModified: new Date(r.kickoff),
+        changeFrequency: "monthly" as const,
+        priority: 0.65,
+      })),
+    ];
+  } catch {
+    recapPages = [{ url: `${base}/recaps`, lastModified: now, changeFrequency: "daily" as const, priority: 0.7 }];
+  }
+
   return [
     ...staticPages,
     ...wcStaticPages,
@@ -181,5 +200,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...vsPages,
     ...glossaryPages,
     ...matchPages,
+    ...recapPages,
   ];
 }

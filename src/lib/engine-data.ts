@@ -5280,3 +5280,258 @@ export async function getMatchIdsForSitemap(): Promise<Array<{ id: string; updat
   if (error || !data) return [];
   return data.map((r) => ({ id: r.id as string, updatedAt: r.updated_at as string }));
 }
+
+// ─── Match Recap (SEO pages) ──────────────────────────────────────────────────
+
+export interface RecapBet {
+  id: string;
+  market: string;
+  selection: string;
+  oddsAtPick: number;
+  closingOdds: number | null;
+  clv: number | null;
+  result: string;
+  pnl: number;
+  botName: string;
+  edgePercent: number | null;
+}
+
+export interface RecapSignal {
+  signalName: string;
+  signalValue: number;
+  signalGroup: string;
+}
+
+export interface MatchRecapData {
+  matchId: string;
+  homeTeam: string;
+  awayTeam: string;
+  leagueName: string;
+  leagueCountry: string;
+  kickoff: string;
+  status: string;
+  scoreHome: number | null;
+  scoreAway: number | null;
+  result: string | null;
+  logoHome: string | null;
+  logoAway: string | null;
+  dataGrade: "A" | "B" | "C" | null;
+  modelHome: number | null;
+  modelDraw: number | null;
+  modelAway: number | null;
+  pseudoClvHome: number | null;
+  pseudoClvDraw: number | null;
+  pseudoClvAway: number | null;
+  bets: RecapBet[];
+  signals: RecapSignal[];
+}
+
+export async function getMatchRecapData(matchId: string): Promise<MatchRecapData | null> {
+  const admin = createSupabaseAdmin();
+  const pub = createSupabasePublic();
+
+  const [matchRes, predRes, betsRes, signalsRes, pseudoClvRes] = await Promise.all([
+    pub
+      .from("matches")
+      .select(`id, date, status, score_home, score_away, result,
+               home_team:home_team_id(name, logo_url),
+               away_team:away_team_id(name, logo_url),
+               league:league_id(name, country)`)
+      .eq("id", matchId)
+      .single(),
+    pub
+      .from("predictions")
+      .select("source, market, model_probability")
+      .eq("match_id", matchId),
+    admin
+      .from("simulated_bets")
+      .select(`id, market, selection, odds_at_pick, closing_odds, clv, result, pnl, edge_percent, bot:bot_id(name)`)
+      .eq("match_id", matchId)
+      .neq("result", "pending")
+      .order("pick_time", { ascending: false }),
+    pub
+      .from("match_signals")
+      .select("signal_name, signal_value, signal_group, captured_at")
+      .eq("match_id", matchId)
+      .order("captured_at", { ascending: false })
+      .limit(500),
+    pub
+      .from("matches")
+      .select("pseudo_clv_home, pseudo_clv_draw, pseudo_clv_away")
+      .eq("id", matchId)
+      .single(),
+  ]);
+
+  if (matchRes.error || !matchRes.data) return null;
+  const m = matchRes.data as {
+    id: string; date: string; status: string; score_home: number | null; score_away: number | null; result: string | null;
+    home_team: { name: string; logo_url: string | null } | { name: string; logo_url: string | null }[] | null;
+    away_team: { name: string; logo_url: string | null } | { name: string; logo_url: string | null }[] | null;
+    league: { name: string; country: string } | { name: string; country: string }[] | null;
+  };
+
+  const homeTeam = Array.isArray(m.home_team) ? m.home_team[0] : m.home_team;
+  const awayTeam = Array.isArray(m.away_team) ? m.away_team[0] : m.away_team;
+  const league = Array.isArray(m.league) ? m.league[0] : m.league;
+
+  // Determine data grade from prediction sources
+  const predSources = new Set((predRes.data ?? []).map((r: { source: string }) => r.source));
+  let dataGrade: "A" | "B" | "C" | null = null;
+  if (predSources.has("xgboost")) dataGrade = "A";
+  else if (predSources.has("poisson")) dataGrade = "B";
+  else if (predSources.has("af")) dataGrade = "C";
+
+  // Extract ensemble 1x2 probabilities
+  let modelHome: number | null = null;
+  let modelDraw: number | null = null;
+  let modelAway: number | null = null;
+  for (const p of (predRes.data ?? []) as { source: string; market: string; model_probability: number }[]) {
+    if (p.source !== "ensemble") continue;
+    const pct = Math.round(Number(p.model_probability) * 1000) / 10;
+    if (p.market === "1x2_home") modelHome = pct;
+    else if (p.market === "1x2_draw") modelDraw = pct;
+    else if (p.market === "1x2_away") modelAway = pct;
+  }
+
+  // Settled bets
+  type BetRow = { id: string; market: string; selection: string; odds_at_pick: number; closing_odds: number | null; clv: number | null; result: string; pnl: number; edge_percent: number | null; bot: { name: string } | { name: string }[] | null };
+  const bets: RecapBet[] = (betsRes.data ?? []).map((b: BetRow) => ({
+    id: b.id,
+    market: b.market,
+    selection: b.selection,
+    oddsAtPick: Number(b.odds_at_pick),
+    closingOdds: b.closing_odds != null ? Number(b.closing_odds) : null,
+    clv: b.clv != null ? Number(b.clv) : null,
+    result: b.result,
+    pnl: Number(b.pnl || 0),
+    botName: (Array.isArray(b.bot) ? b.bot[0] : b.bot)?.name || "unknown",
+    edgePercent: b.edge_percent != null ? Number(b.edge_percent) : null,
+  }));
+
+  // Signals — deduplicate to latest per name, keep market + quality groups
+  const seen = new Set<string>();
+  const signals: RecapSignal[] = [];
+  for (const row of (signalsRes.data ?? []) as { signal_name: string; signal_value: number; signal_group: string; captured_at: string }[]) {
+    if (seen.has(row.signal_name)) continue;
+    seen.add(row.signal_name);
+    if (row.signal_group === "market" || row.signal_group === "quality") {
+      signals.push({ signalName: row.signal_name, signalValue: Number(row.signal_value), signalGroup: row.signal_group });
+    }
+  }
+
+  const pclv = pseudoClvRes.data as { pseudo_clv_home: number | null; pseudo_clv_draw: number | null; pseudo_clv_away: number | null } | null;
+
+  return {
+    matchId: m.id,
+    homeTeam: homeTeam?.name || "TBD",
+    awayTeam: awayTeam?.name || "TBD",
+    leagueName: league?.name || "Unknown",
+    leagueCountry: league?.country || "",
+    kickoff: m.date,
+    status: m.status,
+    scoreHome: m.score_home,
+    scoreAway: m.score_away,
+    result: m.result,
+    logoHome: homeTeam?.logo_url ?? null,
+    logoAway: awayTeam?.logo_url ?? null,
+    dataGrade,
+    modelHome,
+    modelDraw,
+    modelAway,
+    pseudoClvHome: pclv?.pseudo_clv_home ?? null,
+    pseudoClvDraw: pclv?.pseudo_clv_draw ?? null,
+    pseudoClvAway: pclv?.pseudo_clv_away ?? null,
+    bets,
+    signals: signals.slice(0, 8),
+  };
+}
+
+export interface RecapIndexEntry {
+  matchId: string;
+  homeTeam: string;
+  awayTeam: string;
+  leagueName: string;
+  leagueCountry: string;
+  kickoff: string;
+  scoreHome: number | null;
+  scoreAway: number | null;
+  result: string | null;
+  dataGrade: "A" | "B" | "C" | null;
+  betCount: number;
+  avgClv: number | null;
+}
+
+/** Settled matches we have model coverage for, ordered newest first. */
+export async function getRecapIndex(limit = 60, offset = 0): Promise<RecapIndexEntry[]> {
+  const admin = createSupabaseAdmin();
+
+  // Get A-tier match IDs from match_feature_vectors
+  const { data: fvRows } = await admin
+    .from("match_feature_vectors")
+    .select("match_id")
+    .eq("data_tier", "A");
+
+  const aTierIds = (fvRows ?? []).map((r: { match_id: string }) => r.match_id);
+  if (aTierIds.length === 0) return [];
+
+  const since = new Date(Date.now() - 180 * 86_400_000).toISOString();
+
+  const { data: matches } = await admin
+    .from("matches")
+    .select(`id, date, score_home, score_away, result,
+             home_team:home_team_id(name),
+             away_team:away_team_id(name),
+             league:league_id(name, country)`)
+    .in("id", aTierIds)
+    .eq("status", "finished")
+    .gte("date", since)
+    .order("date", { ascending: false })
+    .range(offset, offset + limit - 1);
+
+  if (!matches) return [];
+
+  // Fetch bet counts + avg CLV per match
+  const matchIds = (matches as { id: string }[]).map((m) => m.id);
+  const { data: betAggs } = await admin
+    .from("simulated_bets")
+    .select("match_id, clv")
+    .in("match_id", matchIds)
+    .neq("result", "pending");
+
+  type BetAgg = { match_id: string; clv: number | null };
+  const betsByMatch = new Map<string, { count: number; clvSum: number; clvN: number }>();
+  for (const b of (betAggs ?? []) as BetAgg[]) {
+    const cur = betsByMatch.get(b.match_id) ?? { count: 0, clvSum: 0, clvN: 0 };
+    cur.count++;
+    if (b.clv != null) { cur.clvSum += Number(b.clv); cur.clvN++; }
+    betsByMatch.set(b.match_id, cur);
+  }
+
+  type MatchRow = {
+    id: string; date: string; score_home: number | null; score_away: number | null; result: string | null;
+    home_team: { name: string } | { name: string }[] | null;
+    away_team: { name: string } | { name: string }[] | null;
+    league: { name: string; country: string } | { name: string; country: string }[] | null;
+  };
+
+  return (matches as MatchRow[]).map((m) => {
+    const home = Array.isArray(m.home_team) ? m.home_team[0] : m.home_team;
+    const away = Array.isArray(m.away_team) ? m.away_team[0] : m.away_team;
+    const lg = Array.isArray(m.league) ? m.league[0] : m.league;
+    const agg = betsByMatch.get(m.id);
+    return {
+      matchId: m.id,
+      homeTeam: home?.name || "TBD",
+      awayTeam: away?.name || "TBD",
+      leagueName: lg?.name || "Unknown",
+      leagueCountry: lg?.country || "",
+      kickoff: m.date,
+      scoreHome: m.score_home,
+      scoreAway: m.score_away,
+      result: m.result,
+      dataGrade: "A" as const,
+      betCount: agg?.count ?? 0,
+      avgClv: agg && agg.clvN > 0 ? agg.clvSum / agg.clvN : null,
+    };
+  });
+}
