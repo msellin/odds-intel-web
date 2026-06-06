@@ -1,7 +1,6 @@
 export const dynamic = 'force-dynamic';
 
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Suspense } from "react";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import {
@@ -19,8 +18,8 @@ import {
 import { ValueBetsScan } from "@/components/value-bets-scan";
 import { ValueBetsGate } from "@/components/value-bets-gate";
 import { TodayPicksPreview } from "@/components/today-picks-preview";
-import { CLVTrustBanner } from "@/components/clv-trust-banner";
-import { ValueBetsLiveSection } from "@/components/value-bets-live-section";
+import { ValueBetsHeader } from "@/components/value-bets-header";
+import { ValueBetsLiveStrip } from "@/components/value-bets-live-strip";
 import { getUserTier } from "@/lib/get-user-tier";
 
 export const metadata: Metadata = {
@@ -151,10 +150,11 @@ async function ValueBetsContent({ userId }: { userId: string }) {
   const cohort: BetCohort =
     isElite ? "active" : isPro ? "calibrated" : "prematch";
 
-  // CLV-TRUST-BANNER (2026-06-02): the hero CLV stats now come from
-  // <CLVTrustBanner variant="value-bets" />, which does its own dashboard_cache
-  // read. We no longer need to pre-fetch cache here for the hero. Kept the
-  // public performance extras for the bot-ROI hook + odds-movement view.
+  // VALUE-BETS-DENSITY-PASS Tier 1 (2026-06-06): the hero CLV stat is now a
+  // compact pill inside ValueBetsHeader (links to /performance for the full
+  // breakdown). No pre-fetch needed here — the header component does its own
+  // dashboard_cache read. Kept the public performance extras for the bot-ROI
+  // hook + odds-movement view.
   // ELITE-LEAGUE-FILTER (2026-06-03): per-league 90d hit rate only fetched
   // for Elite users; Pro and Free don't render the badge/filter and we don't
   // need to pay the query cost.
@@ -216,121 +216,40 @@ async function ValueBetsContent({ userId }: { userId: string }) {
 
   // Server-anchored "now" for the live section. The client component diffs
   // each pick's placedAt against this (NOT Date.now()) for the stale gate, so
-  // a clock-drifted browser can't fake freshness.
-  const serverNow = new Date().toISOString();
-
-  // CLV banner cohort follows the user's tier: Pro sees the calibrated cohort,
-  // Elite sees all-active (matches what they're actually consuming on this page).
-  const clvCohort = isElite ? "elite" : "pro";
-
   return (
-    <div className="space-y-6">
-      {/* GROWTH-CLV-FIRST-MESSAGING (2026-06-05): page-level header that leads
-          with CLV before the tier-explainer block. Visible to all tiers — the
-          CLV-first honesty positioning is our actual moat, so /value-bets
-          must lead with it the same way the landing hero does. */}
-      <header className="space-y-2">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-          Today&apos;s value bets — <span className="text-green-400">CLV-tracked</span>, not just hit-rate.
-        </h1>
-        <p className="text-sm text-muted-foreground sm:text-base">
-          Every pick is logged before kickoff and scored against the closing line.
-          ROI swings on luck for hundreds of bets; CLV is the honest scoreboard.{" "}
-          <Link
-            href="/learn/closing-line-value"
-            className="text-foreground underline underline-offset-2 hover:text-green-400"
-          >
-            Why CLV beats ROI →
-          </Link>
-        </p>
-      </header>
+    <div className="space-y-4">
+      {/* VALUE-BETS-DENSITY-PASS Tier 1 (2026-06-06): compact 2-line header
+          replaces the previous 5-section vertical stack. CLV stat collapses
+          to a clickable pill linking to /performance for the full breakdown.
+          Telegram CTA becomes a small icon-chip. Tier explainer collapses to
+          a one-line caption appropriate to the current user's tier. ~500-
+          600px vertical recovered above the fold on mobile. */}
+      <ValueBetsHeader isPro={isPro} isElite={isElite} totalCount={totalCount} />
 
-      {/* COHORT-TRANSPARENCY (2026-06-02): make the Pro/Elite distinction
-          unmissable. Free users get a teaser ("here's what's in here").
-          Pro users get the curated calibrated-bot feed and a clear Elite
-          upgrade hook. Elite users get the firehose and a "this is the
-          full feed" confirmation. */}
-      {!isPro && (
-        <section className="rounded-xl border border-white/[0.06] bg-card/40 p-4 text-sm text-muted-foreground sm:p-5">
-          <p className="font-semibold text-foreground">What you'd see as Pro or Elite</p>
-          <p className="mt-1.5 text-xs leading-relaxed">
-            <span className="font-semibold text-foreground">Pro</span> — every pick from our 4 calibrated strategies (the ones with proven track record). Side, odds, model probability, edge%.
-            {" "}
-            <span className="font-semibold text-foreground">Elite</span> — every pick from all 39 strategies in the ensemble (calibrated + experimental + niche specialists). Plus Kelly stake sizing per pick.
-          </p>
-        </section>
-      )}
-      {isPro && !isElite && (
-        <section className="flex items-start gap-3 rounded-xl border border-blue-500/20 bg-blue-500/[0.06] p-3 text-xs sm:p-4 sm:text-sm">
-          <div className="flex-1 leading-relaxed">
-            <p className="font-semibold text-foreground">You're seeing the calibrated-strategy feed</p>
-            <p className="mt-1 text-muted-foreground">
-              These are picks from our 4 calibrated strategies — promoted only after proving statistically significant ROI. Quality over quantity. Elite tier unlocks picks from all 39 strategies in the ensemble (~3× the daily pick volume) plus per-strategy tracking on /performance.
-            </p>
-          </div>
-        </section>
-      )}
-      {isElite && (
-        <section className="flex items-start gap-3 rounded-xl border border-purple-500/20 bg-purple-500/[0.06] p-3 text-xs sm:p-4 sm:text-sm">
-          <div className="flex-1 leading-relaxed">
-            <p className="font-semibold text-foreground">You're seeing the full feed</p>
-            <p className="mt-1 text-muted-foreground">
-              Every pick from all 39 strategies in the ensemble — calibrated, experimental, niche specialists. Per-strategy ROI + CLV tracking on /performance.
-            </p>
-          </div>
-        </section>
-      )}
-
-      {/* Telegram delivery reminder — Pro+ only. Shown to all Pro/Elite users;
-          /profile shows the active-or-inactive connect state, so this banner
-          just routes them there. */}
-      {isPro && (
-        <Link
-          href="/profile#telegram"
-          className="group flex items-center justify-between gap-3 rounded-xl border border-sky-500/20 bg-sky-500/[0.06] px-4 py-3 text-xs transition-colors hover:border-sky-500/40 hover:bg-sky-500/[0.10] sm:text-sm"
-        >
-          <div className="flex items-center gap-3">
-            <span className="text-base" aria-hidden>📲</span>
-            <span className="text-foreground">
-              <span className="font-semibold">Get these picks in Telegram</span>
-              <span className="ml-2 text-muted-foreground">
-                — sent the moment they&apos;re identified, before line movement.
-              </span>
-            </span>
-          </div>
-          <span className="text-sky-300 group-hover:text-sky-200">Manage →</span>
-        </Link>
-      )}
-
-      {/* CLV trust banner — Pro+ only; replaces the old PRO-TIER-V2 hero so
-          /value-bets, /world-cup and / all read from a single component. */}
-      {isPro && <CLVTrustBanner variant="value-bets" cohort={clvCohort} />}
-
-      {/* Live now — inplay picks, auto-refresh every 60s (Pro+ only) */}
+      {/* VALUE-BETS-DENSITY-PASS Tier 2 (2026-06-06): live picks as a
+          compact 1-row strip instead of the full live grid component
+          which still lives on /live. Removes the /value-bets ⇄ /live data
+          duplication while keeping live picks 1-tap-away. */}
       {isPro && inplayBets.length > 0 && (
-        <ValueBetsLiveSection
+        <ValueBetsLiveStrip
           initialBets={inplayBets.map((b) => ({
             id: b.id,
             matchId: b.matchId,
             match: b.match,
-            league: b.league,
             market: b.market,
             selection: b.selection,
-            odds: b.odds,
-            modelProb: b.modelProb,
             edge: b.edge,
-            kickoff: b.kickoff,
-            placedAt: b.placedAt,
-            recommendedBookmaker: b.recommendedBookmaker,
-            bot: b.bot,
-            stake: b.stake,
           }))}
-          serverNow={serverNow}
-          isElite={isElite}
         />
       )}
 
-      <TodayPicksPreview picks={todayPicks} isPro={isPro} isElite={isElite} />
+      {/* Free users still see TodayPicksPreview as the teaser surface.
+          Pro/Elite no longer see it — it duplicates ValueBetsScan content
+          in a different layout, contributing to page-level noise. */}
+      {!isPro && (
+        <TodayPicksPreview picks={todayPicks} isPro={isPro} isElite={isElite} />
+      )}
+
       <ValueBetsScan
         bets={bets}
         totalCount={totalCount}

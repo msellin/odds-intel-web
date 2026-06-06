@@ -535,17 +535,20 @@ function ValueBetRow({
               })()}
               <span className="truncate">{pickLine}</span>
               <ConsensusDots count={bet.botCount} />
-              {/* COHORT-TRANSPARENCY (2026-06-02): Elite users see picks from
-                  all 39 active bots; mark the ones that are ALSO in the Pro
-                  feed (calibrated subset) so they can tell the curated picks
-                  from the wider Elite-only set. Hidden on Pro view because
-                  every row is already calibrated. */}
+              {/* COHORT-TRANSPARENCY (2026-06-02) + VALUE-BETS-DENSITY-PASS
+                  Tier 3 (2026-06-06): renamed "Pro" → "Calibrated". The chip
+                  was always a MATURITY indicator (this pick came from a bot
+                  that survived the calibration gate), not a tier label.
+                  "Pro" was confusing — it sounded like the chip was telling
+                  Elite users "this is also visible to Pro tier", which is
+                  true but secondary. The primary signal is "this pick has
+                  proven model+bot infrastructure behind it." */}
               {isElite && bet.isCalibrated && (
                 <span
                   className="shrink-0 rounded-sm border border-amber-500/40 bg-amber-500/10 px-1 py-px text-[8px] font-bold uppercase tracking-wider text-amber-300"
-                  title="From a calibrated bot — also in the Pro tier feed"
+                  title="From a calibrated bot — proven model + bot infrastructure. Also visible in the Pro tier feed."
                 >
-                  Pro
+                  Calibrated
                 </span>
               )}
               {/* ELITE-LEAGUE-FILTER (2026-06-03): per-row league strength
