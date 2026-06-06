@@ -81,8 +81,9 @@ export default withSentryConfig(nextConfig, {
   silent: !process.env.CI,
   // No source-map uploads — we removed captureException everywhere; the
   // only Sentry events we ship are user-submitted feedback (which doesn't
-  // benefit from source maps).
+  // benefit from source maps). `disableLogger` was removed because it's
+  // deprecated and a no-op under Turbopack (Next 16 default).
   widenClientFileUpload: false,
-  disableLogger: true,
+  sourcemaps: { disable: true },
   tunnelRoute: "/monitoring",
 });

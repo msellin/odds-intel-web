@@ -8,7 +8,7 @@ const PROTECTED_ROUTES = ["/profile", "/my-picks"];
 // a network round-trip to Supabase on every landing-page / static-page hit.
 const PUBLIC_STATIC_ROUTES = ["/", "/changelog", "/terms", "/privacy", "/how-it-works"];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Skip auth refresh for static public pages — no session needed
