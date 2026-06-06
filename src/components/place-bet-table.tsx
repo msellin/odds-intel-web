@@ -2,7 +2,8 @@
 
 import { Fragment, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { autoMinEdgeFor, type PlaceableBet } from "@/lib/engine-data";
+import { autoMinEdgeFor } from "@/lib/coolbet-edge";
+import type { PlaceableBet } from "@/lib/engine-data";
 import { RealMoneyTierBadge } from "@/components/real-money-tier-badge";
 
 // PER-MARKET-EDGE-V2 (2026-06-06): per-row badge explaining whether the

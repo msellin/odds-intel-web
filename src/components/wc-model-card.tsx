@@ -184,11 +184,17 @@ function DisagreementCallout({
   // saying "more confident" when own=50% / market=70%+ is the inverse of what
   // the data shows and breaks user trust.
   const ownIsMoreConfident = info.gapPp >= 0;
-  // The "we disagree because" pulls the reasoning JSON's first non-empty
-  // string. When the engine doesn't ship a reasoning string yet, fall back
-  // to a generic explainer that points at the feature drivers below.
-  const explanation = reasoning?.trim()
-    ? reasoning.trim()
+  // The "we disagree because" pulls the reasoning string from the engine.
+  // But: `write_blended_predictions.py` stores a machine-readable debug
+  // payload there (e.g. `wc_a4_blend {"blended":true,"lambda_used":...}`)
+  // for DB-side audit. That must NEVER reach the UI verbatim — strip it and
+  // fall back to the generic explainer. Heuristic: starts with a `prefix {`
+  // token or a bare `{` (JSON object) → it's machine output, not user copy.
+  const rawReasoning = reasoning?.trim() ?? "";
+  const looksLikeDebugPayload =
+    rawReasoning.startsWith("{") || /^\w[\w_]*\s*\{/.test(rawReasoning);
+  const explanation = rawReasoning && !looksLikeDebugPayload
+    ? rawReasoning
     : "Our ELO + Poisson model weights recent international form and squad availability differently than the public market — see the drivers below.";
 
   return (

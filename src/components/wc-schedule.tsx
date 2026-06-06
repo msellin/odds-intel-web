@@ -32,22 +32,6 @@ function dateKey(iso: string): string {
   return iso.slice(0, 10);
 }
 
-/**
- * Slug for the `/world-cup/teams/[name]` route. Mirror of `slugifyTeam` in
- * the team detail page and `slugifyTeamName` in wc-group-card. Kept local
- * because lifting a tiny string fn into a shared lib for three callers is
- * overkill; if a fourth caller appears, lift into `src/lib/wc-team-slug.ts`.
- */
-function slugifyTeamNameForRoute(name: string): string {
-  return name
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/['']/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
 function formatDayHeader(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, {
     weekday: "long",
@@ -183,67 +167,45 @@ export function WCSchedule({
                     key={f.id}
                     className="overflow-hidden rounded-lg border border-white/[0.06] bg-card/40 hover:border-white/[0.12]"
                   >
-                    {/* Scan row — grid of three sibling <Link>s so each click
-                        target is semantically distinct:
-                          • group chip + time + chevron → match detail
-                          • home name+flag cell → home team page
-                          • away flag+name cell → away team page
-                        Sibling links (not nested) keep HTML valid. The grid
-                        template is unchanged so the favourite-bolding +
-                        1fr-auto-1fr alignment carry through. */}
-                    <div className="grid min-h-[44px] grid-cols-[20px_44px_1fr_auto_1fr_auto] items-center gap-2 px-2.5 py-1.5 sm:grid-cols-[20px_56px_1fr_auto_1fr_auto] sm:gap-3 sm:px-3 sm:py-2">
-                      <Link
-                        href={`/matches/${f.id}`}
-                        aria-label="Open match detail"
-                        className="contents"
-                      >
-                        <GroupChip letter={groupLetter} />
+                    {/* Scan row — one big match-detail link covering the whole
+                        row. Previously the home/away name cells were team-
+                        profile links taking up most of the row width, so
+                        users couldn't reliably "click the match to open it"
+                        — the click landed on a team page instead. Team
+                        profiles stay accessible from the Groups tab + bracket.
+                        Grid template unchanged so the favourite-bolding +
+                        1fr-auto-1fr alignment carries through. */}
+                    <Link
+                      href={`/matches/${f.id}`}
+                      aria-label={`Open ${f.home.name} versus ${f.away.name} match detail`}
+                      className="group/row grid min-h-[44px] grid-cols-[20px_44px_1fr_auto_1fr_auto] items-center gap-2 px-2.5 py-1.5 sm:grid-cols-[20px_56px_1fr_auto_1fr_auto] sm:gap-3 sm:px-3 sm:py-2"
+                    >
+                      <GroupChip letter={groupLetter} />
 
-                        <div className="text-center font-mono text-[10px] text-muted-foreground sm:text-[11px]">
-                          {hasScore ? (
-                            <span className="font-semibold text-foreground">
-                              {f.scoreHome}–{f.scoreAway}
-                            </span>
-                          ) : (
-                            formatTime(f.date)
-                          )}
-                        </div>
-                      </Link>
+                      <div className="text-center font-mono text-[10px] text-muted-foreground sm:text-[11px]">
+                        {hasScore ? (
+                          <span className="font-semibold text-foreground">
+                            {f.scoreHome}–{f.scoreAway}
+                          </span>
+                        ) : (
+                          formatTime(f.date)
+                        )}
+                      </div>
 
-                      <Link
-                        href={`/world-cup/teams/${slugifyTeamNameForRoute(f.home.name)}`}
-                        aria-label={`${f.home.name} team profile`}
-                        className="flex min-w-0 items-center justify-end gap-1.5 text-right hover:text-[color:var(--color-tournament-gold)]"
-                      >
-                        <span className={`truncate text-xs sm:text-sm ${favouriteClass(modelPick, "home")} group-hover:text-inherit`}>{f.home.name}</span>
+                      <div className="flex min-w-0 items-center justify-end gap-1.5 text-right">
+                        <span className={`truncate text-xs sm:text-sm ${favouriteClass(modelPick, "home")}`}>{f.home.name}</span>
                         <TeamFlag logo={f.home.logo} name={f.home.name} size={16} />
-                      </Link>
+                      </div>
 
-                      <Link
-                        href={`/matches/${f.id}`}
-                        aria-label="Open match detail"
-                        className="text-[9px] text-muted-foreground/60"
-                      >
-                        v
-                      </Link>
+                      <span className="text-[9px] text-muted-foreground/60">v</span>
 
-                      <Link
-                        href={`/world-cup/teams/${slugifyTeamNameForRoute(f.away.name)}`}
-                        aria-label={`${f.away.name} team profile`}
-                        className="flex min-w-0 items-center gap-1.5 hover:text-[color:var(--color-tournament-gold)]"
-                      >
+                      <div className="flex min-w-0 items-center gap-1.5">
                         <TeamFlag logo={f.away.logo} name={f.away.name} size={16} />
-                        <span className={`truncate text-xs sm:text-sm ${favouriteClass(modelPick, "away")} group-hover:text-inherit`}>{f.away.name}</span>
-                      </Link>
+                        <span className={`truncate text-xs sm:text-sm ${favouriteClass(modelPick, "away")}`}>{f.away.name}</span>
+                      </div>
 
-                      <Link
-                        href={`/matches/${f.id}`}
-                        aria-label="Open match detail"
-                        className="group/chev"
-                      >
-                        <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/40 transition-transform group-hover/chev:translate-x-0.5" />
-                      </Link>
-                    </div>
+                      <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/40 transition-transform group-hover/row:translate-x-0.5" />
+                    </Link>
 
                     {/* Engagement strip — only renders when we have model probs.
                         Lives OUTSIDE the Link wrapper so the inline picker's
