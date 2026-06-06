@@ -19,12 +19,31 @@ import type { LiveBet } from "./engine-data";
 
 export const QUALITY_CUTOFF = "2026-05-06";
 
+// BOT-MODAL-COHORT-ROW (2026-06-06): cutoff date for the "post-major-model-
+// batch" cohort split surfaced in the per-bot modal. Pinned at 2026-05-24 —
+// the v20260524_market production rollout. If a future model batch ships,
+// either bump this date (single point of truth) or migrate to a config table.
+export const MODEL_BATCH_CUTOFF = "2026-05-24";
+
 export const EXPERIMENTAL_BOT_NAMES = new Set([
   "bot_acca_value", "bot_acca_proven", "bot_acca_coolbet",
   "bot_combo_system", "bot_combo_proven_system", "bot_acca_leg_shadow",
 ]);
 
 // ── Shared types ─────────────────────────────────────────────────────────────
+
+// BOT-MODAL-COHORT-ROW (2026-06-06): cohort sub-stats shape, used both for
+// the all-time aggregate (BotStat top-level fields) and the post-cutoff
+// cohort (BotStat.postCutoff sub-object).
+export interface BotCohortStats {
+  settled: number;
+  won: number;
+  totalPnl: number;
+  totalStaked: number;
+  hitRate: number | null;   // 0-100
+  roi: number | null;       // percent
+  avgClv: number | null;    // percent (multiplied from raw fraction)
+}
 
 export interface BotStat {
   name: string;
@@ -39,8 +58,18 @@ export interface BotStat {
   totalPnl: number;
   totalStaked: number;
   roi: number | null;
+  /** All-time avg CLV in percent. BOT-MODAL-COHORT-ROW (2026-06-06). */
+  avgClv: number | null;
   currentBankroll: number;
   isRetired?: boolean;
+  /**
+   * Post-MODEL_BATCH_CUTOFF cohort stats. Same shape as the top-level
+   * fields but filtered to `placedAt >= MODEL_BATCH_CUTOFF`. Surfaced in
+   * the per-bot modal so audits can be done in-product instead of via
+   * one-off SQL. Always present (zeros if no bets in the cohort).
+   * BOT-MODAL-COHORT-ROW (2026-06-06).
+   */
+  postCutoff: BotCohortStats;
 }
 
 export interface MarketStat {
@@ -111,33 +140,56 @@ export function buildBotStats(bets: LiveBet[], botsDB: BotDbRow[]): BotStat[] {
     betsByBot[bet.bot].push(bet);
   }
 
+  // Shared cohort aggregator — runs the same accounting over any subset of
+  // a bot's bets. BOT-MODAL-COHORT-ROW (2026-06-06).
+  const aggregate = (bets: LiveBet[]): BotCohortStats => {
+    const settled = bets.filter((b) => b.result !== "pending" && b.result !== "void");
+    const won = settled.filter((b) => b.result === "won").length;
+    const totalPnl = settled.reduce((s, b) => s + b.pnl, 0);
+    const totalStaked = settled.reduce((s, b) => s + b.stake, 0);
+    const clvValues = settled.map((b) => b.clv).filter((v): v is number => v != null);
+    return {
+      settled: settled.length,
+      won,
+      totalPnl,
+      totalStaked,
+      hitRate: settled.length > 0 ? (won / settled.length) * 100 : null,
+      roi:
+        totalStaked > 0 && settled.length > 0 ? (totalPnl / totalStaked) * 100 : null,
+      avgClv:
+        clvValues.length > 0
+          ? (clvValues.reduce((s, v) => s + v, 0) / clvValues.length) * 100
+          : null,
+    };
+  };
+
   return botsDB
     .map((dbBot): BotStat => {
       const botBets = betsByBot[dbBot.name] || [];
       // Voids never count toward the bot's bet count — they're cancelled bets, not history.
       const counted = botBets.filter((b) => b.result !== "void");
-      const settled = botBets.filter((b) => b.result !== "pending" && b.result !== "void");
-      const won = settled.filter((b) => b.result === "won").length;
-      const totalPnl = settled.reduce((s, b) => s + b.pnl, 0);
-      const totalStaked = settled.reduce((s, b) => s + b.stake, 0);
+      const allTime = aggregate(botBets);
+      // BOT-MODAL-COHORT-ROW (2026-06-06): post-MODEL_BATCH_CUTOFF cohort.
+      // String comparison works because placedAt is ISO 8601 (lexically sortable).
+      const postCutoffBets = botBets.filter((b) => b.placedAt >= MODEL_BATCH_CUTOFF);
+      const postCutoff = aggregate(postCutoffBets);
       return {
         name: dbBot.name,
         description: dbBot.description || dbBot.strategy || "",
         strategyDescription: dbBot.strategyDescription || "",
         total: counted.length,
         pending: botBets.filter((b) => b.result === "pending").length,
-        settled: settled.length,
-        won,
-        lost: settled.length - won,
-        hitRate: settled.length > 0 ? (won / settled.length) * 100 : null,
-        totalPnl,
-        totalStaked,
-        roi:
-          totalStaked > 0 && settled.length > 0
-            ? (totalPnl / totalStaked) * 100
-            : null,
+        settled: allTime.settled,
+        won: allTime.won,
+        lost: allTime.settled - allTime.won,
+        hitRate: allTime.hitRate,
+        totalPnl: allTime.totalPnl,
+        totalStaked: allTime.totalStaked,
+        roi: allTime.roi,
+        avgClv: allTime.avgClv,
         currentBankroll: dbBot.currentBankroll,
         isRetired: Boolean(dbBot.retiredAt),
+        postCutoff,
       };
     })
     .sort((a, b) => {

@@ -11,6 +11,7 @@ import {
   isLiveBot,
 } from "@/lib/bot-aggregates";
 import type { BotStat, MarketStat, Summary } from "@/lib/bot-aggregates";
+import { MODEL_BATCH_CUTOFF } from "@/lib/bot-aggregates";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -204,6 +205,79 @@ function BotDetailModal({
             <p className="text-xs text-muted-foreground mt-1">{bot.description}</p>
           ) : null}
         </DialogHeader>
+
+        {/* BOT-MODAL-COHORT-ROW (2026-06-06): performance breakdown by
+            cohort. Surfaces the all-time vs post-major-model-batch split
+            so audits don't require one-off SQL. Pinned cutoff lives in
+            MODEL_BATCH_CUTOFF in src/lib/bot-aggregates.ts.
+            Hidden when bot has zero settled bets all-time. */}
+        {bot.settled > 0 && (
+          <div className="mt-2">
+            <p className="mb-1.5 text-[10px] font-mono uppercase tracking-widest text-muted-foreground/70">
+              Performance breakdown
+            </p>
+            <div className="overflow-x-auto rounded-lg border border-border/40 bg-card/40">
+              <table className="w-full text-xs">
+                <thead className="border-b border-border/40 bg-muted/20">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Cohort</th>
+                    <th className="px-2 py-2 text-right font-medium text-muted-foreground">Bets</th>
+                    <th className="px-2 py-2 text-right font-medium text-muted-foreground">Hit&nbsp;rate</th>
+                    <th className="px-2 py-2 text-right font-medium text-muted-foreground">P&amp;L</th>
+                    <th className="px-2 py-2 text-right font-medium text-muted-foreground">ROI</th>
+                    <th className="px-3 py-2 text-right font-medium text-muted-foreground">CLV</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-b border-border/30">
+                    <td className="px-3 py-1.5 font-medium text-foreground/85">All&#8209;time</td>
+                    <td className="px-2 py-1.5 text-right font-mono tabular-nums">{bot.settled}</td>
+                    <td className="px-2 py-1.5 text-right font-mono tabular-nums">{bot.hitRate != null ? `${bot.hitRate.toFixed(1)}%` : "—"}</td>
+                    <td className={`px-2 py-1.5 text-right font-mono tabular-nums ${pnlClass(bot.totalPnl)}`}>{fmt(bot.totalPnl)}€</td>
+                    <td className={`px-2 py-1.5 text-right font-mono tabular-nums ${bot.roi != null ? pnlClass(bot.roi) : ""}`}>{bot.roi != null ? `${bot.roi >= 0 ? "+" : ""}${bot.roi.toFixed(1)}%` : "—"}</td>
+                    <td className={`px-3 py-1.5 text-right font-mono tabular-nums ${bot.avgClv != null ? pnlClass(bot.avgClv) : ""}`}>{bot.avgClv != null ? `${bot.avgClv >= 0 ? "+" : ""}${bot.avgClv.toFixed(1)}%` : "—"}</td>
+                  </tr>
+                  <tr className="border-b border-border/30">
+                    <td className="px-3 py-1.5 font-medium text-foreground/85">Since&nbsp;{MODEL_BATCH_CUTOFF}</td>
+                    <td className="px-2 py-1.5 text-right font-mono tabular-nums">{bot.postCutoff.settled}</td>
+                    <td className="px-2 py-1.5 text-right font-mono tabular-nums">{bot.postCutoff.hitRate != null ? `${bot.postCutoff.hitRate.toFixed(1)}%` : "—"}</td>
+                    <td className={`px-2 py-1.5 text-right font-mono tabular-nums ${pnlClass(bot.postCutoff.totalPnl)}`}>{fmt(bot.postCutoff.totalPnl)}€</td>
+                    <td className={`px-2 py-1.5 text-right font-mono tabular-nums ${bot.postCutoff.roi != null ? pnlClass(bot.postCutoff.roi) : ""}`}>{bot.postCutoff.roi != null ? `${bot.postCutoff.roi >= 0 ? "+" : ""}${bot.postCutoff.roi.toFixed(1)}%` : "—"}</td>
+                    <td className={`px-3 py-1.5 text-right font-mono tabular-nums ${bot.postCutoff.avgClv != null ? pnlClass(bot.postCutoff.avgClv) : ""}`}>{bot.postCutoff.avgClv != null ? `${bot.postCutoff.avgClv >= 0 ? "+" : ""}${bot.postCutoff.avgClv.toFixed(1)}%` : "—"}</td>
+                  </tr>
+                  {/* Δ row: only meaningful when post-cutoff has data */}
+                  {bot.postCutoff.settled > 0 && (
+                    <tr className="bg-muted/10">
+                      <td className="px-3 py-1.5 text-muted-foreground italic">Δ</td>
+                      <td className="px-2 py-1.5 text-right font-mono tabular-nums text-muted-foreground/70">—</td>
+                      <td className={`px-2 py-1.5 text-right font-mono tabular-nums ${bot.hitRate != null && bot.postCutoff.hitRate != null ? pnlClass(bot.postCutoff.hitRate - bot.hitRate) : "text-muted-foreground/50"}`}>
+                        {bot.hitRate != null && bot.postCutoff.hitRate != null
+                          ? `${bot.postCutoff.hitRate - bot.hitRate >= 0 ? "+" : ""}${(bot.postCutoff.hitRate - bot.hitRate).toFixed(1)}pp`
+                          : "—"}
+                      </td>
+                      <td className="px-2 py-1.5 text-right font-mono tabular-nums text-muted-foreground/70">—</td>
+                      <td className={`px-2 py-1.5 text-right font-mono tabular-nums ${bot.roi != null && bot.postCutoff.roi != null ? pnlClass(bot.postCutoff.roi - bot.roi) : "text-muted-foreground/50"}`}>
+                        {bot.roi != null && bot.postCutoff.roi != null
+                          ? `${bot.postCutoff.roi - bot.roi >= 0 ? "+" : ""}${(bot.postCutoff.roi - bot.roi).toFixed(1)}pp`
+                          : "—"}
+                      </td>
+                      <td className={`px-3 py-1.5 text-right font-mono tabular-nums ${bot.avgClv != null && bot.postCutoff.avgClv != null ? pnlClass(bot.postCutoff.avgClv - bot.avgClv) : "text-muted-foreground/50"}`}>
+                        {bot.avgClv != null && bot.postCutoff.avgClv != null
+                          ? `${bot.postCutoff.avgClv - bot.avgClv >= 0 ? "+" : ""}${(bot.postCutoff.avgClv - bot.avgClv).toFixed(1)}pp`
+                          : "—"}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {bot.postCutoff.settled === 0 && (
+              <p className="mt-1.5 text-[10px] text-muted-foreground/60 italic">
+                No bets placed since {MODEL_BATCH_CUTOFF} — Δ row omitted.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Bankroll chart */}
         {chartData.length > 1 ? (
