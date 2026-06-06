@@ -22,6 +22,7 @@ interface AggStats {
   pending: number;
   won: number;
   lost: number;
+  void: number;
   staked: number;
   pnl: number;
   roi: number;
@@ -32,6 +33,11 @@ function aggregate(bets: RealBet[]): AggStats {
   const settled = bets.filter((b) => b.result !== "pending");
   const won = settled.filter((b) => b.result === "won").length;
   const lost = settled.filter((b) => b.result === "lost").length;
+  // ADMIN-REAL-BETS-VOID-COUNT (2026-06-06): track voids separately so the
+  // "Won / lost" tile doesn't mysteriously leave settled out of count.
+  // Operator-flagged 2026-06-06: "13 settled, 5 won + 7 lost = missing 1?" —
+  // the missing one was a void (refunded bet, neither outcome).
+  const voidN = settled.filter((b) => b.result === "void").length;
   const staked = settled.reduce((s, b) => s + b.stake, 0);
   const pnl = settled.reduce((s, b) => s + (b.pnl ?? 0), 0);
   const roi = staked > 0 ? (pnl / staked) * 100 : 0;
@@ -46,6 +52,7 @@ function aggregate(bets: RealBet[]): AggStats {
     pending: bets.length - settled.length,
     won,
     lost,
+    void: voidN,
     staked,
     pnl,
     roi,
@@ -457,9 +464,19 @@ function StatRow({ label, stats }: { label: string; stats: AggStats }) {
           sub={`${stats.settled} settled · ${stats.pending} pending`}
         />
         <Stat
-          label="Won / lost"
-          value={`${stats.won} / ${stats.lost}`}
-          sub={stats.settled > 0 ? `${((stats.won / stats.settled) * 100).toFixed(1)}% hit rate` : "—"}
+          label="Won / lost / void"
+          value={stats.void > 0
+            ? `${stats.won} / ${stats.lost} / ${stats.void}`
+            : `${stats.won} / ${stats.lost}`}
+          sub={(() => {
+            // ADMIN-REAL-BETS-VOID-COUNT (2026-06-06): hit-rate denominator
+            // excludes voids — they neither won nor lost, so they shouldn't
+            // dilute the hit-rate signal. Settled-with-outcome is the right
+            // denominator.
+            const settledWithOutcome = stats.won + stats.lost;
+            if (settledWithOutcome === 0) return "—";
+            return `${((stats.won / settledWithOutcome) * 100).toFixed(1)}% hit rate`;
+          })()}
         />
         <Stat
           label="P&L"
