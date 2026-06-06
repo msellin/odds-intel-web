@@ -180,7 +180,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     recapPages = [
       { url: `${base}/recaps`, lastModified: now, changeFrequency: "daily" as const, priority: 0.7 },
       ...recaps.map((r) => ({
-        url: `${base}/recaps/${r.matchId}`,
+        url: `${base}/recaps/${r.slug}`,
         lastModified: new Date(r.kickoff),
         changeFrequency: "monthly" as const,
         priority: 0.65,

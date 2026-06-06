@@ -5448,6 +5448,7 @@ export async function getMatchRecapData(matchId: string): Promise<MatchRecapData
 
 export interface RecapIndexEntry {
   matchId: string;
+  slug: string;
   homeTeam: string;
   awayTeam: string;
   leagueName: string;
@@ -5461,18 +5462,34 @@ export interface RecapIndexEntry {
   avgClv: number | null;
 }
 
-/** Settled matches we have model coverage for, ordered newest first. */
+/**
+ * Settled A-tier matches that have at least one tracked bet — quality gate
+ * ensures every linked recap page has meaningful content (bets, CLV, signals).
+ * Ordered newest first.
+ */
 export async function getRecapIndex(limit = 60, offset = 0): Promise<RecapIndexEntry[]> {
   const admin = createSupabaseAdmin();
 
-  // Get A-tier match IDs from match_feature_vectors
-  const { data: fvRows } = await admin
-    .from("match_feature_vectors")
-    .select("match_id")
-    .eq("data_tier", "A");
+  // Get A-tier match IDs with at least one settled bet — the quality gate.
+  // Fetching more than needed so we can paginate after filtering.
+  const { data: betRows } = await admin
+    .from("simulated_bets")
+    .select("match_id, clv")
+    .neq("result", "pending")
+    .limit(20000);
 
-  const aTierIds = (fvRows ?? []).map((r: { match_id: string }) => r.match_id);
-  if (aTierIds.length === 0) return [];
+  type BetAgg = { match_id: string; clv: number | null };
+  const betsByMatch = new Map<string, { count: number; clvSum: number; clvN: number }>();
+  for (const b of (betRows ?? []) as BetAgg[]) {
+    const mid = String(b.match_id);
+    const cur = betsByMatch.get(mid) ?? { count: 0, clvSum: 0, clvN: 0 };
+    cur.count++;
+    if (b.clv != null) { cur.clvSum += Number(b.clv); cur.clvN++; }
+    betsByMatch.set(mid, cur);
+  }
+
+  const matchIdsWithBets = Array.from(betsByMatch.keys());
+  if (matchIdsWithBets.length === 0) return [];
 
   const since = new Date(Date.now() - 180 * 86_400_000).toISOString();
 
@@ -5482,30 +5499,13 @@ export async function getRecapIndex(limit = 60, offset = 0): Promise<RecapIndexE
              home_team:home_team_id(name),
              away_team:away_team_id(name),
              league:league_id(name, country)`)
-    .in("id", aTierIds)
+    .in("id", matchIdsWithBets)
     .eq("status", "finished")
     .gte("date", since)
     .order("date", { ascending: false })
     .range(offset, offset + limit - 1);
 
   if (!matches) return [];
-
-  // Fetch bet counts + avg CLV per match
-  const matchIds = (matches as { id: string }[]).map((m) => m.id);
-  const { data: betAggs } = await admin
-    .from("simulated_bets")
-    .select("match_id, clv")
-    .in("match_id", matchIds)
-    .neq("result", "pending");
-
-  type BetAgg = { match_id: string; clv: number | null };
-  const betsByMatch = new Map<string, { count: number; clvSum: number; clvN: number }>();
-  for (const b of (betAggs ?? []) as BetAgg[]) {
-    const cur = betsByMatch.get(b.match_id) ?? { count: 0, clvSum: 0, clvN: 0 };
-    cur.count++;
-    if (b.clv != null) { cur.clvSum += Number(b.clv); cur.clvN++; }
-    betsByMatch.set(b.match_id, cur);
-  }
 
   type MatchRow = {
     id: string; date: string; score_home: number | null; score_away: number | null; result: string | null;
@@ -5519,10 +5519,13 @@ export async function getRecapIndex(limit = 60, offset = 0): Promise<RecapIndexE
     const away = Array.isArray(m.away_team) ? m.away_team[0] : m.away_team;
     const lg = Array.isArray(m.league) ? m.league[0] : m.league;
     const agg = betsByMatch.get(m.id);
+    const homeName = home?.name || "TBD";
+    const awayName = away?.name || "TBD";
     return {
       matchId: m.id,
-      homeTeam: home?.name || "TBD",
-      awayTeam: away?.name || "TBD",
+      slug: fixtureSlug(homeName, awayName, m.date),
+      homeTeam: homeName,
+      awayTeam: awayName,
       leagueName: lg?.name || "Unknown",
       leagueCountry: lg?.country || "",
       kickoff: m.date,
@@ -5534,4 +5537,43 @@ export async function getRecapIndex(limit = 60, offset = 0): Promise<RecapIndexE
       avgClv: agg && agg.clvN > 0 ? agg.clvSum / agg.clvN : null,
     };
   });
+}
+
+/**
+ * Resolve a recap slug (e.g. "man-utd-vs-arsenal-2026-05-17") to a matchId.
+ * Parses the date from the end of the slug, queries all matches on that date,
+ * then finds the one whose recomputed fixtureSlug matches.
+ */
+export async function resolveRecapSlug(slugParam: string): Promise<string | null> {
+  const dateMatch = slugParam.match(/^(.+)-(\d{4}-\d{2}-\d{2})$/);
+  if (!dateMatch) return null;
+  const [, , dateStr] = dateMatch;
+
+  const admin = createSupabaseAdmin();
+  const dayStart = `${dateStr}T00:00:00Z`;
+  const dayEnd = `${dateStr}T23:59:59Z`;
+
+  const { data, error } = await admin
+    .from("matches")
+    .select("id, date, home_team:home_team_id(name), away_team:away_team_id(name)")
+    .gte("date", dayStart)
+    .lte("date", dayEnd)
+    .range(0, 499);
+
+  if (error || !data) return null;
+
+  type Row = {
+    id: string; date: string;
+    home_team: { name: string } | { name: string }[] | null;
+    away_team: { name: string } | { name: string }[] | null;
+  };
+  for (const m of data as Row[]) {
+    const home = Array.isArray(m.home_team) ? m.home_team[0] : m.home_team;
+    const away = Array.isArray(m.away_team) ? m.away_team[0] : m.away_team;
+    if (!home?.name || !away?.name) continue;
+    if (fixtureSlug(home.name, away.name, m.date) === slugParam) {
+      return m.id;
+    }
+  }
+  return null;
 }

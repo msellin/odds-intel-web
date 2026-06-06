@@ -2,17 +2,19 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
-import { getMatchRecapData } from "@/lib/engine-data";
+import { getMatchRecapData, resolveRecapSlug } from "@/lib/engine-data";
 
 export const revalidate = 3600;
 
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
-  const { id } = await params;
-  const recap = await getMatchRecapData(id);
+  const { slug } = await params;
+  const matchId = await resolveRecapSlug(slug);
+  if (!matchId) return { title: "Match Recap | OddsIntel" };
+  const recap = await getMatchRecapData(matchId);
   if (!recap) return { title: "Match Recap | OddsIntel" };
 
   const dateStr = new Date(recap.kickoff).toLocaleDateString("en-GB", {
@@ -37,19 +39,26 @@ export async function generateMetadata({
   return {
     title,
     description,
-    alternates: { canonical: `https://oddsintel.app/recaps/${id}` },
+    alternates: { canonical: `https://oddsintel.app/recaps/${slug}` },
     openGraph: {
       title,
       description,
-      url: `https://oddsintel.app/recaps/${id}`,
+      url: `https://oddsintel.app/recaps/${slug}`,
       type: "article",
     },
   };
 }
 
+// CLV is only meaningful when it's non-zero and within a plausible range.
+// Zeros = early-compute artifact (opening==closing at capture time).
+// Values >50% or <-50% = in-play snapshot used as "opening" (data bug).
+function isValidClv(clv: number | null): boolean {
+  return clv != null && clv !== 0 && Math.abs(clv) <= 0.5;
+}
+
 function clvBar(clv: number | null, label: string) {
-  if (clv == null) return null;
-  const pct = clv * 100;
+  if (!isValidClv(clv)) return null;
+  const pct = clv! * 100;
   const color = pct >= 2 ? "bg-green-500" : pct >= 0 ? "bg-yellow-500" : "bg-red-500";
   const width = Math.min(Math.abs(pct) * 5, 100);
   return (
@@ -92,10 +101,12 @@ function signalLabel(name: string): string {
 export default async function RecapPage({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  params: Promise<{ slug: string }>;
 }) {
-  const { id } = await params;
-  const recap = await getMatchRecapData(id);
+  const { slug } = await params;
+  const matchId = await resolveRecapSlug(slug);
+  if (!matchId) notFound();
+  const recap = await getMatchRecapData(matchId);
   if (!recap) notFound();
 
   const finished = recap.status === "finished";
@@ -211,8 +222,8 @@ export default async function RecapPage({
         </div>
       )}
 
-      {/* Closing Line Value */}
-      {(recap.pseudoClvHome != null || recap.pseudoClvDraw != null || recap.pseudoClvAway != null) && (
+      {/* Closing Line Value — only render when at least one valid, non-zero, non-outlier value exists */}
+      {[recap.pseudoClvHome, recap.pseudoClvDraw, recap.pseudoClvAway].some(isValidClv) && (
         <div className="rounded-xl border border-border bg-card p-5 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold">Closing Line Value</h2>

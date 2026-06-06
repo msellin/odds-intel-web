@@ -54,7 +54,7 @@ export default async function RecapsIndexPage() {
             return (
               <Link
                 key={r.matchId}
-                href={`/recaps/${r.matchId}`}
+                href={`/recaps/${r.slug}`}
                 className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 hover:border-primary/40 hover:bg-card/80 transition-colors"
               >
                 {/* Result badge */}
