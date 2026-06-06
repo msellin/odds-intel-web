@@ -1726,13 +1726,13 @@ export async function getCoolbetSnapshotFreshnessMinutes(): Promise<number | nul
   const admin = createSupabaseAdmin();
   const { data, error } = await admin
     .from("odds_snapshots")
-    .select("captured_at")
+    .select("timestamp")
     .eq("bookmaker", "Coolbet")
-    .order("captured_at", { ascending: false })
+    .order("timestamp", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (error || !data?.captured_at) return null;
-  const ageMs = Date.now() - new Date(data.captured_at).getTime();
+  if (error || !data?.timestamp) return null;
+  const ageMs = Date.now() - new Date(data.timestamp).getTime();
   return Math.max(0, Math.floor(ageMs / 60_000));
 }
 
