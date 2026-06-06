@@ -2,6 +2,12 @@ import { createClient } from "@supabase/supabase-js";
 import { unstable_cache } from "next/cache";
 import { createSupabaseServer } from "./supabase-server";
 import { createSupabasePublic } from "./supabase-public";
+import {
+  computeRealMoneyTier,
+  type RealMoneyTier,
+  type CalibrationRow,
+  type BotAgg,
+} from "./real-money-tier";
 
 // LIGHTHOUSE-FIX-3 (2026-06-05): SSR data-fetch cache. Heavy queries used
 // by /matches + /value-bets are wrapped with unstable_cache so that bot
@@ -1660,6 +1666,11 @@ export interface PlaceableBet {
   // COMBO-ADMIN-PLACE-UI (2026-05-18): for combo/acca rows, the legs to combine
   // on the Coolbet bet builder slip. null for single bets.
   comboLegs: PlaceableBetLeg[] | null;
+  // REAL-MONEY-TIER (2026-06-06): composite "should I bet real money on this?"
+  // signal that folds model calibration + bot track record + per-bet flags.
+  // See `src/lib/real-money-tier.ts` for the gating rules. Surfaces as the
+  // operator-only badge on /admin/place; no filtering by tier.
+  realMoneyTier: RealMoneyTier;
 }
 
 /** Threshold (decimal fraction, 0.05 = 5%) below which the Coolbet auto-placer
@@ -1697,6 +1708,24 @@ function _mapPaperToSnapshotKey(market: string, selection: string): { market: st
     if (s === "home" || s === "away") return { market: "draw_no_bet", selection: s };
   }
   return null;
+}
+
+/** COOLBET-INGEST-ANON-FOLLOWUP (2026-06-06): minutes since the last
+ *  Coolbet odds_snapshot landed. Returns null on DB error so the caller
+ *  can render a "freshness check failed" softer warning instead of
+ *  asserting confidence in the absence of data. */
+export async function getCoolbetSnapshotFreshnessMinutes(): Promise<number | null> {
+  const admin = createSupabaseAdmin();
+  const { data, error } = await admin
+    .from("odds_snapshots")
+    .select("captured_at")
+    .eq("bookmaker", "Coolbet")
+    .order("captured_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data?.captured_at) return null;
+  const ageMs = Date.now() - new Date(data.captured_at).getTime();
+  return Math.max(0, Math.floor(ageMs / 60_000));
 }
 
 /** All pending paper bets on matches that haven't kicked off yet, with
@@ -1884,6 +1913,57 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
     }
   }
 
+  // REAL-MONEY-TIER (2026-06-06): fetch calibration rows + per-bot aggregates
+  // in two cheap round-trips. Maps are then handed to computeRealMoneyTier
+  // per bet so the classification stays pure / testable in
+  // src/lib/real-money-tier.ts.
+  //
+  // Bot aggregates are computed in-process from settled bets in the last 60d
+  // — that's plenty of sample (bots settle 5-50/week) without dragging in
+  // ancient pre-tuning data that would understate current bot quality.
+  const sixtyDaysAgoIso = new Date(Date.now() - 60 * 86_400_000).toISOString();
+  const [calRes, botAggRes] = await Promise.all([
+    admin
+      .from("model_calibration")
+      .select("market, sample_count, ece_after, fitted_at")
+      .not("platt_a", "is", null),
+    admin
+      .from("simulated_bets")
+      .select("bot_id, result, pnl, clv, stake")
+      .in("result", ["won", "lost"])
+      .gte("created_at", sixtyDaysAgoIso),
+  ]);
+  const calibrationByKey = new Map<string, CalibrationRow>();
+  for (const row of (calRes.data ?? []) as CalibrationRow[]) {
+    // Keep only the freshest fit per market — historical refits are allowed
+    // in the same table; the latest fitted_at wins.
+    const existing = calibrationByKey.get(row.market);
+    if (!existing || new Date(row.fitted_at).getTime() > new Date(existing.fitted_at).getTime()) {
+      calibrationByKey.set(row.market, row);
+    }
+  }
+  const botById = new Map<string, BotAgg>();
+  type BotAggRaw = { bot_id: string | null; result: string | null; pnl: number | null; clv: number | null; stake: number | null };
+  for (const r of (botAggRes.data ?? []) as BotAggRaw[]) {
+    if (!r.bot_id) continue;
+    const cur = botById.get(r.bot_id) ?? { botId: r.bot_id, settledBets: 0, clv: 0, roi: 0 };
+    cur.settledBets += 1;
+    cur.clv = (cur.clv ?? 0) + (r.clv != null ? Number(r.clv) : 0);
+    const stake = r.stake != null && Number(r.stake) > 0 ? Number(r.stake) : 1;
+    cur.roi = (cur.roi ?? 0) + (r.pnl != null ? Number(r.pnl) : 0) / stake;
+    botById.set(r.bot_id, cur);
+  }
+  // Finalise: convert running sums to means.
+  for (const [k, v] of botById.entries()) {
+    if (v.settledBets > 0) {
+      botById.set(k, {
+        ...v,
+        clv: (v.clv ?? 0) / v.settledBets,
+        roi: (v.roi ?? 0) / v.settledBets,
+      });
+    }
+  }
+
   // 3) build PlaceableBet rows
   const out: PlaceableBet[] = [];
   const nowMs = Date.now();
@@ -1991,6 +2071,16 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
       autoPlaceStatus = "ready";
     }
 
+    const realMoneyTier = computeRealMoneyTier({
+      market: b.market,
+      selection: b.selection,
+      edge: pickEdge != null ? pickEdge / 100 : null,  // pickEdge is in %, helper expects decimal
+      botId: bot?.id || "",
+      calibrationByKey,
+      botById,
+      nowMs,
+    });
+
     out.push({
       betId: b.id,
       bot: bot?.name || "unknown",
@@ -2013,6 +2103,7 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
       autoPlaceStatus,
       liveEdge,
       comboLegs,
+      realMoneyTier,
     });
   }
 

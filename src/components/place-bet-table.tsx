@@ -3,6 +3,7 @@
 import { Fragment, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import type { PlaceableBet } from "@/lib/engine-data";
+import { RealMoneyTierBadge } from "@/components/real-money-tier-badge";
 
 // ADMIN-PLACE-SKIP-REASON (2026-05-24): per-row badge explaining whether the
 // auto-placer would take this bet. Mirrors `coolbet_placer.py` gate order:
@@ -342,6 +343,7 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
                     size={groupSizeByBetId.get(c.betId) ?? 1}
                     recommended={recommendedByBetId.has(c.betId)}
                   />
+                  <RealMoneyTierBadge tier={c.realMoneyTier} />
                   <AutoPlaceStatusBadge status={c.autoPlaceStatus} liveEdge={c.liveEdge} />
                 </div>
                 <div className="flex items-center gap-2">
@@ -432,6 +434,7 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
                             size={groupSizeByBetId.get(c.betId) ?? 1}
                             recommended={recommendedByBetId.has(c.betId)}
                           />
+                          <RealMoneyTierBadge tier={c.realMoneyTier} />
                           <AutoPlaceStatusBadge status={c.autoPlaceStatus} liveEdge={c.liveEdge} />
                         </>
                       )}

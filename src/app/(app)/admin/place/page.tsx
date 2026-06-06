@@ -1,8 +1,9 @@
 export const dynamic = "force-dynamic";
 
 import { createSupabaseServer } from "@/lib/supabase-server";
-import { getPlaceableBets } from "@/lib/engine-data";
+import { getPlaceableBets, getCoolbetSnapshotFreshnessMinutes } from "@/lib/engine-data";
 import { PlaceBetTable } from "@/components/place-bet-table";
+import { CoolbetIngestBanner } from "@/components/coolbet-ingest-banner";
 
 export default async function PlaceBetPage() {
   const supabase = await createSupabaseServer();
@@ -32,7 +33,10 @@ export default async function PlaceBetPage() {
     );
   }
 
-  const candidates = await getPlaceableBets();
+  const [candidates, coolbetFreshness] = await Promise.all([
+    getPlaceableBets(),
+    getCoolbetSnapshotFreshnessMinutes(),
+  ]);
 
   return (
     <div className="container mx-auto py-8 px-4 max-w-7xl">
@@ -47,6 +51,7 @@ export default async function PlaceBetPage() {
           Place €1–3 manually at coolbet.ee or bet365.com, then log via &quot;Place&quot;.
         </p>
       </div>
+      <CoolbetIngestBanner minutesSinceLastSnapshot={coolbetFreshness} />
       <PlaceBetTable candidates={candidates} />
     </div>
   );
