@@ -232,9 +232,6 @@ function NextModelCallout({
 }) {
   if (!summary) return null;
   const deltas = summary.group_deltas ?? {};
-  const headlineHead = Object.entries(deltas)
-    .filter(([, d]) => d < -1)
-    .sort(([, a], [, b]) => a - b)[0];
 
   const fmtPct = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
   const fmtMarket = (k: string) =>
@@ -243,17 +240,33 @@ function NextModelCallout({
     ? new Date(summary.trained_at).toLocaleDateString("en", { month: "short", day: "numeric" })
     : null;
 
+  const groupOrder = ["1x2", "ah", "btts", "ou"];
+  const chips = groupOrder
+    .filter((k) => deltas[k] != null)
+    .map((k) => ({ key: k, delta: deltas[k] }));
+
   return (
     <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 px-4 py-2 flex items-center gap-3 flex-wrap">
       <span className="text-[10px] font-bold uppercase tracking-wider text-sky-400">
         Next upgrade{trainedDate ? ` · trained ${trainedDate}` : ""}
       </span>
-      {headlineHead && (
-        <span className="text-[11px] text-muted-foreground">
-          <span className="font-mono font-semibold text-sky-300">
-            {fmtMarket(headlineHead[0])} {fmtPct(headlineHead[1])} log-loss
-          </span>{" "}
-          in offline tests
+      {chips.length > 0 && (
+        <span className="text-[11px] text-muted-foreground flex items-center gap-2 flex-wrap">
+          {chips.map(({ key, delta }) => {
+            const regressed = delta > 1;
+            const improved = delta < -1;
+            const cls = regressed
+              ? "text-rose-300"
+              : improved
+                ? "text-sky-300"
+                : "text-muted-foreground";
+            return (
+              <span key={key} className={`font-mono font-semibold ${cls}`}>
+                {fmtMarket(key)} {fmtPct(delta)}
+              </span>
+            );
+          })}
+          <span className="text-muted-foreground">log-loss · offline tests</span>
         </span>
       )}
       <span className="ml-auto text-[10px] font-mono text-muted-foreground">
