@@ -529,6 +529,126 @@ export const VS_COMPETITORS: VsCompetitor[] = [
       },
     ],
   },
+
+  // ────────────────────────────────────────────────────────────────────────────
+
+  {
+    slug: "sofascore",
+    name: "SofaScore",
+    tier: "Stats aggregator",
+    homeUrl: "https://www.sofascore.com",
+    oneliner:
+      "Mobile-first sports stats and live-scores aggregator covering 25 sports and 5,000+ leagues with FIFA/UEFA data partnerships.",
+    traffic: "~150M visits/month (Similarweb 2026) — closer to a top-30 sports media property than a betting tool",
+    pricing: "Free · in-app purchases for ad-free + extra features ($1.99-$59.99 per item, varies)",
+    whereTheyWin: [
+      "**Scale.** ~150M monthly visits and millions of mobile-app installs. Sports-stats audience at a magnitude no betting startup can match organically.",
+      "**Multi-sport breadth.** 25 sports including NBA, NFL, MLB, tennis, basketball. We're football-only by design.",
+      "**FIFA/UEFA data partnerships.** Official data feeds for major competitions including a dedicated FIFA World Cup 2026 tab. Hard to replicate.",
+      "**Mobile UX polish.** Native iOS + Android apps optimised over a decade. Even Wear OS support. We're web + Telegram only.",
+      "**Free at the floor.** Live scores + basic stats free with no signup. Lowest possible friction.",
+    ],
+    oddsIntelWins: [
+      "**SofaScore doesn't do predictions or value-bet detection — at all.** It's a stats reference, not a betting decision tool. If you're trying to decide what to bet on, SofaScore tells you who the team is, not whether the market is mispriced.",
+      "**CLV-tracked picks.** We measure every pick against the closing line and publish the running result. SofaScore has no concept of bet quality, only stat depth.",
+      "**Multi-bookmaker live odds.** We track 13 bookmakers in real-time and flag pricing inefficiencies. SofaScore shows scores, not odds movement.",
+      "**Per-bet AI explanation (Elite).** LLM explains why each value bet was identified, grounded in the actual model signals. SofaScore explains nothing — it just displays.",
+      "**Telegram pre-kickoff delivery.** Push to your phone before the line moves. SofaScore is a destination app — you check it, it doesn't push the *decision* to you.",
+      "**Honest methodology + drawdown disclosure.** We document the model + publish worst drawdowns (−€398). SofaScore makes no claims about edge because they don't sell edge.",
+    ],
+    matrix: [
+      { label: "Live scores + basic stats", competitor: "✅", oddsintel: "✅" },
+      { label: "Multi-sport coverage (25 sports)", competitor: "✅", oddsintel: "❌ (football-only)" },
+      { label: "Native mobile app (iOS + Android)", competitor: "✅", oddsintel: "⏳" },
+      { label: "Official FIFA/UEFA data partnerships", competitor: "✅", oddsintel: "❌" },
+      { label: "AI value-bet detection", competitor: "❌", oddsintel: "✅" },
+      { label: "Multi-bookmaker odds comparison", competitor: "❌", oddsintel: "~ (13 books)" },
+      { label: "CLV-tracked picks", competitor: "❌", oddsintel: "✅" },
+      { label: "Per-bet AI explanation", competitor: "❌", oddsintel: "✅" },
+      { label: "Telegram pre-kickoff alerts", competitor: "❌", oddsintel: "✅" },
+      { label: "Open methodology page", competitor: "❌", oddsintel: "✅" },
+    ],
+    verdict: {
+      pickThem:
+        "You want a free, polished mobile app for live scores + match stats across many sports, you're a football fan (not specifically a value bettor), or you watch NBA / NFL / tennis / hockey as much as football. SofaScore is the best free sports companion in its category — it's just not a betting decision tool.",
+      pickUs:
+        "You want to actually beat the bookmaker over time on football specifically, you care that picks are validated by CLV (not just stat depth), and you want decisions pushed to your phone pre-kickoff with rationale. SofaScore tells you who's playing; we tell you where the market is wrong.",
+    },
+    faq: [
+      {
+        q: "Can I use SofaScore alongside OddsIntel?",
+        a: "Absolutely — and many bettors do. SofaScore for live scores, match stats, and multi-sport browsing; OddsIntel for football value bets with CLV tracking and Telegram alerts. They're complementary, not competing — SofaScore is a stats reference, we're a decision layer.",
+      },
+      {
+        q: "Will OddsIntel cover NBA / NFL like SofaScore?",
+        a: "Not yet. We're football-only by design — we want to be the deepest football product before broadening. Multi-sport is a roadmap item; if you bet outside football right now, SofaScore + dedicated US-sports tools (like SportBot AI) are better fits.",
+      },
+      {
+        q: "Does SofaScore have predictions or value bets?",
+        a: "No. SofaScore is a pure data layer — live scores, lineups, historical stats. There's no AI prediction, no value-bet flagging, no edge math, no track record because there are no picks to track. That's not a knock — it's a different product. If you want stats only, SofaScore wins on scale. If you want curated picks with measurable edge, that's a different job.",
+      },
+    ],
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+
+  {
+    slug: "oddschecker",
+    name: "OddsChecker",
+    tier: "Odds comparison",
+    homeUrl: "https://www.oddschecker.com",
+    oneliner:
+      "UK odds-comparison incumbent since 1999 — 25+ bookmakers, affiliate-driven, 30M+ visits/month, the established standard for \"where can I get the best price on this bet\".",
+    traffic: "~30M visits/month (Similarweb 2026), 51% organic search, primarily UK + US (post-PASPA expansion)",
+    pricing: "Free (affiliate revenue from bookmaker click-throughs)",
+    whereTheyWin: [
+      "**27 years of brand trust.** Founded 1999 — the default odds-comparison site for UK punters. \"OddsChecker\" is its own search term.",
+      "**Bookmaker breadth.** 25+ bookmakers tracked, with 125M+ price changes processed daily. We track 13. For pure \"where can I get the best price\" use case, they win on raw volume.",
+      "**Free, no signup.** Lowest possible friction. Their affiliate model means consume-forever-for-free.",
+      "**UK + US horse racing depth.** Horse racing is a category we don't touch; OddsChecker has decades of liquidity there.",
+      "**Modern UI + integrated H2H data.** Fast odds tables with historical context. Strong UX for the comparison use case.",
+    ],
+    oddsIntelWins: [
+      "**OddsChecker shows you the odds; we tell you whether the odds are wrong.** It's a comparison index, not a curation. If 13 bookmakers price a market at 2.00 and a 14th prices it at 2.10, OddsChecker highlights the 2.10 — that's price comparison, not value detection. Value betting requires knowing what the *true* probability is, which their tool doesn't compute.",
+      "**CLV-tracked picks.** Every pick logged before kickoff and scored against the closing line. OddsChecker doesn't publish picks — there's nothing to track.",
+      "**AI value-bet detection.** We compute model probabilities against bookmaker implied probabilities and flag the edge. OddsChecker has no model — only price aggregation.",
+      "**Honest drawdown disclosure.** −€398 worst 9-day stretch, openly published. OddsChecker has no model and thus no track record — but absence of accountability isn't honesty.",
+      "**Per-bet AI explanation (Elite).** LLM explains the rationale behind each value bet. OddsChecker explains nothing because there's nothing to explain — they're a price index.",
+      "**Telegram pre-kickoff delivery.** Decision pushed to your phone before the line moves. OddsChecker is a destination — you check it; it doesn't push picks to you.",
+    ],
+    matrix: [
+      { label: "Multi-bookmaker odds comparison", competitor: "✅ (25+)", oddsintel: "~ (13 books)" },
+      { label: "Horse racing coverage", competitor: "✅", oddsintel: "❌" },
+      { label: "AI value-bet detection", competitor: "❌", oddsintel: "✅" },
+      { label: "AI predictions / model probabilities", competitor: "❌", oddsintel: "✅" },
+      { label: "CLV-tracked picks", competitor: "❌", oddsintel: "✅" },
+      { label: "Per-bet AI explanation", competitor: "❌", oddsintel: "✅" },
+      { label: "Telegram pre-kickoff alerts", competitor: "❌", oddsintel: "✅" },
+      { label: "Open methodology page", competitor: "❌", oddsintel: "✅" },
+      { label: "Honest drawdown disclosure", competitor: "❌", oddsintel: "✅" },
+      { label: "Free tier", competitor: "✅", oddsintel: "✅" },
+    ],
+    verdict: {
+      pickThem:
+        "You already know what bet you want to place and just need the best available price across UK bookmakers, you bet horse racing, or you want a free reference index of 25+ books without committing to a model. OddsChecker is the UK incumbent for this exact job and we won't out-scale them on bookmaker breadth.",
+      pickUs:
+        "You don't know which bets to place — you want a curated set of value-detected picks with measurable edge against the closing line. OddsChecker tells you where to find the best 2.10; we tell you whether 2.10 is actually mispriced. Comparison layer vs decision layer. Different jobs.",
+    },
+    faq: [
+      {
+        q: "Doesn't OddsChecker also flag \"value bets\"?",
+        a: "OddsChecker highlights the best price across bookmakers — that's price comparison, not value detection. A value bet requires comparing the bookmaker's implied probability against a *true* probability estimate; OddsChecker has no model that produces a true probability, so it can't compute edge. We do (Poisson + XGBoost + market signals → calibrated probability → edge math). Both surfaces have legitimate uses but they're solving different problems.",
+      },
+      {
+        q: "Why do you cover only 13 bookmakers vs OddsChecker's 25+?",
+        a: "We focus on EU bookmakers our users can actually access. OddsChecker covers many more, but the additional 12+ are mostly UK-specific shops, affiliate-friendly small operators, or US sportsbooks. 13 books at high-quality EU operators are enough to find genuine pricing inefficiencies — and adding more books without adding decision logic doesn't improve the value-bet identification problem.",
+      },
+      {
+        q: "Can I use both?",
+        a: "Yes, and many bettors do. OddsChecker for confirming the best available price once we've flagged a value bet (you take our pick + their best-odds widget = optimal). Our /vs/oddspedia entry talks about the broader \"reference layer + decision layer\" idea — it applies here too.",
+      },
+    ],
+  },
 ];
 
 export function getVsCompetitor(slug: string): VsCompetitor | undefined {

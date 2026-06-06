@@ -44,10 +44,10 @@ interface Section {
 }
 
 const COMPETITORS: CompetitorCol[] = [
-  { name: "SofaScore",   tier: "Stats aggregator",    href: "https://www.sofascore.com" },
-  { name: "OddsChecker", tier: "Odds comparison",     href: "https://www.oddschecker.com" },
-  { name: "WinnerOdds",  tier: "Value-bet engine",    href: "https://winnerodds.com",   vsSlug: "winnerodds" },
-  { name: "InPlayGuru",  tier: "In-play scanner",     href: "https://inplayguru.com",   vsSlug: "inplayguru" },
+  { name: "SofaScore",   tier: "Stats aggregator",    href: "https://www.sofascore.com",   vsSlug: "sofascore" },
+  { name: "OddsChecker", tier: "Odds comparison",     href: "https://www.oddschecker.com", vsSlug: "oddschecker" },
+  { name: "WinnerOdds",  tier: "Value-bet engine",    href: "https://winnerodds.com",      vsSlug: "winnerodds" },
+  { name: "InPlayGuru",  tier: "In-play scanner",     href: "https://inplayguru.com",      vsSlug: "inplayguru" },
 ];
 
 const SECTIONS: Section[] = [
