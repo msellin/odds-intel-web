@@ -2,19 +2,27 @@
 
 import { Fragment, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import type { PlaceableBet } from "@/lib/engine-data";
+import { autoMinEdgeFor, type PlaceableBet } from "@/lib/engine-data";
 import { RealMoneyTierBadge } from "@/components/real-money-tier-badge";
 
-// ADMIN-PLACE-SKIP-REASON (2026-05-24): per-row badge explaining whether the
+// PER-MARKET-EDGE-V2 (2026-06-06): per-row badge explaining whether the
 // auto-placer would take this bet. Mirrors `coolbet_placer.py` gate order:
-// already placed → pick edge < 5% → no event / no market → edge now < 0.
+// already placed → pick edge < market floor → no event / no market →
+// live edge < market floor. Market floors live in `autoMinEdgeFor()` —
+// 1x2: 10%, o/u: 3%, AH: 5%, BTTS: 10%, DC: retired (∞).
 function AutoPlaceStatusBadge({
   status,
   liveEdge,
+  market,
 }: {
   status: PlaceableBet["autoPlaceStatus"];
   liveEdge: number | null;
+  market: string;
 }) {
+  const floor = autoMinEdgeFor(market);
+  const isRetired = !Number.isFinite(floor);
+  const floorLabel = isRetired ? "retired" : `${(floor * 100).toFixed(0)}%`;
+
   if (status === "placed") {
     // The match-card already renders ✓ Placed in its own slot; suppress here
     // to avoid duplicating the indicator.
@@ -24,7 +32,7 @@ function AutoPlaceStatusBadge({
     return (
       <span
         className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-900/40 text-emerald-300 font-medium"
-        title="Auto-placer would take this bet on its next run"
+        title={`Auto-placer would take this bet on its next run (${market} floor: ${floorLabel})`}
       >
         ⏵ auto-place
       </span>
@@ -34,9 +42,11 @@ function AutoPlaceStatusBadge({
     return (
       <span
         className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800/60 text-zinc-400"
-        title="Edge below COOLBET_MIN_EDGE (5%) — auto-placer ignores this bet"
+        title={isRetired
+          ? `${market} is retired from real-money placement — backtest showed it loses at every edge threshold. Paper tracking continues.`
+          : `Edge below ${market} floor (${floorLabel}) — auto-placer ignores this bet`}
       >
-        ✗ edge &lt; 5%
+        {isRetired ? `✗ ${market} retired` : `✗ edge < ${floorLabel}`}
       </span>
     );
   }
@@ -64,7 +74,7 @@ function AutoPlaceStatusBadge({
     return (
       <span
         className="text-[10px] px-1.5 py-0.5 rounded bg-red-900/40 text-red-300"
-        title={`Edge at current Coolbet price = ${liveEdge != null ? (liveEdge * 100).toFixed(1) : "?"}% — auto-placer skips -EV bets`}
+        title={`Edge at current live price = ${liveEdge != null ? (liveEdge * 100).toFixed(1) : "?"}% — below ${market} live-edge floor (${floorLabel})`}
       >
         ✗ edge eroded
       </span>
@@ -344,7 +354,7 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
                     recommended={recommendedByBetId.has(c.betId)}
                   />
                   <RealMoneyTierBadge tier={c.realMoneyTier} />
-                  <AutoPlaceStatusBadge status={c.autoPlaceStatus} liveEdge={c.liveEdge} />
+                  <AutoPlaceStatusBadge status={c.autoPlaceStatus} liveEdge={c.liveEdge} market={c.market} />
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs text-muted-foreground">{fmtOdds(c.botOdds)}</span>
@@ -435,7 +445,7 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
                             recommended={recommendedByBetId.has(c.betId)}
                           />
                           <RealMoneyTierBadge tier={c.realMoneyTier} />
-                          <AutoPlaceStatusBadge status={c.autoPlaceStatus} liveEdge={c.liveEdge} />
+                          <AutoPlaceStatusBadge status={c.autoPlaceStatus} liveEdge={c.liveEdge} market={c.market} />
                         </>
                       )}
                     </div>

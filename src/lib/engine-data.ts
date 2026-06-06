@@ -1673,11 +1673,45 @@ export interface PlaceableBet {
   realMoneyTier: RealMoneyTier;
 }
 
-/** Threshold (decimal fraction, 0.05 = 5%) below which the Coolbet auto-placer
- * refuses to place a bet at pick time. Mirrors `COOLBET_MIN_EDGE` env in
- * `workers/automation/coolbet_placer.py`. Surface it in the UI so superadmins
- * can see why a low-edge pick isn't being auto-placed. */
+/** Legacy single-floor threshold (kept for any external callers). New code
+ * should call `autoMinEdgeFor(market)` so each market gets its own floor.
+ * See PER-MARKET-EDGE-V2 below for the per-market values. */
 export const COOLBET_AUTO_MIN_EDGE = 0.05;
+
+/** Legacy live-edge floor — see autoMinEdgeFor() for the per-market version. */
+export const COOLBET_AUTO_MIN_REMAINING_EDGE = 0.03;
+
+/** PER-MARKET-EDGE-V2 (2026-06-06): per-market edge floor (decimal fraction).
+ * Mirrors `_MIN_EDGE_BY_MARKET` in `workers/automation/coolbet_placer.py`.
+ * `null` means retired — never auto-place this market.
+ * Backtest of 3,086 settled simulated_bets (2026-05-01 → 2026-06-06) showed
+ * edge predictiveness varies markedly per market — see
+ * `dev/active/per-market-thresholds-plan.md`. */
+export const COOLBET_AUTO_MIN_EDGE_BY_MARKET: Record<string, number | null> = {
+  "1x2":            0.10,
+  "o/u":            0.03,
+  "asian_handicap": 0.05,
+  "btts":           0.10,
+  "double_chance":  null,
+  "combo":          0.10,
+  "draw_no_bet":    0.05,
+};
+
+/** Per-market edge floor. Returns `Infinity` for retired markets (any
+ * `edge >= autoMinEdgeFor(m)` comparison is False), and the legacy 3%
+ * default for unknown markets. */
+export function autoMinEdgeFor(market: string | null | undefined): number {
+  if (!market) return 0.03;
+  const v = COOLBET_AUTO_MIN_EDGE_BY_MARKET[market.toLowerCase()];
+  if (v === undefined) return 0.03;
+  if (v === null) return Infinity;
+  return v;
+}
+
+/** Timestamp when per-market thresholds went live. Real-bets page splits
+ * stats pre/post this epoch so we can measure the lift in isolation.
+ * Bets placed AT OR AFTER this time are "era v2". */
+export const MARKET_THRESHOLDS_V2_EPOCH = "2026-06-06T17:00:00Z";
 
 /** Map paper-bet (market, selection) to odds_snapshots (market, selection). */
 function _mapPaperToSnapshotKey(market: string, selection: string): { market: string; selection: string } | null {
@@ -2058,15 +2092,31 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
     const coolbetGateEdge = (modelProb != null && coolbetOdds != null && coolbetOdds > 1)
       ? modelProb - 1 / coolbetOdds
       : null;
+    // PER-MARKET-EDGE-V2 (2026-06-06): below_min + edge_eroded both gate on
+    // per-market floors (1x2: 10%, o/u: 3%, AH: 5%, BTTS: 10%, DC: retired).
+    // pickEdge, liveEdge, coolbetGateEdge are all decimal fractions (0.10 = 10%),
+    // matching how simulated_bets.edge_percent is stored in the DB.
+    //
+    // ADMIN-PLACE-EDGE-ERODED-PROXY (2026-06-06): when Coolbet has the event
+    // (matchIdsWithCoolbetEvent) but we lack a recent Coolbet snapshot for
+    // *this specific* (market, selection), the Unibet/Kambi-proxy price is
+    // strong evidence the market exists at Coolbet too. Promote to
+    // `edge_eroded` when the proxy edge is below the per-market floor.
+    const marketFloor = autoMinEdgeFor(b.market);
     let autoPlaceStatus: PlaceableBet["autoPlaceStatus"];
     if (alreadyPlaced) {
       autoPlaceStatus = "placed";
-    } else if (pickEdge != null && pickEdge < COOLBET_AUTO_MIN_EDGE) {
+    } else if (pickEdge != null && pickEdge < marketFloor) {
       autoPlaceStatus = "below_min";
-    } else if (coolbetOdds == null) {
-      autoPlaceStatus = matchIdsWithCoolbetEvent.has(b.match_id) ? "no_market" : "no_event";
-    } else if (coolbetGateEdge != null && coolbetGateEdge < 0) {
+    } else if (coolbetGateEdge != null && coolbetGateEdge < marketFloor) {
       autoPlaceStatus = "edge_eroded";
+    } else if (coolbetOdds == null) {
+      const hasCoolbetEvent = matchIdsWithCoolbetEvent.has(b.match_id);
+      if (hasCoolbetEvent && liveEdge != null && liveEdge < marketFloor) {
+        autoPlaceStatus = "edge_eroded";
+      } else {
+        autoPlaceStatus = hasCoolbetEvent ? "no_market" : "no_event";
+      }
     } else {
       autoPlaceStatus = "ready";
     }

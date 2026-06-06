@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { createSupabaseServer } from "@/lib/supabase-server";
-import { getRealBets, type RealBet } from "@/lib/engine-data";
+import { getRealBets, MARKET_THRESHOLDS_V2_EPOCH, type RealBet } from "@/lib/engine-data";
 import { RealBetsLog } from "@/components/real-bets-log";
 import { RealBetsChart, type RealBetsChartPoint } from "@/components/real-bets-chart";
 
@@ -214,6 +214,14 @@ export default async function RealBetsPage() {
   const exposure = buildExposure(bets);
   const pvr = buildPaperVsReal(bets);
 
+  // PER-MARKET-EDGE-V2 (2026-06-06): split stats pre/post the per-market
+  // threshold change. Without this, the post-change ROI gets diluted by
+  // 5+ weeks of pre-change data and the lift (if any) is invisible.
+  const epoch = new Date(MARKET_THRESHOLDS_V2_EPOCH);
+  const preV2 = aggregate(bets.filter((b) => new Date(b.placedAt) < epoch));
+  const postV2 = aggregate(bets.filter((b) => new Date(b.placedAt) >= epoch));
+  const epochDay = MARKET_THRESHOLDS_V2_EPOCH.slice(0, 10);
+
   // Per-bot breakdown — covers all bets (including pending) so coverage is visible
   const byBot: Record<string, { n: number; pending: number; staked: number; pnl: number }> = {};
   for (const b of bets) {
@@ -241,6 +249,50 @@ export default async function RealBetsPage() {
 
       <StatRow label="Overall" stats={overall} />
       <StatRow label={`Today (UTC · ${todayStartUtc.toISOString().slice(0, 10)})`} stats={today} />
+
+      {/* PER-MARKET-EDGE-V2 (2026-06-06) — era split. Pre-/post-epoch ROI
+          tells us whether per-market thresholds are paying off. Hidden
+          when there are no post-epoch bets yet (epoch in the future). */}
+      {postV2.total > 0 && (
+        <div className="mb-6 rounded-lg border border-emerald-900/40 bg-emerald-950/20 p-4">
+          <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-emerald-300">
+              Per-market threshold era (v2 launched {epochDay})
+            </h2>
+            <span className="text-[10px] text-muted-foreground">
+              1x2 ≥10% · o/u ≥3% · AH ≥5% · BTTS ≥10% · DC retired
+            </span>
+          </div>
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <h3 className="text-xs uppercase tracking-wider text-muted-foreground mb-2">
+                Era v1 — pre-change ({preV2.total} bets, {preV2.settled} settled)
+              </h3>
+              <div className="grid grid-cols-3 gap-2">
+                <MiniStat label="P&L" value={preV2.settled > 0 ? fmtMoney(preV2.pnl) : "—"} good={preV2.pnl > 0} bad={preV2.pnl < 0} />
+                <MiniStat label="ROI" value={preV2.settled > 0 ? fmtPct(preV2.roi) : "—"} good={preV2.roi > 0} bad={preV2.roi < 0} />
+                <MiniStat label="Hit rate" value={preV2.settled > 0 ? `${((preV2.won / preV2.settled) * 100).toFixed(1)}%` : "—"} />
+              </div>
+            </div>
+            <div>
+              <h3 className="text-xs uppercase tracking-wider text-emerald-300 mb-2">
+                Era v2 — post-change ({postV2.total} bets, {postV2.settled} settled)
+              </h3>
+              <div className="grid grid-cols-3 gap-2">
+                <MiniStat label="P&L" value={postV2.settled > 0 ? fmtMoney(postV2.pnl) : "—"} good={postV2.pnl > 0} bad={postV2.pnl < 0} />
+                <MiniStat label="ROI" value={postV2.settled > 0 ? fmtPct(postV2.roi) : "—"} good={postV2.roi > 0} bad={postV2.roi < 0} />
+                <MiniStat label="Hit rate" value={postV2.settled > 0 ? `${((postV2.won / postV2.settled) * 100).toFixed(1)}%` : "—"} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {postV2.total === 0 && (
+        <div className="mb-6 rounded-lg border border-emerald-900/40 bg-emerald-950/10 p-3 text-xs text-muted-foreground">
+          <span className="text-emerald-300 font-semibold">Per-market threshold era (v2)</span> launches{" "}
+          <span className="font-mono">{MARKET_THRESHOLDS_V2_EPOCH}</span> — pre/post comparison appears once the first v2 bet settles. (1x2 ≥10% · o/u ≥3% · AH ≥5% · BTTS ≥10% · DC retired.)
+        </div>
+      )}
 
       <div className="grid lg:grid-cols-3 gap-4 mb-6">
         <div className="lg:col-span-2 rounded-lg border border-border bg-card p-4">
@@ -329,18 +381,26 @@ export default async function RealBetsPage() {
                 </tr>
               </thead>
               <tbody>
-                {daily.map((d) => (
-                  <tr key={d.day} className="border-t border-border">
-                    <td className="p-2 font-mono text-xs">{d.day}</td>
-                    <td className="p-2 text-right">{d.n}</td>
-                    <td className="p-2 text-right">{d.settled}</td>
-                    <td className="p-2 text-right">€{d.staked.toFixed(2)}</td>
-                    <td className={`p-2 text-right font-mono ${d.pnl > 0 ? "text-emerald-400" : d.pnl < 0 ? "text-red-400" : ""}`}>
-                      {d.settled > 0 ? fmtMoney(d.pnl) : "—"}
-                    </td>
-                    <td className="p-2 text-right">{d.roi != null ? fmtPct(d.roi) : "—"}</td>
-                  </tr>
-                ))}
+                {daily.map((d) => {
+                  const isV2 = d.day >= epochDay;
+                  return (
+                    <tr key={d.day} className={`border-t border-border ${isV2 ? "bg-emerald-950/15" : ""}`}>
+                      <td className="p-2 font-mono text-xs">
+                        {d.day}
+                        {d.day === epochDay && (
+                          <span className="ml-2 text-[10px] text-emerald-300">← v2</span>
+                        )}
+                      </td>
+                      <td className="p-2 text-right">{d.n}</td>
+                      <td className="p-2 text-right">{d.settled}</td>
+                      <td className="p-2 text-right">€{d.staked.toFixed(2)}</td>
+                      <td className={`p-2 text-right font-mono ${d.pnl > 0 ? "text-emerald-400" : d.pnl < 0 ? "text-red-400" : ""}`}>
+                        {d.settled > 0 ? fmtMoney(d.pnl) : "—"}
+                      </td>
+                      <td className="p-2 text-right">{d.roi != null ? fmtPct(d.roi) : "—"}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -416,6 +476,16 @@ function StatRow({ label, stats }: { label: string; stats: AggStats }) {
           bad={stats.roi < 0}
         />
       </div>
+    </div>
+  );
+}
+
+function MiniStat({ label, value, good, bad }: { label: string; value: string; good?: boolean; bad?: boolean }) {
+  const color = good ? "text-emerald-400" : bad ? "text-red-400" : "text-foreground";
+  return (
+    <div className="rounded border border-border bg-card/50 px-2 py-1.5">
+      <div className="text-[10px] text-muted-foreground uppercase tracking-wider">{label}</div>
+      <div className={`text-base font-bold font-mono ${color}`}>{value}</div>
     </div>
   );
 }
