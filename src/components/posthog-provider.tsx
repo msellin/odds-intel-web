@@ -25,7 +25,8 @@ function loadPosthog(): Promise<typeof posthogJs> {
           capture_pageview: false,
           capture_pageleave: true,
           persistence: "localStorage",
-          disable_session_recording: true,
+          disable_session_recording: false,
+          session_recording: { sampleRate: 0.5 },
           disable_surveys: true,
           autocapture: false,
           // We don't use feature flags / /decide / /flags — disabling avoids
@@ -80,6 +81,13 @@ function PostHogUserSync({ ready }: { ready: boolean }) {
   }, [user, profile, ready]);
 
   return null;
+}
+
+export function captureEvent(event: string, properties?: Record<string, unknown>) {
+  if (!POSTHOG_KEY) return;
+  loadPosthog().then((ph) => {
+    if (initialized) ph.capture(event, properties);
+  });
 }
 
 export function PostHogProvider({ children }: { children: React.ReactNode }) {

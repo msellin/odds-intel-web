@@ -35,18 +35,18 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.sentry.io https://us-assets.i.posthog.com",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.sentry.io https://us-assets.i.posthog.com https://www.clarity.ms",
               "style-src 'self' 'unsafe-inline'",
               // GROWTH-DIRECTORY-STACK (2026-06-05): allow directory-badge
               // sources so the reciprocal-backlink badges in the landing
               // footer render. Add new domains here as new badges land.
-              "img-src 'self' data: blob: https://*.supabase.co https://media.api-sports.io https://twelve.tools https://wired.business https://aiboom.tools",
+              "img-src 'self' data: blob: https://*.supabase.co https://media.api-sports.io https://twelve.tools https://wired.business https://aiboom.tools https://c.clarity.ms",
               "font-src 'self'",
               // POSTHOG-CSP-FIX (2026-06-06): PostHog ingestion was blocked
                // by CSP for weeks — script-src allowed us-assets.i.posthog.com
                // but connect-src did not allow us.i.posthog.com (events) or
                // us-assets.i.posthog.com (sourcemaps/web-vitals). Adding both.
-              "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.sentry.io https://api.stripe.com https://us.i.posthog.com https://us-assets.i.posthog.com",
+              "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.sentry.io https://api.stripe.com https://us.i.posthog.com https://us-assets.i.posthog.com https://c.bing.com https://c.clarity.ms",
               "frame-src 'self' https://js.stripe.com https://hooks.stripe.com",
               "worker-src 'self' blob:",
             ].join("; "),

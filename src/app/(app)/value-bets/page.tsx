@@ -18,6 +18,7 @@ import {
 import { ValueBetsScan } from "@/components/value-bets-scan";
 import { ValueBetsGate } from "@/components/value-bets-gate";
 import { TodayPicksPreview } from "@/components/today-picks-preview";
+import { AnalyticsEvent } from "@/components/analytics-event";
 import { ValueBetsHeader } from "@/components/value-bets-header";
 import { ValueBetsLiveStrip } from "@/components/value-bets-live-strip";
 import { getUserTier } from "@/lib/get-user-tier";
@@ -247,7 +248,10 @@ async function ValueBetsContent({ userId }: { userId: string }) {
           Pro/Elite no longer see it — it duplicates ValueBetsScan content
           in a different layout, contributing to page-level noise. */}
       {!isPro && (
-        <TodayPicksPreview picks={todayPicks} isPro={isPro} isElite={isElite} />
+        <>
+          <AnalyticsEvent event="locked_content_hit" properties={{ page: "value_bets" }} />
+          <TodayPicksPreview picks={todayPicks} isPro={isPro} isElite={isElite} />
+        </>
       )}
 
       <ValueBetsScan

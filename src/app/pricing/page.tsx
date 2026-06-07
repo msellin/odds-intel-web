@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { PricingCards } from "@/components/pricing-cards";
+import { AnalyticsEvent } from "@/components/analytics-event";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { MarketingNav } from "@/components/marketing-nav";
@@ -45,6 +46,7 @@ const pricingFaq = [
 export default function PricingPage() {
   return (
     <div className="min-h-dvh bg-background text-foreground">
+      <AnalyticsEvent event="pricing_viewed" />
       <MarketingNav />
 
       {/* ───────── Hero ───────── */}

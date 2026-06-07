@@ -1,5 +1,6 @@
 import type { PublicMatch, MatchH2H, TeamStanding } from "@/lib/engine-data";
 import { interestScore, interestIndicator } from "@/lib/match-utils";
+import { AnalyticsEvent } from "@/components/analytics-event";
 import {
   Card,
   CardContent,
@@ -313,6 +314,18 @@ export function MatchDetailFree({
           {/* Pro locked hints — only show if there's actually data behind the lock and user is not already Pro */}
           {!isPro && (bookmakerCount > 1 || hasInjuries || hasLineups || hasStats) && (
             <div className="rounded-lg border border-dashed border-white/10 bg-white/[0.02] p-3 space-y-2">
+              <AnalyticsEvent
+                event="locked_content_hit"
+                properties={{
+                  page: "match_detail",
+                  locked_features: [
+                    ...(bookmakerCount > 1 ? ["bookmakers"] : []),
+                    ...(hasInjuries ? ["injuries"] : []),
+                    ...(hasLineups ? ["lineups"] : []),
+                    ...(hasStats ? ["stats"] : []),
+                  ],
+                }}
+              />
               <p className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
                 <Zap className="h-3 w-3 text-amber-400" />
                 Pro data available for this match
