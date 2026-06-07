@@ -259,12 +259,14 @@ function ExpandedPanel({
   isElite,
   entry,
   mounted,
+  leagueHitRate,
 }: {
   bet: LiveBet & { botCount: number };
   isPro: boolean;
   isElite: boolean;
   entry?: BookOddsEntry;
   mounted: boolean;
+  leagueHitRate?: LeagueHitRate;
 }) {
   const best = entry ? getBestNow(entry) : null;
   const liveEdge = computeLiveEdge(bet.modelProb, entry);
@@ -386,6 +388,38 @@ function ExpandedPanel({
           </div>
         )}
 
+        {/* Calibrated + league hit rate — moved from collapsed row (VALUE-BETS-DENSITY-PASS) */}
+        {((isElite && bet.isCalibrated) || !!leagueHitRate) && (
+          <div className="flex flex-wrap gap-1.5">
+            {isElite && bet.isCalibrated && (
+              <span
+                className="rounded-sm border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-300"
+                title="From a calibrated bot — proven model + bot infrastructure. Also visible in the Pro tier feed."
+              >
+                Calibrated
+              </span>
+            )}
+            {leagueHitRate && (() => {
+              const pct = Math.round(leagueHitRate.hitRate * 100);
+              const cls = leagueHitRate.hitRate >= 0.50
+                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
+                : leagueHitRate.hitRate >= 0.45
+                ? "border-purple-500/40 bg-purple-500/10 text-purple-300"
+                : leagueHitRate.hitRate >= 0.40
+                ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
+                : "border-red-500/40 bg-red-500/10 text-red-300";
+              return (
+                <span
+                  className={cn("rounded-sm border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider", cls)}
+                  title={`Model hit rate in ${bet.league}: ${pct}% over last 90 days (n=${leagueHitRate.settled})`}
+                >
+                  {bet.league?.split(" / ").pop() ?? "League"} · {pct}% hit rate
+                </span>
+              );
+            })()}
+          </div>
+        )}
+
         {/* Timing */}
         {koSignal && (
           <div className="flex gap-2.5 items-start">
@@ -490,39 +524,17 @@ function ValueBetRow({
             <p className="text-sm font-medium text-foreground/90 truncate leading-tight">
               {bet.match.replace(" vs ", " — ")}
             </p>
+
             <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              {/* UNIFIED-STATUS (2026-06-02): type chip — distinguishes a
-                  prematch pick (placed before kickoff) from an inplay pick
-                  (placed during the match by an inplay bot). Without it the
-                  list mixed both with no visual cue. */}
-              {(() => {
-                // INPLAY-METADATA-STALENESS (2026-06-03): when we have the
-                // pick-time minute + score, fold them into the chip so a
-                // 3' pick (close to prematch state) is visually distinct
-                // from a 67' pick (highly path-dependent).
-                if (!bet.isInplay) {
-                  return (
-                    <span
-                      className="shrink-0 rounded-sm border border-sky-500/30 bg-sky-500/10 px-1 py-px text-[8px] font-bold uppercase tracking-wider text-sky-300"
-                      title="Placed before kick-off by a prematch bot"
-                    >
-                      Pre-match
-                    </span>
-                  );
-                }
+              {bet.isInplay && (() => {
                 const minute = bet.matchMinuteAtPick;
                 const home = bet.scoreHomeAtPick;
                 const away = bet.scoreAwayAtPick;
                 const hasMeta = minute != null;
-                const scoreFragment =
-                  home != null && away != null ? ` · ${home}-${away}` : "";
+                const scoreFragment = home != null && away != null ? ` · ${home}-${away}` : "";
                 const minuteFragment = hasMeta ? ` · ${minute}'` : "";
                 const tooltip = hasMeta
-                  ? `Placed by an inplay bot at minute ${minute}${
-                      home != null && away != null
-                        ? ` (score ${home}-${away})`
-                        : ""
-                    }`
+                  ? `Placed by an inplay bot at minute ${minute}${home != null && away != null ? ` (score ${home}-${away})` : ""}`
                   : "Placed during the match by an inplay bot";
                 return (
                   <span
@@ -534,49 +546,6 @@ function ValueBetRow({
                 );
               })()}
               <span className="truncate">{pickLine}</span>
-              <ConsensusDots count={bet.botCount} />
-              {/* COHORT-TRANSPARENCY (2026-06-02) + VALUE-BETS-DENSITY-PASS
-                  Tier 3 (2026-06-06): renamed "Pro" → "Calibrated". The chip
-                  was always a MATURITY indicator (this pick came from a bot
-                  that survived the calibration gate), not a tier label.
-                  "Pro" was confusing — it sounded like the chip was telling
-                  Elite users "this is also visible to Pro tier", which is
-                  true but secondary. The primary signal is "this pick has
-                  proven model+bot infrastructure behind it." */}
-              {isElite && bet.isCalibrated && (
-                <span
-                  className="shrink-0 rounded-sm border border-amber-500/40 bg-amber-500/10 px-1 py-px text-[8px] font-bold uppercase tracking-wider text-amber-300"
-                  title="From a calibrated bot — proven model + bot infrastructure. Also visible in the Pro tier feed."
-                >
-                  Calibrated
-                </span>
-              )}
-              {/* ELITE-LEAGUE-FILTER (2026-06-03): per-row league strength
-                  badge. Colour-coded by 90d hit rate so Elite users can
-                  glance at how the model historically performs in this
-                  league. Pro/Free never gets a value here. */}
-              {leagueHitRate && (() => {
-                const pct = Math.round(leagueHitRate.hitRate * 100);
-                const cls =
-                  leagueHitRate.hitRate >= 0.50
-                    ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
-                    : leagueHitRate.hitRate >= 0.45
-                    ? "border-purple-500/40 bg-purple-500/10 text-purple-300"
-                    : leagueHitRate.hitRate >= 0.40
-                    ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
-                    : "border-red-500/40 bg-red-500/10 text-red-300";
-                return (
-                  <span
-                    className={cn(
-                      "shrink-0 rounded-sm border px-1 py-px text-[8px] font-bold uppercase tracking-wider",
-                      cls,
-                    )}
-                    title={`Model hit rate in ${bet.league}: ${pct}% over last 90 days (n=${leagueHitRate.settled})`}
-                  >
-                    {pct}%
-                  </span>
-                );
-              })()}
             </div>
             {oddsLine && (
               <p className="text-[11px] text-muted-foreground">{oddsLine}</p>
@@ -622,6 +591,7 @@ function ValueBetRow({
           isElite={isElite}
           entry={entry}
           mounted={mounted}
+          leagueHitRate={leagueHitRate}
         />
       )}
     </div>
