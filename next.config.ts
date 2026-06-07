@@ -35,7 +35,7 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.sentry.io https://us-assets.i.posthog.com https://www.clarity.ms",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.sentry.io https://us-assets.i.posthog.com https://*.clarity.ms",
               "style-src 'self' 'unsafe-inline'",
               // GROWTH-DIRECTORY-STACK (2026-06-05): allow directory-badge
               // sources so the reciprocal-backlink badges in the landing

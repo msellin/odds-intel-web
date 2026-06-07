@@ -338,7 +338,7 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
               <div className="flex items-start justify-between gap-2 mb-1">
                 <div className="min-w-0">
                   <div className="font-semibold text-sm leading-tight">{c.match}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">
+                  <div className="text-xs text-muted-foreground mt-0.5" suppressHydrationWarning>
                     {c.league} · {fmtKickoff(c.kickoff)}
                   </div>
                 </div>
@@ -440,7 +440,7 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
                         <span>Combined edge {fmtPct(c.edge)} · stake €{c.stake?.toFixed(2) ?? "—"} · {c.bot}</span>
                       ) : (
                         <>
-                          <span>{fmtKickoff(c.kickoff)} · {c.bot}</span>
+                          <span suppressHydrationWarning>{fmtKickoff(c.kickoff)} · {c.bot}</span>
                           <ConsensusBadge
                             size={groupSizeByBetId.get(c.betId) ?? 1}
                             recommended={recommendedByBetId.has(c.betId)}
@@ -499,7 +499,7 @@ export function PlaceBetTable({ candidates }: { candidates: PlaceableBet[] }) {
                   <tr key={`leg-${i}`} className="border-t border-border/30 bg-purple-950/10 text-xs">
                     <td className="p-2 pl-8">
                       <div className="font-medium">Leg {i + 1}: {leg.match}</div>
-                      <div className="text-muted-foreground">{leg.league} · {fmtKickoff(leg.kickoff)}</div>
+                      <div className="text-muted-foreground" suppressHydrationWarning>{leg.league} · {fmtKickoff(leg.kickoff)}</div>
                       <div className="text-muted-foreground">{leg.botSource}</div>
                     </td>
                     <td className="p-2">
