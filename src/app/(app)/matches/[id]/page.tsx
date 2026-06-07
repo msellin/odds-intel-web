@@ -317,25 +317,31 @@ export default async function MatchDetailPage({
         />
       )}
 
-      {/* Market Implied Probabilities — pre-match and live only, not finished */}
-      {publicMatch.status !== "finished" && publicMatch.hasOdds && publicMatch.bestHome > 0 && (
-        <MarketImpliedProbabilities
-          bestHome={publicMatch.bestHome}
-          bestDraw={publicMatch.bestDraw}
-          bestAway={publicMatch.bestAway}
-          homeTeam={publicMatch.homeTeam}
-          awayTeam={publicMatch.awayTeam}
-          modelHome={publicMatch.modelHome}
-          modelDraw={publicMatch.modelDraw}
-          modelAway={publicMatch.modelAway}
-          matchStatus={publicMatch.status}
-          isPro={isPro}
-        />
-      )}
-
-      {/* Bot consensus (ENG-6) */}
-      {botConsensus && (
-        <BotConsensus consensus={botConsensus} isPro={isPro} isElite={isElite} />
+      {/* Market Implied Probabilities + Bot Consensus — side by side on desktop */}
+      {(publicMatch.status !== "finished" && publicMatch.hasOdds && publicMatch.bestHome > 0 || !!botConsensus) && (
+        <div className={
+          publicMatch.status !== "finished" && publicMatch.hasOdds && publicMatch.bestHome > 0 && !!botConsensus
+            ? "grid gap-3 lg:grid-cols-2"
+            : undefined
+        }>
+          {publicMatch.status !== "finished" && publicMatch.hasOdds && publicMatch.bestHome > 0 && (
+            <MarketImpliedProbabilities
+              bestHome={publicMatch.bestHome}
+              bestDraw={publicMatch.bestDraw}
+              bestAway={publicMatch.bestAway}
+              homeTeam={publicMatch.homeTeam}
+              awayTeam={publicMatch.awayTeam}
+              modelHome={publicMatch.modelHome}
+              modelDraw={publicMatch.modelDraw}
+              modelAway={publicMatch.modelAway}
+              matchStatus={publicMatch.status}
+              isPro={isPro}
+            />
+          )}
+          {botConsensus && (
+            <BotConsensus consensus={botConsensus} isPro={isPro} isElite={isElite} />
+          )}
+        </div>
       )}
 
       {/* AI Match Preview (ENG-3) */}
