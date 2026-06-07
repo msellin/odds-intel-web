@@ -232,11 +232,12 @@ function NextModelCallout({
 }) {
   if (!summary) return null;
   const deltas = summary.group_deltas ?? {};
+  const isPromoted = (summary as { mode?: string }).mode === "recently_promoted";
 
   const fmtPct = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
   const fmtMarket = (k: string) =>
     k === "1x2" ? "1X2" : k === "ah" ? "AH" : k === "ou" ? "O/U" : k.toUpperCase();
-  const trainedDate = summary.trained_at
+  const eventDate = summary.trained_at
     ? new Date(summary.trained_at).toLocaleDateString("en", { month: "short", day: "numeric" })
     : null;
 
@@ -245,10 +246,43 @@ function NextModelCallout({
     .filter((k) => deltas[k] != null)
     .map((k) => ({ key: k, delta: deltas[k] }));
 
+  if (isPromoted) {
+    return (
+      <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/5 px-4 py-2 flex items-center gap-3 flex-wrap">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+          ✓ Model updated{eventDate ? ` · ${eventDate}` : ""}
+        </span>
+        {chips.length > 0 && (
+          <span className="text-[11px] text-muted-foreground flex items-center gap-2 flex-wrap">
+            {chips.map(({ key, delta }) => {
+              const regressed = delta > 1;
+              const improved = delta < -1;
+              const cls = regressed
+                ? "text-rose-300"
+                : improved
+                  ? "text-emerald-300"
+                  : "text-muted-foreground";
+              return (
+                <span key={key} className={`font-mono font-semibold ${cls}`}>
+                  {fmtMarket(key)} {fmtPct(delta)}
+                </span>
+              );
+            })}
+            <span className="text-muted-foreground">log-loss vs prev model</span>
+          </span>
+        )}
+        <span className="ml-auto text-[10px] font-mono text-muted-foreground">
+          {summary.markets_better} improved / {summary.markets_worse} regressed
+          {summary.holdout_n ? ` · n=${summary.holdout_n.toLocaleString()}` : ""}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 px-4 py-2 flex items-center gap-3 flex-wrap">
       <span className="text-[10px] font-bold uppercase tracking-wider text-sky-400">
-        Next upgrade{trainedDate ? ` · trained ${trainedDate}` : ""}
+        Next upgrade{eventDate ? ` · trained ${eventDate}` : ""}
       </span>
       {chips.length > 0 && (
         <span className="text-[11px] text-muted-foreground flex items-center gap-2 flex-wrap">
