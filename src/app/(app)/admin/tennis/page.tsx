@@ -202,14 +202,14 @@ export default async function TennisAdminPage() {
                   {(
                     [
                       {
-                        label: `Player ${fix.player_home}`,
+                        label: fix.player_home,
                         rawOdds: fix.pin_raw_home,
                         threshold: fix.threshold_home,
                         side: "home" as const,
                         sideVbs: homeVbs,
                       },
                       {
-                        label: `Player ${fix.player_away}`,
+                        label: fix.player_away,
                         rawOdds: fix.pin_raw_away,
                         threshold: fix.threshold_away,
                         side: "away" as const,
