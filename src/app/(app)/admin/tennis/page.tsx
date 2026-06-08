@@ -84,25 +84,38 @@ export default async function TennisAdminPage() {
 
   const db = serviceClient();
   const now = new Date();
+  // Exclude matches that started more than 5 minutes ago (already live)
+  const startFloor = new Date(now.getTime() - 5 * 60 * 1000).toISOString();
   const cutoff = new Date(now.getTime() + 36 * 3600 * 1000).toISOString();
 
   const [{ data: fixtures }, { data: valueBets }] = await Promise.all([
     db
       .from("tennis_fixtures_today")
       .select("*")
-      .gte("kickoff_time", now.toISOString())
+      .gte("kickoff_time", startFloor)
       .lte("kickoff_time", cutoff)
-      .order("kickoff_time", { ascending: true }),
+      .order("pin_margin_pct", { ascending: true, nullsFirst: false }),
     db
       .from("tennis_value_bets")
       .select("fixture_id, selection, bookmaker, book_odds, edge_pct, stake")
-      .gte("kickoff_time", now.toISOString())
+      .gte("kickoff_time", startFloor)
       .lte("kickoff_time", cutoff)
       .is("result", null)
       .order("edge_pct", { ascending: false }),
   ]);
 
-  const fixtures_ = (fixtures ?? []) as Fixture[];
+  // Deduplicate fixtures: same player pair + kickoff minute → keep lowest margin
+  const seen = new Set<string>();
+  const deduped = (fixtures ?? []).filter((f) => {
+    const players = [f.player_home, f.player_away].sort().join("|");
+    const minute = new Date(f.kickoff_time).toISOString().slice(0, 16);
+    const key = `${players}|${minute}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  const fixtures_ = deduped as Fixture[];
   const valueBets_ = (valueBets ?? []) as ValueBet[];
 
   // Index value bets by fixture_id + selection
