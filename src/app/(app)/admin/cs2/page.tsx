@@ -30,6 +30,8 @@ interface Cs2Match {
   fair_odds_map2: number | null;
   threshold_map1: number | null;
   threshold_map2: number | null;
+  bookie_odds1: number | null;
+  bookie_odds2: number | null;
   has_elo_history: boolean;
   scanned_at: string;
 }
@@ -143,8 +145,8 @@ export default async function Cs2AdminPage() {
             const hasMap = m.best_of >= 3 && m.fair_odds_map1 != null;
 
             const teams = [
-              { name: m.team1, elo: m.elo1, prob: m.win_prob1, fair: m.fair_odds1, thr: m.threshold_odds1, fairMap: m.fair_odds_map1, thrMap: m.threshold_map1 },
-              { name: m.team2, elo: m.elo2, prob: m.win_prob2, fair: m.fair_odds2, thr: m.threshold_odds2, fairMap: m.fair_odds_map2, thrMap: m.threshold_map2 },
+              { name: m.team1, elo: m.elo1, prob: m.win_prob1, fair: m.fair_odds1, thr: m.threshold_odds1, fairMap: m.fair_odds_map1, thrMap: m.threshold_map1, bookie: m.bookie_odds1 },
+              { name: m.team2, elo: m.elo2, prob: m.win_prob2, fair: m.fair_odds2, thr: m.threshold_odds2, fairMap: m.fair_odds_map2, thrMap: m.threshold_map2, bookie: m.bookie_odds2 },
             ];
 
             return (
@@ -177,11 +179,19 @@ export default async function Cs2AdminPage() {
                       {/* Match winner market */}
                       <div>
                         <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Match Winner</p>
-                        <div className="flex items-baseline gap-1.5">
+                        <div className="flex items-baseline gap-1.5 flex-wrap">
                           <span className="text-xs text-muted-foreground">bet if ≥</span>
                           <span className="text-lg font-bold tabular-nums">{formatOdds(t.thr)}</span>
                           <span className="text-xs text-muted-foreground">(fair {formatOdds(t.fair)})</span>
                         </div>
+                        {t.bookie != null && (
+                          <div className={`flex items-center gap-1.5 mt-0.5 text-xs font-mono ${t.thr != null && t.bookie >= t.thr ? "text-green-400" : "text-muted-foreground"}`}>
+                            <span>bo3.gg: {t.bookie.toFixed(2)}</span>
+                            {t.thr != null && t.bookie >= t.thr && (
+                              <span className="bg-green-500/20 text-green-400 border border-green-500/30 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">VALUE</span>
+                            )}
+                          </div>
+                        )}
                         <div className="mt-1.5">
                           <LogBetButton
                             matchId={m.id}
@@ -228,6 +238,14 @@ export default async function Cs2AdminPage() {
           <span>{matches.length} matches</span>
           <span>{matches.filter((m) => m.best_of >= 3).length} with ≥1 map market</span>
           <span>{matches.filter((m) => m.state === "inProgress").length} live</span>
+          <span>
+            <span className="text-green-400 font-semibold">
+              {matches.filter((m) =>
+                (m.bookie_odds1 != null && m.threshold_odds1 != null && m.bookie_odds1 >= m.threshold_odds1) ||
+                (m.bookie_odds2 != null && m.threshold_odds2 != null && m.bookie_odds2 >= m.threshold_odds2)
+              ).length} value bets
+            </span>{" "}(bo3.gg odds ≥ threshold)
+          </span>
           <span>{matches.filter((m) => !m.has_elo_history).length} without ELO history</span>
         </div>
       )}
