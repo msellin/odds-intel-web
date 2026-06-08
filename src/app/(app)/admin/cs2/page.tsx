@@ -231,28 +231,37 @@ export default async function Cs2AdminPage() {
                       {/* Match winner market */}
                       <div>
                         <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Match Winner</p>
-                        <div className="flex items-baseline gap-1.5 flex-wrap">
-                          <span className="text-xs text-muted-foreground">bet if ≥</span>
-                          <span className="text-lg font-bold tabular-nums">{formatOdds(t.thr)}</span>
-                          <span className="text-xs text-muted-foreground">(fair {formatOdds(t.fair)})</span>
-                        </div>
-                        {t.bookie != null && (
-                          <div className={`flex items-center gap-1.5 mt-0.5 text-xs font-mono ${t.thr != null && t.bookie >= t.thr ? "text-green-400" : "text-muted-foreground"}`}>
-                            <span>bo3.gg: {t.bookie.toFixed(2)}</span>
-                            {t.thr != null && t.bookie >= t.thr && (
-                              <span className="bg-green-500/20 text-green-400 border border-green-500/30 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">VALUE</span>
-                            )}
+                        {t.thr == null ? (
+                          <div className="text-xs text-muted-foreground italic">
+                            Not enough recent matches — model has no edge here
+                            {t.bookie != null && <span className="block mt-0.5 font-mono not-italic">bo3.gg: {t.bookie.toFixed(2)}</span>}
                           </div>
+                        ) : (
+                          <>
+                            <div className="flex items-baseline gap-1.5 flex-wrap">
+                              <span className="text-xs text-muted-foreground">bet if ≥</span>
+                              <span className="text-lg font-bold tabular-nums">{formatOdds(t.thr)}</span>
+                              <span className="text-xs text-muted-foreground">(fair {formatOdds(t.fair)})</span>
+                            </div>
+                            {t.bookie != null && (
+                              <div className={`flex items-center gap-1.5 mt-0.5 text-xs font-mono ${t.bookie >= t.thr ? "text-green-400" : "text-muted-foreground"}`}>
+                                <span>bo3.gg: {t.bookie.toFixed(2)}</span>
+                                {t.bookie >= t.thr && (
+                                  <span className="bg-green-500/20 text-green-400 border border-green-500/30 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">VALUE</span>
+                                )}
+                              </div>
+                            )}
+                            <div className="mt-1.5">
+                              <LogBetButton
+                                matchId={m.id}
+                                teamName={t.name}
+                                market="match_winner"
+                                fairOdds={t.fair}
+                                thresholdOdds={t.thr}
+                              />
+                            </div>
+                          </>
                         )}
-                        <div className="mt-1.5">
-                          <LogBetButton
-                            matchId={m.id}
-                            teamName={t.name}
-                            market="match_winner"
-                            fairOdds={t.fair}
-                            thresholdOdds={t.thr}
-                          />
-                        </div>
                       </div>
 
                       {/* ≥1 map market (BO3/5 only) */}
