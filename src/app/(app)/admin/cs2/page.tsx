@@ -12,6 +12,7 @@ const serviceClient = () =>
 
 interface Cs2Match {
   id: number;
+  bo3gg_id: number | null;
   league: string;
   kickoff_time: string;
   state: string;
@@ -32,285 +33,338 @@ interface Cs2Match {
   threshold_map2: number | null;
   bookie_odds1: number | null;
   bookie_odds2: number | null;
+  coolbet_odds1: number | null;
+  coolbet_odds2: number | null;
+  pinnacle_odds1: number | null;
+  pinnacle_odds2: number | null;
   roster_change1: boolean;
   roster_change2: boolean;
   roster_note1: string | null;
   roster_note2: string | null;
   player_rating1: number | null;
   player_rating2: number | null;
+  is_lan: boolean | null;
+  days_since_roster_change1: number | null;
+  days_since_roster_change2: number | null;
   has_elo_history: boolean;
   scanned_at: string;
 }
 
+interface SimBet {
+  id: number;
+  bo3gg_id: number;
+  market: string;
+  pick: string;
+  bookie: string;
+  odds_at_pick: number;
+  edge: number;
+  result: string | null;
+  pnl: number | null;
+}
+
 function formatTime(iso: string) {
   return new Date(iso).toLocaleString("en-GB", {
-    month: "short",
-    day: "2-digit",
+    weekday: "short",
     hour: "2-digit",
     minute: "2-digit",
     timeZone: "Europe/Tallinn",
   });
 }
 
-function formatOdds(n: number | null) {
+function fmtOdds(n: number | null) {
   return n != null ? n.toFixed(2) : "—";
 }
 
-function WinProbBar({ prob }: { prob: number | null }) {
-  if (prob == null) return null;
-  const pct = Math.round(prob * 100);
-  const color = pct >= 65 ? "bg-green-500" : pct >= 55 ? "bg-blue-500" : "bg-muted-foreground";
-  return (
-    <div className="flex items-center gap-1.5">
-      <div className="h-1.5 rounded-full w-16 bg-muted overflow-hidden">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
-      </div>
-      <span className="text-xs text-muted-foreground tabular-nums">{pct}%</span>
-    </div>
-  );
+const BOOKIES: Array<{ key: "bo3gg" | "coolbet" | "pinnacle"; label: string; k1: keyof Cs2Match; k2: keyof Cs2Match }> = [
+  { key: "bo3gg",    label: "bo3.gg",   k1: "bookie_odds1",   k2: "bookie_odds2"   },
+  { key: "coolbet",  label: "Coolbet",  k1: "coolbet_odds1",  k2: "coolbet_odds2"  },
+  { key: "pinnacle", label: "Pinnacle", k1: "pinnacle_odds1", k2: "pinnacle_odds2" },
+];
+
+function isValueOdds(odds: number | null, thr: number | null): boolean {
+  return odds != null && thr != null && odds >= thr;
+}
+
+function bestValueBookie(thr: number | null, m: Cs2Match, sideKey: "1" | "2") {
+  if (thr == null) return null;
+  let best: { bookie: string; odds: number; edgePct: number } | null = null;
+  for (const b of BOOKIES) {
+    const key = sideKey === "1" ? b.k1 : b.k2;
+    const o = m[key] as number | null;
+    if (o != null && o >= thr) {
+      const edgePct = ((o - thr) / thr) * 100;
+      if (!best || o > best.odds) best = { bookie: b.label, odds: o, edgePct };
+    }
+  }
+  return best;
 }
 
 function PlayerRatingBadge({ rating }: { rating: number | null }) {
   if (rating == null) return null;
   const color = rating >= 1.15 ? "text-green-400" : rating >= 1.05 ? "text-blue-400" : "text-muted-foreground";
-  return (
-    <span className={`text-[10px] font-mono ${color}`}>PQ {rating.toFixed(3)}</span>
-  );
+  return <span className={`text-[10px] font-mono ${color}`}>PQ {rating.toFixed(2)}</span>;
 }
 
 export default async function Cs2AdminPage() {
   const supabase = await createSupabaseServer();
   const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) return (
-    <div className="flex items-center justify-center py-24 text-muted-foreground">Access denied.</div>
-  );
-
-  const { data: profile } = await supabase
-    .from("profiles").select("is_superadmin").eq("id", user.id).single();
-
-  if (!profile?.is_superadmin) return (
-    <div className="flex items-center justify-center py-24 text-muted-foreground">Superadmin only.</div>
-  );
+  if (!user) return <div className="flex items-center justify-center py-24 text-muted-foreground">Access denied.</div>;
+  const { data: profile } = await supabase.from("profiles").select("is_superadmin").eq("id", user.id).single();
+  if (!profile?.is_superadmin) return <div className="flex items-center justify-center py-24 text-muted-foreground">Superadmin only.</div>;
 
   const db = serviceClient();
   const now = new Date();
   const cutoff = new Date(now.getTime() + 7 * 24 * 3600 * 1000).toISOString();
 
-  const { data: rows } = await db
-    .from("cs2_upcoming_matches")
-    .select("*")
-    .gte("kickoff_time", now.toISOString())
-    .lte("kickoff_time", cutoff)
-    .order("kickoff_time", { ascending: true });
+  const [{ data: rows }, { data: botRows }] = await Promise.all([
+    db.from("cs2_upcoming_matches").select("*")
+      .gte("kickoff_time", now.toISOString()).lte("kickoff_time", cutoff)
+      .order("kickoff_time", { ascending: true }),
+    db.from("cs2_simulated_bets").select("id,bo3gg_id,market,pick,bookie,odds_at_pick,edge,result,pnl")
+      .order("placed_at", { ascending: false }).limit(200),
+  ]);
 
   const matches = (rows ?? []) as Cs2Match[];
+  const bots = (botRows ?? []) as SimBet[];
+  const botByMatch = new Map<number, SimBet[]>();
+  for (const b of bots) {
+    const arr = botByMatch.get(b.bo3gg_id) ?? [];
+    arr.push(b); botByMatch.set(b.bo3gg_id, arr);
+  }
 
   const scannedAt = matches[0]?.scanned_at
     ? new Date(matches[0].scanned_at).toLocaleString("en-GB", {
-        timeZone: "Europe/Tallinn",
-        day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
-      })
-    : null;
+        timeZone: "Europe/Tallinn", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+      }) : null;
+
+  const valueCount = matches.reduce((acc, m) => {
+    let n = 0;
+    if (m.threshold_odds1 != null) {
+      if (BOOKIES.some((b) => isValueOdds(m[b.k1] as number | null, m.threshold_odds1))) n++;
+    }
+    if (m.threshold_odds2 != null) {
+      if (BOOKIES.some((b) => isValueOdds(m[b.k2] as number | null, m.threshold_odds2))) n++;
+    }
+    return acc + n;
+  }, 0);
+
+  const settledBots = bots.filter((b) => b.result === "won" || b.result === "lost");
+  const wins = settledBots.filter((b) => b.result === "won").length;
+  const losses = settledBots.length - wins;
+  const totalPnl = settledBots.reduce((acc, b) => acc + (b.pnl ?? 0), 0);
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
+    <div className="max-w-6xl mx-auto px-4 py-6 space-y-4">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">CS2 — ELO Value Sheet</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Bet if bookmaker odds ≥ threshold. Threshold = ELO fair price × 0.97 (3% edge).
-            PQ = avg HLTV rating of last known lineup (green ≥ 1.15, blue ≥ 1.05).
+          <h1 className="text-xl font-bold">CS2 — Value Sheet</h1>
+          <p className="text-xs text-muted-foreground mt-1">
+            All games · Multi-book odds (bo3.gg, Coolbet, Pinnacle) · Green = bookmaker ≥ model threshold (value).
+            Threshold = ELO+PQ fair price × 0.97 (3% baseline edge).
           </p>
         </div>
         <div className="text-right text-xs text-muted-foreground shrink-0">
-          {scannedAt ? (
-            <>Last scan: <span className="font-mono">{scannedAt}</span></>
-          ) : (
-            <span className="text-yellow-400">No data — run the scanner</span>
-          )}
+          {scannedAt ? <>Last scan: <span className="font-mono">{scannedAt}</span></>
+                     : <span className="text-yellow-400">No data — run scanner</span>}
         </div>
       </div>
 
-      {/* How to use */}
-      <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-4 text-sm space-y-1">
-        <p className="font-semibold text-blue-400">How to use</p>
-        <p className="text-muted-foreground">
-          Check bookmaker odds. If they offer <strong className="text-foreground">at least</strong> the
-          threshold shown, it&apos;s a value bet. ELO is built from 9,200+ series (Jan 2023 → live via bo3.gg).
-          PQ = player quality from HLTV ratings. ⚠ = roster change in last 45 days.
-        </p>
-        <p className="text-muted-foreground text-xs mt-1">
-          Refresh:{" "}
-          <code className="bg-muted px-1 rounded">python3 scripts/esports/cs2_elo_scanner.py --record</code>
-        </p>
+      {/* KPI strip */}
+      <div className="grid grid-cols-4 gap-2 text-xs">
+        <div className="rounded border border-border p-2">
+          <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Matches</div>
+          <div className="text-lg font-bold tabular-nums">{matches.length}</div>
+        </div>
+        <div className="rounded border border-border p-2">
+          <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Model coverage</div>
+          <div className="text-lg font-bold tabular-nums">{matches.filter((m) => m.has_elo_history).length}</div>
+        </div>
+        <div className="rounded border border-green-500/30 bg-green-500/5 p-2">
+          <div className="text-green-400 text-[10px] uppercase tracking-wide font-semibold">Value picks</div>
+          <div className="text-lg font-bold tabular-nums text-green-400">{valueCount}</div>
+        </div>
+        <div className="rounded border border-border p-2">
+          <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Bot record</div>
+          <div className="text-sm font-bold tabular-nums">
+            {wins}W-{losses}L
+            <span className={`ml-1 ${totalPnl >= 0 ? "text-green-400" : "text-red-400"}`}>
+              ({totalPnl >= 0 ? "+" : ""}{totalPnl.toFixed(2)}u)
+            </span>
+          </div>
+        </div>
       </div>
 
+      {/* Match list */}
       {matches.length === 0 ? (
         <div className="rounded-lg border border-dashed p-12 text-center text-muted-foreground">
-          No upcoming matches loaded.
-          <br />
+          No upcoming matches loaded. <br />
           <code className="text-sm mt-2 block">python3 scripts/esports/cs2_elo_scanner.py --record</code>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-1.5">
           {matches.map((m) => {
             const isLive = m.state === "inProgress";
-            const hasMap = m.best_of >= 3 && m.fair_odds_map1 != null;
             const hasRosterWarning = m.roster_change1 || m.roster_change2;
-
-            const teams = [
+            const sides = [
               {
-                name: m.team1, elo: m.elo1, prob: m.win_prob1,
+                key: "1" as const, name: m.team1, elo: m.elo1, prob: m.win_prob1,
                 fair: m.fair_odds1, thr: m.threshold_odds1,
                 fairMap: m.fair_odds_map1, thrMap: m.threshold_map1,
-                bookie: m.bookie_odds1,
                 rosterChange: m.roster_change1, rosterNote: m.roster_note1,
                 playerRating: m.player_rating1,
+                dsrc: m.days_since_roster_change1,
               },
               {
-                name: m.team2, elo: m.elo2, prob: m.win_prob2,
+                key: "2" as const, name: m.team2, elo: m.elo2, prob: m.win_prob2,
                 fair: m.fair_odds2, thr: m.threshold_odds2,
                 fairMap: m.fair_odds_map2, thrMap: m.threshold_map2,
-                bookie: m.bookie_odds2,
                 rosterChange: m.roster_change2, rosterNote: m.roster_note2,
                 playerRating: m.player_rating2,
+                dsrc: m.days_since_roster_change2,
               },
             ];
+            const matchBots = botByMatch.get(m.bo3gg_id ?? -1) ?? [];
 
             return (
-              <div
-                key={m.id}
-                className={`rounded-lg border p-4 ${
+              <div key={m.id}
+                className={`rounded border ${
                   isLive ? "border-yellow-500/50 bg-yellow-500/5" :
                   hasRosterWarning ? "border-orange-500/30 bg-orange-500/5" :
-                  "border-border"
+                  "border-border bg-card/30"
                 }`}
               >
-                {/* Match header */}
-                <div className="flex items-center gap-2 mb-3 text-xs text-muted-foreground flex-wrap">
-                  <span className="font-semibold text-foreground text-sm">{m.league}</span>
-                  <span>·</span>
-                  <span className="font-mono">{formatTime(m.kickoff_time)}</span>
-                  <span>· BO{m.best_of}</span>
-                  {isLive && <span className="text-yellow-400 font-bold animate-pulse">⚡ LIVE</span>}
-                  {!m.has_elo_history && <span className="text-orange-400">no ELO history</span>}
+                {/* Compact header */}
+                <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border/40 text-[11px] flex-wrap">
+                  <span className="font-mono text-foreground">{formatTime(m.kickoff_time)}</span>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="text-muted-foreground truncate max-w-md">{m.league}</span>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="font-mono text-muted-foreground">BO{m.best_of}</span>
+                  {m.is_lan && <span className="text-blue-300 bg-blue-500/10 border border-blue-500/30 px-1 rounded text-[10px]">LAN</span>}
+                  {isLive && <span className="text-yellow-400 font-bold animate-pulse">⚡LIVE</span>}
+                  {!m.has_elo_history && <span className="text-orange-400">no model coverage</span>}
                 </div>
 
-                {/* Roster change warnings */}
+                {/* Roster warnings inline */}
                 {hasRosterWarning && (
-                  <div className="mb-3 rounded bg-orange-500/10 border border-orange-500/20 px-3 py-1.5 text-xs text-orange-300 space-y-0.5">
-                    {m.roster_change1 && m.roster_note1 && (
-                      <p>⚠ {m.team1}: {m.roster_note1}</p>
-                    )}
-                    {m.roster_change2 && m.roster_note2 && (
-                      <p>⚠ {m.team2}: {m.roster_note2}</p>
-                    )}
+                  <div className="px-3 py-1 bg-orange-500/10 border-b border-orange-500/20 text-[11px] text-orange-300">
+                    {m.roster_change1 && m.roster_note1 && <span>⚠ {m.team1}: {m.roster_note1}</span>}
+                    {m.roster_change1 && m.roster_change2 && <span className="mx-2">·</span>}
+                    {m.roster_change2 && m.roster_note2 && <span>⚠ {m.team2}: {m.roster_note2}</span>}
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-3">
-                  {teams.map((t) => (
-                    <div key={t.name} className="rounded-md p-3 border border-border bg-muted/20 space-y-2">
-                      <div className="flex items-start justify-between gap-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-sm font-semibold leading-tight">{t.name}</span>
+                {/* Team rows */}
+                <div className="divide-y divide-border/30">
+                  {sides.map((t) => {
+                    const value = bestValueBookie(t.thr, m, t.key);
+                    return (
+                      <div key={t.name} className="grid grid-cols-12 gap-2 px-3 py-2 items-center text-xs">
+                        {/* Team meta */}
+                        <div className="col-span-4 flex items-center gap-1.5 min-w-0">
+                          <span className="font-semibold truncate">{t.name}</span>
                           {t.rosterChange && <span className="text-orange-400 text-xs">⚠</span>}
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
+                          {t.elo != null && <span className="font-mono text-[10px] text-muted-foreground">ELO {Math.round(t.elo)}</span>}
                           <PlayerRatingBadge rating={t.playerRating} />
-                          {t.elo != null && (
-                            <span className="text-xs text-muted-foreground font-mono">ELO {Math.round(t.elo)}</span>
+                          {t.prob != null && <span className="text-muted-foreground text-[10px]">· {Math.round(t.prob * 100)}%</span>}
+                        </div>
+
+                        {/* Model threshold */}
+                        <div className="col-span-2 text-[11px]">
+                          {t.thr != null ? (
+                            <div>
+                              <span className="text-muted-foreground">bet ≥</span>{" "}
+                              <span className="font-bold tabular-nums">{fmtOdds(t.thr)}</span>
+                              <div className="text-[10px] text-muted-foreground">fair {fmtOdds(t.fair)}</div>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground italic">no model</span>
                           )}
                         </div>
-                      </div>
 
-                      <WinProbBar prob={t.prob} />
-
-                      {/* Match winner market */}
-                      <div>
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Match Winner</p>
-                        {t.thr == null ? (
-                          <div className="text-xs text-muted-foreground italic">
-                            Not enough recent matches — model has no edge here
-                            {t.bookie != null && <span className="block mt-0.5 font-mono not-italic">bo3.gg: {t.bookie.toFixed(2)}</span>}
-                          </div>
-                        ) : (
-                          <>
-                            <div className="flex items-baseline gap-1.5 flex-wrap">
-                              <span className="text-xs text-muted-foreground">bet if ≥</span>
-                              <span className="text-lg font-bold tabular-nums">{formatOdds(t.thr)}</span>
-                              <span className="text-xs text-muted-foreground">(fair {formatOdds(t.fair)})</span>
-                            </div>
-                            {t.bookie != null && (
-                              <div className={`flex items-center gap-1.5 mt-0.5 text-xs font-mono ${t.bookie >= t.thr ? "text-green-400" : "text-muted-foreground"}`}>
-                                <span>bo3.gg: {t.bookie.toFixed(2)}</span>
-                                {t.bookie >= t.thr && (
-                                  <span className="bg-green-500/20 text-green-400 border border-green-500/30 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">VALUE</span>
-                                )}
+                        {/* Bookie odds row */}
+                        <div className="col-span-4 flex items-center gap-2 text-[11px] font-mono">
+                          {BOOKIES.map((b) => {
+                            const odds = m[t.key === "1" ? b.k1 : b.k2] as number | null;
+                            const isValue = isValueOdds(odds, t.thr);
+                            if (odds == null) {
+                              return <div key={b.key} className="text-muted-foreground/40 w-16 text-center">—</div>;
+                            }
+                            return (
+                              <div key={b.key} className={`w-16 text-center px-1 py-0.5 rounded ${isValue ? "bg-green-500/15 text-green-400 font-bold ring-1 ring-green-500/40" : "text-muted-foreground"}`}>
+                                <div>{odds.toFixed(2)}</div>
+                                <div className="text-[9px] tracking-tight opacity-70">{b.label}</div>
                               </div>
-                            )}
-                            <div className="mt-1.5">
-                              <LogBetButton
-                                matchId={m.id}
-                                teamName={t.name}
-                                market="match_winner"
-                                fairOdds={t.fair}
-                                thresholdOdds={t.thr}
-                              />
-                            </div>
-                          </>
-                        )}
-                      </div>
-
-                      {/* ≥1 map market (BO3/5 only) */}
-                      {hasMap && t.thrMap != null && (
-                        <div className="pt-2 border-t border-border/50">
-                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Wins ≥1 Map</p>
-                          <div className="flex items-baseline gap-1.5">
-                            <span className="text-xs text-muted-foreground">bet if ≥</span>
-                            <span className="text-base font-bold tabular-nums">{formatOdds(t.thrMap)}</span>
-                            <span className="text-xs text-muted-foreground">(fair {formatOdds(t.fairMap)})</span>
-                          </div>
-                          <div className="mt-1.5">
-                            <LogBetButton
-                              matchId={m.id}
-                              teamName={t.name}
-                              market="atleast1map"
-                              fairOdds={t.fairMap}
-                              thresholdOdds={t.thrMap}
-                            />
-                          </div>
+                            );
+                          })}
                         </div>
-                      )}
-                    </div>
-                  ))}
+
+                        {/* Action */}
+                        <div className="col-span-2 flex items-center justify-end gap-1">
+                          {value && (
+                            <span className="text-green-400 text-[10px] font-bold uppercase tracking-wider mr-1">
+                              +{value.edgePct.toFixed(0)}%
+                            </span>
+                          )}
+                          <LogBetButton
+                            matchId={m.id}
+                            teamName={t.name}
+                            market="match_winner"
+                            fairOdds={t.fair}
+                            thresholdOdds={t.thr}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
+
+                {/* ≥1 map markets — collapsed on its own line when present */}
+                {m.best_of >= 3 && m.threshold_map1 != null && (
+                  <div className="px-3 py-1.5 border-t border-border/40 text-[11px] flex items-center gap-3 bg-muted/10">
+                    <span className="text-muted-foreground uppercase tracking-wider text-[10px]">Wins ≥1 map</span>
+                    {sides.map((t) => (
+                      <div key={t.name} className="flex items-center gap-1.5">
+                        <span className="text-muted-foreground">{t.name.split(" ")[0]}:</span>
+                        <span className="font-mono">bet ≥ <span className="font-bold">{fmtOdds(t.thrMap)}</span></span>
+                        <LogBetButton
+                          matchId={m.id} teamName={t.name} market="atleast1map"
+                          fairOdds={t.fairMap} thresholdOdds={t.thrMap}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Bot picks fired on this match */}
+                {matchBots.length > 0 && (
+                  <div className="px-3 py-1.5 border-t border-border/40 text-[10px] flex items-center gap-3 bg-blue-500/5">
+                    <span className="text-blue-400 uppercase tracking-wider font-semibold">Bot</span>
+                    {matchBots.map((b) => (
+                      <span key={b.id} className="font-mono">
+                        {b.pick} @ {b.bookie} {b.odds_at_pick.toFixed(2)}
+                        {b.result === "won" && <span className="text-green-400"> ✓</span>}
+                        {b.result === "lost" && <span className="text-red-400"> ✗</span>}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
       )}
 
-      {/* Summary */}
+      {/* Footer summary */}
       {matches.length > 0 && (
-        <div className="text-xs text-muted-foreground border-t pt-4 flex flex-wrap gap-6">
+        <div className="text-xs text-muted-foreground border-t pt-3 flex flex-wrap gap-6 mt-4">
           <span>{matches.length} matches</span>
-          <span>{matches.filter((m) => m.best_of >= 3).length} with ≥1 map market</span>
+          <span>{matches.filter((m) => m.best_of >= 3).length} BO3/5</span>
+          <span>{matches.filter((m) => m.is_lan).length} LAN</span>
           <span>{matches.filter((m) => m.state === "inProgress").length} live</span>
-          <span>
-            <span className="text-green-400 font-semibold">
-              {matches.filter((m) =>
-                (m.bookie_odds1 != null && m.threshold_odds1 != null && m.bookie_odds1 >= m.threshold_odds1) ||
-                (m.bookie_odds2 != null && m.threshold_odds2 != null && m.bookie_odds2 >= m.threshold_odds2)
-              ).length} value bets
-            </span>{" "}(bo3.gg odds ≥ threshold)
-          </span>
-          <span className="text-orange-400">
-            {matches.filter((m) => m.roster_change1 || m.roster_change2).length} with roster changes
-          </span>
-          <span>{matches.filter((m) => !m.has_elo_history).length} without ELO history</span>
+          <span className="text-green-400">{valueCount} value picks</span>
+          <span className="text-orange-400">{matches.filter((m) => m.roster_change1 || m.roster_change2).length} roster changes</span>
         </div>
       )}
     </div>
