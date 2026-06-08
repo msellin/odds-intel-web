@@ -139,9 +139,9 @@ export default async function LolAdminPage() {
       <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-4 text-sm space-y-1">
         <p className="font-semibold text-blue-400">How to use</p>
         <p className="text-muted-foreground">
-          Open Coolbet (or any bookmaker) LoL odds. For each match, check if either team&apos;s
-          odds beat the threshold shown. The threshold is the minimum odds for a 3% edge over
-          our ELO fair price.
+          Open Coolbet (or any bookmaker) LoL odds. For each match, the number shown is the
+          <strong className="text-foreground"> minimum odds you need</strong> — bet only if the
+          bookmaker offers that or higher. Higher bookmaker odds = more edge.
         </p>
         <p className="text-muted-foreground text-xs mt-1">
           Refresh data:{" "}
@@ -227,10 +227,10 @@ export default async function LolAdminPage() {
                       <WinProbBar prob={prob} side={probBar} />
 
                       <div className="mt-2 flex items-baseline gap-2">
+                        <span className="text-xs text-muted-foreground">bet if ≥</span>
                         <span className="text-xl font-bold tabular-nums">
                           {formatOdds(threshold)}
                         </span>
-                        <span className="text-xs text-muted-foreground">min to bet</span>
                       </div>
 
                       {fair != null && (
