@@ -311,6 +311,19 @@ export function Nav({ previewTier: initialPreviewTier = null }: NavProps) {
                         <Bot className="h-3.5 w-3.5" />
                         LoL
                       </Link>
+                      <Link
+                        href="/admin/cs2"
+                        onClick={() => setProfileOpen(false)}
+                        className={cn(
+                          "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
+                          pathname === "/admin/cs2"
+                            ? "bg-amber-500/10 text-amber-400"
+                            : "text-amber-500/70 hover:bg-accent hover:text-amber-400"
+                        )}
+                      >
+                        <Bot className="h-3.5 w-3.5" />
+                        CS2
+                      </Link>
                       <div className="mx-3 mt-1.5 mb-0.5">
                         <p className="text-[10px] text-amber-500/40 mb-1">Preview tier</p>
                         <div className="flex gap-1">
@@ -566,6 +579,19 @@ export function Nav({ previewTier: initialPreviewTier = null }: NavProps) {
                   >
                     <Bot className="h-4 w-4" />
                     LoL
+                  </Link>
+                  <Link
+                    href="/admin/cs2"
+                    onClick={() => setMobileOpen(false)}
+                    className={cn(
+                      "flex items-center gap-2 border-l-2 rounded-md px-3 py-2.5 text-sm transition-colors",
+                      pathname === "/admin/cs2"
+                        ? "border-amber-400 bg-amber-500/10 text-amber-400"
+                        : "border-transparent text-amber-500/70 hover:bg-accent hover:text-amber-400"
+                    )}
+                  >
+                    <Bot className="h-4 w-4" />
+                    CS2
                   </Link>
                   <div className="px-3 pt-1.5 pb-0.5">
                     <p className="text-[10px] text-amber-500/40 mb-1">Preview tier</p>
