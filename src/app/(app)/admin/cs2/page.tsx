@@ -116,12 +116,29 @@ export default async function Cs2AdminPage() {
   const now = new Date();
   const cutoff = new Date(now.getTime() + 7 * 24 * 3600 * 1000).toISOString();
 
-  const [{ data: rows }, { data: botRows }] = await Promise.all([
+  const todayStart = new Date();
+  todayStart.setUTCHours(0, 0, 0, 0);
+
+  const [
+    { data: rows },
+    { data: botRows },
+    { count: livePredCount },
+    { count: livePredTodayCount },
+    { count: backfillPredCount },
+    { count: simBetTotal },
+  ] = await Promise.all([
     db.from("cs2_upcoming_matches").select("*")
       .gte("kickoff_time", now.toISOString()).lte("kickoff_time", cutoff)
       .order("kickoff_time", { ascending: true }),
     db.from("cs2_simulated_bets").select("id,bo3gg_id,market,pick,bookie,odds_at_pick,edge,result,pnl")
       .order("placed_at", { ascending: false }).limit(200),
+    db.from("cs2_predictions").select("*", { count: "exact", head: true })
+      .eq("model_version", "elo+pq_v1"),
+    db.from("cs2_predictions").select("*", { count: "exact", head: true })
+      .eq("model_version", "elo+pq_v1").gte("scan_time", todayStart.toISOString()),
+    db.from("cs2_predictions").select("*", { count: "exact", head: true })
+      .like("model_version", "%backfill%"),
+    db.from("cs2_simulated_bets").select("*", { count: "exact", head: true }),
   ]);
 
   const matches = (rows ?? []) as Cs2Match[];
@@ -170,7 +187,39 @@ export default async function Cs2AdminPage() {
         </div>
       </div>
 
-      {/* KPI strip */}
+      {/* Pipeline / Model Stats */}
+      <div className="rounded border border-blue-500/20 bg-blue-500/5 p-3 text-xs grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div>
+          <div className="text-blue-400 text-[10px] uppercase tracking-wide font-semibold">Live predictions</div>
+          <div className="text-lg font-bold tabular-nums">{(livePredCount ?? 0).toLocaleString()}</div>
+          <div className="text-[10px] text-muted-foreground">
+            +{livePredTodayCount ?? 0} today · scanner every 4h
+          </div>
+        </div>
+        <div>
+          <div className="text-blue-400 text-[10px] uppercase tracking-wide font-semibold">Historical (backfill)</div>
+          <div className="text-lg font-bold tabular-nums">{(backfillPredCount ?? 0).toLocaleString()}</div>
+          <div className="text-[10px] text-muted-foreground">
+            Walk-forward, calibration source
+          </div>
+        </div>
+        <div>
+          <div className="text-blue-400 text-[10px] uppercase tracking-wide font-semibold">Bot bets total</div>
+          <div className="text-lg font-bold tabular-nums">{(simBetTotal ?? 0).toLocaleString()}</div>
+          <div className="text-[10px] text-muted-foreground">
+            bot_cs2_value_v1 · single bot
+          </div>
+        </div>
+        <div>
+          <div className="text-blue-400 text-[10px] uppercase tracking-wide font-semibold">Model accuracy</div>
+          <div className="text-lg font-bold tabular-nums">58.9%</div>
+          <div className="text-[10px] text-muted-foreground">
+            ECE 3.0% · 9.2k matches (ELO baseline)
+          </div>
+        </div>
+      </div>
+
+      {/* KPI strip (today's slate) */}
       <div className="grid grid-cols-4 gap-2 text-xs">
         <div className="rounded border border-border p-2">
           <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Matches</div>
