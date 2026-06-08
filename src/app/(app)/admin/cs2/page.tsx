@@ -126,6 +126,7 @@ export default async function Cs2AdminPage() {
     { count: livePredTodayCount },
     { count: backfillPredCount },
     { count: simBetTotal },
+    { data: pipelineRuns },
   ] = await Promise.all([
     db.from("cs2_upcoming_matches").select("*")
       .gte("kickoff_time", now.toISOString()).lte("kickoff_time", cutoff)
@@ -139,7 +140,24 @@ export default async function Cs2AdminPage() {
     db.from("cs2_predictions").select("*", { count: "exact", head: true })
       .like("model_version", "%backfill%"),
     db.from("cs2_simulated_bets").select("*", { count: "exact", head: true }),
+    db.from("pipeline_runs").select("job_name,started_at,status")
+      .like("job_name", "cs2%").order("started_at", { ascending: false }).limit(50),
   ]);
+
+  // Aggregate latest run per CS2 job
+  const cs2Jobs = ["cs2_scanner", "cs2_settlement", "cs2_coolbet_scanner", "cs2_bot", "cs2_pandascore_rosters"];
+  const latestByJob = new Map<string, { started_at: string; status: string }>();
+  for (const r of (pipelineRuns ?? [])) {
+    if (!latestByJob.has(r.job_name)) {
+      latestByJob.set(r.job_name, { started_at: r.started_at, status: r.status });
+    }
+  }
+  const stalenessHours = (iso: string | undefined) =>
+    iso ? (now.getTime() - new Date(iso).getTime()) / 3_600_000 : Infinity;
+  const expectedStalenessHours: Record<string, number> = {
+    cs2_scanner: 6, cs2_settlement: 2, cs2_coolbet_scanner: 1,
+    cs2_bot: 6, cs2_pandascore_rosters: 30,
+  };
 
   const matches = (rows ?? []) as Cs2Match[];
   const bots = (botRows ?? []) as SimBet[];
@@ -216,6 +234,38 @@ export default async function Cs2AdminPage() {
           <div className="text-[10px] text-muted-foreground">
             ECE 3.0% · 9.2k matches (ELO baseline)
           </div>
+        </div>
+      </div>
+
+      {/* Pipeline Health */}
+      <div className="rounded border border-border p-2 text-xs">
+        <div className="text-muted-foreground text-[10px] uppercase tracking-wide font-semibold mb-1.5">
+          Pipeline health (cron last-run)
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+          {cs2Jobs.map((job) => {
+            const last = latestByJob.get(job);
+            const stale = stalenessHours(last?.started_at);
+            const limit = expectedStalenessHours[job] ?? 24;
+            const ok = stale <= limit;
+            const lastStr = last
+              ? new Date(last.started_at).toLocaleString("en-GB", { timeZone: "Europe/Tallinn",
+                  hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short" })
+              : "never";
+            const color = !last ? "text-muted-foreground/60"
+                       : !ok ? "text-orange-400"
+                       : "text-green-400";
+            const dot = !last ? "bg-muted-foreground/40"
+                     : !ok ? "bg-orange-400"
+                     : "bg-green-400";
+            return (
+              <div key={job} className="flex items-center gap-1.5 text-[10px]">
+                <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
+                <span className="font-mono text-foreground">{job.replace("cs2_", "")}</span>
+                <span className={`${color} ml-auto font-mono`}>{lastStr}</span>
+              </div>
+            );
+          })}
         </div>
       </div>
 
