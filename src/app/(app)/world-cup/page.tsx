@@ -49,6 +49,7 @@ import { WCSchedule } from "@/components/wc-schedule";
 import { WCActivityTiles } from "@/components/wc-activity-tiles";
 import { CLVTrustBanner } from "@/components/clv-trust-banner";
 import { loadWcActivityStats } from "@/lib/wc-bracket";
+import { WCPredictionsPanel } from "@/components/wc-predictions-panel";
 
 // ── SEO ──────────────────────────────────────────────────────────────────────
 export const metadata: Metadata = {
@@ -879,7 +880,14 @@ function ActiveTabPanel({
     case "bracket":
       return <BracketChallengePanel isAuthed={isAuthed} />;
     case "scorers":
-      return <ScorersPanel />;
+      return (
+        <WCPredictionsPanel
+          groups={groups}
+          fixtures={fixtures}
+          predictions={predictions}
+          nowMs={nowMs}
+        />
+      );
     case "overview":
     default:
       return (
