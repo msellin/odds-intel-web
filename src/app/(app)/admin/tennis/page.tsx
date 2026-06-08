@@ -104,9 +104,18 @@ export default async function TennisAdminPage() {
       .order("edge_pct", { ascending: false }),
   ]);
 
-  // Deduplicate fixtures: same player pair + kickoff minute → keep lowest margin
+  // Drop fixtures that still have numeric player IDs (old Railway scans without
+  // the /participants name-resolution fix). These must be excluded BEFORE the
+  // dedup step — otherwise a numeric-ID duplicate with lower margin claims the
+  // dedup slot and the real-name fixture (with the value bet) gets thrown away.
+  const isNumericId = (s: string) => /^\d+$/.test(s.trim());
+  const named = (fixtures ?? []).filter(
+    (f) => !isNumericId(f.player_home) && !isNumericId(f.player_away)
+  );
+
+  // Deduplicate: same player pair + kickoff minute → keep lowest margin
   const seen = new Set<string>();
-  const deduped = (fixtures ?? []).filter((f) => {
+  const deduped = named.filter((f) => {
     const players = [f.player_home, f.player_away].sort().join("|");
     const minute = new Date(f.kickoff_time).toISOString().slice(0, 16);
     const key = `${players}|${minute}`;
