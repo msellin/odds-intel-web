@@ -32,6 +32,12 @@ interface Cs2Match {
   threshold_map2: number | null;
   bookie_odds1: number | null;
   bookie_odds2: number | null;
+  roster_change1: boolean;
+  roster_change2: boolean;
+  roster_note1: string | null;
+  roster_note2: string | null;
+  player_rating1: number | null;
+  player_rating2: number | null;
   has_elo_history: boolean;
   scanned_at: string;
 }
@@ -61,6 +67,14 @@ function WinProbBar({ prob }: { prob: number | null }) {
       </div>
       <span className="text-xs text-muted-foreground tabular-nums">{pct}%</span>
     </div>
+  );
+}
+
+function PlayerRatingBadge({ rating }: { rating: number | null }) {
+  if (rating == null) return null;
+  const color = rating >= 1.15 ? "text-green-400" : rating >= 1.05 ? "text-blue-400" : "text-muted-foreground";
+  return (
+    <span className={`text-[10px] font-mono ${color}`}>PQ {rating.toFixed(3)}</span>
   );
 }
 
@@ -107,6 +121,7 @@ export default async function Cs2AdminPage() {
           <h1 className="text-2xl font-bold">CS2 — ELO Value Sheet</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Bet if bookmaker odds ≥ threshold. Threshold = ELO fair price × 0.97 (3% edge).
+            PQ = avg HLTV rating of last known lineup (green ≥ 1.15, blue ≥ 1.05).
           </p>
         </div>
         <div className="text-right text-xs text-muted-foreground shrink-0">
@@ -123,8 +138,8 @@ export default async function Cs2AdminPage() {
         <p className="font-semibold text-blue-400">How to use</p>
         <p className="text-muted-foreground">
           Check bookmaker odds. If they offer <strong className="text-foreground">at least</strong> the
-          threshold shown, it&apos;s a value bet. ELO is built from 9,200+ series (Jan 2023–Apr 2026) via
-          bo3.gg. Click <em>log bet</em> to record your stake + odds.
+          threshold shown, it&apos;s a value bet. ELO is built from 9,200+ series (Jan 2023 → live via bo3.gg).
+          PQ = player quality from HLTV ratings. ⚠ = roster change in last 45 days.
         </p>
         <p className="text-muted-foreground text-xs mt-1">
           Refresh:{" "}
@@ -143,19 +158,38 @@ export default async function Cs2AdminPage() {
           {matches.map((m) => {
             const isLive = m.state === "inProgress";
             const hasMap = m.best_of >= 3 && m.fair_odds_map1 != null;
+            const hasRosterWarning = m.roster_change1 || m.roster_change2;
 
             const teams = [
-              { name: m.team1, elo: m.elo1, prob: m.win_prob1, fair: m.fair_odds1, thr: m.threshold_odds1, fairMap: m.fair_odds_map1, thrMap: m.threshold_map1, bookie: m.bookie_odds1 },
-              { name: m.team2, elo: m.elo2, prob: m.win_prob2, fair: m.fair_odds2, thr: m.threshold_odds2, fairMap: m.fair_odds_map2, thrMap: m.threshold_map2, bookie: m.bookie_odds2 },
+              {
+                name: m.team1, elo: m.elo1, prob: m.win_prob1,
+                fair: m.fair_odds1, thr: m.threshold_odds1,
+                fairMap: m.fair_odds_map1, thrMap: m.threshold_map1,
+                bookie: m.bookie_odds1,
+                rosterChange: m.roster_change1, rosterNote: m.roster_note1,
+                playerRating: m.player_rating1,
+              },
+              {
+                name: m.team2, elo: m.elo2, prob: m.win_prob2,
+                fair: m.fair_odds2, thr: m.threshold_odds2,
+                fairMap: m.fair_odds_map2, thrMap: m.threshold_map2,
+                bookie: m.bookie_odds2,
+                rosterChange: m.roster_change2, rosterNote: m.roster_note2,
+                playerRating: m.player_rating2,
+              },
             ];
 
             return (
               <div
                 key={m.id}
-                className={`rounded-lg border p-4 ${isLive ? "border-yellow-500/50 bg-yellow-500/5" : "border-border"}`}
+                className={`rounded-lg border p-4 ${
+                  isLive ? "border-yellow-500/50 bg-yellow-500/5" :
+                  hasRosterWarning ? "border-orange-500/30 bg-orange-500/5" :
+                  "border-border"
+                }`}
               >
                 {/* Match header */}
-                <div className="flex items-center gap-2 mb-3 text-xs text-muted-foreground">
+                <div className="flex items-center gap-2 mb-3 text-xs text-muted-foreground flex-wrap">
                   <span className="font-semibold text-foreground text-sm">{m.league}</span>
                   <span>·</span>
                   <span className="font-mono">{formatTime(m.kickoff_time)}</span>
@@ -164,14 +198,32 @@ export default async function Cs2AdminPage() {
                   {!m.has_elo_history && <span className="text-orange-400">no ELO history</span>}
                 </div>
 
+                {/* Roster change warnings */}
+                {hasRosterWarning && (
+                  <div className="mb-3 rounded bg-orange-500/10 border border-orange-500/20 px-3 py-1.5 text-xs text-orange-300 space-y-0.5">
+                    {m.roster_change1 && m.roster_note1 && (
+                      <p>⚠ {m.team1}: {m.roster_note1}</p>
+                    )}
+                    {m.roster_change2 && m.roster_note2 && (
+                      <p>⚠ {m.team2}: {m.roster_note2}</p>
+                    )}
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-3">
                   {teams.map((t) => (
                     <div key={t.name} className="rounded-md p-3 border border-border bg-muted/20 space-y-2">
                       <div className="flex items-start justify-between gap-1">
-                        <span className="text-sm font-semibold leading-tight">{t.name}</span>
-                        {t.elo != null && (
-                          <span className="text-xs text-muted-foreground font-mono shrink-0">ELO {Math.round(t.elo)}</span>
-                        )}
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm font-semibold leading-tight">{t.name}</span>
+                          {t.rosterChange && <span className="text-orange-400 text-xs">⚠</span>}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <PlayerRatingBadge rating={t.playerRating} />
+                          {t.elo != null && (
+                            <span className="text-xs text-muted-foreground font-mono">ELO {Math.round(t.elo)}</span>
+                          )}
+                        </div>
                       </div>
 
                       <WinProbBar prob={t.prob} />
@@ -245,6 +297,9 @@ export default async function Cs2AdminPage() {
                 (m.bookie_odds2 != null && m.threshold_odds2 != null && m.bookie_odds2 >= m.threshold_odds2)
               ).length} value bets
             </span>{" "}(bo3.gg odds ≥ threshold)
+          </span>
+          <span className="text-orange-400">
+            {matches.filter((m) => m.roster_change1 || m.roster_change2).length} with roster changes
           </span>
           <span>{matches.filter((m) => !m.has_elo_history).length} without ELO history</span>
         </div>
