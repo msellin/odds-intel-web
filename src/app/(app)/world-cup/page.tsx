@@ -58,16 +58,17 @@ export const metadata: Metadata = {
     "FIFA World Cup 2026 in USA, Canada and Mexico — June 11 to July 19. All 12 groups, every group-stage fixture, advancement %, bracket challenge, and AI predictions from OddsIntel.",
   alternates: { canonical: "https://oddsintel.app/world-cup" },
   openGraph: {
-    title: "FIFA World Cup 2026 — Schedule, Groups & AI Predictions",
+    title: "FIFA World Cup 2026 — AI Predictions, Bracket & Group Game",
     description:
-      "48 teams · 12 groups · 3 host countries. Every WC 2026 fixture with our model's take.",
+      "48 teams · 104 matches · one AI model. Free bracket challenge and group-standings game. Beat 5 named AIs on the leaderboard.",
     url: "https://oddsintel.app/world-cup",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "FIFA World Cup 2026 on OddsIntel",
-    description: "All 12 groups, every fixture, AI predictions, bracket challenge.",
+    title: "World Cup 2026 — AI Predictions & Free Games on OddsIntel",
+    description:
+      "Bracket challenge, group predictor, AI vs you leaderboard. Free to play.",
   },
 };
 

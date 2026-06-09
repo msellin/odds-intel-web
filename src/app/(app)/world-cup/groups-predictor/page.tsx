@@ -24,6 +24,19 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "https://oddsintel.app/world-cup/groups-predictor",
   },
+  openGraph: {
+    title: "Predict the World Cup 2026 Group Standings — OddsIntel",
+    description:
+      "Pick 1st–4th in all 12 groups. 192 points up for grabs. Free to play, locks 11 June 19:00 UTC.",
+    url: "https://oddsintel.app/world-cup/groups-predictor",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "World Cup 2026 — Predict the Group Standings",
+    description:
+      "12 groups, 192 points, locks at first kickoff. Free to play on OddsIntel.",
+  },
 };
 
 async function isAuthed(): Promise<boolean> {

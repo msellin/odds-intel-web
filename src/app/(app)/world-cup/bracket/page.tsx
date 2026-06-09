@@ -24,6 +24,19 @@ export const metadata: Metadata = {
   description:
     "Pick your bracket for FIFA World Cup 2026 stage-by-stage — each knockout round opens when the previous one finishes. Compete against OddsIntel's model and the community.",
   alternates: { canonical: "https://oddsintel.app/world-cup/bracket" },
+  openGraph: {
+    title: "Beat 5 AIs in the World Cup 2026 Bracket — OddsIntel",
+    description:
+      "Stage-by-stage bracket challenge. Five named AIs already on the leaderboard. Free to play, locks at first kickoff.",
+    url: "https://oddsintel.app/world-cup/bracket",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Beat 5 AIs in the World Cup 2026 Bracket",
+    description:
+      "Stage-by-stage bracket challenge. Free to play, locks 11 June 19:00 UTC.",
+  },
 };
 
 /** Choose the right rank pill to render. */
