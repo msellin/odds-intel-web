@@ -227,29 +227,17 @@ export default async function Cs2AdminPage() {
   const anyCoverage = matches.filter((m) =>
     m.has_elo_history || (m.bo3gg_id != null && hltvByMatch.has(m.bo3gg_id))).length;
 
-  // Dedupe to "real-money decisions": for each (bot_name, match, market, pick)
-  // keep only the best-priced bookie. Per-bookie raw rows still exist in DB
-  // so we can compute per-bookie CLV later, but the visible metrics reflect
-  // what you'd actually wager (one bet per pick at the best book).
-  const bestPickMap = new Map<string, SimBet>();
-  for (const b of bots) {
-    const key = `${b.bot_name}|${b.bo3gg_id}|${b.market}|${b.pick}`;
-    const existing = bestPickMap.get(key);
-    if (!existing || b.odds_at_pick > existing.odds_at_pick) {
-      bestPickMap.set(key, b);
-    }
-  }
-  const dedupedBets = Array.from(bestPickMap.values());
-
-  const settledBots = dedupedBets.filter((b) => b.result === "won" || b.result === "lost");
+  // After migration 210 the storage is one bet per (bot, match, market, pick),
+  // so no JS dedupe needed — every row IS a real-money decision.
+  const settledBots = bots.filter((b) => b.result === "won" || b.result === "lost");
   const wins = settledBots.filter((b) => b.result === "won").length;
   const losses = settledBots.length - wins;
   const totalPnl = settledBots.reduce((acc, b) => acc + (b.pnl ?? 0), 0);
 
-  // Per-bot breakdown (also deduped)
+  // Per-bot breakdown
   type BotStats = { name: string; total: number; settled: number; wins: number; losses: number; pnl: number };
   const botStatsMap = new Map<string, BotStats>();
-  for (const b of dedupedBets) {
+  for (const b of bots) {
     const name = b.bot_name || "bot_cs2_value_v1";
     const s = botStatsMap.get(name) ?? { name, total: 0, settled: 0, wins: 0, losses: 0, pnl: 0 };
     s.total++;
@@ -294,9 +282,9 @@ export default async function Cs2AdminPage() {
         </div>
         <div>
           <div className="text-blue-400 text-[10px] uppercase tracking-wide font-semibold">Bot picks total</div>
-          <div className="text-lg font-bold tabular-nums">{dedupedBets.length.toLocaleString()}</div>
+          <div className="text-lg font-bold tabular-nums">{(simBetTotal ?? 0).toLocaleString()}</div>
           <div className="text-[10px] text-muted-foreground">
-            {(simBetTotal ?? 0).toLocaleString()} bookie rows logged
+            one row per (match, market, side)
           </div>
         </div>
         <div>
@@ -370,7 +358,7 @@ export default async function Cs2AdminPage() {
         <div className="rounded border border-border p-2">
           <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Pending picks</div>
           <div className="text-lg font-bold tabular-nums text-blue-400">
-            {dedupedBets.filter((b) => b.result == null).length}
+            {bots.filter((b) => b.result == null).length}
           </div>
           <div className="text-[9px] text-muted-foreground">awaiting settlement</div>
         </div>
@@ -462,24 +450,11 @@ export default async function Cs2AdminPage() {
               >
                 {/* Compact header */}
                 <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border/40 text-[11px] flex-wrap">
-                  {hasBotPick && (() => {
-                    // Distinct (market, pick) pairs = actual picks; the count of
-                    // matchBots is picks × bookies. Show both so users don't
-                    // think the bot is firing 2 different bets.
-                    const distinctPicks = new Set(matchBots.map((b) => `${b.market}|${b.pick}`));
-                    const nPicks = distinctPicks.size;
-                    const nBets = matchBots.length;
-                    return (
-                      <span
-                        title={`${nPicks} pick${nPicks > 1 ? "s" : ""} across ${nBets} bookie row${nBets > 1 ? "s" : ""}. Each (pick, bookie) is logged separately so you can compare which book gives the best price — you only place ONE real bet at the best odds.`}
-                        className="bg-blue-500/20 text-blue-300 border border-blue-500/40 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
-                      >
-                        🤖 BOT {nPicks === 1
-                          ? `${nBets} book${nBets > 1 ? "s" : ""}`
-                          : `${nPicks} picks · ${nBets} rows`}
-                      </span>
-                    );
-                  })()}
+                  {hasBotPick && (
+                    <span className="bg-blue-500/20 text-blue-300 border border-blue-500/40 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+                      🤖 BOT {matchBots.length} pick{matchBots.length > 1 ? "s" : ""}
+                    </span>
+                  )}
                   <span className="font-mono text-foreground">{formatTime(m.kickoff_time)}</span>
                   <span className="text-muted-foreground">·</span>
                   <span className="text-muted-foreground truncate max-w-md">{m.league}</span>
