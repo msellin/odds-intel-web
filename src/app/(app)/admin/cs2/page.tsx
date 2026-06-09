@@ -227,15 +227,29 @@ export default async function Cs2AdminPage() {
   const anyCoverage = matches.filter((m) =>
     m.has_elo_history || (m.bo3gg_id != null && hltvByMatch.has(m.bo3gg_id))).length;
 
-  const settledBots = bots.filter((b) => b.result === "won" || b.result === "lost");
+  // Dedupe to "real-money decisions": for each (bot_name, match, market, pick)
+  // keep only the best-priced bookie. Per-bookie raw rows still exist in DB
+  // so we can compute per-bookie CLV later, but the visible metrics reflect
+  // what you'd actually wager (one bet per pick at the best book).
+  const bestPickMap = new Map<string, SimBet>();
+  for (const b of bots) {
+    const key = `${b.bot_name}|${b.bo3gg_id}|${b.market}|${b.pick}`;
+    const existing = bestPickMap.get(key);
+    if (!existing || b.odds_at_pick > existing.odds_at_pick) {
+      bestPickMap.set(key, b);
+    }
+  }
+  const dedupedBets = Array.from(bestPickMap.values());
+
+  const settledBots = dedupedBets.filter((b) => b.result === "won" || b.result === "lost");
   const wins = settledBots.filter((b) => b.result === "won").length;
   const losses = settledBots.length - wins;
   const totalPnl = settledBots.reduce((acc, b) => acc + (b.pnl ?? 0), 0);
 
-  // Per-bot breakdown
+  // Per-bot breakdown (also deduped)
   type BotStats = { name: string; total: number; settled: number; wins: number; losses: number; pnl: number };
   const botStatsMap = new Map<string, BotStats>();
-  for (const b of bots) {
+  for (const b of dedupedBets) {
     const name = b.bot_name || "bot_cs2_value_v1";
     const s = botStatsMap.get(name) ?? { name, total: 0, settled: 0, wins: 0, losses: 0, pnl: 0 };
     s.total++;
@@ -279,10 +293,10 @@ export default async function Cs2AdminPage() {
           </div>
         </div>
         <div>
-          <div className="text-blue-400 text-[10px] uppercase tracking-wide font-semibold">Bot bets total</div>
-          <div className="text-lg font-bold tabular-nums">{(simBetTotal ?? 0).toLocaleString()}</div>
+          <div className="text-blue-400 text-[10px] uppercase tracking-wide font-semibold">Bot picks total</div>
+          <div className="text-lg font-bold tabular-nums">{dedupedBets.length.toLocaleString()}</div>
           <div className="text-[10px] text-muted-foreground">
-            bot_cs2_value_v1 · single bot
+            {(simBetTotal ?? 0).toLocaleString()} bookie rows logged
           </div>
         </div>
         <div>
@@ -354,9 +368,9 @@ export default async function Cs2AdminPage() {
           </div>
         </div>
         <div className="rounded border border-border p-2">
-          <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Pending bets</div>
+          <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Pending picks</div>
           <div className="text-lg font-bold tabular-nums text-blue-400">
-            {bots.filter((b) => b.result == null).length}
+            {dedupedBets.filter((b) => b.result == null).length}
           </div>
           <div className="text-[9px] text-muted-foreground">awaiting settlement</div>
         </div>
