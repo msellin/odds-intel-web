@@ -201,16 +201,31 @@ export default async function Cs2AdminPage() {
         timeZone: "Europe/Tallinn", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
       }) : null;
 
+  // Effective threshold = ELO threshold if covered, else HLTV-derived
+  // (fair × 0.95) when both teams are HLTV-ranked. Value count + coverage
+  // counts both pricing sources.
+  const effThr = (m: Cs2Match, side: "1" | "2"): number | null => {
+    const eloThr = side === "1" ? m.threshold_odds1 : m.threshold_odds2;
+    if (eloThr != null) return eloThr;
+    const h = m.bo3gg_id != null ? hltvByMatch.get(m.bo3gg_id) : undefined;
+    if (!h) return null;
+    const f = side === "1" ? h.fair_odds1 : h.fair_odds2;
+    return f != null ? +(f * (1 - HLTV_EDGE)).toFixed(2) : null;
+  };
+
   const valueCount = matches.reduce((acc, m) => {
     let n = 0;
-    if (m.threshold_odds1 != null) {
-      if (BOOKIES.some((b) => isValueOdds(m[b.k1] as number | null, m.threshold_odds1))) n++;
-    }
-    if (m.threshold_odds2 != null) {
-      if (BOOKIES.some((b) => isValueOdds(m[b.k2] as number | null, m.threshold_odds2))) n++;
-    }
+    const t1 = effThr(m, "1");
+    const t2 = effThr(m, "2");
+    if (t1 != null && BOOKIES.some((b) => isValueOdds(m[b.k1] as number | null, t1))) n++;
+    if (t2 != null && BOOKIES.some((b) => isValueOdds(m[b.k2] as number | null, t2))) n++;
     return acc + n;
   }, 0);
+
+  const hltvCoverage = matches.filter((m) =>
+    m.bo3gg_id != null && hltvByMatch.has(m.bo3gg_id)).length;
+  const anyCoverage = matches.filter((m) =>
+    m.has_elo_history || (m.bo3gg_id != null && hltvByMatch.has(m.bo3gg_id))).length;
 
   const settledBots = bots.filter((b) => b.result === "won" || b.result === "lost");
   const wins = settledBots.filter((b) => b.result === "won").length;
@@ -312,14 +327,18 @@ export default async function Cs2AdminPage() {
       </div>
 
       {/* KPI strip (today's slate) */}
-      <div className="grid grid-cols-4 gap-2 text-xs">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
         <div className="rounded border border-border p-2">
           <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Matches</div>
           <div className="text-lg font-bold tabular-nums">{matches.length}</div>
         </div>
         <div className="rounded border border-border p-2">
           <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Model coverage</div>
-          <div className="text-lg font-bold tabular-nums">{matches.filter((m) => m.has_elo_history).length}</div>
+          <div className="text-lg font-bold tabular-nums">{anyCoverage}</div>
+          <div className="text-[9px] text-muted-foreground tabular-nums">
+            ELO {matches.filter((m) => m.has_elo_history).length} ·
+            <span className="text-purple-400"> HLTV {hltvCoverage}</span>
+          </div>
         </div>
         <div className="rounded border border-green-500/30 bg-green-500/5 p-2">
           <div className="text-green-400 text-[10px] uppercase tracking-wide font-semibold">Value picks</div>
@@ -333,6 +352,13 @@ export default async function Cs2AdminPage() {
               ({totalPnl >= 0 ? "+" : ""}{totalPnl.toFixed(2)}u)
             </span>
           </div>
+        </div>
+        <div className="rounded border border-border p-2">
+          <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Pending bets</div>
+          <div className="text-lg font-bold tabular-nums text-blue-400">
+            {bots.filter((b) => b.result == null).length}
+          </div>
+          <div className="text-[9px] text-muted-foreground">awaiting settlement</div>
         </div>
       </div>
 
