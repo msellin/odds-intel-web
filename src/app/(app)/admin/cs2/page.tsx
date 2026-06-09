@@ -185,18 +185,32 @@ export default async function Cs2AdminPage() {
   const scraperRows = scraperRowsResult.data ?? [];
   const backtestRows = backtestRowsResult.data ?? [];
 
-  // Fetch latest hltv_v1 predictions for matches in the upcoming window
+  // Fetch latest fallback predictions — prefer v7 (AUC 0.694) over hltv_v1
+  // (AUC 0.673) when both exist for a match. Query both, then pick v7 if
+  // present in the per-match map.
   const upcomingBo3IDs = ((rows ?? []) as Cs2Match[])
     .map((m) => m.bo3gg_id).filter((id): id is number => id != null);
   const { data: hltvPredRows } = upcomingBo3IDs.length
     ? await db.from("cs2_predictions")
-        .select("bo3gg_id,win_prob1,win_prob2,fair_odds1,fair_odds2,hltv_rank1,hltv_rank2,hltv_points1,hltv_points2,scan_time")
-        .eq("model_version", "hltv_v1").in("bo3gg_id", upcomingBo3IDs)
+        .select("bo3gg_id,win_prob1,win_prob2,fair_odds1,fair_odds2,hltv_rank1,hltv_rank2,hltv_points1,hltv_points2,scan_time,model_version")
+        .in("model_version", ["v7", "hltv_v1"])
+        .in("bo3gg_id", upcomingBo3IDs)
         .order("scan_time", { ascending: false })
     : { data: [] };
+  // Walk rows once: prefer v7 entry for each match; fall back to hltv_v1.
+  // Rows come sorted by scan_time desc, so the first v7 we see is the freshest.
   const hltvByMatch = new Map<number, HltvPred>();
-  for (const p of (hltvPredRows ?? []) as HltvPred[]) {
-    if (!hltvByMatch.has(p.bo3gg_id)) hltvByMatch.set(p.bo3gg_id, p);
+  const v7Seen = new Set<number>();
+  for (const p of (hltvPredRows ?? []) as (HltvPred & { model_version?: string })[]) {
+    const mv = p.model_version;
+    if (mv === "v7") {
+      if (!v7Seen.has(p.bo3gg_id)) {
+        hltvByMatch.set(p.bo3gg_id, p);
+        v7Seen.add(p.bo3gg_id);
+      }
+    } else if (!hltvByMatch.has(p.bo3gg_id)) {
+      hltvByMatch.set(p.bo3gg_id, p);
+    }
   }
 
   // Aggregate latest run per CS2 job
