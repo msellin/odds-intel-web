@@ -3,6 +3,8 @@ export const dynamic = 'force-dynamic';
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { createClient } from "@supabase/supabase-js";
 import { LogBetButton } from "./log-bet-button";
+import { ScrapersPanel } from "./scrapers-panel";
+import { BacktestPanel } from "./backtest-panel";
 
 const serviceClient = () =>
   createClient(
@@ -159,6 +161,14 @@ export default async function Cs2AdminPage() {
       .like("job_name", "cs2%").order("started_at", { ascending: false }).limit(50),
   ]);
 
+  // Scrapers state + backtest history for the new admin panels
+  const [scraperRowsResult, backtestRowsResult] = await Promise.all([
+    db.from("cs2_scraper_state").select("*").order("scraper_name", { ascending: true }),
+    db.from("cs2_model_backtest_history").select("*").order("run_at", { ascending: false }).limit(100),
+  ]);
+  const scraperRows = scraperRowsResult.data ?? [];
+  const backtestRows = backtestRowsResult.data ?? [];
+
   // Fetch latest hltv_v1 predictions for matches in the upcoming window
   const upcomingBo3IDs = ((rows ?? []) as Cs2Match[])
     .map((m) => m.bo3gg_id).filter((id): id is number => id != null);
@@ -295,6 +305,12 @@ export default async function Cs2AdminPage() {
           </div>
         </div>
       </div>
+
+      {/* Scrapers self-healing state */}
+      <ScrapersPanel rows={scraperRows} />
+
+      {/* Sneak-peek backtest history */}
+      <BacktestPanel rows={backtestRows} />
 
       {/* Pipeline Health */}
       <div className="rounded border border-border p-2 text-xs">
