@@ -227,16 +227,62 @@ export default async function Cs2AdminPage() {
         timeZone: "Europe/Tallinn", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
       }) : null;
 
+  // Market consensus prob (median of 1/odds across quoting books) — same logic
+  // as cs2_bot.py market_consensus().
+  const marketConsensusProb = (m: Cs2Match, side: "1" | "2"): number | null => {
+    const odds = [
+      side === "1" ? m.bookie_odds1   : m.bookie_odds2,
+      side === "1" ? m.coolbet_odds1  : m.coolbet_odds2,
+      side === "1" ? m.pinnacle_odds1 : m.pinnacle_odds2,
+    ].filter((o): o is number => o != null && o > 1.0);
+    if (odds.length === 0) return null;
+    const implied = odds.map((o) => 1 / o).sort((a, b) => a - b);
+    const n = implied.length;
+    return n % 2 === 0
+      ? (implied[n / 2 - 1] + implied[n / 2]) / 2
+      : implied[Math.floor(n / 2)];
+  };
+
   // Effective threshold = ELO threshold if covered, else HLTV-derived
-  // (fair × 0.95) when both teams are HLTV-ranked. Value count + coverage
-  // counts both pricing sources.
+  // (fair × 0.95) when both teams are HLTV-ranked.
+  //
+  // GATE (added 2026-06-09 after Virtus.pro vs Oxuji incident): the HLTV-rank
+  // model is a NAIVE prior — it knows only rank diff. When the market
+  // consensus disagrees by >15pp with our HLTV-derived prob, the model is
+  // almost always wrong. Suppress the threshold rather than publishing a
+  // misleading "bet ≥ X" recommendation. The bot uses MAX_MODEL_VS_CONSENSUS_PP
+  // = 0.15 for the same check; the UI must follow the same skepticism.
+  const HLTV_MODEL_MARKET_PP_GATE = 0.15;
   const effThr = (m: Cs2Match, side: "1" | "2"): number | null => {
     const eloThr = side === "1" ? m.threshold_odds1 : m.threshold_odds2;
     if (eloThr != null) return eloThr;
     const h = m.bo3gg_id != null ? hltvByMatch.get(m.bo3gg_id) : undefined;
     if (!h) return null;
     const f = side === "1" ? h.fair_odds1 : h.fair_odds2;
-    return f != null ? +(f * (1 - HLTV_EDGE)).toFixed(2) : null;
+    if (f == null) return null;
+
+    // Market-disagreement gate
+    const ourProb = 1 / f;
+    const marketProb = marketConsensusProb(m, side);
+    if (marketProb != null && Math.abs(ourProb - marketProb) > HLTV_MODEL_MARKET_PP_GATE) {
+      return null;
+    }
+    return +(f * (1 - HLTV_EDGE)).toFixed(2);
+  };
+
+  // Sibling helper: did the gate fire for this side? Used by the UI to show
+  // a "model unreliable" badge instead of just a blank field.
+  const hltvModelSuppressed = (m: Cs2Match, side: "1" | "2"): boolean => {
+    const eloThr = side === "1" ? m.threshold_odds1 : m.threshold_odds2;
+    if (eloThr != null) return false;  // ELO covers it; no gate applied
+    const h = m.bo3gg_id != null ? hltvByMatch.get(m.bo3gg_id) : undefined;
+    if (!h) return false;
+    const f = side === "1" ? h.fair_odds1 : h.fair_odds2;
+    if (f == null) return false;
+    const ourProb = 1 / f;
+    const marketProb = marketConsensusProb(m, side);
+    return marketProb != null
+        && Math.abs(ourProb - marketProb) > HLTV_MODEL_MARKET_PP_GATE;
   };
 
   const valueCount = matches.reduce((acc, m) => {
@@ -515,9 +561,14 @@ export default async function Cs2AdminPage() {
                     const hltvProb = hltv ? (t.key === "1" ? hltv.win_prob1 : hltv.win_prob2) : null;
                     const hltvRank = hltv ? (t.key === "1" ? hltv.hltv_rank1 : hltv.hltv_rank2) : null;
                     const usingHltv = t.thr == null && hltvFair != null;
-                    const effThr = t.thr ?? (usingHltv && hltvFair ? +(hltvFair * (1 - HLTV_EDGE)).toFixed(2) : null);
+                    // Use the centralized effThr helper so the market-disagreement
+                    // gate applies here too (the gate kills the threshold when
+                    // HLTV-model disagrees with market consensus by >15pp).
+                    // (Renamed local to avoid shadowing the outer effThr helper.)
+                    const effThrVal = effThr(m, t.key);
                     const effFair = t.fair ?? hltvFair ?? null;
-                    const value = bestValueBookie(effThr, m, t.key);
+                    const modelSuppressed = hltvModelSuppressed(m, t.key);
+                    const value = bestValueBookie(effThrVal, m, t.key);
                     return (
                       <div key={t.name} className="grid grid-cols-12 gap-2 px-3 py-2 items-center text-xs">
                         {/* Team meta */}
@@ -533,12 +584,19 @@ export default async function Cs2AdminPage() {
 
                         {/* Model threshold */}
                         <div className="col-span-2 text-[11px]">
-                          {effThr != null ? (
+                          {effThrVal != null ? (
                             <div>
                               <span className="text-muted-foreground">bet ≥</span>{" "}
-                              <span className={`font-bold tabular-nums ${usingHltv ? "text-purple-300" : ""}`}>{fmtOdds(effThr)}</span>
+                              <span className={`font-bold tabular-nums ${usingHltv ? "text-purple-300" : ""}`}>{fmtOdds(effThrVal)}</span>
                               <div className="text-[10px] text-muted-foreground">
                                 fair {fmtOdds(effFair)} {usingHltv && <span className="text-purple-400">(HLTV)</span>}
+                              </div>
+                            </div>
+                          ) : modelSuppressed ? (
+                            <div title="Model disagreed with market consensus by >15pp. Skip — sharp money knows more than our rank-only model.">
+                              <span className="text-orange-300 italic font-semibold">model overruled</span>
+                              <div className="text-[10px] text-muted-foreground">
+                                market &lt;&gt; HLTV
                               </div>
                             </div>
                           ) : (
@@ -550,7 +608,7 @@ export default async function Cs2AdminPage() {
                         <div className="col-span-4 flex items-center gap-2 text-[11px] font-mono">
                           {BOOKIES.map((b) => {
                             const odds = m[t.key === "1" ? b.k1 : b.k2] as number | null;
-                            const isValue = isValueOdds(odds, effThr);
+                            const isValue = isValueOdds(odds, effThrVal);
                             if (odds == null) {
                               return <div key={b.key} className="text-muted-foreground/40 w-16 text-center">—</div>;
                             }
@@ -575,7 +633,7 @@ export default async function Cs2AdminPage() {
                             teamName={t.name}
                             market="match_winner"
                             fairOdds={effFair}
-                            thresholdOdds={effThr}
+                            thresholdOdds={effThrVal}
                             winProb={t.prob ?? (hltvProb ?? null)}
                             bankrollEur={minCs2Bankroll}
                           />
