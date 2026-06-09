@@ -52,6 +52,7 @@ interface Cs2Match {
 
 interface SimBet {
   id: number;
+  bot_name: string;
   bo3gg_id: number;
   market: string;
   pick: string;
@@ -61,6 +62,20 @@ interface SimBet {
   result: string | null;
   pnl: number | null;
 }
+
+interface HltvPred {
+  bo3gg_id: number;
+  win_prob1: number;
+  win_prob2: number;
+  fair_odds1: number;
+  fair_odds2: number;
+  hltv_rank1: number | null;
+  hltv_rank2: number | null;
+  hltv_points1: number | null;
+  hltv_points2: number | null;
+}
+
+const HLTV_EDGE = 0.05; // matches the bot's HLTV_BASE_EDGE
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleString("en-GB", {
@@ -131,7 +146,7 @@ export default async function Cs2AdminPage() {
     db.from("cs2_upcoming_matches").select("*")
       .gte("kickoff_time", now.toISOString()).lte("kickoff_time", cutoff)
       .order("kickoff_time", { ascending: true }),
-    db.from("cs2_simulated_bets").select("id,bo3gg_id,market,pick,bookie,odds_at_pick,edge,result,pnl")
+    db.from("cs2_simulated_bets").select("id,bot_name,bo3gg_id,market,pick,bookie,odds_at_pick,edge,result,pnl")
       .order("placed_at", { ascending: false }).limit(200),
     db.from("cs2_predictions").select("*", { count: "exact", head: true })
       .eq("model_version", "elo+pq_v1"),
@@ -143,6 +158,20 @@ export default async function Cs2AdminPage() {
     db.from("pipeline_runs").select("job_name,started_at,status")
       .like("job_name", "cs2%").order("started_at", { ascending: false }).limit(50),
   ]);
+
+  // Fetch latest hltv_v1 predictions for matches in the upcoming window
+  const upcomingBo3IDs = ((rows ?? []) as Cs2Match[])
+    .map((m) => m.bo3gg_id).filter((id): id is number => id != null);
+  const { data: hltvPredRows } = upcomingBo3IDs.length
+    ? await db.from("cs2_predictions")
+        .select("bo3gg_id,win_prob1,win_prob2,fair_odds1,fair_odds2,hltv_rank1,hltv_rank2,hltv_points1,hltv_points2,scan_time")
+        .eq("model_version", "hltv_v1").in("bo3gg_id", upcomingBo3IDs)
+        .order("scan_time", { ascending: false })
+    : { data: [] };
+  const hltvByMatch = new Map<number, HltvPred>();
+  for (const p of (hltvPredRows ?? []) as HltvPred[]) {
+    if (!hltvByMatch.has(p.bo3gg_id)) hltvByMatch.set(p.bo3gg_id, p);
+  }
 
   // Aggregate latest run per CS2 job
   const cs2Jobs = ["cs2_scanner", "cs2_settlement", "cs2_coolbet_scanner", "cs2_bot", "cs2_pandascore_rosters"];
@@ -187,6 +216,19 @@ export default async function Cs2AdminPage() {
   const wins = settledBots.filter((b) => b.result === "won").length;
   const losses = settledBots.length - wins;
   const totalPnl = settledBots.reduce((acc, b) => acc + (b.pnl ?? 0), 0);
+
+  // Per-bot breakdown
+  type BotStats = { name: string; total: number; settled: number; wins: number; losses: number; pnl: number };
+  const botStatsMap = new Map<string, BotStats>();
+  for (const b of bots) {
+    const name = b.bot_name || "bot_cs2_value_v1";
+    const s = botStatsMap.get(name) ?? { name, total: 0, settled: 0, wins: 0, losses: 0, pnl: 0 };
+    s.total++;
+    if (b.result === "won") { s.settled++; s.wins++; s.pnl += b.pnl ?? 0; }
+    else if (b.result === "lost") { s.settled++; s.losses++; s.pnl += b.pnl ?? 0; }
+    botStatsMap.set(name, s);
+  }
+  const botStats = Array.from(botStatsMap.values()).sort((a, b) => b.total - a.total);
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-4">
@@ -294,6 +336,42 @@ export default async function Cs2AdminPage() {
         </div>
       </div>
 
+      {/* Per-bot breakdown */}
+      {botStats.length > 0 && (
+        <div className="rounded border border-blue-500/20 bg-blue-500/5 p-2 text-xs">
+          <div className="text-blue-400 text-[10px] uppercase tracking-wide font-semibold mb-1.5">
+            Bots ({botStats.length})
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {botStats.map((s) => {
+              const isHltv = s.name === "bot_cs2_hltv_v1";
+              const roi = s.settled > 0 ? (s.pnl / s.settled) * 100 : 0;
+              return (
+                <div key={s.name} className={`flex items-center gap-2 px-2 py-1.5 rounded ${isHltv ? "bg-purple-500/10 border border-purple-500/20" : "bg-card/30 border border-border"}`}>
+                  <span className={`text-[11px] font-mono font-semibold ${isHltv ? "text-purple-300" : "text-foreground"}`}>
+                    {s.name.replace("bot_cs2_", "")}
+                  </span>
+                  <span className="text-muted-foreground text-[10px]">
+                    {s.total} bets · {s.settled} settled
+                  </span>
+                  <span className="ml-auto font-mono text-[11px]">
+                    {s.wins}W-{s.losses}L
+                    <span className={`ml-1 ${s.pnl >= 0 ? "text-green-400" : "text-red-400"}`}>
+                      ({s.pnl >= 0 ? "+" : ""}{s.pnl.toFixed(2)}u)
+                    </span>
+                    {s.settled >= 5 && (
+                      <span className={`ml-1 text-[10px] ${roi >= 0 ? "text-green-400" : "text-red-400"}`}>
+                        ROI {roi >= 0 ? "+" : ""}{roi.toFixed(1)}%
+                      </span>
+                    )}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Match list */}
       {matches.length === 0 ? (
         <div className="rounded-lg border border-dashed p-12 text-center text-muted-foreground">
@@ -357,7 +435,15 @@ export default async function Cs2AdminPage() {
                 {/* Team rows */}
                 <div className="divide-y divide-border/30">
                   {sides.map((t) => {
-                    const value = bestValueBookie(t.thr, m, t.key);
+                    // HLTV fallback when ELO is gated for this match
+                    const hltv = m.bo3gg_id != null ? hltvByMatch.get(m.bo3gg_id) : undefined;
+                    const hltvFair = hltv ? (t.key === "1" ? hltv.fair_odds1 : hltv.fair_odds2) : null;
+                    const hltvProb = hltv ? (t.key === "1" ? hltv.win_prob1 : hltv.win_prob2) : null;
+                    const hltvRank = hltv ? (t.key === "1" ? hltv.hltv_rank1 : hltv.hltv_rank2) : null;
+                    const usingHltv = t.thr == null && hltvFair != null;
+                    const effThr = t.thr ?? (usingHltv && hltvFair ? +(hltvFair * (1 - HLTV_EDGE)).toFixed(2) : null);
+                    const effFair = t.fair ?? hltvFair ?? null;
+                    const value = bestValueBookie(effThr, m, t.key);
                     return (
                       <div key={t.name} className="grid grid-cols-12 gap-2 px-3 py-2 items-center text-xs">
                         {/* Team meta */}
@@ -366,16 +452,20 @@ export default async function Cs2AdminPage() {
                           {t.rosterChange && <span className="text-orange-400 text-xs">⚠</span>}
                           {t.elo != null && <span className="font-mono text-[10px] text-muted-foreground">ELO {Math.round(t.elo)}</span>}
                           <PlayerRatingBadge rating={t.playerRating} />
-                          {t.prob != null && <span className="text-muted-foreground text-[10px]">· {Math.round(t.prob * 100)}%</span>}
+                          {hltvRank != null && <span className="text-purple-300 text-[10px] font-mono bg-purple-500/10 px-1 rounded">HLTV #{hltvRank}</span>}
+                          {t.prob != null && <span className="text-muted-foreground text-[10px]">· ELO {Math.round(t.prob * 100)}%</span>}
+                          {usingHltv && hltvProb != null && <span className="text-purple-400 text-[10px]">· HLTV {Math.round(hltvProb * 100)}%</span>}
                         </div>
 
                         {/* Model threshold */}
                         <div className="col-span-2 text-[11px]">
-                          {t.thr != null ? (
+                          {effThr != null ? (
                             <div>
                               <span className="text-muted-foreground">bet ≥</span>{" "}
-                              <span className="font-bold tabular-nums">{fmtOdds(t.thr)}</span>
-                              <div className="text-[10px] text-muted-foreground">fair {fmtOdds(t.fair)}</div>
+                              <span className={`font-bold tabular-nums ${usingHltv ? "text-purple-300" : ""}`}>{fmtOdds(effThr)}</span>
+                              <div className="text-[10px] text-muted-foreground">
+                                fair {fmtOdds(effFair)} {usingHltv && <span className="text-purple-400">(HLTV)</span>}
+                              </div>
                             </div>
                           ) : (
                             <span className="text-muted-foreground italic">no model</span>
@@ -386,7 +476,7 @@ export default async function Cs2AdminPage() {
                         <div className="col-span-4 flex items-center gap-2 text-[11px] font-mono">
                           {BOOKIES.map((b) => {
                             const odds = m[t.key === "1" ? b.k1 : b.k2] as number | null;
-                            const isValue = isValueOdds(odds, t.thr);
+                            const isValue = isValueOdds(odds, effThr);
                             if (odds == null) {
                               return <div key={b.key} className="text-muted-foreground/40 w-16 text-center">—</div>;
                             }
@@ -438,15 +528,20 @@ export default async function Cs2AdminPage() {
 
                 {/* Bot picks fired on this match */}
                 {matchBots.length > 0 && (
-                  <div className="px-3 py-1.5 border-t border-border/40 text-[10px] flex items-center gap-3 bg-blue-500/5">
+                  <div className="px-3 py-1.5 border-t border-border/40 text-[10px] flex items-center gap-3 flex-wrap bg-blue-500/5">
                     <span className="text-blue-400 uppercase tracking-wider font-semibold">Bot</span>
-                    {matchBots.map((b) => (
-                      <span key={b.id} className="font-mono">
-                        {b.pick} @ {b.bookie} {b.odds_at_pick.toFixed(2)}
-                        {b.result === "won" && <span className="text-green-400"> ✓</span>}
-                        {b.result === "lost" && <span className="text-red-400"> ✗</span>}
-                      </span>
-                    ))}
+                    {matchBots.map((b) => {
+                      const isHltv = b.bot_name === "bot_cs2_hltv_v1";
+                      return (
+                        <span key={b.id} className={`font-mono ${isHltv ? "text-purple-300" : ""}`}>
+                          {isHltv && <span className="bg-purple-500/15 px-1 rounded mr-1">HLTV</span>}
+                          {b.pick} @ {b.bookie} {b.odds_at_pick.toFixed(2)}
+                          {b.edge != null && <span className="text-muted-foreground"> · edge +{Math.round(b.edge * 100)}%</span>}
+                          {b.result === "won" && <span className="text-green-400"> ✓</span>}
+                          {b.result === "lost" && <span className="text-red-400"> ✗</span>}
+                        </span>
+                      );
+                    })}
                   </div>
                 )}
               </div>
