@@ -448,11 +448,24 @@ export default async function Cs2AdminPage() {
               >
                 {/* Compact header */}
                 <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border/40 text-[11px] flex-wrap">
-                  {hasBotPick && (
-                    <span className="bg-blue-500/20 text-blue-300 border border-blue-500/40 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
-                      🤖 BOT × {matchBots.length}
-                    </span>
-                  )}
+                  {hasBotPick && (() => {
+                    // Distinct (market, pick) pairs = actual picks; the count of
+                    // matchBots is picks × bookies. Show both so users don't
+                    // think the bot is firing 2 different bets.
+                    const distinctPicks = new Set(matchBots.map((b) => `${b.market}|${b.pick}`));
+                    const nPicks = distinctPicks.size;
+                    const nBets = matchBots.length;
+                    return (
+                      <span
+                        title={`${nPicks} pick${nPicks > 1 ? "s" : ""} across ${nBets} bookie row${nBets > 1 ? "s" : ""}. Each (pick, bookie) is logged separately so you can compare which book gives the best price — you only place ONE real bet at the best odds.`}
+                        className="bg-blue-500/20 text-blue-300 border border-blue-500/40 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
+                      >
+                        🤖 BOT {nPicks === 1
+                          ? `${nBets} book${nBets > 1 ? "s" : ""}`
+                          : `${nPicks} picks · ${nBets} rows`}
+                      </span>
+                    );
+                  })()}
                   <span className="font-mono text-foreground">{formatTime(m.kickoff_time)}</span>
                   <span className="text-muted-foreground">·</span>
                   <span className="text-muted-foreground truncate max-w-md">{m.league}</span>
