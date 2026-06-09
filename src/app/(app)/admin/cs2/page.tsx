@@ -428,17 +428,31 @@ export default async function Cs2AdminPage() {
               },
             ];
             const matchBots = botByMatch.get(m.bo3gg_id ?? -1) ?? [];
+            const hasBotPick = matchBots.length > 0;
+            const botPickResults = matchBots
+              .map((b) => b.result)
+              .filter((r): r is string => r === "won" || r === "lost");
+            const botWonAll = botPickResults.length > 0 && botPickResults.every((r) => r === "won");
+            const botLostAll = botPickResults.length > 0 && botPickResults.every((r) => r === "lost");
 
             return (
               <div key={m.id}
                 className={`rounded border ${
                   isLive ? "border-yellow-500/50 bg-yellow-500/5" :
+                  hasBotPick && botWonAll ? "border-green-500/40 bg-green-500/5" :
+                  hasBotPick && botLostAll ? "border-red-500/40 bg-red-500/5" :
+                  hasBotPick ? "border-blue-500/40 bg-blue-500/5" :
                   hasRosterWarning ? "border-orange-500/30 bg-orange-500/5" :
                   "border-border bg-card/30"
                 }`}
               >
                 {/* Compact header */}
                 <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border/40 text-[11px] flex-wrap">
+                  {hasBotPick && (
+                    <span className="bg-blue-500/20 text-blue-300 border border-blue-500/40 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+                      🤖 BOT × {matchBots.length}
+                    </span>
+                  )}
                   <span className="font-mono text-foreground">{formatTime(m.kickoff_time)}</span>
                   <span className="text-muted-foreground">·</span>
                   <span className="text-muted-foreground truncate max-w-md">{m.league}</span>
