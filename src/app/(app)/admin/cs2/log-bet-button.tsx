@@ -10,12 +10,17 @@ interface Props {
   thresholdOdds: number | null;
   /** Model win probability for the picked side. Used to compute Kelly stake. */
   winProb?: number | null;
+  /** Current bankroll € for the relevant bot. Lets us show stake in €. */
+  bankrollEur?: number | null;
 }
 
 // Mirror cs2_bot.py: half-Kelly stake, capped at 2u, drops to 0 on -EV.
 const KELLY_FRACTION = 0.5;
 const KELLY_CAP = 2.0;
 const BASE_STAKE = 1.0;
+// Mirror cs2_bot.py MAX_STAKE_PCT_OF_BANKROLL = 0.02 — never wager more
+// than 2% of bankroll on a single bet regardless of what Kelly says.
+const MAX_STAKE_PCT_OF_BANKROLL = 0.02;
 
 function kellyStake(prob: number | null | undefined, odds: number): number | null {
   if (prob == null || odds <= 1) return null;
@@ -27,7 +32,14 @@ function kellyStake(prob: number | null | undefined, odds: number): number | nul
   return Math.min(KELLY_CAP, Math.round(BASE_STAKE * KELLY_FRACTION * full * 100) / 100);
 }
 
-export function LogBetButton({ matchId, teamName, market, fairOdds, thresholdOdds, winProb }: Props) {
+/** Translate Kelly-units to euros: 1u = 1% of bankroll, capped at 2% bankroll. */
+function unitsToEur(stakeUnits: number, bankroll: number): number {
+  const raw = (stakeUnits * bankroll) / 100;
+  const capped = Math.min(raw, bankroll * MAX_STAKE_PCT_OF_BANKROLL);
+  return Math.max(capped, 0);
+}
+
+export function LogBetButton({ matchId, teamName, market, fairOdds, thresholdOdds, winProb, bankrollEur }: Props) {
   // ── All hooks must run in the same order on every render. Keep them above
   // any early returns. (Bug fixed 2026-06-09: useState+useEffect after early
   // returns triggered React error #310 when clicking "log bet".)
@@ -133,6 +145,11 @@ export function LogBetButton({ matchId, teamName, market, fairOdds, thresholdOdd
               className="text-amber-400 hover:underline font-mono"
             >
               {suggestedStake.toFixed(2)}u
+              {bankrollEur != null && bankrollEur > 0 && (
+                <span className="ml-1 text-emerald-400">
+                  (€{unitsToEur(suggestedStake, bankrollEur).toFixed(2)})
+                </span>
+              )}
             </button>
           </span>
         )}

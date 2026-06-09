@@ -161,6 +161,22 @@ export default async function Cs2AdminPage() {
       .like("job_name", "cs2%").order("started_at", { ascending: false }).limit(50),
   ]);
 
+  // CS2 bots' current bankroll for the LogBetButton € display
+  const { data: cs2BotRows } = await db.from("bots")
+    .select("name,current_bankroll")
+    .in("name", ["bot_cs2_value_v1", "bot_cs2_hltv_v1"]);
+  const bankrollByBot = new Map<string, number>();
+  for (const b of (cs2BotRows ?? [])) {
+    bankrollByBot.set(b.name, Number(b.current_bankroll));
+  }
+  // ELO-covered matches → bot_cs2_value_v1, HLTV-fallback → bot_cs2_hltv_v1.
+  // The button currently doesn't know which bot will fire, so pick the more
+  // conservative bankroll (smaller). Almost always the same anyway.
+  const minCs2Bankroll = Math.min(
+    bankrollByBot.get("bot_cs2_value_v1") ?? 1000,
+    bankrollByBot.get("bot_cs2_hltv_v1") ?? 1000,
+  );
+
   // Scrapers state + backtest history for the new admin panels
   const [scraperRowsResult, backtestRowsResult] = await Promise.all([
     db.from("cs2_scraper_state").select("*").order("scraper_name", { ascending: true }),
@@ -561,6 +577,7 @@ export default async function Cs2AdminPage() {
                             fairOdds={effFair}
                             thresholdOdds={effThr}
                             winProb={t.prob ?? (hltvProb ?? null)}
+                            bankrollEur={minCs2Bankroll}
                           />
                         </div>
                       </div>
@@ -579,6 +596,7 @@ export default async function Cs2AdminPage() {
                         <LogBetButton
                           matchId={m.id} teamName={t.name} market="atleast1map"
                           fairOdds={t.fairMap} thresholdOdds={t.thrMap}
+                          bankrollEur={minCs2Bankroll}
                         />
                       </div>
                     ))}
