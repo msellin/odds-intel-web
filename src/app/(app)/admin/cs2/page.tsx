@@ -507,7 +507,11 @@ export default async function Cs2AdminPage() {
                 dsrc: m.days_since_roster_change2,
               },
             ];
-            const matchBots = botByMatch.get(m.bo3gg_id ?? -1) ?? [];
+            // Voided bets are kept in the DB for audit but shouldn't surface
+            // as "live bot picks" — they failed today's gates and were marked
+            // voided manually (or by future automated re-validation).
+            const matchBots = (botByMatch.get(m.bo3gg_id ?? -1) ?? [])
+              .filter((b) => b.result !== "voided");
             const hasBotPick = matchBots.length > 0;
             const botPickResults = matchBots
               .map((b) => b.result)
