@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface Props {
   matchId: number;
@@ -8,9 +8,26 @@ interface Props {
   market: "match_winner" | "atleast1map";
   fairOdds: number | null;
   thresholdOdds: number | null;
+  /** Model win probability for the picked side. Used to compute Kelly stake. */
+  winProb?: number | null;
 }
 
-export function LogBetButton({ matchId, teamName, market, fairOdds, thresholdOdds }: Props) {
+// Mirror cs2_bot.py: half-Kelly stake, capped at 2u, drops to 0 on -EV.
+const KELLY_FRACTION = 0.5;
+const KELLY_CAP = 2.0;
+const BASE_STAKE = 1.0;
+
+function kellyStake(prob: number | null | undefined, odds: number): number | null {
+  if (prob == null || odds <= 1) return null;
+  const b = odds - 1;
+  const p = prob;
+  const q = 1 - p;
+  const full = (b * p - q) / b;
+  if (full <= 0) return 0;
+  return Math.min(KELLY_CAP, Math.round(BASE_STAKE * KELLY_FRACTION * full * 100) / 100);
+}
+
+export function LogBetButton({ matchId, teamName, market, fairOdds, thresholdOdds, winProb }: Props) {
   const [open, setOpen] = useState(false);
   const [odds, setOdds] = useState("");
   const [stake, setStake] = useState("1");
@@ -56,12 +73,10 @@ export function LogBetButton({ matchId, teamName, market, fairOdds, thresholdOdd
   const validOdds = !isNaN(oddsNum) && oddsNum > 1;
   const fair = fairOdds ?? null;
   const thr = thresholdOdds ?? null;
-  // model_prob = 1/fair_odds. Expected value per 1u stake = (odds * prob) - 1
-  // = (odds/fair) - 1  → positive means edge (you get paid more than fair).
+  // Use model prob if passed, otherwise derive from fair odds.
+  const modelProb = winProb ?? (fair && fair > 1 ? 1 / fair : null);
   const evPct = validOdds && fair ? (oddsNum / fair - 1) * 100 : null;
-  // Edge over threshold = (odds - threshold) / threshold
   const thrEdgePct = validOdds && thr ? ((oddsNum - thr) / thr) * 100 : null;
-  // Verdict: green if odds ≥ threshold, blue if positive EV but below threshold, red if EV negative
   const verdict =
     evPct == null ? null :
     thr != null && oddsNum >= thr ? "VALUE" :
@@ -72,6 +87,16 @@ export function LogBetButton({ matchId, teamName, market, fairOdds, thresholdOdd
     verdict?.startsWith("+EV") ? "text-blue-400 bg-blue-500/10 border-blue-500/30" :
     verdict === "negative EV" ? "text-red-400 bg-red-500/10 border-red-500/30" :
     "";
+
+  // Half-Kelly suggested stake based on entered odds + model prob.
+  const suggestedStake = validOdds ? kellyStake(modelProb, oddsNum) : null;
+  // Auto-fill the stake field on first valid odds entry; let user override after.
+  const [touchedStake, setTouchedStake] = useState(false);
+  useEffect(() => {
+    if (!touchedStake && suggestedStake != null && suggestedStake > 0) {
+      setStake(suggestedStake.toString());
+    }
+  }, [suggestedStake, touchedStake]);
 
   return (
     <div className="flex flex-col gap-1">
@@ -90,12 +115,24 @@ export function LogBetButton({ matchId, teamName, market, fairOdds, thresholdOdd
         <span className="text-xs text-muted-foreground">units</span>
         <input
           type="number"
-          step="0.5"
-          min="0.5"
+          step="0.05"
+          min="0.05"
           value={stake}
-          onChange={(e) => setStake(e.target.value)}
-          className="w-14 text-xs bg-muted border border-border rounded px-2 py-0.5 font-mono focus:outline-none focus:border-amber-500/50"
+          onChange={(e) => { setStake(e.target.value); setTouchedStake(true); }}
+          className="w-16 text-xs bg-muted border border-border rounded px-2 py-0.5 font-mono focus:outline-none focus:border-amber-500/50"
         />
+        {suggestedStake != null && suggestedStake > 0 && (
+          <span className="text-[10px] text-muted-foreground">
+            Kelly →{" "}
+            <button
+              type="button"
+              onClick={() => { setStake(suggestedStake.toString()); setTouchedStake(false); }}
+              className="text-amber-400 hover:underline font-mono"
+            >
+              {suggestedStake.toFixed(2)}u
+            </button>
+          </span>
+        )}
         <button
           onClick={submit}
           disabled={saving || !odds}

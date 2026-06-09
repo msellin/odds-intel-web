@@ -542,8 +542,9 @@ export default async function Cs2AdminPage() {
                             matchId={m.id}
                             teamName={t.name}
                             market="match_winner"
-                            fairOdds={t.fair}
-                            thresholdOdds={t.thr}
+                            fairOdds={effFair}
+                            thresholdOdds={effThr}
+                            winProb={t.prob ?? (hltvProb ?? null)}
                           />
                         </div>
                       </div>
