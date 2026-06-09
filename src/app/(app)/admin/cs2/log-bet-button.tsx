@@ -28,11 +28,30 @@ function kellyStake(prob: number | null | undefined, odds: number): number | nul
 }
 
 export function LogBetButton({ matchId, teamName, market, fairOdds, thresholdOdds, winProb }: Props) {
+  // ── All hooks must run in the same order on every render. Keep them above
+  // any early returns. (Bug fixed 2026-06-09: useState+useEffect after early
+  // returns triggered React error #310 when clicking "log bet".)
   const [open, setOpen] = useState(false);
   const [odds, setOdds] = useState("");
   const [stake, setStake] = useState("1");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [touchedStake, setTouchedStake] = useState(false);
+
+  // Derived values for the edit form (always computed; only USED when open)
+  const oddsNum = parseFloat(odds);
+  const validOdds = !isNaN(oddsNum) && oddsNum > 1;
+  const fair = fairOdds ?? null;
+  const thr = thresholdOdds ?? null;
+  const modelProb = winProb ?? (fair && fair > 1 ? 1 / fair : null);
+  const suggestedStake = validOdds ? kellyStake(modelProb, oddsNum) : null;
+
+  // Auto-fill the stake field on first valid odds entry; let user override after.
+  useEffect(() => {
+    if (!touchedStake && suggestedStake != null && suggestedStake > 0) {
+      setStake(suggestedStake.toString());
+    }
+  }, [suggestedStake, touchedStake]);
 
   async function submit() {
     const o = parseFloat(odds);
@@ -68,13 +87,7 @@ export function LogBetButton({ matchId, teamName, market, fairOdds, thresholdOdd
     );
   }
 
-  // Live edge calculation as user types
-  const oddsNum = parseFloat(odds);
-  const validOdds = !isNaN(oddsNum) && oddsNum > 1;
-  const fair = fairOdds ?? null;
-  const thr = thresholdOdds ?? null;
-  // Use model prob if passed, otherwise derive from fair odds.
-  const modelProb = winProb ?? (fair && fair > 1 ? 1 / fair : null);
+  // Open-state derived values (EV / verdict)
   const evPct = validOdds && fair ? (oddsNum / fair - 1) * 100 : null;
   const thrEdgePct = validOdds && thr ? ((oddsNum - thr) / thr) * 100 : null;
   const verdict =
@@ -87,16 +100,6 @@ export function LogBetButton({ matchId, teamName, market, fairOdds, thresholdOdd
     verdict?.startsWith("+EV") ? "text-blue-400 bg-blue-500/10 border-blue-500/30" :
     verdict === "negative EV" ? "text-red-400 bg-red-500/10 border-red-500/30" :
     "";
-
-  // Half-Kelly suggested stake based on entered odds + model prob.
-  const suggestedStake = validOdds ? kellyStake(modelProb, oddsNum) : null;
-  // Auto-fill the stake field on first valid odds entry; let user override after.
-  const [touchedStake, setTouchedStake] = useState(false);
-  useEffect(() => {
-    if (!touchedStake && suggestedStake != null && suggestedStake > 0) {
-      setStake(suggestedStake.toString());
-    }
-  }, [suggestedStake, touchedStake]);
 
   return (
     <div className="flex flex-col gap-1">
