@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { TrendingUp, Check, Loader2 } from "lucide-react";
@@ -14,6 +14,10 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
 import { GoogleSignIn, DiscordSignIn, AuthDivider } from "@/components/google-sign-in";
+import { captureEvent } from "@/components/posthog-provider";
+
+const emailDomain = (e: string) =>
+  e.includes("@") ? e.split("@")[1]?.toLowerCase() ?? null : null;
 
 const FREE_FEATURES = [
   "All today's fixtures + live scores",
@@ -28,13 +32,53 @@ const FREE_FEATURES = [
 function SignUpForm() {
   const searchParams = useSearchParams();
   const plan = searchParams.get("plan") as "pro" | "elite" | null;
-  const [email, setEmail] = useState(searchParams.get("email") ?? "");
+  const prefilledEmail = searchParams.get("email") ?? "";
+  const [email, setEmail] = useState(prefilledEmail);
   const [step, setStep] = useState<"email" | "sent">("email");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const emailFocusedRef = useRef(false);
+  const emailTypedRef = useRef(false);
+
+  // Page view — separate from $pageview so we can segment by plan + prefill.
+  useEffect(() => {
+    captureEvent("signup_page_viewed", {
+      has_plan: Boolean(plan),
+      plan: plan ?? null,
+      has_prefilled_email: Boolean(prefilledEmail),
+      referrer: typeof document !== "undefined" ? document.referrer || null : null,
+    });
+  }, [plan, prefilledEmail]);
+
+  // Fired when the "sent" screen renders — the funnel's success cliff.
+  useEffect(() => {
+    if (step === "sent") {
+      captureEvent("signup_sent_screen_viewed", { email_domain: emailDomain(email) });
+    }
+  }, [step, email]);
+
+  const handleEmailFocus = () => {
+    if (emailFocusedRef.current) return;
+    emailFocusedRef.current = true;
+    captureEvent("signup_email_focused");
+  };
+
+  const handleEmailChange = (value: string) => {
+    setEmail(value);
+    if (!emailTypedRef.current && value.length > 0) {
+      emailTypedRef.current = true;
+      captureEvent("signup_email_typed");
+    }
+  };
+
   const handleSendLink = async () => {
     if (!email) return;
+    captureEvent("signup_submit_clicked", {
+      email_domain: emailDomain(email),
+      has_plan: Boolean(plan),
+      plan: plan ?? null,
+    });
     setError(null);
     setLoading(true);
     const supabase = createSupabaseBrowser();
@@ -47,8 +91,13 @@ function SignUpForm() {
     });
     setLoading(false);
     if (error) {
+      captureEvent("signup_otp_error", {
+        error_message: error.message,
+        email_domain: emailDomain(email),
+      });
       setError(error.message);
     } else {
+      captureEvent("signup_otp_sent", { email_domain: emailDomain(email) });
       setStep("sent");
     }
   };
@@ -91,7 +140,8 @@ function SignUpForm() {
                 type="email"
                 placeholder="you@example.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onFocus={handleEmailFocus}
+                onChange={(e) => handleEmailChange(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSendLink()}
               />
             </div>
@@ -123,14 +173,30 @@ function SignUpForm() {
 
             <p className="text-center text-xs text-muted-foreground">
               By signing up you agree to our{" "}
-              <Link href="/terms" className="text-primary hover:underline">Terms</Link>
+              <Link
+                href="/terms"
+                className="text-primary hover:underline"
+                onClick={() => captureEvent("signup_terms_clicked")}
+              >
+                Terms
+              </Link>
               {" "}and{" "}
-              <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>.
+              <Link
+                href="/privacy"
+                className="text-primary hover:underline"
+                onClick={() => captureEvent("signup_privacy_clicked")}
+              >
+                Privacy Policy
+              </Link>.
             </p>
 
             <p className="text-center text-sm text-muted-foreground">
               Already have an account?{" "}
-              <Link href={plan ? `/login?plan=${plan}` : "/login"} className="text-primary hover:underline">
+              <Link
+                href={plan ? `/login?plan=${plan}` : "/login"}
+                className="text-primary hover:underline"
+                onClick={() => captureEvent("signup_signin_link_clicked", { plan: plan ?? null })}
+              >
                 Sign in
               </Link>
             </p>
@@ -147,7 +213,11 @@ function SignUpForm() {
             </p>
             <button
               className="w-full text-center text-sm text-muted-foreground hover:text-primary transition-colors"
-              onClick={() => { setStep("email"); setError(null); }}
+              onClick={() => {
+                captureEvent("signup_use_different_email_clicked");
+                setStep("email");
+                setError(null);
+              }}
             >
               Use a different email
             </button>

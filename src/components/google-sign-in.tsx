@@ -3,19 +3,24 @@
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
+import { captureEvent } from "@/components/posthog-provider";
 
 export function GoogleSignIn() {
   const [loading, setLoading] = useState(false);
 
   const handleGoogleSignIn = async () => {
+    captureEvent("auth_oauth_clicked", { provider: "google" });
     setLoading(true);
     const supabase = createSupabaseBrowser();
-    await supabase.auth.signInWithOAuth({
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
       },
     });
+    if (error) {
+      captureEvent("auth_oauth_init_error", { provider: "google", error_message: error.message });
+    }
   };
 
   return (
@@ -55,14 +60,18 @@ export function DiscordSignIn() {
   const [loading, setLoading] = useState(false);
 
   const handleDiscordSignIn = async () => {
+    captureEvent("auth_oauth_clicked", { provider: "discord" });
     setLoading(true);
     const supabase = createSupabaseBrowser();
-    await supabase.auth.signInWithOAuth({
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: "discord",
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
       },
     });
+    if (error) {
+      captureEvent("auth_oauth_init_error", { provider: "discord", error_message: error.message });
+    }
   };
 
   return (
