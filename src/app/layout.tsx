@@ -9,6 +9,7 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 import { CookieBanner } from "@/components/cookie-banner";
 import { MetaPixel } from "@/components/meta-pixel";
 import { FeedbackButton } from "@/components/feedback-button";
+import { GoogleOneTap } from "@/components/google-one-tap";
 
 const inter = Inter({
   variable: "--font-sans",
@@ -128,6 +129,7 @@ export default function RootLayout({
         />
         <AuthProvider>
           <PostHogProvider>{children}</PostHogProvider>
+          <GoogleOneTap />
         </AuthProvider>
         <CookieBanner />
         <FeedbackButton />
