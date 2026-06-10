@@ -57,7 +57,7 @@ function PostHogPageView({ ready }: { ready: boolean }) {
 }
 
 function PostHogUserSync({ ready }: { ready: boolean }) {
-  const { user, profile } = useAuth();
+  const { user, profile, isAnonymous } = useAuth();
   const lastIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -65,20 +65,32 @@ function PostHogUserSync({ ready }: { ready: boolean }) {
 
     if (user && profile) {
       if (lastIdRef.current !== user.id) {
-        posthogRef.identify(user.id, {
-          email: profile.email,
-          name: profile.display_name ?? profile.email,
-          tier: profile.tier,
-          is_superadmin: profile.is_superadmin,
-          created_at: profile.created_at,
-        });
+        if (isAnonymous) {
+          // ANON-AUTH: don't call identify() for anonymous users — PostHog
+          // bills per identified user, and we don't have a real identity
+          // yet. Register the Supabase user.id as $distinct_id so events
+          // are stably attributed; we'll call identify() on upgrade.
+          posthogRef.register({
+            $distinct_id: user.id,
+            is_anonymous: true,
+            tier: profile.tier,
+          });
+        } else {
+          posthogRef.identify(user.id, {
+            email: profile.email ?? undefined,
+            name: profile.display_name ?? profile.email ?? "User",
+            tier: profile.tier,
+            is_superadmin: profile.is_superadmin,
+            created_at: profile.created_at,
+          });
+        }
         lastIdRef.current = user.id;
       }
     } else if (!user && lastIdRef.current) {
       posthogRef.reset();
       lastIdRef.current = null;
     }
-  }, [user, profile, ready]);
+  }, [user, profile, isAnonymous, ready]);
 
   return null;
 }

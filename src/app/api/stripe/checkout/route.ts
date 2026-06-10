@@ -49,6 +49,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // ANON-AUTH (mig 232): Stripe requires a real email per customer.
+  // Anonymous Supabase users have no email — they must upgrade first.
+  if (user.is_anonymous) {
+    return NextResponse.json(
+      {
+        error: "anonymous_upgrade_required",
+        message: "Create an account or sign in before subscribing.",
+      },
+      { status: 403 }
+    );
+  }
+
   const body = await req.json();
   let requestedPriceId: string = body.priceId;
 

@@ -15,7 +15,7 @@ export type UserTier = "free" | "pro" | "elite";
 
 export interface UserProfile {
   id: string;
-  email: string;
+  email: string | null;  // NULL for anonymous Supabase users (mig 232)
   display_name: string | null;
   tier: UserTier;
   is_superadmin: boolean;
@@ -32,6 +32,11 @@ interface AuthContextValue {
   session: Session | null;
   profile: UserProfile | null;
   loading: boolean;
+  // True when the current session is a Supabase anonymous user (no email,
+  // no identity providers linked yet). Use this to gate features that
+  // require a real identity (Stripe checkout, email digest opt-in,
+  // telegram link) and to drive the upgrade-CTA banner.
+  isAnonymous: boolean;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   loginModalOpen: boolean;
@@ -44,6 +49,7 @@ const AuthContext = createContext<AuthContextValue>({
   session: null,
   profile: null,
   loading: true,
+  isAnonymous: false,
   signOut: async () => {},
   refreshProfile: async () => {},
   loginModalOpen: false,
@@ -120,13 +126,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null);
   };
 
+  // ANON-AUTH (mig 232): two truth sources, prefer the Supabase
+  // is_anonymous flag from auth.users (set the moment signInAnonymously
+  // is called). Fall back to email-null check from our profiles row
+  // for resilience if the user object is stale.
+  const user = session?.user ?? null;
+  const isAnonymous =
+    Boolean(user?.is_anonymous) ||
+    (Boolean(user) && profile != null && profile.email == null);
+
   return (
     <AuthContext.Provider
       value={{
-        user: session?.user ?? null,
+        user,
         session,
         profile,
         loading,
+        isAnonymous,
         signOut,
         refreshProfile,
         loginModalOpen,
