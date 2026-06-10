@@ -11,6 +11,7 @@
 
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { captureEvent } from "@/components/posthog-provider";
+import { getTurnstileToken } from "@/lib/turnstile";
 
 export type AnonCreateSource =
   | "favorite_match"
@@ -56,11 +57,25 @@ export async function ensureAnonUser(
 
   captureEvent("anon_user_create_attempt", { source });
 
-  const { data, error } = await supabase.auth.signInAnonymously();
+  // PHASE 4: Cloudflare Turnstile captcha. getTurnstileToken returns null
+  // gracefully if the site key isn't configured (pre-deploy) or if the
+  // widget fails. We pass through to signInAnonymously either way — if
+  // Supabase has captcha enforcement off, the call still works without
+  // a token; if it's on and the token is null, Supabase rejects and
+  // we surface the error to the caller.
+  const captchaToken = await getTurnstileToken();
+  if (captchaToken) {
+    captureEvent("anon_user_captcha_token_obtained", { source });
+  }
+
+  const { data, error } = await supabase.auth.signInAnonymously(
+    captchaToken ? { options: { captchaToken } } : undefined
+  );
   if (error || !data.user) {
     captureEvent("anon_user_create_error", {
       source,
       error_message: error?.message ?? "no_user_returned",
+      had_captcha_token: Boolean(captchaToken),
     });
     return {
       user: null,
