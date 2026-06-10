@@ -6,6 +6,7 @@ import { MarketingNav } from "@/components/marketing-nav";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { CLVTrustBanner } from "@/components/clv-trust-banner";
+import { HeroGoogleCTA } from "@/components/hero-google-cta";
 import { getDashboardCache } from "@/lib/engine-data";
 
 // World Cup promo banner — auto-hides one week post-final (2026-07-26).
@@ -164,17 +165,23 @@ export default async function LandingPage() {
             </span>
           </div>
 
-          <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-            <Button
-              size="lg"
-              className="h-12 bg-green-500 px-8 text-base font-bold text-black shadow-lg shadow-green-500/20 hover:bg-green-400"
-              nativeButton={false} render={<Link href="/signup" />}
+          <div className="mt-8 flex flex-col items-center gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+              <HeroGoogleCTA />
+              <Button
+                size="lg"
+                className="h-12 bg-green-500 px-8 text-base font-bold text-black shadow-lg shadow-green-500/20 hover:bg-green-400"
+                nativeButton={false} render={<Link href="/login" />}
+              >
+                Start Free with Email
+              </Button>
+            </div>
+            <Link
+              href="/value-bets"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
-              Start Free
-            </Button>
-            <Button variant="ghost" size="lg" className="h-12 px-8 text-base border border-white/[0.15] text-foreground hover:bg-white/[0.05]" nativeButton={false} render={<Link href="/value-bets" />}>
-              See Today&apos;s Picks →
-            </Button>
+              Or browse today&apos;s picks first →
+            </Link>
           </div>
           {/* GROWTH-COPY-DENSITY-AUDIT Day 2: tightened from 12 to 5 words. */}
           <p className="mt-4 text-xs text-muted-foreground">
@@ -461,7 +468,7 @@ export default async function LandingPage() {
             <Button
               size="lg"
               className="h-12 bg-sky-500 px-8 text-base font-bold text-white hover:bg-sky-400"
-              nativeButton={false} render={<Link href="/signup" />}
+              nativeButton={false} render={<Link href="/login" />}
             >
               Start Free
             </Button>
