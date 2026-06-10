@@ -9,7 +9,7 @@ import {
   Lock,
   Flag,
   Users,
-  Activity,
+  Sparkles,
   Target,
   LayoutGrid,
   Home,
@@ -92,12 +92,18 @@ const TABS: WCTab[] = [
   { id: "knockouts", label: "Bracket", icon: Trophy },
   { id: "teams", label: "Teams", icon: Globe, href: "/world-cup/teams" },
   { id: "leaderboard", label: "Leaderboard", icon: Target },
-  { id: "scorers", label: "Top Scorers", icon: Activity },
+  { id: "predictions", label: "Predictions", icon: Sparkles },
 ];
+
+// Legacy `?tab=scorers` URLs (the panel used to be billed as "Top Scorers"
+// before it grew into the full pre-tournament AI predictions overview) keep
+// resolving to the new `predictions` tab so external links don't break.
+const TAB_ID_ALIASES: Record<string, string> = { scorers: "predictions" };
 
 function resolveTab(raw: string | undefined): string {
   if (!raw) return "overview";
-  return TABS.some((t) => t.id === raw) ? raw : "overview";
+  const aliased = TAB_ID_ALIASES[raw] ?? raw;
+  return TABS.some((t) => t.id === aliased) ? aliased : "overview";
 }
 
 // ── Knockout placeholder (kept inline — used in the Knockouts tab) ───────────
@@ -691,21 +697,6 @@ function BracketChallengePanel({ isAuthed }: { isAuthed: boolean }) {
   );
 }
 
-function ScorersPanel() {
-  return (
-    <section className="rounded-2xl border border-white/[0.08] bg-card/40 p-8 text-center">
-      <Activity className="mx-auto size-8 text-muted-foreground/40" />
-      <h2 className="mt-3 text-lg font-bold text-foreground sm:text-xl">Top scorers</h2>
-      <p className="mx-auto mt-2 max-w-sm text-xs text-muted-foreground sm:text-sm">
-        The tournament hasn&apos;t started yet — top scorers will appear here once matches go live.
-      </p>
-      <p className="mx-auto mt-2 max-w-sm text-[11px] text-muted-foreground/70">
-        First kick-off: Jun 11, 19:00 UTC · Mexico v South Africa.
-      </p>
-    </section>
-  );
-}
-
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default async function WorldCupPage({
@@ -880,7 +871,7 @@ function ActiveTabPanel({
     // Legacy /world-cup?tab=bracket URLs still route to the bracket page.
     case "bracket":
       return <BracketChallengePanel isAuthed={isAuthed} />;
-    case "scorers":
+    case "predictions":
       return (
         <WCPredictionsPanel
           groups={groups}
