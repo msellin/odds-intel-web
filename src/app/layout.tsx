@@ -10,6 +10,8 @@ import { CookieBanner } from "@/components/cookie-banner";
 import { MetaPixel } from "@/components/meta-pixel";
 import { FeedbackButton } from "@/components/feedback-button";
 import { GoogleOneTap } from "@/components/google-one-tap";
+import { UpgradeModalMount } from "@/components/upgrade-modal-mount";
+import { AnonUpgradeBanner } from "@/components/anon-upgrade-banner";
 
 const inter = Inter({
   variable: "--font-sans",
@@ -128,8 +130,10 @@ export default function RootLayout({
           }}
         />
         <AuthProvider>
+          <AnonUpgradeBanner />
           <PostHogProvider>{children}</PostHogProvider>
           <GoogleOneTap />
+          <UpgradeModalMount />
         </AuthProvider>
         <CookieBanner />
         <FeedbackButton />

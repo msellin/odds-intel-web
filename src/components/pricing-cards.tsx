@@ -6,6 +6,7 @@ import posthog from "posthog-js";
 import { Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BillingToggle } from "@/components/billing-toggle";
+import { useAuth } from "@/components/auth-provider";
 
 const proFeatures = [
   "Everything in Free",
@@ -35,23 +36,34 @@ const freeFeatures = [
   "Saved matches watchlist",
 ];
 
-async function openCheckout(tier: "pro" | "elite") {
-  const res = await fetch("/api/stripe/checkout", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ tier }),
-  });
-  if (res.status === 401) {
-    window.location.href = `/signup?plan=${tier}`;
-    return;
-  }
-  const data = await res.json();
-  if (data.url) window.location.href = data.url;
-}
-
 export function PricingCards() {
+  const { openUpgradeModal } = useAuth();
   const [annual, setAnnual] = useState(false);
   const [upgrading, setUpgrading] = useState<"pro" | "elite" | null>(null);
+
+  const openCheckout = async (tier: "pro" | "elite") => {
+    const res = await fetch("/api/stripe/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tier }),
+    });
+    if (res.status === 401) {
+      window.location.href = `/login?plan=${tier}`;
+      return;
+    }
+    if (res.status === 403) {
+      // ANON-AUTH: backend returns 403 anonymous_upgrade_required when an
+      // anon user tries to checkout. Surface the upgrade modal in-place so
+      // they can convert + then immediately retry Stripe.
+      const data = await res.json().catch(() => ({}));
+      if (data.error === "anonymous_upgrade_required") {
+        openUpgradeModal("stripe_checkout_blocked");
+        return;
+      }
+    }
+    const data = await res.json();
+    if (data.url) window.location.href = data.url;
+  };
 
   const handleUpgrade = async (tier: "pro" | "elite") => {
     posthog.capture("upgrade_clicked", { tier, source: "pricing_cards" });

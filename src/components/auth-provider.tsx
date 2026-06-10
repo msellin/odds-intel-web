@@ -27,6 +27,16 @@ export interface UserProfile {
   updated_at: string;
 }
 
+// ANON-AUTH PHASE 3 — what surface invoked the upgrade modal. Used as a
+// PostHog tag so we can attribute upgrades to the right activation hook.
+export type UpgradeTrigger =
+  | "3rd_favorite"
+  | "nth_pick"
+  | "pro_feature_gate"
+  | "banner"
+  | "manual"
+  | "stripe_checkout_blocked";
+
 interface AuthContextValue {
   user: User | null;
   session: Session | null;
@@ -42,6 +52,11 @@ interface AuthContextValue {
   loginModalOpen: boolean;
   openLoginModal: () => void;
   closeLoginModal: () => void;
+  // ANON-AUTH PHASE 3 — upgrade modal state (in-place conversion for anon users)
+  upgradeModalOpen: boolean;
+  upgradeTrigger: UpgradeTrigger;
+  openUpgradeModal: (trigger?: UpgradeTrigger) => void;
+  closeUpgradeModal: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -55,6 +70,10 @@ const AuthContext = createContext<AuthContextValue>({
   loginModalOpen: false,
   openLoginModal: () => {},
   closeLoginModal: () => {},
+  upgradeModalOpen: false,
+  upgradeTrigger: "manual",
+  openUpgradeModal: () => {},
+  closeUpgradeModal: () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -62,10 +81,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
+  const [upgradeTrigger, setUpgradeTrigger] = useState<UpgradeTrigger>("manual");
   const supabase = createSupabaseBrowser();
 
   const openLoginModal = useCallback(() => setLoginModalOpen(true), []);
   const closeLoginModal = useCallback(() => setLoginModalOpen(false), []);
+  const openUpgradeModal = useCallback(
+    (t: UpgradeTrigger = "manual") => {
+      setUpgradeTrigger(t);
+      setUpgradeModalOpen(true);
+    },
+    []
+  );
+  const closeUpgradeModal = useCallback(() => setUpgradeModalOpen(false), []);
 
   const fetchProfile = useCallback(
     async (userId: string) => {
@@ -148,6 +177,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loginModalOpen,
         openLoginModal,
         closeLoginModal,
+        upgradeModalOpen,
+        upgradeTrigger,
+        openUpgradeModal,
+        closeUpgradeModal,
       }}
     >
       {children}

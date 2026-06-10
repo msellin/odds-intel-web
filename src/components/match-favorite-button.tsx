@@ -21,7 +21,7 @@ export function MatchFavoriteButton({
   onToggle,
   className,
 }: MatchFavoriteButtonProps) {
-  const { user } = useAuth();
+  const { user, isAnonymous, openUpgradeModal } = useAuth();
   const [loading, setLoading] = useState(false);
   const isFavorited = favoriteMatchIds.has(matchId);
 
@@ -29,6 +29,7 @@ export function MatchFavoriteButton({
   // unauthenticated visitor silently creates a Supabase anonymous user, then
   // performs the favorite write against that user.id. They never see a
   // signup form — their favorites just start being saved.
+  // PHASE 3: once the anon user crosses 3 favorites, surface the upgrade modal.
 
   const handleToggle = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -39,16 +40,15 @@ export function MatchFavoriteButton({
     const supabase = createSupabaseBrowser();
 
     let activeUserId = user?.id;
+    let justCreatedAnon = false;
     if (!activeUserId) {
       const result = await ensureAnonUser(supabase, "favorite_match");
       if (!result.user) {
-        // Anon creation failed (rate limit, network, etc.). Bail silently;
-        // the button just won't toggle. We don't surface a sign-in prompt
-        // here because the design intent is "saving should feel free".
         setLoading(false);
         return;
       }
       activeUserId = result.user.id;
+      justCreatedAnon = result.created;
     }
 
     if (isFavorited) {
@@ -65,6 +65,20 @@ export function MatchFavoriteButton({
         .insert({ user_id: activeUserId, match_id: matchId });
       captureEvent("favorite_match_added");
       onToggle(matchId, true);
+
+      // PHASE 3 trigger: after the 3rd favorite (counting the one just added),
+      // nudge anonymous users to upgrade. Only for anon users — and not for
+      // the brand-new anon user we just created on this same click (let them
+      // get to 3 organically).
+      const newCount = favoriteMatchIds.size + 1;
+      if (
+        newCount === 3 &&
+        (isAnonymous || justCreatedAnon)
+      ) {
+        captureEvent("anon_upgrade_trigger_fired", { trigger: "3rd_favorite" });
+        // Tiny delay so the star animation lands before the modal opens.
+        setTimeout(() => openUpgradeModal("3rd_favorite"), 350);
+      }
     }
     setLoading(false);
   };
