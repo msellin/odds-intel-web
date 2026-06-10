@@ -22,18 +22,26 @@ const emailDomain = (e: string) =>
 type Mode = "password" | "magic";
 type Step = "form" | "magic_sent";
 
+// Supabase returns the same generic message for "wrong password", "user has
+// no password set", and "user doesn't exist" — by design (prevents user
+// enumeration). We surface a recovery UI in all three cases.
+const isCredentialError = (msg: string) =>
+  /invalid login credentials|invalid email or password/i.test(msg);
+
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const plan = searchParams.get("plan") as "pro" | "elite" | null;
+  const fromSignupHint = searchParams.get("from") === "signup_exists";
 
   const [mode, setMode] = useState<Mode>("password");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(searchParams.get("email") ?? "");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [step, setStep] = useState<Step>("form");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showRecovery, setShowRecovery] = useState(false);
 
   const emailFocusedRef = useRef(false);
   const emailTypedRef = useRef(false);
@@ -71,6 +79,7 @@ function LoginForm() {
       email_domain: emailDomain(email),
     });
     setError(null);
+    setShowRecovery(false);
     setLoading(true);
     const supabase = createSupabaseBrowser();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -80,11 +89,56 @@ function LoginForm() {
         error_message: error.message,
         email_domain: emailDomain(email),
       });
-      setError(error.message);
+      if (isCredentialError(error.message)) {
+        // Most likely: user signed up via Google/magic link and never set a
+        // password. Show recovery options instead of the cryptic error.
+        captureEvent("login_password_recovery_shown", {
+          email_domain: emailDomain(email),
+        });
+        setShowRecovery(true);
+        setError(null);
+      } else {
+        setError(error.message);
+      }
       return;
     }
     captureEvent("login_password_success", { email_domain: emailDomain(email) });
     router.push(plan ? `/pricing?plan=${plan}` : "/matches");
+  };
+
+  // One-click recovery: send a magic link to the email already typed in.
+  const handleRecoveryMagicLink = async () => {
+    if (!email) return;
+    captureEvent("login_recovery_magic_link_clicked", { email_domain: emailDomain(email) });
+    setError(null);
+    setLoading(true);
+    const supabase = createSupabaseBrowser();
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        shouldCreateUser: false,
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+    setLoading(false);
+    if (error) {
+      if (error.message.toLowerCase().includes("signups not allowed")) {
+        router.push(
+          plan
+            ? `/signup?plan=${plan}&email=${encodeURIComponent(email)}`
+            : `/signup?email=${encodeURIComponent(email)}`
+        );
+      } else {
+        captureEvent("login_recovery_magic_link_error", {
+          error_message: error.message,
+          email_domain: emailDomain(email),
+        });
+        setError(error.message);
+      }
+    } else {
+      captureEvent("login_recovery_magic_link_sent", { email_domain: emailDomain(email) });
+      setStep("magic_sent");
+    }
   };
 
   const handleMagicLink = async () => {
@@ -148,6 +202,14 @@ function LoginForm() {
           </div>
         )}
 
+        {fromSignupHint && step === "form" && (
+          <div className="rounded-md bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-sm text-amber-200">
+            You already have an account. Sign in below — if you signed up
+            with Google or a magic link, use those options or click{" "}
+            <span className="font-medium">Forgot</span> to set a password.
+          </div>
+        )}
+
         {step === "form" && (
           <>
             <GoogleSignIn />
@@ -197,6 +259,40 @@ function LoginForm() {
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  First time signing in with a password? Click{" "}
+                  <span className="text-foreground">Forgot</span> to set one.
+                </p>
+              </div>
+            )}
+
+            {showRecovery && (
+              <div className="rounded-md bg-amber-500/10 border border-amber-500/30 px-3 py-3 space-y-2">
+                <p className="text-sm text-amber-200 font-medium">
+                  Can&apos;t sign in with that password.
+                </p>
+                <p className="text-xs text-amber-200/80">
+                  Either the password is wrong, or you signed up before with
+                  Google / a magic link and never set one. Pick a way to
+                  recover:
+                </p>
+                <div className="flex flex-col gap-2 pt-1">
+                  <Button
+                    type="button"
+                    onClick={handleRecoveryMagicLink}
+                    disabled={loading || !email}
+                    className="w-full bg-amber-500/20 hover:bg-amber-500/30 text-amber-100 border border-amber-500/40"
+                  >
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : `Email a sign-in link to ${email}`}
+                  </Button>
+                  <Link
+                    href={`/forgot-password?email=${encodeURIComponent(email)}`}
+                    onClick={() => captureEvent("login_recovery_reset_clicked")}
+                    className="text-center text-xs text-amber-200/80 hover:text-amber-100"
+                  >
+                    Reset my password instead
+                  </Link>
                 </div>
               </div>
             )}

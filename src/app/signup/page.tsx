@@ -119,6 +119,20 @@ function SignUpForm() {
         error_message: error.message,
         email_domain: emailDomain(email),
       });
+      // Email already has an account — gently shepherd them to /login instead
+      // of showing the cryptic Supabase error.
+      if (/already (registered|exists|in use)|user already/i.test(error.message)) {
+        captureEvent("signup_already_registered_redirect", {
+          email_domain: emailDomain(email),
+        });
+        const q = new URLSearchParams({
+          email,
+          from: "signup_exists",
+        });
+        if (plan) q.set("plan", plan);
+        router.push(`/login?${q.toString()}`);
+        return;
+      }
       setError(error.message);
       return;
     }
