@@ -4,8 +4,9 @@ import { useState, useEffect } from "react";
 import { Check, Loader2 } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
+import { ensureAnonUser } from "@/lib/anon-auth";
+import { captureEvent } from "@/components/posthog-provider";
 import { cn } from "@/lib/utils";
-import Link from "next/link";
 
 interface MatchPickButtonProps {
   matchId: string;
@@ -58,21 +59,9 @@ export function MatchPickButton({
       });
   }, [user, matchId]);
 
-  if (!user) {
-    return (
-      <div className="rounded-lg border border-dashed border-white/10 bg-white/[0.02] p-4 text-center">
-        <p className="text-sm text-muted-foreground mb-2">
-          Track your predictions and build your record
-        </p>
-        <Link
-          href="/signup"
-          className="inline-flex items-center justify-center rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700"
-        >
-          Sign up to make picks
-        </Link>
-      </div>
-    );
-  }
+  // ANON-AUTH PHASE 2: anonymous visitors see the pick UI just like signed-in
+  // users. First time they make a pick, ensureAnonUser silently creates a
+  // Supabase anonymous user behind the scenes.
 
   if (initialLoading) {
     return (
@@ -94,10 +83,20 @@ export function MatchPickButton({
       selection === "home" ? bestHome : selection === "draw" ? bestDraw : bestAway;
 
     const supabase = createSupabaseBrowser();
+    let activeUserId = user?.id;
+    if (!activeUserId) {
+      const result = await ensureAnonUser(supabase, "tracker_pick");
+      if (!result.user) {
+        setLoading(false);
+        return;
+      }
+      activeUserId = result.user.id;
+    }
+
     const { data, error } = await supabase
       .from("user_picks")
       .insert({
-        user_id: user.id,
+        user_id: activeUserId,
         match_id: matchId,
         selection,
         odds: odds || null,
@@ -107,6 +106,7 @@ export function MatchPickButton({
       .single();
 
     if (!error && data) {
+      captureEvent("tracker_pick_made", { selection });
       setPick(data as UserPick);
     }
     setLoading(false);
