@@ -16,13 +16,205 @@ function createAdmin() {
   );
 }
 
-async function sendReply(chatId: number, text: string) {
+async function sendReply(chatId: number, text: string, parseMode?: "Markdown" | "HTML") {
   if (!BOT_TOKEN) return;
+  // Telegram caps messages at 4096 chars. Our /today report could
+  // exceed that with high placement days — defensively truncate so the
+  // call doesn't 400 (vs silently dropping all info beyond char 4096).
+  const safe = text.length > 4000 ? text.slice(0, 3970) + "\n…(truncated)" : text;
+  const body: Record<string, unknown> = { chat_id: chatId, text: safe };
+  if (parseMode) body.parse_mode = parseMode;
   await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text }),
+    body: JSON.stringify(body),
   });
+}
+
+// COOLBET-FS-SESSION-STABLE Step 1.6 (2026-06-11): operator commands.
+// Gated by TELEGRAM_CHAT_ID — same single-operator env the existing
+// place-button + admin alerts already use. Non-operator chats get a
+// silent no-op so random users messaging the bot don't trigger them.
+
+function isOperator(chatId: number): boolean {
+  return !!ADMIN_CHAT_ID && String(chatId) === String(ADMIN_CHAT_ID);
+}
+
+function fmtTimeAgo(ts: string | null | undefined): string {
+  if (!ts) return "never";
+  const ageMs = Date.now() - new Date(ts).getTime();
+  if (ageMs < 60_000) return `${Math.round(ageMs / 1000)}s ago`;
+  if (ageMs < 3_600_000) return `${Math.round(ageMs / 60_000)}m ago`;
+  if (ageMs < 86_400_000) return `${Math.round(ageMs / 3_600_000)}h ago`;
+  return `${Math.round(ageMs / 86_400_000)}d ago`;
+}
+
+function fmtJwtTtl(jwtExpAt: string | null | undefined): string {
+  if (!jwtExpAt) return "no JWT";
+  const ttlMs = new Date(jwtExpAt).getTime() - Date.now();
+  if (ttlMs < 0) return `EXPIRED ${fmtTimeAgo(jwtExpAt)}`;
+  if (ttlMs < 60_000) return `${Math.round(ttlMs / 1000)}s left`;
+  return `${Math.round(ttlMs / 60_000)}m left`;
+}
+
+async function handleStatusCommand(
+  chatId: number,
+  admin: ReturnType<typeof createAdmin>,
+): Promise<void> {
+  // Read the singleton state row (mig 242 + 243 + 244).
+  const { data: state, error } = await admin
+    .from("coolbet_session_state")
+    .select("*")
+    .eq("id", 1)
+    .maybeSingle();
+
+  if (error || !state) {
+    await sendReply(chatId, "❌ Could not read coolbet_session_state — DB or RLS issue.");
+    return;
+  }
+
+  const healthGlyph = state.session_healthy ? "✅" : "❌";
+  const pausedLine = state.placement_paused
+    ? `\n🛑 PAUSED — reason: ${state.placement_paused_reason || "(none)"}\n   paused at: ${fmtTimeAgo(state.placement_paused_at)}`
+    : "";
+
+  const lines = [
+    `${healthGlyph} Coolbet session — ${state.session_healthy ? "healthy" : "UNHEALTHY"}`,
+    pausedLine,
+    ``,
+    `🔐 last login:  ${fmtTimeAgo(state.last_login_at)} (${state.last_login_method || "?"})`,
+    `🔑 JWT user:   ${state.jwt_user_id || "(none)"}`,
+    `⏱  JWT TTL:    ${fmtJwtTtl(state.jwt_exp_at)}`,
+    `💓 heartbeat:  ${state.last_heartbeat_ok ? "OK" : "FAIL"} ${fmtTimeAgo(state.last_heartbeat_at)}`,
+    `🍪 cookies:    ${state.cookies_count_last ?? 0} refreshed ${fmtTimeAgo(state.cookies_last_refresh_at)}`,
+    `🖥  FS session: ${state.fs_session_name || "?"}`,
+    `📱 device ID:  ${state.device_id ? state.device_id.slice(0, 8) + "…" : "(none — will auto-gen)"}`,
+  ];
+
+  if (state.last_error) {
+    lines.push("", `⚠️  last error: ${String(state.last_error).slice(0, 300)}`);
+    lines.push(`   at: ${fmtTimeAgo(state.last_error_at)}`);
+  }
+  await sendReply(chatId, lines.filter((l) => l !== "").join("\n"));
+}
+
+async function handleTodayCommand(
+  chatId: number,
+  admin: ReturnType<typeof createAdmin>,
+): Promise<void> {
+  // Today's real_bets — what got placed, slippage, results so far.
+  const { data: bets, error } = await admin
+    .from("real_bets")
+    .select("market, selection, captured_odds, actual_odds, stake, result, pnl, placed_at, bookmaker")
+    .gte("placed_at", new Date(Date.now() - 24 * 3600_000).toISOString())
+    .order("placed_at", { ascending: false })
+    .limit(20);
+
+  if (error) {
+    await sendReply(chatId, `❌ DB error: ${error.message}`);
+    return;
+  }
+  if (!bets || bets.length === 0) {
+    await sendReply(chatId, "📋 No real_bets in the last 24h.");
+    return;
+  }
+
+  const totalStake = bets.reduce((s: number, b: { stake: number | null }) => s + Number(b.stake ?? 0), 0);
+  const settled = bets.filter((b: { result: string | null }) => b.result === "won" || b.result === "lost");
+  const won = bets.filter((b: { result: string | null }) => b.result === "won").length;
+  const lost = bets.filter((b: { result: string | null }) => b.result === "lost").length;
+  const pending = bets.length - settled.length;
+  const totalPnL = bets.reduce((s: number, b: { pnl: number | null }) => s + Number(b.pnl ?? 0), 0);
+
+  const lines = [
+    `📋 real_bets last 24h: ${bets.length} placements`,
+    `   stake: €${totalStake.toFixed(2)} · settled: ${settled.length} (${won}W/${lost}L) · pending: ${pending}`,
+    `   PnL: ${totalPnL >= 0 ? "+" : ""}€${totalPnL.toFixed(2)}`,
+    ``,
+  ];
+
+  // Show up to 10 most-recent entries — beyond that we'd exceed Telegram's
+  // 4096-char ceiling. Older ones are visible via the /admin/real-bets page.
+  for (const b of bets.slice(0, 10)) {
+    const ts = new Date(b.placed_at).toISOString().slice(11, 16); // HH:MM
+    const slip = b.actual_odds && b.captured_odds
+      ? ` (slip ${(((b.actual_odds - b.captured_odds) / b.captured_odds) * 100).toFixed(1)}%)`
+      : "";
+    const outcome = b.result === "won" ? "✓"
+      : b.result === "lost" ? "✗"
+      : "⏳";
+    const pnl = (b.result === "won" || b.result === "lost") && b.pnl !== null
+      ? ` ${b.pnl >= 0 ? "+" : ""}€${Number(b.pnl).toFixed(2)}`
+      : "";
+    lines.push(`${outcome} ${ts} ${b.market}/${b.selection} @ ${b.actual_odds ?? "?"}${slip} · €${b.stake}${pnl}`);
+  }
+
+  if (bets.length > 10) {
+    lines.push("", `…and ${bets.length - 10} more — see /admin/real-bets`);
+  }
+  await sendReply(chatId, lines.join("\n"));
+}
+
+async function handlePauseCommand(
+  chatId: number,
+  admin: ReturnType<typeof createAdmin>,
+  reason: string,
+): Promise<void> {
+  const { error } = await admin
+    .from("coolbet_session_state")
+    .update({
+      placement_paused: true,
+      placement_paused_at: new Date().toISOString(),
+      placement_paused_reason: reason || "operator /pause",
+    })
+    .eq("id", 1);
+  if (error) {
+    await sendReply(chatId, `❌ Could not set placement_paused: ${error.message}`);
+    return;
+  }
+  await sendReply(
+    chatId,
+    `🛑 Auto-placer PAUSED. Next pipeline tick will skip placements until /resume.\n` +
+    `Reason logged: ${reason || "(none)"}`,
+  );
+}
+
+async function handleResumeCommand(
+  chatId: number,
+  admin: ReturnType<typeof createAdmin>,
+): Promise<void> {
+  const { error } = await admin
+    .from("coolbet_session_state")
+    .update({
+      placement_paused: false,
+      placement_paused_at: null,
+      placement_paused_reason: null,
+    })
+    .eq("id", 1);
+  if (error) {
+    await sendReply(chatId, `❌ Could not clear placement_paused: ${error.message}`);
+    return;
+  }
+  await sendReply(chatId, "▶️  Auto-placer RESUMED. Next pipeline tick will place qualifying bets again.");
+}
+
+async function handleHelpCommand(chatId: number): Promise<void> {
+  await sendReply(
+    chatId,
+    [
+      "🤖 OddsIntel Coolbet bot — operator commands:",
+      "",
+      "/status        — session health, JWT TTL, last heartbeat, errors",
+      "/today         — real_bets placed in last 24h + stake + PnL",
+      "/pause <reason>— halt auto-placement until /resume (instant; no restart)",
+      "/resume        — re-enable auto-placement",
+      "/help          — this message",
+      "",
+      "User commands (anyone):",
+      "/start <uuid>  — connect this chat to a user account",
+      "/stop          — disconnect",
+    ].join("\n"),
+  );
 }
 
 // MANUAL-PLACE: ack the button tap. Telegram requires a callback_query response
@@ -152,6 +344,32 @@ export async function POST(req: NextRequest) {
   const text = (message.text as string | undefined)?.trim() ?? "";
 
   if (!chatId) return new NextResponse("OK", { status: 200 });
+
+  // Operator commands (gated by TELEGRAM_CHAT_ID env). Try these first so
+  // user-flow commands (/start, /stop) below don't accidentally swallow them.
+  if (isOperator(chatId)) {
+    if (text === "/status") {
+      await handleStatusCommand(chatId, admin);
+      return new NextResponse("OK", { status: 200 });
+    }
+    if (text === "/today") {
+      await handleTodayCommand(chatId, admin);
+      return new NextResponse("OK", { status: 200 });
+    }
+    if (text === "/pause" || text.startsWith("/pause ")) {
+      const reason = text === "/pause" ? "" : text.slice("/pause ".length).trim();
+      await handlePauseCommand(chatId, admin, reason);
+      return new NextResponse("OK", { status: 200 });
+    }
+    if (text === "/resume") {
+      await handleResumeCommand(chatId, admin);
+      return new NextResponse("OK", { status: 200 });
+    }
+    if (text === "/help") {
+      await handleHelpCommand(chatId);
+      return new NextResponse("OK", { status: 200 });
+    }
+  }
 
   if (text.startsWith("/start")) {
     // /start <user_uuid>  — links this Telegram chat to the OddsIntel profile
