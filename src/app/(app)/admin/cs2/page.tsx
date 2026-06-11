@@ -63,6 +63,9 @@ interface SimBet {
   edge: number;
   result: string | null;
   pnl: number | null;
+  placed_at: string;
+  team1: string;
+  team2: string;
 }
 
 interface HltvPred {
@@ -148,7 +151,7 @@ export default async function Cs2AdminPage() {
     db.from("cs2_upcoming_matches").select("*")
       .gte("kickoff_time", now.toISOString()).lte("kickoff_time", cutoff)
       .order("kickoff_time", { ascending: true }),
-    db.from("cs2_simulated_bets").select("id,bot_name,bo3gg_id,market,pick,bookie,odds_at_pick,edge,result,pnl")
+    db.from("cs2_simulated_bets").select("id,bot_name,bo3gg_id,market,pick,bookie,odds_at_pick,edge,result,pnl,placed_at,team1,team2")
       .order("placed_at", { ascending: false }).limit(200),
     db.from("cs2_predictions").select("*", { count: "exact", head: true })
       .eq("model_version", "elo+pq_v1"),
@@ -185,33 +188,43 @@ export default async function Cs2AdminPage() {
   const scraperRows = scraperRowsResult.data ?? [];
   const backtestRows = backtestRowsResult.data ?? [];
 
-  // Fetch latest fallback predictions — prefer v7 (AUC 0.694) over hltv_v1
-  // (AUC 0.673) when both exist for a match. Query both, then pick v7 if
-  // present in the per-match map.
+  // Fetch latest fallback predictions — prefer v8 (AUC 0.703) over v7 (0.694)
+  // over hltv_v1 (0.673) when multiple exist for a match. Same preference
+  // order as cs2_bot.py uses.
   const upcomingBo3IDs = ((rows ?? []) as Cs2Match[])
     .map((m) => m.bo3gg_id).filter((id): id is number => id != null);
   const { data: hltvPredRows } = upcomingBo3IDs.length
     ? await db.from("cs2_predictions")
         .select("bo3gg_id,win_prob1,win_prob2,fair_odds1,fair_odds2,hltv_rank1,hltv_rank2,hltv_points1,hltv_points2,scan_time,model_version")
-        .in("model_version", ["v7", "hltv_v1"])
+        .in("model_version", ["v8", "v7", "hltv_v1"])
         .in("bo3gg_id", upcomingBo3IDs)
         .order("scan_time", { ascending: false })
     : { data: [] };
-  // Walk rows once: prefer v7 entry for each match; fall back to hltv_v1.
-  // Rows come sorted by scan_time desc, so the first v7 we see is the freshest.
+  // Walk rows once with model preference v8 > v7 > hltv_v1.
   const hltvByMatch = new Map<number, HltvPred>();
+  const sourceByMatch = new Map<number, string>();
+  const v8Seen = new Set<number>();
   const v7Seen = new Set<number>();
   for (const p of (hltvPredRows ?? []) as (HltvPred & { model_version?: string })[]) {
     const mv = p.model_version;
-    if (mv === "v7") {
-      if (!v7Seen.has(p.bo3gg_id)) {
-        hltvByMatch.set(p.bo3gg_id, p);
-        v7Seen.add(p.bo3gg_id);
+    const id = p.bo3gg_id;
+    if (mv === "v8") {
+      if (!v8Seen.has(id)) {
+        hltvByMatch.set(id, p); sourceByMatch.set(id, "v8"); v8Seen.add(id);
       }
-    } else if (!hltvByMatch.has(p.bo3gg_id)) {
-      hltvByMatch.set(p.bo3gg_id, p);
+    } else if (mv === "v7") {
+      if (!v8Seen.has(id) && !v7Seen.has(id)) {
+        hltvByMatch.set(id, p); sourceByMatch.set(id, "v7"); v7Seen.add(id);
+      }
+    } else {
+      if (!v8Seen.has(id) && !v7Seen.has(id) && !hltvByMatch.has(id)) {
+        hltvByMatch.set(id, p); sourceByMatch.set(id, "hltv_v1");
+      }
     }
   }
+  const v8Coverage = v8Seen.size;
+  const v7Coverage = v7Seen.size;
+  const hltvOnlyCoverage = hltvByMatch.size - v8Coverage - v7Coverage;
 
   // Aggregate latest run per CS2 job
   const cs2Jobs = ["cs2_scanner", "cs2_settlement", "cs2_coolbet_scanner", "cs2_bot", "cs2_pandascore_rosters"];
@@ -430,8 +443,10 @@ export default async function Cs2AdminPage() {
           <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Model coverage</div>
           <div className="text-lg font-bold tabular-nums">{anyCoverage}</div>
           <div className="text-[9px] text-muted-foreground tabular-nums">
-            ELO {matches.filter((m) => m.has_elo_history).length} ·
-            <span className="text-purple-400"> HLTV {hltvCoverage}</span>
+            ELO {matches.filter((m) => m.has_elo_history).length}
+            {v8Coverage > 0 && <> · <span className="text-emerald-400">v8 {v8Coverage}</span></>}
+            {v7Coverage > 0 && <> · <span className="text-cyan-400">v7 {v7Coverage}</span></>}
+            {hltvOnlyCoverage > 0 && <> · <span className="text-purple-400">hltv {hltvOnlyCoverage}</span></>}
           </div>
         </div>
         <div className="rounded border border-green-500/30 bg-green-500/5 p-2">
@@ -488,6 +503,59 @@ export default async function Cs2AdminPage() {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Recent picks history — last 20 across all bots */}
+      {bots.length > 0 && (
+        <div className="rounded border border-border bg-card/30 p-2 text-xs">
+          <div className="text-muted-foreground text-[10px] uppercase tracking-wide font-semibold mb-1.5">
+            Recent picks ({Math.min(bots.length, 20)} of {bots.length})
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[11px] tabular-nums">
+              <thead className="text-muted-foreground text-[10px] uppercase">
+                <tr>
+                  <th className="text-left font-normal pr-2">Placed</th>
+                  <th className="text-left font-normal pr-2">Match</th>
+                  <th className="text-left font-normal pr-2">Pick</th>
+                  <th className="text-left font-normal pr-2">Bookie</th>
+                  <th className="text-right font-normal px-2">Odds</th>
+                  <th className="text-right font-normal px-2">Edge</th>
+                  <th className="text-right font-normal px-2">Result</th>
+                  <th className="text-right font-normal pl-2">PnL</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bots.slice(0, 20).map((b) => {
+                  const resColor = b.result === "won" ? "text-green-400"
+                    : b.result === "lost" ? "text-red-400"
+                    : b.result === "voided" ? "text-muted-foreground"
+                    : "text-blue-400";
+                  const pnlColor = (b.pnl ?? 0) > 0 ? "text-green-400"
+                    : (b.pnl ?? 0) < 0 ? "text-red-400" : "text-muted-foreground";
+                  const placed = new Date(b.placed_at).toLocaleString("en-GB", {
+                    timeZone: "Europe/Tallinn", day: "2-digit", month: "short",
+                    hour: "2-digit", minute: "2-digit",
+                  });
+                  return (
+                    <tr key={b.id} className="border-t border-border/30">
+                      <td className="pr-2 text-muted-foreground">{placed}</td>
+                      <td className="pr-2 truncate max-w-[180px]">{b.team1} vs {b.team2}</td>
+                      <td className="pr-2 font-mono">{b.pick}</td>
+                      <td className="pr-2 text-muted-foreground">{b.bookie}</td>
+                      <td className="text-right px-2">{Number(b.odds_at_pick).toFixed(2)}</td>
+                      <td className="text-right px-2 text-green-400">{(Number(b.edge) * 100).toFixed(1)}%</td>
+                      <td className={`text-right px-2 ${resColor}`}>{b.result ?? "open"}</td>
+                      <td className={`text-right pl-2 ${pnlColor}`}>
+                        {b.pnl != null ? (b.pnl > 0 ? "+" : "") + Number(b.pnl).toFixed(3) : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
