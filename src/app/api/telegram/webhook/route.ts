@@ -256,6 +256,72 @@ async function handleCallbackQuery(
     return;
   }
 
+  // COOLBET-SIGNALER-A-BUTTONS (2026-06-12): inline buttons on bet-signal
+  // messages let the operator mark each pick as placed/skipped with one
+  // tap. Updates simulated_bets.user_placed_at / user_skipped_at and
+  // edits the original message to append a status footer.
+  if (data.startsWith("sigplaced:") || data.startsWith("sigskip:")) {
+    const isPlaced = data.startsWith("sigplaced:");
+    const prefix = isPlaced ? "sigplaced:" : "sigskip:";
+    const sigSimId = data.slice(prefix.length).trim();
+    if (!UUID_RE.test(sigSimId)) {
+      await answerCallbackQuery(cqId, "❌ Invalid bet id", true);
+      return;
+    }
+    const column = isPlaced ? "user_placed_at" : "user_skipped_at";
+
+    // Look up the (match,market,selection) tuple so we mark ALL sibling
+    // bot picks at once — same dedup model as _mark_signaled in the
+    // signaler. Without this, the *other* bots' picks of the same bet
+    // would still appear as "unplaced" in any future tracker.
+    const { data: target, error: targetErr } = await admin
+      .from("simulated_bets")
+      .select("match_id, market, selection")
+      .eq("id", sigSimId)
+      .maybeSingle();
+    if (targetErr || !target) {
+      await answerCallbackQuery(cqId, "❌ Bet not found", true);
+      return;
+    }
+
+    const { error: updErr } = await admin
+      .from("simulated_bets")
+      .update({ [column]: new Date().toISOString() })
+      .eq("match_id", target.match_id)
+      .eq("market", target.market)
+      .eq("selection", target.selection)
+      .is(column, null);
+    if (updErr) {
+      console.error(`simulated_bets.${column} update failed`, updErr);
+      await answerCallbackQuery(cqId, "❌ DB update failed", true);
+      return;
+    }
+
+    // Edit the original message to show "✓ Marked placed HH:MM UTC" /
+    // "⏭ Skipped HH:MM UTC" footer. Keep original body intact above the
+    // footer so the operator's audit trail isn't lost.
+    const original = (message?.text as string | undefined) ?? "";
+    const stamp = new Date().toISOString().slice(11, 16) + " UTC";
+    const footer = isPlaced
+      ? `\n— ✅ Placed @ ${stamp}`
+      : `\n— ⏭ Skipped @ ${stamp}`;
+    if (chatId && messageId && BOT_TOKEN) {
+      await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          message_id: messageId,
+          text: original + footer,
+          disable_web_page_preview: true,
+        }),
+      });
+    }
+
+    await answerCallbackQuery(cqId, isPlaced ? "✅ Marked placed" : "⏭ Skipped");
+    return;
+  }
+
   if (!data.startsWith("place:")) {
     await answerCallbackQuery(cqId, "Unknown action");
     return;
