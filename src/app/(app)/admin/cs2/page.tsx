@@ -37,6 +37,8 @@ interface Cs2Match {
   bookie_odds2: number | null;
   coolbet_odds1: number | null;
   coolbet_odds2: number | null;
+  coolbet_odds_map1: number | null;
+  coolbet_odds_map2: number | null;
   pinnacle_odds1: number | null;
   pinnacle_odds2: number | null;
   roster_change1: boolean;
@@ -576,6 +578,7 @@ export default async function Cs2AdminPage() {
                 key: "1" as const, name: m.team1, elo: m.elo1, prob: m.win_prob1,
                 fair: m.fair_odds1, thr: m.threshold_odds1,
                 fairMap: m.fair_odds_map1, thrMap: m.threshold_map1,
+                coolbetMap: m.coolbet_odds_map1,
                 rosterChange: m.roster_change1, rosterNote: m.roster_note1,
                 playerRating: m.player_rating1,
                 dsrc: m.days_since_roster_change1,
@@ -584,6 +587,7 @@ export default async function Cs2AdminPage() {
                 key: "2" as const, name: m.team2, elo: m.elo2, prob: m.win_prob2,
                 fair: m.fair_odds2, thr: m.threshold_odds2,
                 fairMap: m.fair_odds_map2, thrMap: m.threshold_map2,
+                coolbetMap: m.coolbet_odds_map2,
                 rosterChange: m.roster_change2, rosterNote: m.roster_note2,
                 playerRating: m.player_rating2,
                 dsrc: m.days_since_roster_change2,
@@ -729,21 +733,47 @@ export default async function Cs2AdminPage() {
                   })}
                 </div>
 
-                {/* ≥1 map markets — collapsed on its own line when present */}
+                {/* ≥1 map markets — collapsed on its own line when present.
+                    Edge shown when coolbet_odds_map* is populated (mig 250). */}
                 {m.best_of >= 3 && m.threshold_map1 != null && (
-                  <div className="px-3 py-1.5 border-t border-border/40 text-[11px] flex items-center gap-3 bg-muted/10">
+                  <div className="px-3 py-1.5 border-t border-border/40 text-[11px] flex items-center gap-3 bg-muted/10 flex-wrap">
                     <span className="text-muted-foreground uppercase tracking-wider text-[10px]">Wins ≥1 map</span>
-                    {sides.map((t) => (
-                      <div key={t.name} className="flex items-center gap-1.5">
-                        <span className="text-muted-foreground">{t.name.split(" ")[0]}:</span>
-                        <span className="font-mono">bet ≥ <span className="font-bold">{fmtOdds(t.thrMap)}</span></span>
-                        <LogBetButton
-                          matchId={m.id} teamName={t.name} market="atleast1map"
-                          fairOdds={t.fairMap} thresholdOdds={t.thrMap}
-                          bankrollEur={minCs2Bankroll}
-                        />
-                      </div>
-                    ))}
+                    {sides.map((t) => {
+                      // Compute model fair prob from fair_odds_map (1/fair = prob).
+                      // Edge = coolbetOdds * prob - 1. Display only when both
+                      // values exist and edge is meaningfully positive (≥ 1%).
+                      const fairProb = t.fairMap ? 1 / t.fairMap : null;
+                      const edge = (t.coolbetMap && fairProb)
+                        ? t.coolbetMap * fairProb - 1
+                        : null;
+                      const edgeColor = edge == null
+                        ? "text-muted-foreground"
+                        : edge >= 0.05 ? "text-green-400"
+                        : edge >= 0.01 ? "text-yellow-400"
+                        : "text-red-400";
+                      const meetsThreshold = t.coolbetMap && t.thrMap && t.coolbetMap >= t.thrMap;
+                      return (
+                        <div key={t.name} className="flex items-center gap-1.5">
+                          <span className="text-muted-foreground">{t.name.split(" ")[0]}:</span>
+                          <span className="font-mono">bet ≥ <span className="font-bold">{fmtOdds(t.thrMap)}</span></span>
+                          {t.coolbetMap != null && (
+                            <span className="font-mono text-muted-foreground">
+                              · CB <span className={meetsThreshold ? "text-green-400 font-bold" : ""}>{fmtOdds(t.coolbetMap)}</span>
+                            </span>
+                          )}
+                          {edge != null && (
+                            <span className={`font-mono font-semibold ${edgeColor}`}>
+                              {edge >= 0 ? "+" : ""}{Math.round(edge * 100)}%
+                            </span>
+                          )}
+                          <LogBetButton
+                            matchId={m.id} teamName={t.name} market="atleast1map"
+                            fairOdds={t.fairMap} thresholdOdds={t.thrMap}
+                            bankrollEur={minCs2Bankroll}
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 
