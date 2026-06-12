@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
 import { GoogleSignIn, DiscordSignIn, AuthDivider } from "@/components/google-sign-in";
 import { captureEvent } from "@/components/posthog-provider";
+import { getTurnstileToken } from "@/lib/turnstile";
 
 const MIN_PASSWORD = 6;
 
@@ -94,7 +95,12 @@ function AuthForm() {
     const supabase = createSupabaseBrowser();
 
     // Try sign-in first.
-    const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
+    const signInCaptcha = await getTurnstileToken();
+    const { error: signInErr } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+      ...(signInCaptcha ? { options: { captchaToken: signInCaptcha } } : {}),
+    });
     if (!signInErr) {
       setLoading(false);
       captureEvent("auth_signed_in_existing", { email_domain: emailDomain(email) });
@@ -116,11 +122,13 @@ function AuthForm() {
       return;
     }
 
+    const signUpCaptcha = await getTurnstileToken();
     const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: `${window.location.origin}/auth/callback${plan ? `?plan=${plan}` : ""}`,
+        ...(signUpCaptcha ? { captchaToken: signUpCaptcha } : {}),
       },
     });
     setLoading(false);
@@ -162,11 +170,13 @@ function AuthForm() {
     setError(null);
     setLoading(true);
     const supabase = createSupabaseBrowser();
+    const otpCaptcha = await getTurnstileToken();
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
         shouldCreateUser: true,
         emailRedirectTo: `${window.location.origin}/auth/callback${plan ? `?plan=${plan}` : ""}`,
+        ...(otpCaptcha ? { captchaToken: otpCaptcha } : {}),
       },
     });
     setLoading(false);

@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
 import { captureEvent } from "@/components/posthog-provider";
+import { getTurnstileToken } from "@/lib/turnstile";
 
 const emailDomain = (e: string) =>
   e.includes("@") ? e.split("@")[1]?.toLowerCase() ?? null : null;
@@ -27,8 +28,10 @@ function ForgotPasswordForm() {
     setError(null);
     setLoading(true);
     const supabase = createSupabaseBrowser();
+    const captchaToken = await getTurnstileToken();
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
+      ...(captchaToken ? { captchaToken } : {}),
     });
     setLoading(false);
     if (error) {

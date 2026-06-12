@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { GoogleSignIn, DiscordSignIn, AuthDivider } from "@/components/google-sign-in";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
 import { useAuth } from "@/components/auth-provider";
+import { getTurnstileToken } from "@/lib/turnstile";
 
 export function LoginModal() {
   const { loginModalOpen, closeLoginModal, user } = useAuth();
@@ -52,11 +53,13 @@ export function LoginModal() {
     setError(null);
     setLoading(true);
     const supabase = createSupabaseBrowser();
+    const captchaToken = await getTurnstileToken();
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
         shouldCreateUser: true,
         emailRedirectTo: "https://oddsintel.app/auth/callback",
+        ...(captchaToken ? { captchaToken } : {}),
       },
     });
     setLoading(false);
