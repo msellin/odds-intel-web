@@ -29,9 +29,17 @@
 import { createSupabasePublic } from "./supabase-public";
 import {
   WORLD_CUP_LEAGUE_API_ID,
-  NATIONAL_TEAM_MODEL_SOURCE,
 } from "./world-cup";
 
+// Engine writes the unblended ELO+Poisson model under "national_team_v1" and
+// the market-blended Bayesian version under "national_team_v1_blended". This
+// loader needs BOTH side-by-side (own vs blended) — do NOT reuse the
+// world-cup.ts `NATIONAL_TEAM_MODEL_SOURCE` constant: that one was flipped to
+// "national_team_v1_blended" by WC-A4-FE-SWITCH and now tracks "what to show
+// on the /world-cup landing page", not "the own model identity". Importing it
+// here caused the leaderboard's "OddsIntel (own model)" and "OddsIntel
+// (blended)" rows to collapse to the same source.
+const OWN_MODEL_SOURCE = "national_team_v1";
 const BLENDED_MODEL_SOURCE = "national_team_v1_blended";
 
 // ── Public types ─────────────────────────────────────────────────────────────
@@ -247,7 +255,7 @@ function aggregatePredictions(
   const out: Record_<string, { triple: ProbTriple; isBlended: boolean } | null> = {};
   for (const [matchId, bySource] of buckets.entries()) {
     const preferred =
-      bySource.get(BLENDED_MODEL_SOURCE) ?? bySource.get(NATIONAL_TEAM_MODEL_SOURCE);
+      bySource.get(BLENDED_MODEL_SOURCE) ?? bySource.get(OWN_MODEL_SOURCE);
     if (!preferred) {
       out[matchId] = null;
       continue;
@@ -460,7 +468,7 @@ export async function loadRecord(): Promise<Record> {
   const { data: rawPreds } = await supabase
     .from("predictions")
     .select("match_id, market, model_probability, source")
-    .in("source", [NATIONAL_TEAM_MODEL_SOURCE, BLENDED_MODEL_SOURCE])
+    .in("source", [OWN_MODEL_SOURCE, BLENDED_MODEL_SOURCE])
     .in("match_id", matchIds);
 
   const predictionsByMatch = aggregatePredictions((rawPreds ?? []) as RawPredictionRow[]);
@@ -634,7 +642,7 @@ export async function loadLeaderboard(): Promise<LeaderboardRow[]> {
   const { data: rawPreds } = await supabase
     .from("predictions")
     .select("match_id, market, model_probability, source")
-    .in("source", [NATIONAL_TEAM_MODEL_SOURCE, BLENDED_MODEL_SOURCE])
+    .in("source", [OWN_MODEL_SOURCE, BLENDED_MODEL_SOURCE])
     .in("match_id", matchIds);
 
   const { data: rawConsensus } = await supabase
@@ -665,7 +673,7 @@ export async function loadLeaderboard(): Promise<LeaderboardRow[]> {
     return out;
   }
 
-  const ownByMatch = collapseSource(NATIONAL_TEAM_MODEL_SOURCE);
+  const ownByMatch = collapseSource(OWN_MODEL_SOURCE);
   const blendedByMatch = collapseSource(BLENDED_MODEL_SOURCE);
   const marketByMatch = new Map<string, ProbTriple>();
   for (const c of (rawConsensus ?? []) as RawConsensusRow[]) {

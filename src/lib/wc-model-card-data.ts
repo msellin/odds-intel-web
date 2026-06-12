@@ -19,8 +19,15 @@
  */
 
 import { createSupabasePublic } from "./supabase-public";
-import { NATIONAL_TEAM_MODEL_SOURCE } from "./world-cup";
 
+// Engine writes the unblended ELO+Poisson model under "national_team_v1" and
+// the market-blended Bayesian version under "national_team_v1_blended". The
+// model card needs BOTH side-by-side — do NOT reuse the world-cup.ts
+// `OWN_MODEL_SOURCE` constant: that one was flipped to
+// "national_team_v1_blended" by WC-A4-FE-SWITCH and now tracks "what to show
+// on the /world-cup landing page", not "the own model identity". Importing
+// it here caused the card's "own" row to silently mirror the blended row.
+const OWN_MODEL_SOURCE = "national_team_v1";
 const BLENDED_MODEL_SOURCE = "national_team_v1_blended";
 const LINEUP_MODEL_SOURCE = "national_team_v1_lineup";
 
@@ -146,7 +153,7 @@ export async function loadWCModelCard(matchId: string): Promise<ModelCardData> {
       .select("market, model_probability, source, reasoning")
       .eq("match_id", matchId)
       .in("source", [
-        NATIONAL_TEAM_MODEL_SOURCE,
+        OWN_MODEL_SOURCE,
         BLENDED_MODEL_SOURCE,
         LINEUP_MODEL_SOURCE,
       ]),
@@ -167,7 +174,7 @@ export async function loadWCModelCard(matchId: string): Promise<ModelCardData> {
     if (row.reasoning && !reasoning) reasoning = row.reasoning;
   }
 
-  const own = finaliseTriple(bySource.get(NATIONAL_TEAM_MODEL_SOURCE));
+  const own = finaliseTriple(bySource.get(OWN_MODEL_SOURCE));
   const blended = finaliseTriple(bySource.get(BLENDED_MODEL_SOURCE));
   const lineup = finaliseTriple(bySource.get(LINEUP_MODEL_SOURCE));
 
