@@ -345,31 +345,13 @@ export async function POST(req: NextRequest) {
 
   if (!chatId) return new NextResponse("OK", { status: 200 });
 
-  // Operator commands (gated by TELEGRAM_CHAT_ID env). Try these first so
-  // user-flow commands (/start, /stop) below don't accidentally swallow them.
-  if (isOperator(chatId)) {
-    if (text === "/status") {
-      await handleStatusCommand(chatId, admin);
-      return new NextResponse("OK", { status: 200 });
-    }
-    if (text === "/today") {
-      await handleTodayCommand(chatId, admin);
-      return new NextResponse("OK", { status: 200 });
-    }
-    if (text === "/pause" || text.startsWith("/pause ")) {
-      const reason = text === "/pause" ? "" : text.slice("/pause ".length).trim();
-      await handlePauseCommand(chatId, admin, reason);
-      return new NextResponse("OK", { status: 200 });
-    }
-    if (text === "/resume") {
-      await handleResumeCommand(chatId, admin);
-      return new NextResponse("OK", { status: 200 });
-    }
-    if (text === "/help") {
-      await handleHelpCommand(chatId);
-      return new NextResponse("OK", { status: 200 });
-    }
-  }
+  // COOLBET-SIGNALER-A (2026-06-12): operator commands /status, /pause,
+  // /resume, /today, /help were tied to the now-defunct Railway-side
+  // auto-placer (which spammed SMS overnight when its JWT chain broke).
+  // The new signal-only flow has nothing to "pause" — bets either signal
+  // to your Telegram or they don't; there's no Railway session to
+  // monitor. Commands removed in this commit. If we add a Mac-side
+  // daemon (option B), it'll get its own minimal command surface.
 
   if (text.startsWith("/start")) {
     // /start <user_uuid>  — links this Telegram chat to the OddsIntel profile
