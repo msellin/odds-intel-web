@@ -78,17 +78,36 @@ async function handleStatusCommand(
     ? `\n🛑 PAUSED — reason: ${state.placement_paused_reason || "(none)"}\n   paused at: ${fmtTimeAgo(state.placement_paused_at)}`
     : "";
 
+  // MAC-DAEMON-HEARTBEAT (mig 251): >35min stale = daemon process
+  // likely dead. Below 35min: show last tick result. Never seen:
+  // first-deploy / heartbeat write disabled.
+  const tickAt = state.mac_daemon_last_tick_at;
+  const tickResult = state.mac_daemon_last_tick_result as
+    | { qualified?: number; placed?: number; skipped?: number; errors?: number; synced_from_coolbet?: number; elapsed_s?: number }
+    | null;
+  const tickAgeMs = tickAt ? Date.now() - new Date(tickAt).getTime() : Infinity;
+  let daemonLine: string;
+  if (!tickAt) {
+    daemonLine = `🖥  Mac daemon: ❓ never seen heartbeat (DB column populated by daemon — first tick yet to land)`;
+  } else if (tickAgeMs > 35 * 60_000) {
+    daemonLine = `🖥  Mac daemon: ❌ DEAD — last tick ${fmtTimeAgo(tickAt)} (process likely down / laptop asleep / launchd unloaded)`;
+  } else {
+    const r = tickResult || {};
+    daemonLine = `🖥  Mac daemon: ✅ alive — last tick ${fmtTimeAgo(tickAt)}\n` +
+      `   qualified=${r.qualified ?? "?"} placed=${r.placed ?? "?"} skipped=${r.skipped ?? "?"} errors=${r.errors ?? "?"}` +
+      (r.elapsed_s != null ? ` (${Number(r.elapsed_s).toFixed(1)}s)` : "");
+  }
+
   const lines = [
     `${healthGlyph} Coolbet session — ${state.session_healthy ? "healthy" : "UNHEALTHY"}`,
     pausedLine,
     ``,
+    daemonLine,
+    ``,
     `🔐 last login:  ${fmtTimeAgo(state.last_login_at)} (${state.last_login_method || "?"})`,
-    `🔑 JWT user:   ${state.jwt_user_id || "(none)"}`,
     `⏱  JWT TTL:    ${fmtJwtTtl(state.jwt_exp_at)}`,
     `💓 heartbeat:  ${state.last_heartbeat_ok ? "OK" : "FAIL"} ${fmtTimeAgo(state.last_heartbeat_at)}`,
     `🍪 cookies:    ${state.cookies_count_last ?? 0} refreshed ${fmtTimeAgo(state.cookies_last_refresh_at)}`,
-    `🖥  FS session: ${state.fs_session_name || "?"}`,
-    `📱 device ID:  ${state.device_id ? state.device_id.slice(0, 8) + "…" : "(none — will auto-gen)"}`,
   ];
 
   if (state.last_error) {
@@ -411,13 +430,36 @@ export async function POST(req: NextRequest) {
 
   if (!chatId) return new NextResponse("OK", { status: 200 });
 
-  // COOLBET-SIGNALER-A (2026-06-12): operator commands /status, /pause,
-  // /resume, /today, /help were tied to the now-defunct Railway-side
-  // auto-placer (which spammed SMS overnight when its JWT chain broke).
-  // The new signal-only flow has nothing to "pause" — bets either signal
-  // to your Telegram or they don't; there's no Railway session to
-  // monitor. Commands removed in this commit. If we add a Mac-side
-  // daemon (option B), it'll get its own minimal command surface.
+  // COOLBET-MAC-DAEMON-COMMANDS (2026-06-12): operator commands re-wired
+  // for the Mac-side placement daemon. They're operator-only (gated by
+  // TELEGRAM_CHAT_ID via isOperator()). /status shows the DB state +
+  // Mac daemon heartbeat freshness so the operator can tell from their
+  // phone whether the local daemon is alive. /pause + /resume toggle
+  // the placement_paused kill switch — daemon's place_all_bets() reads
+  // it at the start of every execute=True call. /today summarises the
+  // last 24h of real_bets. /help prints the command list.
+  if (text.startsWith("/status") && isOperator(chatId)) {
+    await handleStatusCommand(chatId, admin);
+    return new NextResponse("OK", { status: 200 });
+  }
+  if (text.startsWith("/today") && isOperator(chatId)) {
+    await handleTodayCommand(chatId, admin);
+    return new NextResponse("OK", { status: 200 });
+  }
+  if (text.startsWith("/pause") && isOperator(chatId)) {
+    // /pause <reason — free text>
+    const reason = text.replace(/^\/pause(\s|$)/, "").trim();
+    await handlePauseCommand(chatId, admin, reason);
+    return new NextResponse("OK", { status: 200 });
+  }
+  if (text === "/resume" && isOperator(chatId)) {
+    await handleResumeCommand(chatId, admin);
+    return new NextResponse("OK", { status: 200 });
+  }
+  if (text === "/help" && isOperator(chatId)) {
+    await handleHelpCommand(chatId);
+    return new NextResponse("OK", { status: 200 });
+  }
 
   if (text.startsWith("/start")) {
     // /start <user_uuid>  — links this Telegram chat to the OddsIntel profile
