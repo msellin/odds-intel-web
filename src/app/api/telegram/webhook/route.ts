@@ -341,6 +341,103 @@ async function handleCallbackQuery(
     return;
   }
 
+  // INLINE-HEAL-BUTTONS (2026-06-17): operator-initiated daemon control
+  // via inline buttons attached to daemon-fail-burst alerts and the daily
+  // summary. Three actions:
+  //
+  //   coolbet-heal:   → INSERT a row into coolbet_daemon_commands. The Mac
+  //                     daemon polls that table every ~30s and runs
+  //                     auto_self_heal, sends confirmation Telegram.
+  //   coolbet-pause:  → DIRECT UPDATE on coolbet_session_state.placement_paused
+  //                     = true with reason "operator via Telegram".
+  //                     placement_paused gates the placer + the daily-summary
+  //                     glyph, so the effect is immediate (no daemon round-trip
+  //                     needed).
+  //   coolbet-resume: → DIRECT UPDATE clearing placement_paused. Mirror of pause.
+  //
+  // All three edit the original Telegram message to append a status footer
+  // (same UX pattern as sigplaced/sigskip) so the operator sees confirmation
+  // in the same message they tapped.
+  if (
+    data === "coolbet-heal:" ||
+    data === "coolbet-pause:" ||
+    data === "coolbet-resume:"
+  ) {
+    const stamp = new Date().toISOString().slice(11, 16) + " UTC";
+    let footer = "";
+    let toastText = "";
+
+    if (data === "coolbet-heal:") {
+      const { error: insErr } = await admin
+        .from("coolbet_daemon_commands")
+        .insert({
+          command_type: "heal",
+          requested_by: `telegram_user_${fromId}`,
+        });
+      if (insErr) {
+        console.error("coolbet_daemon_commands insert failed", insErr);
+        await answerCallbackQuery(cqId, "❌ Heal request failed", true);
+        return;
+      }
+      footer = `\n— 🔄 Heal requested @ ${stamp} (daemon will run on next poll)`;
+      toastText = "🔄 Heal requested";
+    } else if (data === "coolbet-pause:") {
+      const { error: pauseErr } = await admin
+        .from("coolbet_session_state")
+        .update({
+          placement_paused: true,
+          placement_paused_at: new Date().toISOString(),
+          placement_paused_reason: `operator via Telegram (user ${fromId})`,
+        })
+        .eq("id", 1);
+      if (pauseErr) {
+        console.error("placement_paused=true update failed", pauseErr);
+        await answerCallbackQuery(cqId, "❌ Pause failed", true);
+        return;
+      }
+      footer = `\n— ⏸ Paused @ ${stamp}`;
+      toastText = "⏸ Placement paused";
+    } else {
+      // coolbet-resume:
+      const { error: resumeErr } = await admin
+        .from("coolbet_session_state")
+        .update({
+          placement_paused: false,
+          placement_paused_at: null,
+          placement_paused_reason: null,
+        })
+        .eq("id", 1);
+      if (resumeErr) {
+        console.error("placement_paused=false update failed", resumeErr);
+        await answerCallbackQuery(cqId, "❌ Resume failed", true);
+        return;
+      }
+      footer = `\n— ▶ Resumed @ ${stamp}`;
+      toastText = "▶ Placement resumed";
+    }
+
+    // Edit the original message: append the footer so the operator sees
+    // confirmation in-place. Strip the inline keyboard so the same buttons
+    // can't be tapped twice (tap two pause buttons = harmless but confusing).
+    const original = (message?.text as string | undefined) ?? "";
+    if (chatId && messageId && BOT_TOKEN) {
+      await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          message_id: messageId,
+          text: original + footer,
+          parse_mode: "HTML",
+          disable_web_page_preview: true,
+        }),
+      });
+    }
+
+    await answerCallbackQuery(cqId, toastText);
+    return;
+  }
+
   if (!data.startsWith("place:")) {
     await answerCallbackQuery(cqId, "Unknown action");
     return;
