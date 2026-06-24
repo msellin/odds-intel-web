@@ -93,7 +93,10 @@ export default async function PreviewLanding() {
             ODDSINTEL
           </Link>
           <nav className="flex items-center gap-4 text-xs text-neutral-400">
-            <Link href="/track-record" className="hover:text-neutral-100">
+            <Link href="/picks" className="hover:text-neutral-100">
+              Live Picks
+            </Link>
+            <Link href="/performance" className="hover:text-neutral-100">
               Track Record
             </Link>
             <Link
@@ -139,18 +142,24 @@ export default async function PreviewLanding() {
               every result settled against official scores, every closing line
               tracked. Public ledger; nothing hidden.
             </p>
-            <div className="flex items-center justify-center gap-3 pt-2">
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
               <Link
-                href="/track-record"
+                href="/picks"
                 className="rounded-md bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-neutral-950 hover:bg-emerald-400"
               >
-                View live ledger
+                See today&apos;s picks
               </Link>
               <Link
-                href="https://t.me/oddsintel"
+                href="/performance"
                 className="rounded-md border border-white/15 bg-white/[0.04] px-5 py-2.5 text-sm font-semibold text-neutral-100 hover:bg-white/[0.08]"
               >
-                Free picks on Telegram
+                View track record
+              </Link>
+              <Link
+                href="https://t.me/oddsintelapp"
+                className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-5 py-2.5 text-sm font-semibold text-emerald-300 hover:bg-emerald-500/20"
+              >
+                Telegram
               </Link>
             </div>
           </div>
