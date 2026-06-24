@@ -58,7 +58,7 @@ async function sendUpgradeEmail(to: string, tier: string): Promise<void> {
             <p style="margin:0 0 20px;font-size:14px;color:#475569;line-height:1.6;">Your subscription is active. Here's what just unlocked:</p>
             <table width="100%" cellpadding="0" cellspacing="0">${featuresHtml}</table>
             <div style="margin-top:24px;text-align:center;">
-              <a href="${SITE_URL}/value-bets" style="display:inline-block;padding:12px 28px;background:#22c55e;color:#ffffff;font-weight:700;font-size:14px;text-decoration:none;border-radius:6px;">See today's value bets →</a>
+              <a href="${SITE_URL}/performance" style="display:inline-block;padding:12px 28px;background:#22c55e;color:#ffffff;font-weight:700;font-size:14px;text-decoration:none;border-radius:6px;">See live track record →</a>
             </div>
           </td>
         </tr>
