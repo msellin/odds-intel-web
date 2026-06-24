@@ -26,31 +26,29 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "OddsIntel — AI Football Predictions & Value Bets Today",
+  title: "OddsIntel — Verified Football Picks · Public Track Record",
   description:
-    "Get AI-powered value bets and football predictions today. Compare bookmaker odds, track injuries, and check H2H records — free, across 280+ leagues.",
+    "Football picks logged before kickoff and tracked on a public, time-stamped ledger. Every bet, every closing line, every result — verifiable via GitHub and the Bitcoin blockchain.",
   keywords: [
-    "AI football predictions",
-    "value bets today",
-    "football predictions today",
-    "odds comparison",
-    "football betting tips",
-    "betting tips today",
-    "best odds today",
-    "football injury news",
-    "football odds comparison tool",
-    "expected value betting calculator",
-    "football injury news before kickoff",
-    "machine learning football predictions",
-    "football value bets today free",
+    "verified football picks",
+    "football tipster track record",
+    "transparent betting model",
+    "closing line value",
+    "CLV tracking",
+    "open source betting model",
+    "auditable football predictions",
+    "pre-match value bets",
+    "football model ROI",
+    "Bitcoin-anchored tipster",
+    "Pinnacle CLV",
   ],
   verification: {
     google: "ix-rQvuyTbEjWYRefDYn7o-yi2S_8oUB7ahHhI56W38",
   },
   openGraph: {
-    title: "OddsIntel — AI Football Predictions & Value Bets Today",
+    title: "OddsIntel — Verified Football Picks · Public Track Record",
     description:
-      "Get AI-powered value bets and football predictions today. Compare bookmaker odds, track injuries, and check H2H records — free, across 280+ leagues.",
+      "Football picks logged before kickoff. Public ledger on GitHub, anchored to the Bitcoin blockchain via OpenTimestamps. Nothing hidden.",
     url: "https://oddsintel.app",
     siteName: "OddsIntel",
     locale: "en_US",
@@ -60,15 +58,15 @@ export const metadata: Metadata = {
         url: "https://oddsintel.app/opengraph-image",
         width: 1200,
         height: 630,
-        alt: "OddsIntel — Sports Betting Intelligence",
+        alt: "OddsIntel — Verified Football Picks",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "OddsIntel — AI Football Predictions & Value Bets Today",
+    title: "OddsIntel — Verified Football Picks · Public Track Record",
     description:
-      "Get AI-powered value bets and football predictions today. Compare bookmaker odds, track injuries, and check H2H records — free, across 280+ leagues.",
+      "Football picks logged before kickoff. Public ledger on GitHub, anchored to the Bitcoin blockchain via OpenTimestamps. Nothing hidden.",
     images: ["https://oddsintel.app/opengraph-image"],
   },
   alternates: {
@@ -125,7 +123,7 @@ export default function RootLayout({
               url: "https://oddsintel.app",
               logo: "https://oddsintel.app/icon-512.png",
               description:
-                "OddsIntel uses an AI ensemble model combining Poisson regression and XGBoost to generate football predictions and value bets across 280+ leagues. Provides odds comparison, injury tracking, H2H records and standings in one platform.",
+                "OddsIntel is an open-source football prediction model (Poisson + XGBoost ensemble) that publishes every pick before kickoff to a public ledger. Track record at /performance, live picks at /picks, JSON API at /api/v1/track-record. Each daily snapshot is committed to GitHub and anchored to the Bitcoin blockchain via OpenTimestamps for independent verification.",
             }),
           }}
         />

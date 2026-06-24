@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "OddsIntel — Sports Betting Intelligence";
+export const alt = "OddsIntel — Verified Football Picks · Public Track Record";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -117,18 +117,18 @@ export default function OGImage() {
               fontSize: "22px",
               color: "#9ca3af",
               textAlign: "center",
-              maxWidth: "600px",
+              maxWidth: "640px",
               lineHeight: 1.4,
               fontFamily: "sans-serif",
             }}
           >
-            All your pre-match intelligence.{" "}
-            <span style={{ color: "#e5e7eb" }}>One screen.</span>
+            Football picks logged before kickoff.{" "}
+            <span style={{ color: "#e5e7eb" }}>Public ledger. Bitcoin-anchored.</span>
           </div>
 
           {/* Pills */}
           <div style={{ display: "flex", gap: "12px", marginTop: "8px" }}>
-            {["467 daily fixtures", "13 bookmakers", "AI alerts"].map((label) => (
+            {["Verified track record", "Open-source model", "Free picks"].map((label) => (
               <div
                 key={label}
                 style={{
