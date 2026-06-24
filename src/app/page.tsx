@@ -217,7 +217,7 @@ export default async function PreviewLanding() {
               Head-to-head vs other public models
             </h2>
             <span className="text-[10px] font-mono uppercase tracking-wider text-neutral-600">
-              {matchedWindow.start} → {matchedWindow.end} · €10 flat stake
+              matched window · same markets
             </span>
           </div>
 
@@ -225,7 +225,7 @@ export default async function PreviewLanding() {
             {/* OddsIntel hero strip — shown ONCE at the top */}
             <div className="border-b border-white/[0.06] bg-gradient-to-b from-emerald-500/[0.10] to-emerald-500/[0.02] px-5 py-6 text-center">
               <p className="font-mono text-[10px] uppercase tracking-widest text-emerald-400">
-                OddsIntel · production · pre-match
+                OddsIntel · production
               </p>
               <p className="mt-2 font-mono text-4xl font-semibold tabular-nums text-emerald-300 sm:text-5xl">
                 +{ourMatched.roiPct.toFixed(2)}% ROI
@@ -234,7 +234,7 @@ export default async function PreviewLanding() {
                 <span className="font-mono tabular-nums text-neutral-200">
                   {ourMatched.n.toLocaleString()}
                 </span>{" "}
-                settled bets in this window
+                settled bets
               </p>
             </div>
 
@@ -252,11 +252,11 @@ export default async function PreviewLanding() {
                 return (
                   <div
                     key={c.name}
-                    className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-3 px-4 py-3.5 sm:gap-5 sm:px-5"
+                    className="grid grid-cols-[auto_1fr_auto] items-center gap-4 px-4 py-4 sm:gap-5 sm:px-5"
                   >
                     {/* Letter avatar */}
                     <div
-                      className={`flex h-9 w-9 items-center justify-center rounded-full font-mono text-sm font-bold ring-1 ring-inset ${avatarBg}`}
+                      className={`flex h-10 w-10 items-center justify-center rounded-full font-mono text-sm font-bold ring-1 ring-inset ${avatarBg}`}
                       aria-hidden
                     >
                       {initial}
@@ -273,19 +273,20 @@ export default async function PreviewLanding() {
                         {c.name}{" "}
                         <span className="font-mono text-[10px] font-normal text-neutral-500">↗</span>
                       </a>
-                      <p className="mt-0.5 font-mono text-[11px] text-neutral-500 tabular-nums">
-                        {c.theirN.toLocaleString()} bets ·{" "}
-                        <span className={c.theirRoi >= 0 ? "text-neutral-400" : "text-red-400"}>
-                          {c.theirRoi > 0 ? "+" : ""}
-                          {c.theirRoi.toFixed(2)}% ROI
-                        </span>
+                      <p className={`mt-0.5 font-mono text-base font-semibold tabular-nums sm:text-lg ${
+                        c.theirRoi >= 0 ? "text-neutral-300" : "text-red-400"
+                      }`}>
+                        {c.theirRoi > 0 ? "+" : ""}{c.theirRoi.toFixed(2)}% ROI
+                      </p>
+                      <p className="font-mono text-[10px] text-neutral-600 tabular-nums">
+                        {c.theirN.toLocaleString()} bets
                       </p>
                     </div>
 
                     {/* Delta — hero of the row */}
                     <div className="text-right">
                       <p
-                        className={`font-mono text-lg font-bold tabular-nums sm:text-2xl ${
+                        className={`font-mono text-xl font-bold tabular-nums sm:text-3xl ${
                           delta > 0
                             ? "text-emerald-400"
                             : delta < 0
@@ -297,22 +298,6 @@ export default async function PreviewLanding() {
                       </p>
                       <p className="font-mono text-[9px] uppercase tracking-widest text-neutral-600">
                         in our favour
-                      </p>
-                    </div>
-
-                    {/* Per €1k */}
-                    <div className="hidden text-right sm:block">
-                      <p className="font-mono text-xs text-neutral-500 tabular-nums">
-                        per €1k staked
-                      </p>
-                      <p className="font-mono text-[11px] tabular-nums">
-                        <span className="text-emerald-300">
-                          +€{(ourMatched.roiPct * 10).toFixed(0)}
-                        </span>{" "}
-                        <span className="text-neutral-600">vs</span>{" "}
-                        <span className={c.theirRoi >= 0 ? "text-neutral-400" : "text-red-400"}>
-                          {c.theirRoi > 0 ? "+" : ""}€{(c.theirRoi * 10).toFixed(0)}
-                        </span>
                       </p>
                     </div>
                   </div>
