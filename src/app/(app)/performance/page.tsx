@@ -24,11 +24,7 @@ import type { LiveBet, ModelV2Stats, CalibratedHeadlineStats } from "@/lib/engin
 import { PerformanceClient } from "@/components/performance-client";
 import type { PublicBotStat, SanitizedBotBet } from "@/components/performance-leaderboard";
 import { PerformanceHistory } from "@/components/performance-history";
-import { ClvEducation } from "@/components/clv-education";
-import { TrackRecordFooterCta } from "@/components/track-record-footer-cta";
-import { RetiredStrategiesSection } from "@/components/retired-strategies-section";
 import { PerformanceExtras } from "@/components/performance-extras";
-import { RecentWinsReel } from "@/components/recent-wins-reel";
 
 // ── Server-side cache → public stats fallback ────────────────────────────────
 
@@ -183,11 +179,7 @@ export default async function PerformancePage() {
     .filter(b => b.maturityLabel !== 'experimental')
     .filter(b => !liveRetiredNames.has(b.name));
 
-  // Filter retired_bot_breakdown against live DB so un-retired bots disappear
-  // immediately without waiting for tonight's dashboard_cache refresh.
-  const retiredBreakdown = (cache?.retired_bot_breakdown ?? null)?.filter((r) =>
-    liveRetiredNames.has(r.name)
-  ) ?? null;
+  // (retired_bot_breakdown filter removed with RetiredStrategiesSection)
 
   // Shared cached fallback props — used both as the Suspense fallback for Pro
   // and as the direct render for Free users.
@@ -224,17 +216,11 @@ export default async function PerformancePage() {
         <PerformanceClient {...cachedClientProps} />
       )}
 
-      {/* PERF-HERO-RECENT-WINS (2026-06-01): concrete "model called these and beat the closing line" stories. */}
-      <RecentWinsReel wins={cache?.recent_top_wins ?? null} />
-
-      {/* Cumulative P&L chart + streak badges + calibration table — visible to all tiers. */}
+      {/* Cumulative P&L chart + streak badges + calibration table. */}
       <PerformanceExtras data={extras} />
 
-      {/* PERF-HONEST-HEADLINE: every retired bot with its final stats + reason. */}
-      <RetiredStrategiesSection retired={retiredBreakdown} />
-
-      {/* Free users: compact recent-results strip as trust signal + upsell.
-          Pro/Elite: full bet history lives inside the per-bot modal. */}
+      {/* Recent settled bets — short ledger strip. The full JSON feed at
+          /api/v1/track-record is the canonical source. */}
       {!isPro && (
         <PerformanceHistory
           fullBets={null}
@@ -243,8 +229,6 @@ export default async function PerformancePage() {
           isElite={false}
         />
       )}
-      <ClvEducation />
-      <TrackRecordFooterCta isPro={isPro} isElite={isElite} />
     </>
   );
 }
