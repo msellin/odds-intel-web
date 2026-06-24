@@ -11,7 +11,7 @@ import { useMemo } from "react";
 import { PerformanceHero } from "./performance-hero";
 import { PerformanceLeaderboard } from "./performance-leaderboard";
 import type { PublicBotStat, SanitizedBotBet } from "./performance-leaderboard";
-import type { TrackRecordStats, DashboardCache, LiveBet, ModelV2Stats } from "@/lib/engine-data";
+import type { TrackRecordStats, DashboardCache, LiveBet, ModelV2Stats, CalibratedHeadlineStats } from "@/lib/engine-data";
 import {
   filterExperimental,
   buildPublicBotStats,
@@ -39,6 +39,7 @@ interface Props {
   aggregateBets: LiveBet[] | null;
   botsDB: BotDbRow[] | null;
   modelV2Stats: ModelV2Stats | null;
+  calibrated: CalibratedHeadlineStats | null;
 }
 
 export function PerformanceClient({
@@ -51,6 +52,7 @@ export function PerformanceClient({
   aggregateBets,
   botsDB,
   modelV2Stats,
+  calibrated,
 }: Props) {
   // UI-METRIC-SOT (2026-06-06): dashboard_cache is the single source of truth
   // for hero metrics. Settlement.py writes active_avg_clv / active_roi_pct /
@@ -90,6 +92,7 @@ export function PerformanceClient({
         modelV2Stats={modelV2Stats}
         activeBotCount={activeBotCount}
         retiredBotCount={retiredBotCount}
+        calibrated={calibrated}
       />
 
 

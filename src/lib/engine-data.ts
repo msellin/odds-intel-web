@@ -3204,6 +3204,116 @@ export async function getTrackRecordStats(): Promise<TrackRecordStats> {
   };
 }
 
+// ─── Calibrated pre-match honest stats ─────────────────────────────────────
+//
+// HEADLINE-COHORT (2026-06-24): the public ROI claim is calibrated bots,
+// pre-match markets only (1x2 + O/U + BTTS), no Asian Handicap, since the
+// calibrated tier launched (2026-05-04). Excluding AH because calibrated AH
+// is -13% over 132 bets and drags the headline — fix-or-retire is a separate
+// internal task. Excluding in-play because the variance is wildly different
+// and public conflation of the two cohorts produced confusing numbers
+// (e.g. "Pre-match ROI 30d -2.2%" when calibrated pre-match all-time is
+// +9.57%).
+
+export interface CalibratedHeadlineStats {
+  allTime: {
+    n: number;
+    stakeEur: number;
+    pnlEur: number;
+    roiPct: number | null;
+    avgClvPct: number | null;
+    clvN: number;
+    clvBeatPct: number | null;
+    sinceDate: string;
+  };
+  last30d: {
+    n: number;
+    roiPct: number | null;
+  };
+}
+
+const CALIBRATED_SINCE = "2026-05-04";
+const CALIBRATED_PUBLIC_MARKETS = ["1x2", "o/u", "over_under_25", "btts"] as const;
+
+const _getCalibratedHeadlineStatsUncached =
+  async (): Promise<CalibratedHeadlineStats> => {
+    const admin = createSupabaseAdmin();
+    const cutoff30 = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+
+    // Pull all calibrated pre-match settled bets since launch in one shot.
+    const { data, error } = await admin
+      .from("simulated_bets")
+      .select(
+        "created_at, stake, pnl, clv_pinnacle, bots!inner(maturity_label)",
+      )
+      .eq("bots.maturity_label", "calibrated")
+      .in("market", CALIBRATED_PUBLIC_MARKETS as unknown as string[])
+      .in("result", ["won", "lost"])
+      .gte("created_at", `${CALIBRATED_SINCE}T00:00:00Z`)
+      .range(0, 9999);
+
+    if (error || !data) {
+      return {
+        allTime: {
+          n: 0, stakeEur: 0, pnlEur: 0, roiPct: null,
+          avgClvPct: null, clvN: 0, clvBeatPct: null,
+          sinceDate: CALIBRATED_SINCE,
+        },
+        last30d: { n: 0, roiPct: null },
+      };
+    }
+
+    let n = 0, stake = 0, pnl = 0;
+    let clvSum = 0, clvN = 0, clvBeats = 0;
+    let n30 = 0, stake30 = 0, pnl30 = 0;
+    for (const r of data as Array<{
+      created_at: string;
+      stake: number | string | null;
+      pnl: number | string | null;
+      clv_pinnacle: number | string | null;
+    }>) {
+      const s = Number(r.stake ?? 0);
+      const p = Number(r.pnl ?? 0);
+      n += 1;
+      stake += s;
+      pnl += p;
+      if (r.clv_pinnacle != null) {
+        const c = Number(r.clv_pinnacle);
+        clvSum += c;
+        clvN += 1;
+        if (c > 0) clvBeats += 1;
+      }
+      if (r.created_at >= cutoff30) {
+        n30 += 1;
+        stake30 += s;
+        pnl30 += p;
+      }
+    }
+
+    return {
+      allTime: {
+        n,
+        stakeEur: Number(stake.toFixed(2)),
+        pnlEur: Number(pnl.toFixed(2)),
+        roiPct: stake > 0 ? Number(((100 * pnl) / stake).toFixed(2)) : null,
+        avgClvPct: clvN > 0 ? Number(((100 * clvSum) / clvN).toFixed(2)) : null,
+        clvN,
+        clvBeatPct: clvN > 0 ? Number(((100 * clvBeats) / clvN).toFixed(1)) : null,
+        sinceDate: CALIBRATED_SINCE,
+      },
+      last30d: {
+        n: n30,
+        roiPct: stake30 > 0 ? Number(((100 * pnl30) / stake30).toFixed(2)) : null,
+      },
+    };
+  };
+
+export const getCalibratedHeadlineStats = unstable_cache(
+  _getCalibratedHeadlineStatsUncached,
+  ["getCalibratedHeadlineStats_v1"],
+  { revalidate: 600 },
+);
+
 // ─── System status (live activity indicators) ──────────────────────────────
 
 export interface SystemStatus {

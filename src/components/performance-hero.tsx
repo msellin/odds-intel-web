@@ -1,6 +1,11 @@
-import { TrendingUp, Bot, BarChart2, Clock, Archive } from "lucide-react";
+import { TrendingUp, Bot, BarChart2, Clock, Archive, Target } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { TrackRecordStats, DashboardCache, ModelV2Stats } from "@/lib/engine-data";
+import type {
+  TrackRecordStats,
+  DashboardCache,
+  ModelV2Stats,
+  CalibratedHeadlineStats,
+} from "@/lib/engine-data";
 import { EquitySparkline } from "@/components/equity-sparkline";
 
 interface Props {
@@ -10,9 +15,10 @@ interface Props {
   modelV2Stats?: ModelV2Stats | null;
   activeBotCount?: number | null;
   retiredBotCount?: number | null;
+  calibrated?: CalibratedHeadlineStats | null;
 }
 
-export function PerformanceHero({ stats, cache, modelV2Stats, activeBotCount, retiredBotCount }: Props) {
+export function PerformanceHero({ stats, cache, modelV2Stats, activeBotCount, retiredBotCount, calibrated }: Props) {
   const daysRunning = Math.floor((Date.now() - new Date("2026-05-01").getTime()) / 86400000);
   const allTimeSettled = stats.settledBets;
 
@@ -30,15 +36,22 @@ export function PerformanceHero({ stats, cache, modelV2Stats, activeBotCount, re
     r != null ? `${r >= 0 ? "+" : ""}${r.toFixed(1)}%` : "—";
   const showAllTime = allTimeRoi != null && activeRoi != null && Math.abs(activeRoi - allTimeRoi) >= 0.1;
 
-  // PERF-HERO-COHORT-SPLIT (2026-06-01): last-30d ROI by cohort. Falls back to
-  // the combined active_roi_pct if cohort fields are absent (pre-migration-157
-  // cache rows). When both cohort values exist, the combined tile is replaced
-  // by two tiles below.
-  const prematchRoi      = cache?.prematch_roi_pct ?? null;
-  const prematchSettled  = cache?.prematch_settled_bets ?? null;
-  const inplayRoi        = cache?.inplay_roi_pct ?? null;
-  const inplaySettled    = cache?.inplay_settled_bets ?? null;
-  const hasCohortSplit   = prematchRoi != null && inplayRoi != null;
+  // HEADLINE-COHORT (2026-06-24): public headline is calibrated bots,
+  // pre-match (1x2/OU/BTTS — no AH), since calibrated tier launched. The
+  // previous tiles split into pre-match-30d vs in-play-30d, which (a) hid
+  // the +9% all-time number behind a noisy 30d window, (b) mixed AH
+  // (calibrated AH = -13%) into the pre-match cohort, (c) gave in-play
+  // a headline tile despite higher variance and the InplayBot UUID
+  // history. The new tiles surface the honest cut: ROI since calibrated
+  // launch + 30d sub-stat for transparency. In-play stays in the system
+  // and is still tracked admin-side.
+  const cal             = calibrated?.allTime;
+  const cal30           = calibrated?.last30d;
+  const calRoi          = cal?.roiPct ?? null;
+  const calN            = cal?.n ?? 0;
+  const calSince        = cal?.sinceDate ?? "2026-05-04";
+  const cal30Roi        = cal30?.roiPct ?? null;
+  const cal30N          = cal30?.n ?? 0;
 
   return (
     <div className="space-y-4">
@@ -141,66 +154,51 @@ export function PerformanceHero({ stats, cache, modelV2Stats, activeBotCount, re
           </CardContent>
         </Card>
 
-        {hasCohortSplit ? (
-          <>
-            <Card className="border-border/50 bg-card/80">
-              <CardHeader className="pb-1 pt-3 px-4">
-                <CardTitle className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                  <BarChart2 className="h-3 w-3" />
-                  Pre-match ROI · 30d
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-4 pb-3 pt-0">
-                <span className={`font-mono text-2xl font-bold tabular-nums ${
-                  prematchRoi! >= 0 ? "text-emerald-400" : "text-red-400"
-                }`}>
-                  {fmtRoi(prematchRoi)}
-                </span>
-                <p className="text-[10px] text-muted-foreground mt-1">
-                  {prematchSettled != null ? `${prematchSettled.toLocaleString()} bets · ` : ""}before kickoff · last 30d
-                </p>
-              </CardContent>
-            </Card>
+        <Card className="border-emerald-500/30 bg-emerald-500/[0.04]">
+          <CardHeader className="pb-1 pt-3 px-4">
+            <CardTitle className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              <Target className="h-3 w-3" />
+              ROI · calibrated · all-time
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-3 pt-0">
+            <span className={`font-mono text-2xl font-bold tabular-nums ${
+              calRoi == null
+                ? "text-muted-foreground"
+                : calRoi >= 0
+                  ? "text-emerald-400"
+                  : "text-red-400"
+            }`}>
+              {fmtRoi(calRoi)}
+            </span>
+            <p className="text-[10px] text-muted-foreground mt-1">
+              {calN.toLocaleString()} pre-match picks · since {calSince}
+            </p>
+          </CardContent>
+        </Card>
 
-            <Card className="border-border/50 bg-card/80">
-              <CardHeader className="pb-1 pt-3 px-4">
-                <CardTitle className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                  <BarChart2 className="h-3 w-3" />
-                  In-play ROI · 30d
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-4 pb-3 pt-0">
-                <span className={`font-mono text-2xl font-bold tabular-nums ${
-                  inplayRoi! >= 0 ? "text-emerald-400" : "text-red-400"
-                }`}>
-                  {fmtRoi(inplayRoi)}
-                </span>
-                <p className="text-[10px] text-muted-foreground mt-1">
-                  {inplaySettled != null ? `${inplaySettled.toLocaleString()} bets · ` : ""}during the match · last 30d
-                </p>
-              </CardContent>
-            </Card>
-          </>
-        ) : (
-          <Card className="border-border/50 bg-card/80 sm:col-span-2">
-            <CardHeader className="pb-1 pt-3 px-4">
-              <CardTitle className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                <BarChart2 className="h-3 w-3" />
-                System ROI
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-3 pt-0">
-              <span className={`font-mono text-2xl font-bold tabular-nums ${
-                activeRoi == null ? "text-muted-foreground" : activeRoi >= 0 ? "text-emerald-400" : "text-red-400"
-              }`}>
-                {fmtRoi(activeRoi)}
-              </span>
-              <p className="text-[10px] text-muted-foreground mt-1">
-                active strategies{showAllTime ? ` · incl. retired: ${fmtRoi(allTimeRoi)}` : ""}
-              </p>
-            </CardContent>
-          </Card>
-        )}
+        <Card className="border-border/50 bg-card/80">
+          <CardHeader className="pb-1 pt-3 px-4">
+            <CardTitle className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              <BarChart2 className="h-3 w-3" />
+              ROI · calibrated · 30d
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-3 pt-0">
+            <span className={`font-mono text-2xl font-bold tabular-nums ${
+              cal30Roi == null
+                ? "text-muted-foreground"
+                : cal30Roi >= 0
+                  ? "text-emerald-400"
+                  : "text-red-400"
+            }`}>
+              {fmtRoi(cal30Roi)}
+            </span>
+            <p className="text-[10px] text-muted-foreground mt-1">
+              {cal30N.toLocaleString()} bets · last 30d window
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* ── Equity sparkline ─────────────────────────────────────────────── */}

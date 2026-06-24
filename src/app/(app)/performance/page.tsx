@@ -18,8 +18,9 @@ import {
   getRecentSettledBets,
   getPublicPerformanceExtras,
   getModelV2Stats,
+  getCalibratedHeadlineStats,
 } from "@/lib/engine-data";
-import type { LiveBet, ModelV2Stats } from "@/lib/engine-data";
+import type { LiveBet, ModelV2Stats, CalibratedHeadlineStats } from "@/lib/engine-data";
 import { PerformanceClient } from "@/components/performance-client";
 import type { PublicBotStat, SanitizedBotBet } from "@/components/performance-leaderboard";
 import { PerformanceHistory } from "@/components/performance-history";
@@ -107,6 +108,7 @@ interface ProSectionProps {
   cachedBots: PublicBotStat[];
   botsDB: Awaited<ReturnType<typeof getAllBotsFromDB>>;
   modelV2Stats: ModelV2Stats | null;
+  calibrated: CalibratedHeadlineStats | null;
 }
 
 async function ProPerformanceSection({
@@ -117,6 +119,7 @@ async function ProPerformanceSection({
   cachedBots,
   botsDB,
   modelV2Stats,
+  calibrated,
 }: ProSectionProps) {
   const allBetsRaw = await getAllBets();
   const sanitizedBets = sanitizeBets(allBetsRaw, isElite);
@@ -132,6 +135,7 @@ async function ProPerformanceSection({
       aggregateBets={allBetsRaw}
       botsDB={botsDB}
       modelV2Stats={modelV2Stats}
+      calibrated={calibrated}
     />
   );
 }
@@ -140,7 +144,7 @@ async function ProPerformanceSection({
 
 export default async function PerformancePage() {
   // All fast fetches run in parallel — botsDB moved here since it doesn't need isPro.
-  const [authResult, trackStats, cache, extras, modelV2Stats, botsDB] = await Promise.all([
+  const [authResult, trackStats, cache, extras, modelV2Stats, botsDB, calibrated] = await Promise.all([
     (async () => {
       const supabase = await createSupabaseServer();
       const {
@@ -154,6 +158,7 @@ export default async function PerformancePage() {
     getPublicPerformanceExtras(),
     getModelV2Stats(),
     getAllBotsFromDB(),
+    getCalibratedHeadlineStats(),
   ]);
 
   const { isPro, isElite } = authResult as {
@@ -196,6 +201,7 @@ export default async function PerformancePage() {
     aggregateBets: null as LiveBet[] | null,
     botsDB,
     modelV2Stats,
+    calibrated,
   };
 
   return (
@@ -211,6 +217,7 @@ export default async function PerformancePage() {
             cachedBots={cachedBots}
             botsDB={botsDB}
             modelV2Stats={modelV2Stats}
+            calibrated={calibrated}
           />
         </Suspense>
       ) : (
