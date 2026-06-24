@@ -341,11 +341,13 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets }: Props)
   const [selected, setSelected] = useState<PublicBotStat | null>(null);
   const [showUnderperforming, setShowUnderperforming] = useState(false);
   const [showDeveloping, setShowDeveloping] = useState(false);
-  const [tab, setTab] = useState<'all' | 'prematch' | 'inplay'>('all');
 
-  const tabFilteredBots = tab === 'all' ? bots
-    : tab === 'inplay' ? bots.filter((b) => isLiveBot(b.name))
-    : bots.filter((b) => !isLiveBot(b.name));
+  // PERFORMANCE-PUBLIC-PREMATCH-ONLY (2026-06-24): the public leaderboard
+  // hides in-play bots entirely — they have higher variance + the InplayBot
+  // UUID-bug history, and the public "production strategies" cohort the
+  // landing claims is pre-match only. In-play data stays in /admin where
+  // the operator can audit it.
+  const tabFilteredBots = bots.filter((b) => !isLiveBot(b.name));
 
   const activeBots = tabFilteredBots.filter((b) => b.hasEnoughData && (b.roi == null || b.roi >= 0));
   const underperformingBots = tabFilteredBots.filter((b) => b.hasEnoughData && b.roi != null && b.roi < 0);
@@ -379,17 +381,8 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets }: Props)
               <span className="text-[10px] text-muted-foreground">accumulating data, no confirmed signals yet</span>
             </div>
           </div>
-          <div className="flex items-center gap-1 rounded-lg border border-border/30 bg-background/40 p-0.5">
-            {(['all', 'prematch', 'inplay'] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`rounded-md px-3 py-1 text-[11px] font-medium transition-colors ${tab === t ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-              >
-                {t === 'all' ? 'All' : t === 'prematch' ? 'Pre-match' : 'In-play'}
-              </button>
-            ))}
-          </div>
+          {/* Pre-match / In-play tabs removed — in-play hidden from public,
+              audit data lives in /admin. */}
         </div>
       </div>
 

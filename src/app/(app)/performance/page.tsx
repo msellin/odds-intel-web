@@ -197,9 +197,12 @@ export default async function PerformancePage() {
   };
 
   return (
-    <>
+    // PERFORMANCE-NARROW (2026-06-24): wrap in max-w-4xl to match the
+    // landing page width, so the layout reads as one continuous brand
+    // surface rather than the wide /admin-style dashboard the (app)
+    // layout's max-w-7xl gave us.
+    <div className="mx-auto max-w-4xl -mx-2 sm:-mx-4">
       {isPro ? (
-        // Pro: show cached hero immediately, stream in full bet data behind Suspense.
         <Suspense fallback={<PerformanceClient {...cachedClientProps} />}>
           <ProPerformanceSection
             isPro={isPro}
@@ -229,6 +232,6 @@ export default async function PerformancePage() {
           isElite={false}
         />
       )}
-    </>
+    </div>
   );
 }

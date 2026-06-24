@@ -84,6 +84,7 @@ export default async function PreviewLanding() {
     {
       // scripts/production_audit_vs_winnerodds.py
       name: "WinnerOdds",
+      url: "https://winnerodds.com",
       windowStart: "2026-04-01",
       windowEnd: "2026-06-08",
       theirN: 2294,
@@ -95,6 +96,7 @@ export default async function PreviewLanding() {
     {
       // ledger/comparison_signalodds.json (2026-06-24 scrape)
       name: "SignalOdds",
+      url: "https://signalodds.com",
       windowStart: "2026-05-04",
       windowEnd: "2026-06-25",
       theirN: 1157,
@@ -106,6 +108,7 @@ export default async function PreviewLanding() {
     {
       // ledger/comparison_deepbetting.json (2026-06-24 scrape)
       name: "DeepBetting",
+      url: "https://deepbetting.io",
       windowStart: "2026-05-04",
       windowEnd: "2026-06-25",
       theirN: 235,
@@ -277,41 +280,61 @@ export default async function PreviewLanding() {
               <div className="text-right">ROI</div>
               <div className="text-right">Bets</div>
             </div>
-            {competitors.map((c) => (
-              <div key={c.name} className="border-b border-white/[0.04] last:border-b-0">
-                <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 px-4 py-3 bg-emerald-500/[0.04]">
-                  <div className="text-neutral-100">OddsIntel · production · pre-match</div>
-                  <div className="text-right font-mono text-emerald-400">
-                    {c.ourRoi !== null
-                      ? `${c.ourRoi > 0 ? "+" : ""}${c.ourRoi.toFixed(2)}%`
-                      : "—"}
+            {competitors.map((c) => {
+              const weeks = Math.round(
+                (new Date(c.windowEnd).getTime() - new Date(c.windowStart).getTime())
+                  / (7 * 24 * 3600 * 1000),
+              );
+              const windowTip = `${c.windowStart} → ${c.windowEnd} (${weeks}w) · ${c.verifiable}`;
+              return (
+                <div key={c.name} className="border-b border-white/[0.04] last:border-b-0">
+                  <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 px-4 py-3 bg-emerald-500/[0.04]">
+                    <div className="text-neutral-100">OddsIntel · production</div>
+                    <div className="text-right font-mono text-emerald-400">
+                      {c.ourRoi !== null
+                        ? `${c.ourRoi > 0 ? "+" : ""}${c.ourRoi.toFixed(2)}%`
+                        : "—"}
+                    </div>
+                    <div className="text-right font-mono text-neutral-300">
+                      {c.ourN.toLocaleString()}
+                    </div>
                   </div>
-                  <div className="text-right font-mono text-neutral-300">
-                    {c.ourN.toLocaleString()}
+                  <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 px-4 py-3">
+                    <div className="text-neutral-400">
+                      <a
+                        href={c.url}
+                        target="_blank"
+                        rel="nofollow noopener noreferrer"
+                        className="text-neutral-300 hover:text-neutral-100 hover:underline"
+                      >
+                        {c.name}
+                      </a>
+                      <span
+                        title={windowTip}
+                        className="ml-2 cursor-help text-[10px] font-mono uppercase tracking-wider text-neutral-600 underline decoration-dotted underline-offset-2 hover:text-neutral-400"
+                      >
+                        {weeks}w window
+                      </span>
+                    </div>
+                    <div className={`text-right font-mono ${c.theirRoi > 0 ? "text-neutral-300" : "text-red-400"}`}>
+                      {c.theirRoi > 0 ? "+" : ""}{c.theirRoi.toFixed(2)}%
+                    </div>
+                    <div className="text-right font-mono text-neutral-300">
+                      {c.theirN.toLocaleString()}
+                    </div>
                   </div>
                 </div>
-                <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 px-4 py-3">
-                  <div className="text-neutral-400">
-                    {c.name} · same window ({c.windowStart} → {c.windowEnd})
-                  </div>
-                  <div className={`text-right font-mono ${c.theirRoi > 0 ? "text-neutral-300" : "text-red-400"}`}>
-                    {c.theirRoi > 0 ? "+" : ""}{c.theirRoi.toFixed(2)}%
-                  </div>
-                  <div className="text-right font-mono text-neutral-300">
-                    {c.theirN.toLocaleString()}
-                  </div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
           <p className="mt-3 text-xs text-neutral-500">
-            Every competitor pick pulled via their public endpoint (no scraping
-            of paywalled content), settled outcomes matched to ours by match id
-            + kickoff, ROI computed at €10 flat stake. Reproducible — see{" "}
+            Each competitor pulled via their public endpoint, settled outcomes
+            matched to ours by match id + kickoff, ROI at €10 flat stake.
+            Hover the <span className="font-mono text-neutral-400">Nw window</span>{" "}
+            badge for exact dates + source. Reproducible —{" "}
             <code className="rounded bg-white/[0.05] px-1 font-mono">scripts/audit_vs_*.py</code>{" "}
-            in the engine repo and{" "}
-            <code className="rounded bg-white/[0.05] px-1 font-mono">ledger/comparison_*.json</code>{" "}
-            for the raw numbers.
+            +{" "}
+            <code className="rounded bg-white/[0.05] px-1 font-mono">ledger/comparison_*.json</code>.
           </p>
         </section>
 

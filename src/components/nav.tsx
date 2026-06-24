@@ -50,7 +50,7 @@ export function Nav({ previewTier: _ = null }: NavProps) {
             <span className="sm:hidden">Stats</span>
           </Link>
           {isSuperadmin && (
-            <Link href="/admin" className={linkClass("/admin")}>
+            <Link href="/admin/bots" className={linkClass("/admin")}>
               <Shield className="h-3.5 w-3.5" />
               Admin
             </Link>
