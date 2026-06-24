@@ -21,6 +21,7 @@
  */
 import Link from "next/link";
 import { headers } from "next/headers";
+import { PremiumWaitlistForm } from "@/components/premium-waitlist-form";
 
 interface TrackRecordMeta {
   since: string;
@@ -74,15 +75,46 @@ export default async function PreviewLanding() {
   const pnl = meta?.pnl_total ?? 0;
   const since = meta?.since ?? "2026-05-04";
 
-  // Same-window WinnerOdds comparison from the audit committed today.
-  // Hard-coded for now — could be lifted to a separate `audit_results` table
-  // and re-computed by a weekly cron, but at our update cadence (weekly retrain
-  // → weekly audit), a hard-coded 8-week snapshot is honest enough as long as
-  // we update the dates when we re-run.
-  const woWindowStart = "2026-04-01";
-  const woWindowEnd = "2026-06-08";
-  const woRoi = 5.84;
-  const woN = 2294;
+  // Same-window competitor comparisons from the audits committed in
+  // odds-intel-engine/ledger/comparison_*.json. Hard-coded for now —
+  // could be lifted to a weekly cron, but the underlying audits already
+  // commit to the engine repo so the JSON IS the source of truth and
+  // updating these constants is a one-line change.
+  const competitors = [
+    {
+      // scripts/production_audit_vs_winnerodds.py
+      name: "WinnerOdds",
+      windowStart: "2026-04-01",
+      windowEnd: "2026-06-08",
+      theirN: 2294,
+      theirRoi: 5.84,
+      ourN: total, // production cohort full sample (we beat them on n=1181 vs 2294)
+      ourRoi: roi,
+      verifiable: "Their public GraphQL endpoint at app.winnerodds.com:4000",
+    },
+    {
+      // ledger/comparison_signalodds.json (2026-06-24 scrape)
+      name: "SignalOdds",
+      windowStart: "2026-05-04",
+      windowEnd: "2026-06-25",
+      theirN: 1157,
+      theirRoi: -0.44,
+      ourN: 989,
+      ourRoi: 11.91,
+      verifiable: "Their public /predictions/past pages (HTML scrape)",
+    },
+    {
+      // ledger/comparison_deepbetting.json (2026-06-24 scrape)
+      name: "DeepBetting",
+      windowStart: "2026-05-04",
+      windowEnd: "2026-06-25",
+      theirN: 235,
+      theirRoi: -9.15,
+      ourN: 989,
+      ourRoi: 11.91,
+      verifiable: "Their public /backend/api/predictions-api.php endpoint",
+    },
+  ];
 
   return (
     <div className="min-h-dvh bg-neutral-950 text-neutral-50 antialiased">
@@ -237,39 +269,49 @@ export default async function PreviewLanding() {
         {/* ───────── Comparison ───────── */}
         <section className="mt-16">
           <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-neutral-500">
-            vs the established reference
+            vs other public football models
           </h2>
-          <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]">
-            <div className="grid grid-cols-3 gap-px bg-white/[0.06] text-xs font-mono uppercase tracking-wider text-neutral-500">
-              <div className="bg-neutral-950 px-4 py-3">Source</div>
-              <div className="bg-neutral-950 px-4 py-3 text-right">ROI</div>
-              <div className="bg-neutral-950 px-4 py-3 text-right">Bets</div>
+          <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02] text-sm">
+            <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 px-4 py-3 border-b border-white/[0.06] font-mono text-xs uppercase tracking-wider text-neutral-500">
+              <div>Source</div>
+              <div className="text-right">ROI</div>
+              <div className="text-right">Bets</div>
             </div>
-            <div className="grid grid-cols-3 gap-px bg-white/[0.06] text-sm">
-              <div className="bg-neutral-950 px-4 py-3 text-neutral-100">
-                OddsIntel · production · pre-match
+            {competitors.map((c) => (
+              <div key={c.name} className="border-b border-white/[0.04] last:border-b-0">
+                <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 px-4 py-3 bg-emerald-500/[0.04]">
+                  <div className="text-neutral-100">OddsIntel · production · pre-match</div>
+                  <div className="text-right font-mono text-emerald-400">
+                    {c.ourRoi !== null
+                      ? `${c.ourRoi > 0 ? "+" : ""}${c.ourRoi.toFixed(2)}%`
+                      : "—"}
+                  </div>
+                  <div className="text-right font-mono text-neutral-300">
+                    {c.ourN.toLocaleString()}
+                  </div>
+                </div>
+                <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 px-4 py-3">
+                  <div className="text-neutral-400">
+                    {c.name} · same window ({c.windowStart} → {c.windowEnd})
+                  </div>
+                  <div className={`text-right font-mono ${c.theirRoi > 0 ? "text-neutral-300" : "text-red-400"}`}>
+                    {c.theirRoi > 0 ? "+" : ""}{c.theirRoi.toFixed(2)}%
+                  </div>
+                  <div className="text-right font-mono text-neutral-300">
+                    {c.theirN.toLocaleString()}
+                  </div>
+                </div>
               </div>
-              <div className="bg-neutral-950 px-4 py-3 text-right font-mono text-emerald-400">
-                {roi !== null ? `${roi > 0 ? "+" : ""}${roi.toFixed(2)}%` : "—"}
-              </div>
-              <div className="bg-neutral-950 px-4 py-3 text-right font-mono text-neutral-300">
-                {total.toLocaleString()}
-              </div>
-              <div className="bg-neutral-950 px-4 py-3 text-neutral-400">
-                WinnerOdds · same 8-week window ({woWindowStart} → {woWindowEnd})
-              </div>
-              <div className="bg-neutral-950 px-4 py-3 text-right font-mono text-neutral-300">
-                +{woRoi.toFixed(2)}%
-              </div>
-              <div className="bg-neutral-950 px-4 py-3 text-right font-mono text-neutral-300">
-                {woN.toLocaleString()}
-              </div>
-            </div>
+            ))}
           </div>
           <p className="mt-3 text-xs text-neutral-500">
-            WinnerOdds picks pulled from their public GraphQL endpoint; settled
-            outcomes matched to ours via fixture id + kickoff. Reproducible —
-            see <code className="rounded bg-white/[0.05] px-1 font-mono">scripts/production_audit_vs_winnerodds.py</code>.
+            Every competitor pick pulled via their public endpoint (no scraping
+            of paywalled content), settled outcomes matched to ours by match id
+            + kickoff, ROI computed at €10 flat stake. Reproducible — see{" "}
+            <code className="rounded bg-white/[0.05] px-1 font-mono">scripts/audit_vs_*.py</code>{" "}
+            in the engine repo and{" "}
+            <code className="rounded bg-white/[0.05] px-1 font-mono">ledger/comparison_*.json</code>{" "}
+            for the raw numbers.
           </p>
         </section>
 
@@ -290,8 +332,13 @@ export default async function PreviewLanding() {
             (open JSON, no auth) — use match_id + kickoff_utc + placed_at_utc
             to independently re-settle each pick against ESPN or Flashscore.
             Daily snapshot hashes are timestamped to the Bitcoin blockchain via
-            OpenTimestamps (cron coming soon).
+            OpenTimestamps.
           </p>
+        </section>
+
+        {/* ───────── Premium waitlist (demand-signal capture) ───────── */}
+        <section className="mt-12">
+          <PremiumWaitlistForm />
         </section>
 
         {/* ───────── Footer ───────── */}
