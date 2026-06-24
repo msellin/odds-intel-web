@@ -222,72 +222,152 @@ export default async function PreviewLanding() {
           + anchored on the Bitcoin blockchain via OpenTimestamps.
         </p>
 
-        {/* ───────── Comparison ───────── */}
+        {/* ───────── Comparison cards — one per competitor ─────────
+           Per-competitor card emphasises the head-to-head: huge ROI
+           numbers side-by-side + a prominent delta in percentage
+           points. Designed to read in 3 seconds on mobile and 1
+           second on desktop — a sharp bettor sees "+12.35pp better
+           than SignalOdds on n=989" without parsing a table. */}
         <section className="mt-16">
-          <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-neutral-500">
-            vs other public football models
-          </h2>
-          <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02] text-sm">
-            <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 px-4 py-3 border-b border-white/[0.06] font-mono text-xs uppercase tracking-wider text-neutral-500">
-              <div>Source</div>
-              <div className="text-right">ROI</div>
-              <div className="text-right">Bets</div>
-            </div>
+          <div className="mb-4 flex items-baseline justify-between gap-2">
+            <h2 className="text-xs font-semibold uppercase tracking-widest text-neutral-500">
+              Head-to-head vs other public football models
+            </h2>
+            <span className="text-[10px] font-mono uppercase tracking-wider text-neutral-600">
+              same window · €10 flat stake
+            </span>
+          </div>
+          <div className="grid gap-3">
             {competitors.map((c) => {
               const weeks = Math.round(
                 (new Date(c.windowEnd).getTime() - new Date(c.windowStart).getTime())
                   / (7 * 24 * 3600 * 1000),
               );
-              const windowTip = `${c.windowStart} → ${c.windowEnd} (${weeks}w) · ${c.verifiable}`;
+              const ourRoi = c.ourRoi ?? 0;
+              const delta = ourRoi - c.theirRoi;
+              // Domain → 32px favicon via Google's public favicon service.
+              // No auth, free, attribution-friendly, served as image.
+              const domain = c.url.replace(/^https?:\/\//, "").replace(/\/.*/, "");
+              const favicon = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+              const windowTip = `${c.windowStart} → ${c.windowEnd} · ${c.verifiable}`;
               return (
-                <div key={c.name} className="border-b border-white/[0.04] last:border-b-0">
-                  <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 px-4 py-3 bg-emerald-500/[0.04]">
-                    <div className="text-neutral-100">OddsIntel · production</div>
-                    <div className="text-right font-mono text-emerald-400">
-                      {c.ourRoi !== null
-                        ? `${c.ourRoi > 0 ? "+" : ""}${c.ourRoi.toFixed(2)}%`
-                        : "—"}
-                    </div>
-                    <div className="text-right font-mono text-neutral-300">
-                      {c.ourN.toLocaleString()}
-                    </div>
+                <div
+                  key={c.name}
+                  className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.02]"
+                >
+                  {/* Header strip — favicon + name + window pill */}
+                  <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] bg-white/[0.02] px-4 py-2.5">
+                    <a
+                      href={c.url}
+                      target="_blank"
+                      rel="nofollow noopener noreferrer"
+                      className="flex items-center gap-2 text-sm font-semibold text-neutral-200 hover:text-neutral-100"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={favicon}
+                        alt=""
+                        width={20}
+                        height={20}
+                        className="h-5 w-5 rounded-sm"
+                        loading="lazy"
+                      />
+                      <span>vs {c.name}</span>
+                      <span className="text-[11px] font-normal text-neutral-500">↗</span>
+                    </a>
+                    <span
+                      title={windowTip}
+                      className="cursor-help font-mono text-[10px] uppercase tracking-widest text-neutral-500 underline decoration-dotted underline-offset-4 hover:text-neutral-300"
+                    >
+                      {weeks}w window
+                    </span>
                   </div>
-                  <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 px-4 py-3">
-                    <div className="text-neutral-400">
-                      <a
-                        href={c.url}
-                        target="_blank"
-                        rel="nofollow noopener noreferrer"
-                        className="text-neutral-300 hover:text-neutral-100 hover:underline"
-                      >
-                        {c.name}
-                      </a>
+
+                  {/* Numbers — 3 columns: us · vs · them, with delta hero */}
+                  <div className="grid grid-cols-3 items-center gap-2 px-3 py-5 sm:px-6 sm:py-7">
+                    {/* OddsIntel */}
+                    <div className="text-center">
+                      <p className="font-mono text-[10px] uppercase tracking-widest text-emerald-400">
+                        OddsIntel
+                      </p>
+                      <p className="mt-1 font-mono text-2xl font-semibold tabular-nums text-emerald-300 sm:text-4xl">
+                        {ourRoi >= 0 ? "+" : ""}{ourRoi.toFixed(2)}%
+                      </p>
+                      <p className="mt-1 text-[10px] text-neutral-500 tabular-nums">
+                        n={c.ourN.toLocaleString()}
+                      </p>
+                    </div>
+
+                    {/* Delta hero */}
+                    <div className="flex flex-col items-center">
+                      <span className="font-mono text-[10px] uppercase tracking-widest text-neutral-500">
+                        delta
+                      </span>
                       <span
-                        title={windowTip}
-                        className="ml-2 cursor-help text-[10px] font-mono uppercase tracking-wider text-neutral-600 underline decoration-dotted underline-offset-2 hover:text-neutral-400"
+                        className={`mt-1 inline-flex items-center gap-1 font-mono text-xl font-bold tabular-nums sm:text-2xl ${
+                          delta > 0
+                            ? "text-emerald-400"
+                            : delta < 0
+                              ? "text-red-400"
+                              : "text-neutral-400"
+                        }`}
                       >
-                        {weeks}w window
+                        <span aria-hidden>{delta > 0 ? "▲" : delta < 0 ? "▼" : "—"}</span>
+                        <span>
+                          {delta > 0 ? "+" : ""}
+                          {delta.toFixed(2)}pp
+                        </span>
+                      </span>
+                      <span className="mt-1 text-[10px] text-neutral-500">
+                        {delta > 0 ? "in our favour" : delta < 0 ? "they lead" : "tied"}
                       </span>
                     </div>
-                    <div className={`text-right font-mono ${c.theirRoi > 0 ? "text-neutral-300" : "text-red-400"}`}>
-                      {c.theirRoi > 0 ? "+" : ""}{c.theirRoi.toFixed(2)}%
+
+                    {/* Competitor */}
+                    <div className="text-center">
+                      <p className="font-mono text-[10px] uppercase tracking-widest text-neutral-500">
+                        {c.name}
+                      </p>
+                      <p
+                        className={`mt-1 font-mono text-2xl font-semibold tabular-nums sm:text-4xl ${
+                          c.theirRoi >= 0 ? "text-neutral-300" : "text-red-400"
+                        }`}
+                      >
+                        {c.theirRoi > 0 ? "+" : ""}{c.theirRoi.toFixed(2)}%
+                      </p>
+                      <p className="mt-1 text-[10px] text-neutral-500 tabular-nums">
+                        n={c.theirN.toLocaleString()}
+                      </p>
                     </div>
-                    <div className="text-right font-mono text-neutral-300">
-                      {c.theirN.toLocaleString()}
-                    </div>
+                  </div>
+
+                  {/* Per-€1k footer — concrete framing of the % delta */}
+                  <div className="border-t border-white/[0.04] bg-white/[0.02] px-4 py-2 text-center font-mono text-[11px] text-neutral-500">
+                    Per €1,000 staked:{" "}
+                    <span className="text-emerald-300">
+                      OddsIntel {ourRoi >= 0 ? "+" : ""}€{(ourRoi * 10).toFixed(0)}
+                    </span>{" "}
+                    ·{" "}
+                    <span className={c.theirRoi >= 0 ? "text-neutral-300" : "text-red-400"}>
+                      {c.name} {c.theirRoi > 0 ? "+" : ""}€{(c.theirRoi * 10).toFixed(0)}
+                    </span>
                   </div>
                 </div>
               );
             })}
           </div>
-          <p className="mt-3 text-xs text-neutral-500">
+          <p className="mt-3 text-center text-xs text-neutral-500">
             Each competitor pulled via their public endpoint, settled outcomes
             matched to ours by match id + kickoff, ROI at €10 flat stake.
-            Hover the <span className="font-mono text-neutral-400">Nw window</span>{" "}
-            badge for exact dates + source. Reproducible —{" "}
-            <code className="rounded bg-white/[0.05] px-1 font-mono">scripts/audit_vs_*.py</code>{" "}
+            Reproducible —{" "}
+            <code className="rounded bg-white/[0.05] px-1 font-mono">
+              scripts/audit_vs_*.py
+            </code>{" "}
             +{" "}
-            <code className="rounded bg-white/[0.05] px-1 font-mono">ledger/comparison_*.json</code>.
+            <code className="rounded bg-white/[0.05] px-1 font-mono">
+              ledger/comparison_*.json
+            </code>
+            .
           </p>
         </section>
 
