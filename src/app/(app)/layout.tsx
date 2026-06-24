@@ -1,6 +1,5 @@
 import { Nav } from "@/components/nav";
 import { LoginModal } from "@/components/login-modal";
-import { BackButton } from "@/components/back-button";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { cookies } from "next/headers";
 
@@ -28,7 +27,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <>
       <Nav previewTier={previewTier} />
-      <BackButton />
       <main className="mx-auto w-full max-w-7xl flex-1 px-2 sm:px-4 py-6">
         {children}
       </main>

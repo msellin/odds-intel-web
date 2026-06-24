@@ -548,7 +548,7 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets }: Props)
               </p>
             </div>
             <Link
-              href="/how-it-works"
+              href="/performance"
               className="shrink-0 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 transition-colors"
             >
               Upgrade to Pro
@@ -562,7 +562,7 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets }: Props)
         <div className="border-t border-border/20 px-5 py-3 bg-emerald-500/5">
           <p className="text-[11px] text-muted-foreground">
             <span className="text-emerald-400 font-medium">Elite</span> unlocks exact CLV %, current bankroll per bot, and stake sizes.{" "}
-            <Link href="/how-it-works" className="text-emerald-400 hover:underline">Upgrade →</Link>
+            <Link href="/performance" className="text-emerald-400 hover:underline">Upgrade →</Link>
           </p>
         </div>
       )}
