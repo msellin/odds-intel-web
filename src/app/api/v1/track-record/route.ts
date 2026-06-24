@@ -7,7 +7,8 @@
  * market data exposed here.
  *
  * Filter scope (intentional, never widen without updating MODEL_WHITEPAPER):
- *   - bots.maturity_label = 'calibrated'  (no beta/active/retired noise)
+ *   - bots.maturity_label IN ('calibrated','beta','active')  — production
+ *     strategies only, excludes retired (failed experiments)
  *   - market IN ('1x2', 'over_under_25', 'o/u', 'btts')  (pre-match only)
  *   - result IN ('won', 'lost')  (settled, no pending/voided)
  *
@@ -29,6 +30,7 @@ export const revalidate = 60;
 
 const DEFAULT_SINCE = "2026-05-04";
 const PRE_MATCH_MARKETS = ["1x2", "over_under_25", "o/u", "btts"];
+const PUBLIC_MATURITY_LABELS = ["calibrated", "beta", "active"];
 
 function adminClient() {
   return createClient(
@@ -102,7 +104,7 @@ export async function GET(req: Request) {
        ),
        bots!inner ( name, maturity_label )`
     )
-    .eq("bots.maturity_label", "calibrated")
+    .in("bots.maturity_label", PUBLIC_MATURITY_LABELS)
     .in("market", PRE_MATCH_MARKETS)
     .in("result", ["won", "lost"])
     .gte("created_at", `${since}T00:00:00Z`)
@@ -123,10 +125,10 @@ export async function GET(req: Request) {
   const aggRes = await sb
     .from("simulated_bets")
     .select(
-      "stake, pnl, clv_pinnacle, bots!inner(maturity_label)",
+      "stake, pnl, clv, clv_pinnacle, bots!inner(maturity_label)",
       { count: "exact" }
     )
-    .eq("bots.maturity_label", "calibrated")
+    .in("bots.maturity_label", PUBLIC_MATURITY_LABELS)
     .in("market", PRE_MATCH_MARKETS)
     .in("result", ["won", "lost"])
     .gte("created_at", `${since}T00:00:00Z`);
@@ -134,36 +136,46 @@ export async function GET(req: Request) {
   let total = 0;
   let stake = 0;
   let pnl = 0;
-  const clvVals: number[] = [];
+  // any-book CLV is the public headline metric (matches the cohort used
+  // historically in dashboard_cache.active_avg_clv).
+  const clvAnyVals: number[] = [];
+  const clvPinVals: number[] = [];
+  let clvSum = 0;
   let clvBeats = 0;
   if (!aggRes.error && aggRes.data) {
     total = aggRes.count ?? aggRes.data.length;
     for (const r of aggRes.data as Array<{
       stake: number | null;
       pnl: number | null;
+      clv: number | null;
       clv_pinnacle: number | null;
     }>) {
       stake += Number(r.stake ?? 0);
       pnl += Number(r.pnl ?? 0);
-      if (r.clv_pinnacle != null) {
-        const c = Number(r.clv_pinnacle);
-        clvVals.push(c);
+      if (r.clv != null) {
+        const c = Number(r.clv);
+        clvAnyVals.push(c);
+        clvSum += c;
         if (c > 0) clvBeats += 1;
+      }
+      if (r.clv_pinnacle != null) {
+        clvPinVals.push(Number(r.clv_pinnacle));
       }
     }
   }
-  // Median CLV — robust to mixed-vintage closing snaps. See engine-data.ts
-  // CalibratedHeadlineStats for rationale.
-  let medianClvPct: number | null = null;
-  if (clvVals.length) {
-    const sorted = clvVals.sort((a, b) => a - b);
-    const mid = Math.floor(sorted.length / 2);
-    const med = sorted.length % 2 === 0
-      ? (sorted[mid - 1] + sorted[mid]) / 2
-      : sorted[mid];
-    medianClvPct = Number((med * 100).toFixed(2));
+  function median(xs: number[]): number | null {
+    if (xs.length === 0) return null;
+    const s = [...xs].sort((a, b) => a - b);
+    const m = Math.floor(s.length / 2);
+    const med = s.length % 2 === 0 ? (s[m - 1] + s[m]) / 2 : s[m];
+    return Number((med * 100).toFixed(2));
   }
-  const clvN = clvVals.length;
+  const medianClvPct = median(clvAnyVals);
+  const medianClvPinPct = median(clvPinVals);
+  const meanClvPct = clvAnyVals.length
+    ? Number(((100 * clvSum) / clvAnyVals.length).toFixed(2))
+    : null;
+  const clvN = clvAnyVals.length;
 
   const bets = rows.map((r) => ({
     id: r.id,
@@ -200,11 +212,13 @@ export async function GET(req: Request) {
     roi_pct: stake > 0 ? Number(((100 * pnl) / stake).toFixed(2)) : null,
     pnl_total: Number(pnl.toFixed(2)),
     stake_total: Number(stake.toFixed(2)),
-    median_clv_pin_pct: medianClvPct,
-    clv_pin_coverage_pct: total > 0 ? Number(((100 * clvN) / total).toFixed(1)) : 0,
-    clv_pin_beat_pct: clvN > 0 ? Number(((100 * clvBeats) / clvN).toFixed(1)) : null,
+    median_clv_pct: medianClvPct,
+    mean_clv_pct: meanClvPct,
+    median_clv_pin_pct: medianClvPinPct,
+    clv_coverage_pct: total > 0 ? Number(((100 * clvN) / total).toFixed(1)) : 0,
+    clv_beat_pct: clvN > 0 ? Number(((100 * clvBeats) / clvN).toFixed(1)) : null,
     scope:
-      "calibrated bots, pre-match markets (1x2, OU 2.5, BTTS), settled only",
+      "production strategies (calibrated + beta + active maturity, no retired), pre-match markets (1x2, OU 2.5, BTTS), settled only",
     notes:
       "Every row is an independently re-settleable bet. Use match_id (UUID) + kickoff_utc + market + selection + placed_at_utc to verify against ESPN/Flashscore. Track record published unfiltered — losing bets are present.",
     next_cursor:

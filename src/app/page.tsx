@@ -29,9 +29,11 @@ interface TrackRecordMeta {
   roi_pct: number | null;
   pnl_total: number;
   stake_total: number;
+  median_clv_pct: number | null;
+  mean_clv_pct: number | null;
   median_clv_pin_pct: number | null;
-  clv_pin_coverage_pct: number;
-  clv_pin_beat_pct: number | null;
+  clv_coverage_pct: number;
+  clv_beat_pct: number | null;
   scope: string;
   notes: string;
   next_cursor: string | null;
@@ -65,8 +67,9 @@ export default async function PreviewLanding() {
   const meta = await getMeta();
   const roi = meta?.roi_pct ?? null;
   const total = meta?.total_bets ?? 0;
-  const clv = meta?.median_clv_pin_pct ?? null;
-  const beat = meta?.clv_pin_beat_pct ?? null;
+  const clvMedian = meta?.median_clv_pct ?? null;
+  const clvPinMedian = meta?.median_clv_pin_pct ?? null;
+  const beat = meta?.clv_beat_pct ?? null;
   const stake = meta?.stake_total ?? 0;
   const pnl = meta?.pnl_total ?? 0;
   const since = meta?.since ?? "2026-05-04";
@@ -86,7 +89,7 @@ export default async function PreviewLanding() {
       {/* ───────── Nav ───────── */}
       <header className="border-b border-white/[0.06]">
         <div className="mx-auto flex h-14 max-w-4xl items-center justify-between px-4">
-          <Link href="/preview" className="font-mono text-sm font-bold tracking-tight">
+          <Link href="/" className="font-mono text-sm font-bold tracking-tight">
             ODDSINTEL
           </Link>
           <nav className="flex items-center gap-4 text-xs text-neutral-400">
@@ -124,7 +127,7 @@ export default async function PreviewLanding() {
                     {roi.toFixed(2)}% ROI
                   </span>
                   <span className="block text-2xl text-neutral-400 font-normal mt-3 sm:text-3xl">
-                    across {total.toLocaleString()} calibrated pre-match picks
+                    across {total.toLocaleString()} verified pre-match picks
                   </span>
                 </>
               ) : (
@@ -167,14 +170,18 @@ export default async function PreviewLanding() {
             accent={roi !== null && roi > 0 ? "positive" : null}
           />
           <Metric
-            label="Median CLV vs Pinnacle"
-            value={clv !== null ? `${clv > 0 ? "+" : ""}${clv.toFixed(2)}%` : "—"}
-            sub={
-              meta?.clv_pin_coverage_pct
-                ? `n=${Math.round((meta.clv_pin_coverage_pct / 100) * total)} settled w/ close`
-                : "tracking"
+            label="Median CLV"
+            value={
+              clvMedian !== null
+                ? `${clvMedian > 0 ? "+" : ""}${clvMedian.toFixed(2)}%`
+                : "—"
             }
-            accent={clv !== null && clv > 0 ? "positive" : null}
+            sub={
+              clvPinMedian !== null
+                ? `+${clvPinMedian.toFixed(1)}% vs Pinnacle close`
+                : "vs closing line"
+            }
+            accent={clvMedian !== null && clvMedian > 0 ? "positive" : null}
           />
           <Metric
             label="Beat the close"
@@ -193,10 +200,11 @@ export default async function PreviewLanding() {
             <p className="text-sm leading-relaxed text-neutral-300">
               The model is a Poisson + XGBoost blend, retrained weekly on every
               completed match in our 280+ league universe. Every pick goes through
-              a calibration layer (isotonic) before publication, and only the
-              calibrated production tier appears in the public ledger. Beta and
-              experimental bots run in the background — they exist to learn from,
-              not to bet your money on.
+              an isotonic calibration layer before publication. The public ledger
+              shows all production strategies — calibrated, beta, and active —
+              with no cherry-picking. Retired bots (failed experiments) are
+              excluded from the headline but stay visible in the admin dashboard
+              for audit.
             </p>
           </div>
           <div>
@@ -230,7 +238,7 @@ export default async function PreviewLanding() {
             </div>
             <div className="grid grid-cols-3 gap-px bg-white/[0.06] text-sm">
               <div className="bg-neutral-950 px-4 py-3 text-neutral-100">
-                OddsIntel · calibrated · pre-match
+                OddsIntel · production · pre-match
               </div>
               <div className="bg-neutral-950 px-4 py-3 text-right font-mono text-emerald-400">
                 {roi !== null ? `${roi > 0 ? "+" : ""}${roi.toFixed(2)}%` : "—"}

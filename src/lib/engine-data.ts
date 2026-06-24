@@ -3221,10 +3221,20 @@ export interface CalibratedHeadlineStats {
     stakeEur: number;
     pnlEur: number;
     roiPct: number | null;
-    /** Median CLV vs Pinnacle close, in percent. Robust to data-quality
-     *  outliers caused by mixed-vintage closing snaps. Prefer this over a
-     *  mean — see HEADLINE-COHORT comment. */
+    /** Median CLV vs ANY-BOOK close, in percent. Matches the cohort + metric
+     *  the dashboard_cache.active_avg_clv has used since the product
+     *  launched — kept as the public headline so the number doesn't appear
+     *  to "collapse" relative to historical claims. */
     medianClvPct: number | null;
+    /** Mean CLV vs any-book close, in percent. Inflated by ±50% outliers
+     *  from mixed-vintage closing snaps in the historical data; shown as a
+     *  transparency footnote, not the headline. The closing_snap.py cron
+     *  shipped 2026-06-24 fixes the source of the noise going forward. */
+    meanClvPct: number | null;
+    /** Pinnacle-specific median CLV — the metric sharp bettors look at.
+     *  Smaller than any-book median because Pinnacle is the sharpest book
+     *  and has the tightest closing line. Shown as a credibility marker. */
+    medianClvPinPct: number | null;
     clvN: number;
     clvBeatPct: number | null;
     sinceDate: string;
@@ -3236,6 +3246,11 @@ export interface CalibratedHeadlineStats {
 }
 
 const CALIBRATED_SINCE = "2026-05-04";
+// Headline cohort: all production strategies (calibrated + beta + active
+// maturities — same cohort the dashboard_cache.active_avg_clv historically
+// used). EXCLUDES retired bots (failed experiments) so the headline isn't
+// dragged by deactivated losers.
+const PUBLIC_MATURITY_LABELS = ["calibrated", "beta", "active"] as const;
 const CALIBRATED_PUBLIC_MARKETS = ["1x2", "o/u", "over_under_25", "btts"] as const;
 
 const _getCalibratedHeadlineStatsUncached =
@@ -3243,24 +3258,24 @@ const _getCalibratedHeadlineStatsUncached =
     const admin = createSupabaseAdmin();
     const cutoff30 = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
 
-    // Pull all calibrated pre-match settled bets since launch in one shot.
+    // Pull all production pre-match settled bets since launch in one shot.
     const { data, error } = await admin
       .from("simulated_bets")
       .select(
-        "created_at, stake, pnl, clv_pinnacle, bots!inner(maturity_label)",
+        "created_at, stake, pnl, clv, clv_pinnacle, bots!inner(maturity_label)",
       )
-      .eq("bots.maturity_label", "calibrated")
+      .in("bots.maturity_label", PUBLIC_MATURITY_LABELS as unknown as string[])
       .in("market", CALIBRATED_PUBLIC_MARKETS as unknown as string[])
       .in("result", ["won", "lost"])
       .gte("created_at", `${CALIBRATED_SINCE}T00:00:00Z`)
-      .range(0, 9999);
+      .range(0, 19999);
 
     if (error || !data) {
       return {
         allTime: {
           n: 0, stakeEur: 0, pnlEur: 0, roiPct: null,
-          medianClvPct: null, clvN: 0, clvBeatPct: null,
-          sinceDate: CALIBRATED_SINCE,
+          medianClvPct: null, meanClvPct: null, medianClvPinPct: null,
+          clvN: 0, clvBeatPct: null, sinceDate: CALIBRATED_SINCE,
         },
         last30d: { n: 0, roiPct: null },
       };
@@ -3269,11 +3284,14 @@ const _getCalibratedHeadlineStatsUncached =
     let n = 0, stake = 0, pnl = 0;
     let n30 = 0, stake30 = 0, pnl30 = 0;
     let clvBeats = 0;
+    let clvSum = 0;
     const clvVals: number[] = [];
+    const clvPinVals: number[] = [];
     for (const r of data as Array<{
       created_at: string;
       stake: number | string | null;
       pnl: number | string | null;
+      clv: number | string | null;
       clv_pinnacle: number | string | null;
     }>) {
       const s = Number(r.stake ?? 0);
@@ -3281,10 +3299,14 @@ const _getCalibratedHeadlineStatsUncached =
       n += 1;
       stake += s;
       pnl += p;
-      if (r.clv_pinnacle != null) {
-        const c = Number(r.clv_pinnacle) * 100;
+      if (r.clv != null) {
+        const c = Number(r.clv) * 100;
         clvVals.push(c);
+        clvSum += c;
         if (c > 0) clvBeats += 1;
+      }
+      if (r.clv_pinnacle != null) {
+        clvPinVals.push(Number(r.clv_pinnacle) * 100);
       }
       if (r.created_at >= cutoff30) {
         n30 += 1;
@@ -3293,19 +3315,13 @@ const _getCalibratedHeadlineStatsUncached =
       }
     }
 
-    // Median CLV is robust to outliers from mixed-vintage closing snaps
-    // (some Pinnacle "closes" are days pre-kickoff while others are T-5;
-    // the mean swings by ±10pp depending on the noise tail). The 5-min
-    // closing_snap cron we just shipped tightens this going forward, but
-    // historical bets retain the noise — surface the median publicly.
-    let medianClvPct: number | null = null;
-    if (clvVals.length > 0) {
-      const sorted = [...clvVals].sort((a, b) => a - b);
-      const mid = Math.floor(sorted.length / 2);
-      medianClvPct =
-        sorted.length % 2 === 0
-          ? Number(((sorted[mid - 1] + sorted[mid]) / 2).toFixed(2))
-          : Number(sorted[mid].toFixed(2));
+    function median(xs: number[]): number | null {
+      if (xs.length === 0) return null;
+      const s = [...xs].sort((a, b) => a - b);
+      const m = Math.floor(s.length / 2);
+      return Number(
+        (s.length % 2 === 0 ? (s[m - 1] + s[m]) / 2 : s[m]).toFixed(2),
+      );
     }
 
     return {
@@ -3314,12 +3330,15 @@ const _getCalibratedHeadlineStatsUncached =
         stakeEur: Number(stake.toFixed(2)),
         pnlEur: Number(pnl.toFixed(2)),
         roiPct: stake > 0 ? Number(((100 * pnl) / stake).toFixed(2)) : null,
-        medianClvPct,
+        medianClvPct: median(clvVals),
+        meanClvPct: clvVals.length
+          ? Number((clvSum / clvVals.length).toFixed(2))
+          : null,
+        medianClvPinPct: median(clvPinVals),
         clvN: clvVals.length,
-        clvBeatPct:
-          clvVals.length > 0
-            ? Number(((100 * clvBeats) / clvVals.length).toFixed(1))
-            : null,
+        clvBeatPct: clvVals.length
+          ? Number(((100 * clvBeats) / clvVals.length).toFixed(1))
+          : null,
         sinceDate: CALIBRATED_SINCE,
       },
       last30d: {
