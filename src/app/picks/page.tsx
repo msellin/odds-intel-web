@@ -235,7 +235,7 @@ export default async function PicksPage() {
           </p>
           <div className="mt-4 flex items-center gap-3">
             <Link
-              href="https://t.me/oddsintelapp"
+              href="https://t.me/oddsintelpicks"
               className="rounded-md bg-emerald-500 px-4 py-2 text-sm font-semibold text-neutral-950 hover:bg-emerald-400"
             >
               Join Telegram

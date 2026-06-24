@@ -106,7 +106,7 @@ export default async function PreviewLanding() {
               API
             </Link>
             <Link
-              href="https://t.me/oddsintel"
+              href="https://t.me/oddsintelpicks"
               className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-emerald-300 hover:bg-emerald-500/20"
             >
               Telegram
@@ -156,7 +156,7 @@ export default async function PreviewLanding() {
                 View track record
               </Link>
               <Link
-                href="https://t.me/oddsintelapp"
+                href="https://t.me/oddsintelpicks"
                 className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-5 py-2.5 text-sm font-semibold text-emerald-300 hover:bg-emerald-500/20"
               >
                 Telegram
@@ -308,7 +308,7 @@ export default async function PreviewLanding() {
               >
                 GitHub
               </Link>
-              <Link href="https://t.me/oddsintel" className="hover:text-neutral-300">
+              <Link href="https://t.me/oddsintelpicks" className="hover:text-neutral-300">
                 Telegram
               </Link>
             </div>
