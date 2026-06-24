@@ -29,7 +29,7 @@ interface TrackRecordMeta {
   roi_pct: number | null;
   pnl_total: number;
   stake_total: number;
-  avg_clv_pin_pct: number | null;
+  median_clv_pin_pct: number | null;
   clv_pin_coverage_pct: number;
   clv_pin_beat_pct: number | null;
   scope: string;
@@ -65,7 +65,7 @@ export default async function PreviewLanding() {
   const meta = await getMeta();
   const roi = meta?.roi_pct ?? null;
   const total = meta?.total_bets ?? 0;
-  const clv = meta?.avg_clv_pin_pct ?? null;
+  const clv = meta?.median_clv_pin_pct ?? null;
   const beat = meta?.clv_pin_beat_pct ?? null;
   const stake = meta?.stake_total ?? 0;
   const pnl = meta?.pnl_total ?? 0;
@@ -167,11 +167,11 @@ export default async function PreviewLanding() {
             accent={roi !== null && roi > 0 ? "positive" : null}
           />
           <Metric
-            label="Avg CLV vs Pinnacle"
+            label="Median CLV vs Pinnacle"
             value={clv !== null ? `${clv > 0 ? "+" : ""}${clv.toFixed(2)}%` : "—"}
             sub={
               meta?.clv_pin_coverage_pct
-                ? `${meta.clv_pin_coverage_pct.toFixed(0)}% coverage`
+                ? `n=${Math.round((meta.clv_pin_coverage_pct / 100) * total)} settled w/ close`
                 : "tracking"
             }
             accent={clv !== null && clv > 0 ? "positive" : null}

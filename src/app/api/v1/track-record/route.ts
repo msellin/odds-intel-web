@@ -134,8 +134,7 @@ export async function GET(req: Request) {
   let total = 0;
   let stake = 0;
   let pnl = 0;
-  let clvSum = 0;
-  let clvN = 0;
+  const clvVals: number[] = [];
   let clvBeats = 0;
   if (!aggRes.error && aggRes.data) {
     total = aggRes.count ?? aggRes.data.length;
@@ -147,12 +146,24 @@ export async function GET(req: Request) {
       stake += Number(r.stake ?? 0);
       pnl += Number(r.pnl ?? 0);
       if (r.clv_pinnacle != null) {
-        clvSum += Number(r.clv_pinnacle);
-        clvN += 1;
-        if (Number(r.clv_pinnacle) > 0) clvBeats += 1;
+        const c = Number(r.clv_pinnacle);
+        clvVals.push(c);
+        if (c > 0) clvBeats += 1;
       }
     }
   }
+  // Median CLV — robust to mixed-vintage closing snaps. See engine-data.ts
+  // CalibratedHeadlineStats for rationale.
+  let medianClvPct: number | null = null;
+  if (clvVals.length) {
+    const sorted = clvVals.sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    const med = sorted.length % 2 === 0
+      ? (sorted[mid - 1] + sorted[mid]) / 2
+      : sorted[mid];
+    medianClvPct = Number((med * 100).toFixed(2));
+  }
+  const clvN = clvVals.length;
 
   const bets = rows.map((r) => ({
     id: r.id,
@@ -189,7 +200,7 @@ export async function GET(req: Request) {
     roi_pct: stake > 0 ? Number(((100 * pnl) / stake).toFixed(2)) : null,
     pnl_total: Number(pnl.toFixed(2)),
     stake_total: Number(stake.toFixed(2)),
-    avg_clv_pin_pct: clvN > 0 ? Number(((100 * clvSum) / clvN).toFixed(2)) : null,
+    median_clv_pin_pct: medianClvPct,
     clv_pin_coverage_pct: total > 0 ? Number(((100 * clvN) / total).toFixed(1)) : 0,
     clv_pin_beat_pct: clvN > 0 ? Number(((100 * clvBeats) / clvN).toFixed(1)) : null,
     scope:

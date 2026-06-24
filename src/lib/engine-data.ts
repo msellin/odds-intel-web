@@ -3221,7 +3221,10 @@ export interface CalibratedHeadlineStats {
     stakeEur: number;
     pnlEur: number;
     roiPct: number | null;
-    avgClvPct: number | null;
+    /** Median CLV vs Pinnacle close, in percent. Robust to data-quality
+     *  outliers caused by mixed-vintage closing snaps. Prefer this over a
+     *  mean — see HEADLINE-COHORT comment. */
+    medianClvPct: number | null;
     clvN: number;
     clvBeatPct: number | null;
     sinceDate: string;
@@ -3256,7 +3259,7 @@ const _getCalibratedHeadlineStatsUncached =
       return {
         allTime: {
           n: 0, stakeEur: 0, pnlEur: 0, roiPct: null,
-          avgClvPct: null, clvN: 0, clvBeatPct: null,
+          medianClvPct: null, clvN: 0, clvBeatPct: null,
           sinceDate: CALIBRATED_SINCE,
         },
         last30d: { n: 0, roiPct: null },
@@ -3264,8 +3267,9 @@ const _getCalibratedHeadlineStatsUncached =
     }
 
     let n = 0, stake = 0, pnl = 0;
-    let clvSum = 0, clvN = 0, clvBeats = 0;
     let n30 = 0, stake30 = 0, pnl30 = 0;
+    let clvBeats = 0;
+    const clvVals: number[] = [];
     for (const r of data as Array<{
       created_at: string;
       stake: number | string | null;
@@ -3278,9 +3282,8 @@ const _getCalibratedHeadlineStatsUncached =
       stake += s;
       pnl += p;
       if (r.clv_pinnacle != null) {
-        const c = Number(r.clv_pinnacle);
-        clvSum += c;
-        clvN += 1;
+        const c = Number(r.clv_pinnacle) * 100;
+        clvVals.push(c);
         if (c > 0) clvBeats += 1;
       }
       if (r.created_at >= cutoff30) {
@@ -3290,15 +3293,33 @@ const _getCalibratedHeadlineStatsUncached =
       }
     }
 
+    // Median CLV is robust to outliers from mixed-vintage closing snaps
+    // (some Pinnacle "closes" are days pre-kickoff while others are T-5;
+    // the mean swings by ±10pp depending on the noise tail). The 5-min
+    // closing_snap cron we just shipped tightens this going forward, but
+    // historical bets retain the noise — surface the median publicly.
+    let medianClvPct: number | null = null;
+    if (clvVals.length > 0) {
+      const sorted = [...clvVals].sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      medianClvPct =
+        sorted.length % 2 === 0
+          ? Number(((sorted[mid - 1] + sorted[mid]) / 2).toFixed(2))
+          : Number(sorted[mid].toFixed(2));
+    }
+
     return {
       allTime: {
         n,
         stakeEur: Number(stake.toFixed(2)),
         pnlEur: Number(pnl.toFixed(2)),
         roiPct: stake > 0 ? Number(((100 * pnl) / stake).toFixed(2)) : null,
-        avgClvPct: clvN > 0 ? Number(((100 * clvSum) / clvN).toFixed(2)) : null,
-        clvN,
-        clvBeatPct: clvN > 0 ? Number(((100 * clvBeats) / clvN).toFixed(1)) : null,
+        medianClvPct,
+        clvN: clvVals.length,
+        clvBeatPct:
+          clvVals.length > 0
+            ? Number(((100 * clvBeats) / clvVals.length).toFixed(1))
+            : null,
         sinceDate: CALIBRATED_SINCE,
       },
       last30d: {
