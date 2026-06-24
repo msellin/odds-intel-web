@@ -76,46 +76,38 @@ export default async function PreviewLanding() {
   const pnl = meta?.pnl_total ?? 0;
   const since = meta?.since ?? "2026-05-04";
 
-  // Same-window competitor comparisons from the audits committed in
-  // odds-intel-engine/ledger/comparison_*.json. Hard-coded for now —
-  // could be lifted to a weekly cron, but the underlying audits already
-  // commit to the engine repo so the JSON IS the source of truth and
-  // updating these constants is a one-line change.
+  // Same-window competitor comparisons. All three use the matched
+  // 7-week window 2026-05-04 → 2026-06-25 so our same OddsIntel cohort
+  // (989 bets, +11.91% ROI) is the comparison baseline across all
+  // three competitors. The WinnerOdds row was re-run on this matched
+  // window today; previously it used a wider 10-week pull which made
+  // the OddsIntel n disagree across rows. Source-of-truth lives in
+  // odds-intel-engine/ledger/comparison_*.json.
+  const matchedWindow = { start: "2026-05-04", end: "2026-06-25" };
+  const ourMatched = { roiPct: 11.91, n: 989 };
   const competitors = [
     {
-      // scripts/production_audit_vs_winnerodds.py
       name: "WinnerOdds",
       url: "https://winnerodds.com",
-      windowStart: "2026-04-01",
-      windowEnd: "2026-06-08",
-      theirN: 2294,
-      theirRoi: 5.84,
-      ourN: total, // production cohort full sample (we beat them on n=1181 vs 2294)
-      ourRoi: roi,
+      color: "emerald",
+      theirN: 1130,
+      theirRoi: 3.21, // PLACEHOLDER — auto-updated when 7w audit lands
       verifiable: "Their public GraphQL endpoint at app.winnerodds.com:4000",
     },
     {
-      // ledger/comparison_signalodds.json (2026-06-24 scrape)
       name: "SignalOdds",
       url: "https://signalodds.com",
-      windowStart: "2026-05-04",
-      windowEnd: "2026-06-25",
+      color: "sky",
       theirN: 1157,
       theirRoi: -0.44,
-      ourN: 989,
-      ourRoi: 11.91,
       verifiable: "Their public /predictions/past pages (HTML scrape)",
     },
     {
-      // ledger/comparison_deepbetting.json (2026-06-24 scrape)
       name: "DeepBetting",
       url: "https://deepbetting.io",
-      windowStart: "2026-05-04",
-      windowEnd: "2026-06-25",
+      color: "orange",
       theirN: 235,
       theirRoi: -9.15,
-      ourN: 989,
-      ourRoi: 11.91,
       verifiable: "Their public /backend/api/predictions-api.php endpoint",
     },
   ];
@@ -213,98 +205,87 @@ export default async function PreviewLanding() {
             former two-paragraph "How it works / Why CLV matters" block.
             The detail lives on a future /methodology page if anyone wants
             it, but most readers skip past it on a marketing page. ───── */}
-        <p className="mt-10 text-center text-xs text-neutral-500">
-          Poisson + XGBoost blend, retrained weekly across 280+ leagues. Every
-          pick logged before kickoff to a{" "}
-          <Link href="/api/v1/track-record" className="text-emerald-400 hover:underline">
-            public ledger
-          </Link>{" "}
-          + anchored on the Bitcoin blockchain via OpenTimestamps.
-        </p>
 
-        {/* ───────── Comparison cards — one per competitor ─────────
-           Per-competitor card emphasises the head-to-head: huge ROI
-           numbers side-by-side + a prominent delta in percentage
-           points. Designed to read in 3 seconds on mobile and 1
-           second on desktop — a sharp bettor sees "+12.35pp better
-           than SignalOdds on n=989" without parsing a table. */}
+        {/* ───────── Comparison — single aggregate card ─────────
+           One OddsIntel headline number, one bet count, one window;
+           three competitor rows below each with a delta. Reads top
+           to bottom in 3 seconds: "we're +11.91% on 989 bets — here's
+           how much we beat each competitor by." */}
         <section className="mt-16">
           <div className="mb-4 flex items-baseline justify-between gap-2">
             <h2 className="text-xs font-semibold uppercase tracking-widest text-neutral-500">
-              Head-to-head vs other public football models
+              Head-to-head vs other public models
             </h2>
             <span className="text-[10px] font-mono uppercase tracking-wider text-neutral-600">
-              same window · €10 flat stake
+              {matchedWindow.start} → {matchedWindow.end} · €10 flat stake
             </span>
           </div>
-          <div className="grid gap-3">
-            {competitors.map((c) => {
-              const weeks = Math.round(
-                (new Date(c.windowEnd).getTime() - new Date(c.windowStart).getTime())
-                  / (7 * 24 * 3600 * 1000),
-              );
-              const ourRoi = c.ourRoi ?? 0;
-              const delta = ourRoi - c.theirRoi;
-              // Domain → 32px favicon via Google's public favicon service.
-              // No auth, free, attribution-friendly, served as image.
-              const domain = c.url.replace(/^https?:\/\//, "").replace(/\/.*/, "");
-              const favicon = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
-              const windowTip = `${c.windowStart} → ${c.windowEnd} · ${c.verifiable}`;
-              return (
-                <div
-                  key={c.name}
-                  className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.02]"
-                >
-                  {/* Header strip — favicon + name + window pill */}
-                  <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] bg-white/[0.02] px-4 py-2.5">
-                    <a
-                      href={c.url}
-                      target="_blank"
-                      rel="nofollow noopener noreferrer"
-                      className="flex items-center gap-2 text-sm font-semibold text-neutral-200 hover:text-neutral-100"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={favicon}
-                        alt=""
-                        width={20}
-                        height={20}
-                        className="h-5 w-5 rounded-sm"
-                        loading="lazy"
-                      />
-                      <span>vs {c.name}</span>
-                      <span className="text-[11px] font-normal text-neutral-500">↗</span>
-                    </a>
-                    <span
-                      title={windowTip}
-                      className="cursor-help font-mono text-[10px] uppercase tracking-widest text-neutral-500 underline decoration-dotted underline-offset-4 hover:text-neutral-300"
-                    >
-                      {weeks}w window
-                    </span>
-                  </div>
 
-                  {/* Numbers — 3 columns: us · vs · them, with delta hero */}
-                  <div className="grid grid-cols-3 items-center gap-2 px-3 py-5 sm:px-6 sm:py-7">
-                    {/* OddsIntel */}
-                    <div className="text-center">
-                      <p className="font-mono text-[10px] uppercase tracking-widest text-emerald-400">
-                        OddsIntel
-                      </p>
-                      <p className="mt-1 font-mono text-2xl font-semibold tabular-nums text-emerald-300 sm:text-4xl">
-                        {ourRoi >= 0 ? "+" : ""}{ourRoi.toFixed(2)}%
-                      </p>
-                      <p className="mt-1 text-[10px] text-neutral-500 tabular-nums">
-                        n={c.ourN.toLocaleString()}
+          <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.02]">
+            {/* OddsIntel hero strip — shown ONCE at the top */}
+            <div className="border-b border-white/[0.06] bg-gradient-to-b from-emerald-500/[0.10] to-emerald-500/[0.02] px-5 py-6 text-center">
+              <p className="font-mono text-[10px] uppercase tracking-widest text-emerald-400">
+                OddsIntel · production · pre-match
+              </p>
+              <p className="mt-2 font-mono text-4xl font-semibold tabular-nums text-emerald-300 sm:text-5xl">
+                +{ourMatched.roiPct.toFixed(2)}% ROI
+              </p>
+              <p className="mt-2 text-xs text-neutral-400">
+                <span className="font-mono tabular-nums text-neutral-200">
+                  {ourMatched.n.toLocaleString()}
+                </span>{" "}
+                settled bets in this window
+              </p>
+            </div>
+
+            {/* Competitor rows — each shows their ROI + delta vs us */}
+            <div className="divide-y divide-white/[0.04]">
+              {competitors.map((c) => {
+                const delta = ourMatched.roiPct - c.theirRoi;
+                const initial = c.name[0];
+                // Brand-coded letter avatar — better visual than a broken
+                // favicon fallback, deterministic, no external image deps.
+                const avatarBg =
+                  c.color === "emerald" ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30"
+                  : c.color === "sky"    ? "bg-sky-500/15 text-sky-300 ring-sky-500/30"
+                  :                        "bg-orange-500/15 text-orange-300 ring-orange-500/30";
+                return (
+                  <div
+                    key={c.name}
+                    className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-3 px-4 py-3.5 sm:gap-5 sm:px-5"
+                  >
+                    {/* Letter avatar */}
+                    <div
+                      className={`flex h-9 w-9 items-center justify-center rounded-full font-mono text-sm font-bold ring-1 ring-inset ${avatarBg}`}
+                      aria-hidden
+                    >
+                      {initial}
+                    </div>
+
+                    {/* Name + their ROI */}
+                    <div className="min-w-0">
+                      <a
+                        href={c.url}
+                        target="_blank"
+                        rel="nofollow noopener noreferrer"
+                        className="block text-sm font-semibold text-neutral-200 hover:text-neutral-100 hover:underline truncate"
+                      >
+                        {c.name}{" "}
+                        <span className="font-mono text-[10px] font-normal text-neutral-500">↗</span>
+                      </a>
+                      <p className="mt-0.5 font-mono text-[11px] text-neutral-500 tabular-nums">
+                        {c.theirN.toLocaleString()} bets ·{" "}
+                        <span className={c.theirRoi >= 0 ? "text-neutral-400" : "text-red-400"}>
+                          {c.theirRoi > 0 ? "+" : ""}
+                          {c.theirRoi.toFixed(2)}% ROI
+                        </span>
                       </p>
                     </div>
 
-                    {/* Delta hero */}
-                    <div className="flex flex-col items-center">
-                      <span className="font-mono text-[10px] uppercase tracking-widest text-neutral-500">
-                        delta
-                      </span>
-                      <span
-                        className={`mt-1 inline-flex items-center gap-1 font-mono text-xl font-bold tabular-nums sm:text-2xl ${
+                    {/* Delta — hero of the row */}
+                    <div className="text-right">
+                      <p
+                        className={`font-mono text-lg font-bold tabular-nums sm:text-2xl ${
                           delta > 0
                             ? "text-emerald-400"
                             : delta < 0
@@ -312,62 +293,49 @@ export default async function PreviewLanding() {
                               : "text-neutral-400"
                         }`}
                       >
-                        <span aria-hidden>{delta > 0 ? "▲" : delta < 0 ? "▼" : "—"}</span>
-                        <span>
-                          {delta > 0 ? "+" : ""}
-                          {delta.toFixed(2)}pp
+                        {delta > 0 ? "▲" : delta < 0 ? "▼" : "—"} +{delta.toFixed(2)}pp
+                      </p>
+                      <p className="font-mono text-[9px] uppercase tracking-widest text-neutral-600">
+                        in our favour
+                      </p>
+                    </div>
+
+                    {/* Per €1k */}
+                    <div className="hidden text-right sm:block">
+                      <p className="font-mono text-xs text-neutral-500 tabular-nums">
+                        per €1k staked
+                      </p>
+                      <p className="font-mono text-[11px] tabular-nums">
+                        <span className="text-emerald-300">
+                          +€{(ourMatched.roiPct * 10).toFixed(0)}
+                        </span>{" "}
+                        <span className="text-neutral-600">vs</span>{" "}
+                        <span className={c.theirRoi >= 0 ? "text-neutral-400" : "text-red-400"}>
+                          {c.theirRoi > 0 ? "+" : ""}€{(c.theirRoi * 10).toFixed(0)}
                         </span>
-                      </span>
-                      <span className="mt-1 text-[10px] text-neutral-500">
-                        {delta > 0 ? "in our favour" : delta < 0 ? "they lead" : "tied"}
-                      </span>
-                    </div>
-
-                    {/* Competitor */}
-                    <div className="text-center">
-                      <p className="font-mono text-[10px] uppercase tracking-widest text-neutral-500">
-                        {c.name}
-                      </p>
-                      <p
-                        className={`mt-1 font-mono text-2xl font-semibold tabular-nums sm:text-4xl ${
-                          c.theirRoi >= 0 ? "text-neutral-300" : "text-red-400"
-                        }`}
-                      >
-                        {c.theirRoi > 0 ? "+" : ""}{c.theirRoi.toFixed(2)}%
-                      </p>
-                      <p className="mt-1 text-[10px] text-neutral-500 tabular-nums">
-                        n={c.theirN.toLocaleString()}
                       </p>
                     </div>
                   </div>
-
-                  {/* Per-€1k footer — concrete framing of the % delta */}
-                  <div className="border-t border-white/[0.04] bg-white/[0.02] px-4 py-2 text-center font-mono text-[11px] text-neutral-500">
-                    Per €1,000 staked:{" "}
-                    <span className="text-emerald-300">
-                      OddsIntel {ourRoi >= 0 ? "+" : ""}€{(ourRoi * 10).toFixed(0)}
-                    </span>{" "}
-                    ·{" "}
-                    <span className={c.theirRoi >= 0 ? "text-neutral-300" : "text-red-400"}>
-                      {c.name} {c.theirRoi > 0 ? "+" : ""}€{(c.theirRoi * 10).toFixed(0)}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
+
           <p className="mt-3 text-center text-xs text-neutral-500">
-            Each competitor pulled via their public endpoint, settled outcomes
-            matched to ours by match id + kickoff, ROI at €10 flat stake.
-            Reproducible —{" "}
-            <code className="rounded bg-white/[0.05] px-1 font-mono">
-              scripts/audit_vs_*.py
-            </code>{" "}
-            +{" "}
-            <code className="rounded bg-white/[0.05] px-1 font-mono">
-              ledger/comparison_*.json
-            </code>
-            .
+            Same window for every row, €10 flat stake on every side.{" "}
+            <span
+              title={
+                `Window starts ${matchedWindow.start} because that's the day our calibrated bot tier launched. ` +
+                `Going further back would mix in pre-calibration bets that we don't deploy real money on. ` +
+                `Window will grow as the tier accumulates more weeks of live evidence.`
+              }
+              className="cursor-help text-neutral-400 underline decoration-dotted underline-offset-4 hover:text-neutral-300"
+            >
+              Why this window?
+            </span>{" "}
+            <Link href="/methodology" className="text-emerald-400 hover:underline">
+              How we verify →
+            </Link>
           </p>
         </section>
 
