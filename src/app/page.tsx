@@ -22,6 +22,7 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 import { PremiumWaitlistForm } from "@/components/premium-waitlist-form";
+import { Nav } from "@/components/nav";
 
 interface TrackRecordMeta {
   since: string;
@@ -121,34 +122,7 @@ export default async function PreviewLanding() {
 
   return (
     <div className="min-h-dvh bg-neutral-950 text-neutral-50 antialiased">
-      {/* ───────── Nav ───────── */}
-      <header className="border-b border-white/[0.06]">
-        <div className="mx-auto flex h-14 max-w-4xl items-center justify-between px-4">
-          <Link href="/" className="font-mono text-sm font-bold tracking-tight">
-            ODDSINTEL
-          </Link>
-          <nav className="flex items-center gap-4 text-xs text-neutral-400">
-            <Link href="/picks" className="hover:text-neutral-100">
-              Live Picks
-            </Link>
-            <Link href="/performance" className="hover:text-neutral-100">
-              Track Record
-            </Link>
-            <Link
-              href="/api/v1/track-record?limit=10"
-              className="hidden sm:inline hover:text-neutral-100 font-mono"
-            >
-              API
-            </Link>
-            <Link
-              href="https://t.me/oddsintelpicks"
-              className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-emerald-300 hover:bg-emerald-500/20"
-            >
-              Telegram
-            </Link>
-          </nav>
-        </div>
-      </header>
+      <Nav />
 
       {/* ───────── Hero ───────── */}
       <main className="mx-auto max-w-4xl px-4">
@@ -235,39 +209,18 @@ export default async function PreviewLanding() {
           />
         </section>
 
-        {/* ───────── Methodology ───────── */}
-        <section className="mt-16 grid gap-8 sm:grid-cols-2 sm:items-start">
-          <div>
-            <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-neutral-500">
-              How it works
-            </h2>
-            <p className="text-sm leading-relaxed text-neutral-300">
-              The model is a Poisson + XGBoost blend, retrained weekly on every
-              completed match in our 280+ league universe. Every pick goes through
-              an isotonic calibration layer before publication. The public ledger
-              shows all production strategies — calibrated, beta, and active —
-              with no cherry-picking. Retired bots (failed experiments) are
-              excluded from the headline but stay visible in the admin dashboard
-              for audit.
-            </p>
-          </div>
-          <div>
-            <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-neutral-500">
-              Why CLV matters
-            </h2>
-            <p className="text-sm leading-relaxed text-neutral-300">
-              ROI can be variance. CLV (closing line value) is the bookmaker-test
-              equivalent of audited financials — if you consistently get better
-              odds than the market closes at, you have a real edge. Our picks
-              beat the closing line on{" "}
-              <span className="text-emerald-300">
-                {beat !== null ? `${beat.toFixed(0)}%` : "—"}
-              </span>{" "}
-              of bets. WinnerOdds, the established reference,{" "}
-              <span className="text-neutral-400">does not.</span>
-            </p>
-          </div>
-        </section>
+        {/* ───────── One-line methodology — compact replacement for the
+            former two-paragraph "How it works / Why CLV matters" block.
+            The detail lives on a future /methodology page if anyone wants
+            it, but most readers skip past it on a marketing page. ───── */}
+        <p className="mt-10 text-center text-xs text-neutral-500">
+          Poisson + XGBoost blend, retrained weekly across 280+ leagues. Every
+          pick logged before kickoff to a{" "}
+          <Link href="/api/v1/track-record" className="text-emerald-400 hover:underline">
+            public ledger
+          </Link>{" "}
+          + anchored on the Bitcoin blockchain via OpenTimestamps.
+        </p>
 
         {/* ───────── Comparison ───────── */}
         <section className="mt-16">
@@ -338,26 +291,9 @@ export default async function PreviewLanding() {
           </p>
         </section>
 
-        {/* ───────── Verification CTA ───────── */}
-        <section className="mt-16 rounded-xl border border-white/[0.06] bg-white/[0.02] p-6">
-          <h2 className="mb-2 text-base font-semibold text-neutral-100">
-            Verify the numbers yourself
-          </h2>
-          <p className="text-sm text-neutral-400">
-            Every bet on this page is in our public ledger. Pull the raw feed
-            at{" "}
-            <Link
-              href="/api/v1/track-record"
-              className="font-mono text-emerald-400 hover:underline"
-            >
-              /api/v1/track-record
-            </Link>{" "}
-            (open JSON, no auth) — use match_id + kickoff_utc + placed_at_utc
-            to independently re-settle each pick against ESPN or Flashscore.
-            Daily snapshot hashes are timestamped to the Bitcoin blockchain via
-            OpenTimestamps.
-          </p>
-        </section>
+        {/* Verification CTA card removed 2026-06-24 — the one-line methodology
+            above + the footer's API/GitHub links already carry this info; the
+            standalone card was page-weight without new content. */}
 
         {/* ───────── Premium waitlist (demand-signal capture) ───────── */}
         <section className="mt-12">

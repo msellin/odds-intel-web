@@ -1,49 +1,66 @@
 "use client";
 
 /**
- * Minimal nav for the in-app shell ((app)/layout.tsx).
+ * Unified public nav used by:
+ *   - /                        (landing — renders this directly)
+ *   - /picks                   (live picks page — renders this directly)
+ *   - /performance, /admin, …  (via `(app)/layout.tsx`)
  *
- * Public surface today is only /performance + /track-record + /admin (gated),
- * so the nav is intentionally tiny. The previous 688-line version with
- * /matches /value-bets /live /world-cup /pricing tabs is gone — those pages
- * were deleted in the 2026-06-24 product collapse.
+ * Before 2026-06-24 these three surfaces had THREE different nav blocks
+ * (inline JSX on / and /picks, the legacy <Nav> on the (app) layout) and
+ * the items shifted as you moved between pages — confusing UX.
+ *
+ * One component now. Items shown:
+ *   ODDSINTEL                Live Picks · Track Record · API · Telegram · [Login / Logout]
+ *   (logo links to /)        (current page is highlighted; superadmin sees Admin)
+ *
+ * Auth-aware via useAuth(); shows Login link if signed out, Logout button
+ * if signed in. Admin link appears only when profile.is_superadmin = true.
  */
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, LogOut, LogIn, Shield } from "lucide-react";
+import { BarChart3, Target, LogOut, LogIn, Shield, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/auth-provider";
 
 interface NavProps {
+  /** Legacy arg kept for backward compat with `(app)/layout.tsx`. Unused. */
   previewTier?: "free" | "pro" | "elite" | null;
 }
 
-// `previewTier` arg kept for backward compat with the layout caller. Not used.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function Nav({ previewTier: _ = null }: NavProps) {
+  void _;
   const pathname = usePathname();
   const { user, profile, loading, signOut } = useAuth();
   const isSuperadmin = profile?.is_superadmin === true;
 
+  const isActive = (href: string) =>
+    pathname === href || (href !== "/" && pathname.startsWith(href + "/"));
+
   const linkClass = (href: string) =>
     cn(
-      "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-      pathname === href || pathname.startsWith(href + "/")
-        ? "bg-white/[0.08] text-foreground"
-        : "text-muted-foreground hover:bg-white/[0.04] hover:text-foreground",
+      "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors sm:text-sm",
+      isActive(href)
+        ? "bg-white/[0.08] text-neutral-100"
+        : "text-neutral-400 hover:bg-white/[0.04] hover:text-neutral-100",
     );
 
   return (
     <header className="border-b border-white/[0.06]">
-      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-3 sm:px-4">
+      <div className="mx-auto flex h-14 max-w-4xl items-center justify-between px-3 sm:px-4">
         <Link
           href="/"
-          className="font-mono text-sm font-bold tracking-tight text-foreground"
+          className="font-mono text-sm font-bold tracking-tight text-neutral-100"
         >
           ODDSINTEL
         </Link>
         <nav className="flex items-center gap-1">
+          <Link href="/picks" className={linkClass("/picks")}>
+            <Target className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Live Picks</span>
+            <span className="sm:hidden">Picks</span>
+          </Link>
           <Link href="/performance" className={linkClass("/performance")}>
             <BarChart3 className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Track Record</span>
@@ -52,28 +69,36 @@ export function Nav({ previewTier: _ = null }: NavProps) {
           {isSuperadmin && (
             <Link href="/admin/bots" className={linkClass("/admin")}>
               <Shield className="h-3.5 w-3.5" />
-              Admin
+              <span className="hidden sm:inline">Admin</span>
             </Link>
           )}
-          {!loading && (
-            user ? (
+          <Link
+            href="https://t.me/oddsintelpicks"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ml-1 flex items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20 sm:text-sm"
+          >
+            <Send className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Telegram</span>
+          </Link>
+          {!loading &&
+            (user ? (
               <button
                 onClick={() => signOut()}
-                className="ml-1 flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-white/[0.04] hover:text-foreground transition-colors"
+                className="hidden sm:flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-neutral-400 hover:bg-white/[0.04] hover:text-neutral-100 transition-colors sm:text-sm"
+                title="Sign out"
               >
                 <LogOut className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Logout</span>
               </button>
             ) : (
               <Link
                 href="/login"
-                className="ml-1 flex items-center gap-1.5 rounded-md border border-white/15 bg-white/[0.04] px-3 py-1.5 text-sm font-medium text-foreground hover:bg-white/[0.08] transition-colors"
+                className="hidden sm:flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-neutral-400 hover:bg-white/[0.04] hover:text-neutral-100 transition-colors sm:text-sm"
+                title="Sign in"
               >
                 <LogIn className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Login</span>
               </Link>
-            )
-          )}
+            ))}
         </nav>
       </div>
     </header>

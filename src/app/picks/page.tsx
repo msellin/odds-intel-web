@@ -10,6 +10,7 @@
  */
 import Link from "next/link";
 import { headers } from "next/headers";
+import { Nav } from "@/components/nav";
 
 interface UpcomingPick {
   id: string;
@@ -102,18 +103,7 @@ export default async function PicksPage() {
 
   return (
     <div className="min-h-dvh bg-neutral-950 text-neutral-50 antialiased">
-      <header className="border-b border-white/[0.06]">
-        <div className="mx-auto flex h-14 max-w-4xl items-center justify-between px-4">
-          <Link href="/" className="font-mono text-sm font-bold tracking-tight">
-            ODDSINTEL
-          </Link>
-          <nav className="flex items-center gap-4 text-xs text-neutral-400">
-            <Link href="/picks" className="text-neutral-100">Picks</Link>
-            <Link href="/performance" className="hover:text-neutral-100">Track Record</Link>
-            <Link href="/api/v1/upcoming" className="hidden sm:inline hover:text-neutral-100 font-mono">API</Link>
-          </nav>
-        </div>
-      </header>
+      <Nav />
 
       <main className="mx-auto max-w-4xl px-4 pt-12 pb-20">
         <div className="space-y-2 text-center">
