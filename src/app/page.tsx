@@ -90,8 +90,8 @@ export default async function PreviewLanding() {
       name: "WinnerOdds",
       url: "https://winnerodds.com",
       color: "emerald",
-      theirN: 1130,
-      theirRoi: 3.21, // PLACEHOLDER — auto-updated when 7w audit lands
+      theirN: 1000,    // 7w match window pulled 2026-06-24
+      theirRoi: 6.55,  // +€2,285 on €34,871 staked, 55.2% hit
       verifiable: "Their public GraphQL endpoint at app.winnerodds.com:4000",
     },
     {
@@ -322,17 +322,7 @@ export default async function PreviewLanding() {
           </div>
 
           <p className="mt-3 text-center text-xs text-neutral-500">
-            Same window for every row, €10 flat stake on every side.{" "}
-            <span
-              title={
-                `Window starts ${matchedWindow.start} because that's the day our calibrated bot tier launched. ` +
-                `Going further back would mix in pre-calibration bets that we don't deploy real money on. ` +
-                `Window will grow as the tier accumulates more weeks of live evidence.`
-              }
-              className="cursor-help text-neutral-400 underline decoration-dotted underline-offset-4 hover:text-neutral-300"
-            >
-              Why this window?
-            </span>{" "}
+            Same window, same stake, same markets.{" "}
             <Link href="/methodology" className="text-emerald-400 hover:underline">
               How we verify →
             </Link>

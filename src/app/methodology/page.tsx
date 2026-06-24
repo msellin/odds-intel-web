@@ -185,6 +185,30 @@ export default function MethodologyPage() {
           GitHub Actions, anyone can clone the repo and re-run.
         </P>
 
+        <H>Why the comparison count differs from the hero count</H>
+        <P>
+          The landing page hero shows{" "}
+          <strong>1,181 settled bets at +9.08% ROI</strong> — that&apos;s
+          our full production cohort across 1X2 + O/U 2.5 + BTTS since
+          the calibrated tier launched.
+        </P>
+        <P>
+          The comparison card on the landing shows{" "}
+          <strong>989 bets at +11.91% ROI</strong> — a subset, because
+          SignalOdds and DeepBetting both publish 1X2 + O/U only, not
+          BTTS. To stay apples-to-apples we drop BTTS from BOTH sides.
+          Dropping BTTS actually lifts our ROI from +9.08% to +11.91%
+          because our BTTS model is weaker than 1X2/OU (see Known
+          Limitations in MODEL_WHITEPAPER.md). Both numbers are real;
+          they measure different cohorts.
+        </P>
+        <P>
+          Why the window starts 2026-05-04: that&apos;s the day our
+          calibrated bot tier launched. Going further back would mix in
+          pre-calibration bets we don&apos;t deploy real money on. The
+          window will grow as more weeks of live evidence accumulate.
+        </P>
+
         <H>Verification stack</H>
         <ul className="mb-3 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-neutral-300">
           <li>
