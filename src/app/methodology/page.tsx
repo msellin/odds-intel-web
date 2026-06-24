@@ -185,6 +185,49 @@ export default function MethodologyPage() {
           GitHub Actions, anyone can clone the repo and re-run.
         </P>
 
+        <H>Per-competitor caveats</H>
+        <P>
+          Each competitor row on the landing is the headline number. A
+          few have noteworthy structure worth knowing:
+        </P>
+        <ul className="mb-3 list-disc space-y-2 pl-5 text-sm leading-relaxed text-neutral-300">
+          <li>
+            <strong>Forebet</strong> — algorithmic predictor with a free
+            public history. Their +15.33% headline is driven entirely by
+            Over/Under 2.5 (+35.67% on n=611 in this window); their
+            1X2 picks alone return essentially break-even at +0.23% on
+            n=823. The OU lift is consistent with a low-scoring stretch
+            of European fixtures during this audit window — likely to
+            mean-revert as the new season starts. We show the headline
+            honestly; the OU dependency is what to watch.
+          </li>
+          <li>
+            <strong>Tipstrr</strong> — only monthly aggregates are
+            public, per-bet detail is paywalled. The audit pools three
+            active football tipsters (<Code>star-tips</Code>,{" "}
+            <Code>mls-value</Code>,{" "}
+            <Code>main-draws-model-top-euros</Code>) and covers all
+            football bet types (1X2 + O/U + AH + BTTS) — slightly wider
+            than ours (1X2 + O/U only). The wider scope works in their
+            favour; even so, they&apos;re at -5.22% in the matched
+            window.
+          </li>
+          <li>
+            <strong>Betaminic</strong> — public strategies list is
+            auth-walled (free signup gate plus paid tiers). Status is
+            <Code>auth_required</Code> in{" "}
+            <Code>ledger/comparison_betaminic.json</Code> with the
+            activation lever documented{" "}
+            (<Code>BETAMINIC_COOKIE</Code> env). Not displayed on the
+            landing comparison until we have credible data.
+          </li>
+          <li>
+            <strong>WinnerOdds + SignalOdds + DeepBetting</strong> —
+            fully public per-bet history, no paywall, scope notes pinned
+            to the same 1X2 + OU 2.5 cohort as ours.
+          </li>
+        </ul>
+
         <H>Why the comparison count differs from the hero count</H>
         <P>
           The landing page hero shows{" "}

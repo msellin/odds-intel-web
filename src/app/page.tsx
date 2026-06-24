@@ -110,6 +110,33 @@ export default async function PreviewLanding() {
       theirRoi: -9.15,
       verifiable: "Their public /backend/api/predictions-api.php endpoint",
     },
+    {
+      // ledger/comparison_tipstrr.json — pool of 3 active football tipsters
+      // (star-tips, mls-value, main-draws-model-top-euros). Monthly
+      // aggregates only — per-bet detail is paywalled. Covers all football
+      // markets (1X2/OU/AH/BTTS); we only cover 1X2+OU 2.5 (caveat in
+      // /methodology).
+      name: "Tipstrr",
+      url: "https://tipstrr.com/football",
+      color: "rose",
+      theirN: 209,
+      theirRoi: -5.22,
+      verifiable: "Tipstrr STATS_MONTH endpoint (Cloudflare-fronted)",
+    },
+    {
+      // ledger/comparison_forebet.json — algorithmic predictor, free,
+      // ~38-day rolling history (their older date URLs silently fall back
+      // to today). Headline +15.33% is driven by OU 2.5 (+35.67%/n=611);
+      // 1X2 alone is essentially break-even (+0.23%/n=823). Showing the
+      // headline honestly — a sharp bettor would notice OU streaks
+      // anyway, the caveat lives on /methodology.
+      name: "Forebet",
+      url: "https://www.forebet.com",
+      color: "amber",
+      theirN: 1434,
+      theirRoi: 15.33,
+      verifiable: "Their public daily-archive HTML pages",
+    },
   ];
 
   return (
@@ -248,7 +275,10 @@ export default async function PreviewLanding() {
                 const avatarBg =
                   c.color === "emerald" ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30"
                   : c.color === "sky"    ? "bg-sky-500/15 text-sky-300 ring-sky-500/30"
-                  :                        "bg-orange-500/15 text-orange-300 ring-orange-500/30";
+                  : c.color === "orange" ? "bg-orange-500/15 text-orange-300 ring-orange-500/30"
+                  : c.color === "rose"   ? "bg-rose-500/15 text-rose-300 ring-rose-500/30"
+                  : c.color === "amber"  ? "bg-amber-500/15 text-amber-300 ring-amber-500/30"
+                  :                        "bg-neutral-500/15 text-neutral-300 ring-neutral-500/30";
                 return (
                   <div
                     key={c.name}
