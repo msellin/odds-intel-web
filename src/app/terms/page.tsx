@@ -1,6 +1,5 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { MarketingNav } from "@/components/marketing-nav";
 
 export const metadata: Metadata = {
   title: "Terms of Service — OddsIntel",
@@ -10,7 +9,11 @@ export const metadata: Metadata = {
 export default function TermsPage() {
   return (
     <div className="min-h-dvh bg-background text-foreground">
-      <MarketingNav />
+      <header className="border-b border-white/[0.06]">
+        <div className="mx-auto flex h-14 max-w-4xl items-center justify-between px-4">
+          <Link href="/" className="font-mono text-sm font-bold tracking-tight">ODDSINTEL</Link>
+        </div>
+      </header>
 
       <main className="mx-auto max-w-3xl px-4 py-12 sm:px-6">
         <div className="space-y-8">
