@@ -385,6 +385,71 @@ export default async function PreviewLanding() {
           <PremiumWaitlistForm />
         </section>
 
+        {/* ───────── Partner badges (GROWTH-DIRECTORY-STACK 2026-06-05,
+            restored 2026-06-25 after product-collapse purge) ──────────
+            Reciprocal backlink row for directory listings that require
+            a live badge. Twelve Tools + AIBoom periodically poll this
+            page — if their badge disappears, they remove our listing
+            and we lose the inbound backlink. */}
+        <section
+          aria-label="Featured on"
+          className="mt-12 border-t border-white/[0.04] py-6"
+        >
+          <div className="flex flex-wrap items-center justify-center gap-4">
+            <a
+              href="https://twelve.tools"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="opacity-70 transition-opacity hover:opacity-100"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="https://twelve.tools/badge0-dark.svg"
+                alt="Featured on Twelve Tools"
+                className="h-9 w-auto"
+                loading="lazy"
+              />
+            </a>
+            <a
+              href="https://wired.business"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="opacity-70 transition-opacity hover:opacity-100"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="https://wired.business/badge0-dark.svg"
+                alt="Featured on Wired Business"
+                className="h-9 w-auto"
+                loading="lazy"
+              />
+            </a>
+            <a
+              href="https://aiboom.tools"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="opacity-70 transition-opacity hover:opacity-100"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="https://aiboom.tools/badge/badge_dark.svg"
+                alt="Featured on AIBoom.Tools"
+                className="h-9 w-auto"
+                loading="lazy"
+              />
+            </a>
+          </div>
+        </section>
+
+        {/* ───────── Responsible Gambling notice ─────────
+            Restored 2026-06-25. Both ethically and (in most jurisdictions)
+            legally required disclaimer for a site that discusses betting. */}
+        <div className="mt-6 rounded-lg border border-white/[0.06] bg-white/[0.03] px-6 py-3 text-center text-xs text-neutral-400">
+          <span className="font-semibold text-neutral-100">Responsible Gambling:</span>{" "}
+          Betting involves risk. Data provides intelligence, not certainty.
+          18+ Only.
+        </div>
+
         {/* ───────── Footer ───────── */}
         <footer className="mt-20 mb-12 border-t border-white/[0.06] pt-8 text-xs text-neutral-500">
           <div className="flex flex-wrap items-center justify-between gap-3">
