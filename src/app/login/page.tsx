@@ -104,7 +104,7 @@ function AuthForm() {
     if (!signInErr) {
       setLoading(false);
       captureEvent("auth_signed_in_existing", { email_domain: emailDomain(email) });
-      router.push("/performance");
+      router.push("/picks");
       return;
     }
 
@@ -152,7 +152,7 @@ function AuthForm() {
     if (signUpData.session) {
       // Confirm Email OFF: brand-new user is signed in immediately.
       captureEvent("auth_signed_in_new", { email_domain: emailDomain(email) });
-      router.push("/performance");
+      router.push("/picks");
     } else {
       // Confirm Email ON: confirmation email sent (new user) OR silently
       // no-op'd (existing user, wrong password). We show "Check your email"

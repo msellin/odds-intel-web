@@ -58,7 +58,7 @@ export default function ResetPasswordPage() {
       return;
     }
     captureEvent("reset_password_success");
-    router.push("/matches");
+    router.push("/picks");
   };
 
   if (authLoading || !user) {
