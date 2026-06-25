@@ -65,6 +65,83 @@ export const metadata = {
     "Pre-match football picks with a public, time-stamped ledger. Every bet, every closing line, every result.",
 };
 
+// COMPETITOR-AUTOREFRESH (2026-06-25)
+// Per-competitor static presentation metadata. Numbers come from
+// the engine repo's ledger JSON fetched at render time (6h revalidate).
+interface CompetitorRow {
+  name: string;
+  url: string;
+  color: "emerald" | "sky" | "orange" | "rose" | "amber";
+  ledgerKey: string;     // ledger/comparison_<key>.json
+  theirN: number;
+  theirRoi: number;
+  ourN: number;
+  ourRoi: number;
+  ourMatched: { roiPct: number; n: number };
+}
+
+const COMP_META: Omit<CompetitorRow, "theirN" | "theirRoi" | "ourN" | "ourRoi" | "ourMatched">[] = [
+  { name: "WinnerOdds",  url: "https://winnerodds.com",     color: "emerald", ledgerKey: "winnerodds" },
+  { name: "SignalOdds",  url: "https://signalodds.com",     color: "sky",     ledgerKey: "signalodds" },
+  { name: "DeepBetting", url: "https://deepbetting.io",     color: "orange",  ledgerKey: "deepbetting" },
+  { name: "Tipstrr",     url: "https://tipstrr.com/football", color: "rose",  ledgerKey: "tipstrr" },
+  { name: "Forebet",     url: "https://www.forebet.com",    color: "amber",   ledgerKey: "forebet" },
+];
+
+// Last-known good values committed 2026-06-25. If the GitHub fetch fails
+// or the JSON shape is unexpected, we fall back to these so the landing
+// never renders empty rows.
+const COMP_FALLBACK: Record<string, { theirN: number; theirRoi: number; ourN: number; ourRoi: number }> = {
+  winnerodds:  { theirN: 1007, theirRoi: 6.78,  ourN: 991, ourRoi: 12.06 },
+  signalodds:  { theirN: 1157, theirRoi: -0.44, ourN: 989, ourRoi: 11.91 },
+  deepbetting: { theirN: 235,  theirRoi: -9.15, ourN: 989, ourRoi: 11.91 },
+  tipstrr:     { theirN: 209,  theirRoi: -5.22, ourN: 989, ourRoi: 11.91 },
+  forebet:     { theirN: 1434, theirRoi: 15.33, ourN: 989, ourRoi: 11.91 },
+};
+
+const LEDGER_RAW =
+  "https://raw.githubusercontent.com/msellin/odds-intel-engine/main/ledger";
+
+async function loadCompetitors(): Promise<CompetitorRow[]> {
+  const rows = await Promise.all(
+    COMP_META.map(async (m) => {
+      let theirN = COMP_FALLBACK[m.ledgerKey].theirN;
+      let theirRoi = COMP_FALLBACK[m.ledgerKey].theirRoi;
+      let ourN = COMP_FALLBACK[m.ledgerKey].ourN;
+      let ourRoi = COMP_FALLBACK[m.ledgerKey].ourRoi;
+      try {
+        const res = await fetch(
+          `${LEDGER_RAW}/comparison_${m.ledgerKey}.json`,
+          { next: { revalidate: 21600 } }, // 6h
+        );
+        if (res.ok) {
+          const j = (await res.json()) as {
+            status?: string;
+            their_stats?: { n?: number; roi_pct?: number };
+            our_stats_same_window?: { n?: number; roi_pct?: number };
+          };
+          // Skip pulls flagged as auth_required / insufficient_sample — we
+          // already had this row before, fallback values stay in place.
+          if (j.status === "ok") {
+            theirN = j.their_stats?.n ?? theirN;
+            theirRoi = j.their_stats?.roi_pct ?? theirRoi;
+            ourN = j.our_stats_same_window?.n ?? ourN;
+            ourRoi = j.our_stats_same_window?.roi_pct ?? ourRoi;
+          }
+        }
+      } catch {
+        // network error → keep fallback values
+      }
+      return {
+        ...m,
+        theirN, theirRoi, ourN, ourRoi,
+        ourMatched: { roiPct: ourRoi, n: ourN },
+      };
+    }),
+  );
+  return rows;
+}
+
 export default async function PreviewLanding() {
   const meta = await getMeta();
   const roi = meta?.roi_pct ?? null;
@@ -76,68 +153,20 @@ export default async function PreviewLanding() {
   const pnl = meta?.pnl_total ?? 0;
   const since = meta?.since ?? "2026-05-04";
 
-  // Same-window competitor comparisons. All three use the matched
-  // 7-week window 2026-05-04 → 2026-06-25 so our same OddsIntel cohort
-  // (989 bets, +11.91% ROI) is the comparison baseline across all
-  // three competitors. The WinnerOdds row was re-run on this matched
-  // window today; previously it used a wider 10-week pull which made
-  // the OddsIntel n disagree across rows. Source-of-truth lives in
-  // odds-intel-engine/ledger/comparison_*.json.
-  const matchedWindow = { start: "2026-05-04", end: "2026-06-25" };
-  const ourMatched = { roiPct: 11.91, n: 989 };
-  const competitors = [
-    {
-      name: "WinnerOdds",
-      url: "https://winnerodds.com",
-      color: "emerald",
-      theirN: 1000,    // 7w match window pulled 2026-06-24
-      theirRoi: 6.55,  // +€2,285 on €34,871 staked, 55.2% hit
-      verifiable: "Their public GraphQL endpoint at app.winnerodds.com:4000",
-    },
-    {
-      name: "SignalOdds",
-      url: "https://signalodds.com",
-      color: "sky",
-      theirN: 1157,
-      theirRoi: -0.44,
-      verifiable: "Their public /predictions/past pages (HTML scrape)",
-    },
-    {
-      name: "DeepBetting",
-      url: "https://deepbetting.io",
-      color: "orange",
-      theirN: 235,
-      theirRoi: -9.15,
-      verifiable: "Their public /backend/api/predictions-api.php endpoint",
-    },
-    {
-      // ledger/comparison_tipstrr.json — pool of 3 active football tipsters
-      // (star-tips, mls-value, main-draws-model-top-euros). Monthly
-      // aggregates only — per-bet detail is paywalled. Covers all football
-      // markets (1X2/OU/AH/BTTS); we only cover 1X2+OU 2.5 (caveat in
-      // /methodology).
-      name: "Tipstrr",
-      url: "https://tipstrr.com/football",
-      color: "rose",
-      theirN: 209,
-      theirRoi: -5.22,
-      verifiable: "Tipstrr STATS_MONTH endpoint (Cloudflare-fronted)",
-    },
-    {
-      // ledger/comparison_forebet.json — algorithmic predictor, free,
-      // ~38-day rolling history (their older date URLs silently fall back
-      // to today). Headline +15.33% is driven by OU 2.5 (+35.67%/n=611);
-      // 1X2 alone is essentially break-even (+0.23%/n=823). Showing the
-      // headline honestly — a sharp bettor would notice OU streaks
-      // anyway, the caveat lives on /methodology.
-      name: "Forebet",
-      url: "https://www.forebet.com",
-      color: "amber",
-      theirN: 1434,
-      theirRoi: 15.33,
-      verifiable: "Their public daily-archive HTML pages",
-    },
-  ];
+  // COMPETITOR-AUTOREFRESH (2026-06-25): fetch each comparison_*.json
+  // from the engine repo's raw GitHub URL with 6h revalidate. When the
+  // weekly Sunday cron in odds-intel-engine re-runs the audits, the
+  // numbers auto-flow here without a Vercel rebuild.
+  //
+  // Source-of-truth lives at:
+  //   github.com/msellin/odds-intel-engine/tree/main/ledger
+  //
+  // Per-competitor presentation metadata (url, color, fallback) stays
+  // hard-coded here — only the runtime numbers (n, ROI) come from the
+  // ledger fetch. If a fetch fails, we fall back to the last-known
+  // values committed below so the page never shows "—" rows.
+  const competitors = await loadCompetitors();
+  const ourMatched = competitors[0]?.ourMatched ?? { roiPct: 11.91, n: 989 };
 
   return (
     <div className="min-h-dvh bg-neutral-950 text-neutral-50 antialiased">
@@ -268,7 +297,10 @@ export default async function PreviewLanding() {
             {/* Competitor rows — each shows their ROI + delta vs us */}
             <div className="divide-y divide-white/[0.04]">
               {competitors.map((c) => {
-                const delta = ourMatched.roiPct - c.theirRoi;
+                // Per-competitor delta: each row uses ITS OWN matched-window
+                // ourRoi (not the global one) so the math is internally
+                // consistent for any sub-window like Forebet's 38-day cap.
+                const delta = c.ourRoi - c.theirRoi;
                 const initial = c.name[0];
                 // Brand-coded letter avatar — better visual than a broken
                 // favicon fallback, deterministic, no external image deps.
