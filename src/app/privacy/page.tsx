@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { Nav } from "@/components/nav";
 
 export const metadata: Metadata = {
   title: "Privacy Policy — OddsIntel",
@@ -8,12 +9,8 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <div className="min-h-dvh bg-background text-foreground">
-      <header className="border-b border-white/[0.06]">
-        <div className="mx-auto flex h-14 max-w-4xl items-center justify-between px-4">
-          <Link href="/" className="font-mono text-sm font-bold tracking-tight">ODDSINTEL</Link>
-        </div>
-      </header>
+    <div className="min-h-dvh bg-neutral-950 text-neutral-50 antialiased">
+      <Nav />
 
       <main className="mx-auto max-w-3xl px-4 py-12 sm:px-6">
         <div className="space-y-8">
