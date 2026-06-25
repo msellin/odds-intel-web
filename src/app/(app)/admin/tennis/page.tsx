@@ -48,6 +48,18 @@ interface SettledBet {
   kickoff_time: string;
   closing_odds: number | null;
   clv: number | null;
+  bot_id: string | null;
+}
+
+interface BotBreakdown {
+  bot_id: string;
+  n: number;
+  wins: number;
+  hit_rate: number;
+  total_stake: number;
+  total_pnl: number;
+  roi: number;
+  avg_clv: number | null;
 }
 
 interface PendingBet {
@@ -244,7 +256,7 @@ export default async function TennisAdminPage() {
     db
       .from("tennis_value_bets")
       .select(
-        "id, fixture_id, tournament_name, player_home, player_away, selection, bookmaker, book_odds, edge_pct, stake, result, pnl, kickoff_time, closing_odds, clv"
+        "id, fixture_id, tournament_name, player_home, player_away, selection, bookmaker, book_odds, edge_pct, stake, result, pnl, kickoff_time, closing_odds, clv, bot_id"
       )
       .not("result", "is", null)
       .gte("kickoff_time", settledFrom)
@@ -370,6 +382,33 @@ export default async function TennisAdminPage() {
       total_stake: g.total_stake,
       total_pnl: g.total_pnl,
       roi: g.total_stake > 0 ? (g.total_pnl / g.total_stake) * 100 : 0,
+    }))
+    .sort((a, b) => b.n - a.n);
+
+  // Per-bot breakdown — uses bot_id from Phase 2. Includes CLV average
+  // (the per-bot CLV signal is what tells us a strategy is genuinely +EV
+  // vs lucky variance). null bot_id (very old rows before Phase 2 migration)
+  // bucketed as 'legacy_unsegmented' for visibility.
+  const byBotAgg: Record<string, { n: number; wins: number; total_stake: number; total_pnl: number; clv_sum: number; clv_n: number }> = {};
+  for (const r of settledNonVoid) {
+    const k = r.bot_id ?? "legacy_unsegmented";
+    if (!byBotAgg[k]) byBotAgg[k] = { n: 0, wins: 0, total_stake: 0, total_pnl: 0, clv_sum: 0, clv_n: 0 };
+    byBotAgg[k].n += 1;
+    if (r.result === "win") byBotAgg[k].wins += 1;
+    byBotAgg[k].total_stake += r.stake || 1;
+    byBotAgg[k].total_pnl += r.pnl ?? 0;
+    if (r.clv != null) { byBotAgg[k].clv_sum += r.clv; byBotAgg[k].clv_n += 1; }
+  }
+  const byBot: BotBreakdown[] = Object.entries(byBotAgg)
+    .map(([bot_id, v]) => ({
+      bot_id,
+      n: v.n,
+      wins: v.wins,
+      hit_rate: v.n > 0 ? (v.wins / v.n) * 100 : 0,
+      total_stake: v.total_stake,
+      total_pnl: v.total_pnl,
+      roi: v.total_stake > 0 ? (v.total_pnl / v.total_stake) * 100 : 0,
+      avg_clv: v.clv_n > 0 ? (v.clv_sum / v.clv_n) * 100 : null,
     }))
     .sort((a, b) => b.n - a.n);
 
@@ -515,6 +554,55 @@ export default async function TennisAdminPage() {
                   {totRoi >= 0 ? "+" : ""}{totRoi.toFixed(2)}%
                 </div>
               </div>
+            </div>
+
+            {/* By bot — most important breakdown; shows CLV per persona */}
+            <div className="mb-4 rounded-lg border overflow-hidden">
+              <div className="bg-muted/30 px-3 py-2 text-xs font-semibold uppercase">
+                By bot persona (Phase 2)
+              </div>
+              <table className="w-full text-xs font-mono">
+                <thead className="text-muted-foreground">
+                  <tr>
+                    <th className="text-left p-2">bot_id</th>
+                    <th className="text-right p-2">n</th>
+                    <th className="text-right p-2">W/L/V</th>
+                    <th className="text-right p-2">hit</th>
+                    <th className="text-right p-2">stake</th>
+                    <th className="text-right p-2">PnL</th>
+                    <th className="text-right p-2">ROI</th>
+                    <th className="text-right p-2">avg CLV</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {byBot.length === 0 ? (
+                    <tr><td colSpan={8} className="p-3 text-center text-muted-foreground">No bot-segmented settled rows yet — first bot-routed picks land after migration 261 + scanner deploy</td></tr>
+                  ) : (
+                    byBot.map((b) => {
+                      const wins = b.wins;
+                      const losses = b.n - b.wins;
+                      return (
+                        <tr key={b.bot_id} className="border-t">
+                          <td className="p-2">{b.bot_id}</td>
+                          <td className="text-right p-2">{b.n}</td>
+                          <td className="text-right p-2 text-muted-foreground">{wins}/{losses}/0</td>
+                          <td className="text-right p-2">{b.hit_rate.toFixed(1)}%</td>
+                          <td className="text-right p-2">{b.total_stake.toFixed(1)}u</td>
+                          <td className={`text-right p-2 ${b.total_pnl >= 0 ? "text-green-400" : "text-red-400"}`}>
+                            {b.total_pnl >= 0 ? "+" : ""}{b.total_pnl.toFixed(2)}u
+                          </td>
+                          <td className={`text-right p-2 ${b.roi >= 0 ? "text-green-400" : "text-red-400"}`}>
+                            {b.roi >= 0 ? "+" : ""}{b.roi.toFixed(1)}%
+                          </td>
+                          <td className={`text-right p-2 ${b.avg_clv == null ? "text-muted-foreground" : b.avg_clv >= 0 ? "text-green-400" : "text-red-400"}`}>
+                            {b.avg_clv == null ? "—" : `${b.avg_clv >= 0 ? "+" : ""}${b.avg_clv.toFixed(2)}%`}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
             </div>
 
             {/* Breakdowns */}
