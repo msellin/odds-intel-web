@@ -1,9 +1,19 @@
 User-agent: *
 Allow: /
-Disallow: /my-picks
-Disallow: /track-record
-Disallow: /profile
-Disallow: /welcome
+
+# OAuth callback — never index, contains auth code params
 Disallow: /auth/
+
+# Operator-only admin surface
+Disallow: /admin/
+
+# Internal API routes default to blocked — public ones below are
+# explicitly allowed so search engines can index them for the
+# verification story.
+Disallow: /api/
+
+Allow: /api/v1/track-record
+Allow: /api/v1/upcoming
+Allow: /api/v1/waitlist
 
 Sitemap: https://oddsintel.app/sitemap.xml
