@@ -11,6 +11,7 @@
  */
 import Link from "next/link";
 import { Nav } from "@/components/nav";
+import { StakeSimulator } from "@/components/stake-simulator";
 
 export const metadata = {
   title: "Methodology — OddsIntel",
@@ -183,6 +184,69 @@ export default function MethodologyPage() {
           The output of each audit lands at{" "}
           <Code>ledger/comparison_*.json</Code> — same hash committed by
           GitHub Actions, anyone can clone the repo and re-run.
+        </P>
+
+        <H>Set your own stake</H>
+        <P>
+          The landing comparison uses €10 flat as a clean apples-to-apples
+          unit. Drag the slider below to see what the same matched-window
+          ROI translates to at any per-bet stake.
+        </P>
+        <div className="my-6">
+          <StakeSimulator />
+        </div>
+
+        <H>Why flat stake, not Kelly</H>
+        <P>
+          Conventional wisdom says Kelly sizing maximises bankroll growth
+          when your edge estimate is well-calibrated. We checked. On the
+          same n=1,181 production-cohort pre-match sample since 2026-05-04:
+        </P>
+        <ul className="mb-3 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-neutral-300">
+          <li>
+            <strong>Flat €10 stake</strong> — ROI{" "}
+            <span className="font-mono text-emerald-300">+9.08%</span>{" "}
+            (€612 on €6,741 staked)
+          </li>
+          <li>
+            <strong>Kelly-weighted</strong> — ROI{" "}
+            <span className="font-mono text-neutral-300">+7.31%</span>{" "}
+            (same picks, sized by model edge × bankroll fraction)
+          </li>
+        </ul>
+        <P>
+          Flat <strong>beats</strong> Kelly by ~1.8pp on our current
+          sample. Reason: Kelly sizes up the highest-edge picks, and our
+          highest-edge picks are exactly where the model&apos;s known
+          longshot miscalibration hurts most (see "Conditional
+          miscalibration at high odds" in{" "}
+          <a
+            href="https://github.com/msellin/odds-intel-engine/blob/main/MODEL_WHITEPAPER.md#11-known-limitations"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-emerald-400 hover:underline"
+          >
+            MODEL_WHITEPAPER §11
+          </a>
+          ). Kelly amplifies the bets we&apos;re most overconfident on.
+        </P>
+        <P>
+          We surface flat €10 as the publishable headline because (a) it
+          honestly matches the comparison baseline, and (b) it&apos;s
+          currently our best strategy. Once the calibration fix lands
+          (CAL-ALPHA-ODDS), we&apos;ll re-run this comparison — Kelly
+          should win after the high-odds correction.
+        </P>
+        <P>
+          Competitor stake methods, as best we can tell from their
+          public surfaces: WinnerOdds publishes "unit" stakes (Kelly-like
+          internally); SignalOdds shows EV%-weighted; DeepBetting shows
+          per-confidence-tier flat; Tipstrr shows "level stakes" (flat);
+          Forebet doesn&apos;t publish stake — we apply €10 flat at our
+          end to settle their picks. Translation: our €10-flat
+          comparison is internally consistent on OUR side; per-competitor
+          stake differences add minor noise we can&apos;t correct for
+          from outside their books.
         </P>
 
         <H>Per-competitor caveats</H>
