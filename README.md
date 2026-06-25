@@ -1,36 +1,54 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# OddsIntel — Web Frontend
 
-## Getting Started
+The Next.js frontend for [oddsintel.app](https://oddsintel.app). All the
+model, ledger, and verification work lives in the companion
+[odds-intel-engine](https://github.com/msellin/odds-intel-engine) repo
+— **start there if you're trying to understand or verify the picks**.
 
-First, run the development server:
+## What this repo does
+
+- `src/app/page.tsx` — landing page (hero ROI, comparison block, premium waitlist)
+- `src/app/picks/` — live pending picks (`/picks`)
+- `src/app/(app)/performance/` — settled track record
+- `src/app/methodology/` — model + verification methodology
+- `src/app/api/v1/track-record/` — public JSON feed of settled bets
+- `src/app/api/v1/upcoming/` — public JSON feed of pending picks
+- `src/app/auth/callback/` — Supabase OAuth callback handler
+- `src/app/(app)/admin/` — operator-only dashboards (bot management, real bets log)
+
+The landing comparison block reads
+[`ledger/comparison_*.json`](https://github.com/msellin/odds-intel-engine/tree/main/ledger)
+from the engine repo at runtime (6h revalidate). When the weekly cron
+in the engine refreshes those JSONs, the landing auto-updates with no
+Vercel rebuild.
+
+## Stack
+
+- Next.js 15 (App Router) + TypeScript + Tailwind CSS
+- Supabase Postgres + Auth + Storage
+- Vercel hosting
+- Sentry user feedback widget
+- PostHog analytics
+
+## Running locally
 
 ```bash
+npm install
+cp .env.local.example .env.local  # fill in NEXT_PUBLIC_SUPABASE_URL etc.
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+You'll need the same Supabase project the engine repo writes to. The
+public API routes (`/api/v1/track-record`, `/api/v1/upcoming`) require
+`SUPABASE_SECRET_KEY` because they bypass RLS.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Where to find things
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **Production pipeline + model** → [odds-intel-engine](https://github.com/msellin/odds-intel-engine)
+- **Picks ledger + Bitcoin anchors** → [odds-intel-engine/ledger](https://github.com/msellin/odds-intel-engine/tree/main/ledger)
+- **Daily live picks** → [@oddsintelpicks](https://t.me/oddsintelpicks) on Telegram
 
-## Learn More
+## Disclaimer
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Not financial or gambling advice. 18+ only.
