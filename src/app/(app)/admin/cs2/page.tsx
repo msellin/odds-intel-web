@@ -4,7 +4,13 @@ import { createSupabaseServer } from "@/lib/supabase-server";
 import { createClient } from "@supabase/supabase-js";
 import { LogBetButton } from "./log-bet-button";
 import { ScrapersPanel } from "./scrapers-panel";
-import { BacktestPanel } from "./backtest-panel";
+// CS2-ADMIN-REFACTOR (2026-06-25): BacktestPanel removed from this page
+// — it's a deep-dive view that belongs in /admin/models. The 4-card
+// "Pipeline / Model Stats" panel was also removed (hardcoded baseline
+// accuracy "58.9% on 9.2k matches" that doesn't refresh + counts
+// duplicated by the KPI strip below). Recent-picks table removed too;
+// the cs2_bot_activity_report.py CLI is the canonical place to inspect
+// the pick log day-to-day.
 
 const serviceClient = () =>
   createClient(
@@ -65,9 +71,42 @@ interface SimBet {
   edge: number;
   result: string | null;
   pnl: number | null;
+  pnl_eur: number | null;
+  stake_eur: number | null;
+  n_books_at_pick: number | null;
   placed_at: string;
   team1: string;
   team2: string;
+}
+
+interface BotRow {
+  name: string;
+  current_bankroll: number;
+  starting_bankroll: number;
+  is_active: boolean;
+}
+
+interface PoolRow {
+  threshold_odds1: number | null;
+  bookie_odds1: number | null;
+  coolbet_odds1: number | null;
+  pinnacle_odds1: number | null;
+}
+
+interface BotActivity {
+  name: string;
+  fires: number;
+  settled: number;
+  wins: number;
+  losses: number;
+  pnl_eur: number;
+  staked_eur: number;
+  avg_edge: number | null;
+  avg_books: number | null;
+  single_book_fires: number;
+  market_winner: number;
+  market_atleast1map: number;
+  market_clean_sweep: number;
 }
 
 interface HltvPred {
@@ -137,58 +176,60 @@ export default async function Cs2AdminPage() {
   const db = serviceClient();
   const now = new Date();
   const cutoff = new Date(now.getTime() + 7 * 24 * 3600 * 1000).toISOString();
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 3600 * 1000).toISOString();
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 3600 * 1000).toISOString();
 
-  const todayStart = new Date();
-  todayStart.setUTCHours(0, 0, 0, 0);
-
+  // CS2-ADMIN-REFACTOR (2026-06-25): the data fetches below are scoped
+  // to what the page actually renders. We dropped the "live predictions
+  // count", "backfill count", and "sim bet total" queries because they
+  // backed the hardcoded-accuracy panel that's now gone. Added per-bot
+  // 7d/30d activity + supply funnel + bots-table queries instead.
   const [
     { data: rows },
-    { data: botRows },
-    { count: livePredCount },
-    { count: livePredTodayCount },
-    { count: backfillPredCount },
-    { count: simBetTotal },
+    { data: botRows30d },
     { data: pipelineRuns },
+    { data: scraperRows },
+    { data: bot7dRows },
+    { data: allCs2BotsRows },
+    { data: poolFor30dRows },
   ] = await Promise.all([
+    // Match list — what the user is here to inspect
     db.from("cs2_upcoming_matches").select("*")
       .gte("kickoff_time", now.toISOString()).lte("kickoff_time", cutoff)
       .order("kickoff_time", { ascending: true }),
-    db.from("cs2_simulated_bets").select("id,bot_name,bo3gg_id,market,pick,bookie,odds_at_pick,edge,result,pnl,placed_at,team1,team2")
-      .order("placed_at", { ascending: false }).limit(200),
-    db.from("cs2_predictions").select("*", { count: "exact", head: true })
-      .eq("model_version", "elo+pq_v1"),
-    db.from("cs2_predictions").select("*", { count: "exact", head: true })
-      .eq("model_version", "elo+pq_v1").gte("scan_time", todayStart.toISOString()),
-    db.from("cs2_predictions").select("*", { count: "exact", head: true })
-      .like("model_version", "%backfill%"),
-    db.from("cs2_simulated_bets").select("*", { count: "exact", head: true }),
+    // 30d sim-bets for the per-bot stats + recent in-match pick badges
+    db.from("cs2_simulated_bets")
+      .select("id,bot_name,bo3gg_id,market,pick,bookie,odds_at_pick,edge,result,pnl,pnl_eur,stake_eur,n_books_at_pick,placed_at,team1,team2")
+      .gte("placed_at", thirtyDaysAgo)
+      .order("placed_at", { ascending: false }),
     db.from("pipeline_runs").select("job_name,started_at,status")
       .like("job_name", "cs2%").order("started_at", { ascending: false }).limit(50),
+    db.from("cs2_scraper_state").select("*").order("scraper_name", { ascending: true })
+      .then((r) => ({ data: r.data ?? [] })),
+    // 7d activity subset (used to populate the per-bot 7d columns separately)
+    db.from("cs2_simulated_bets")
+      .select("bot_name,result,pnl_eur,stake_eur,edge,market,n_books_at_pick")
+      .gte("placed_at", sevenDaysAgo),
+    // All cs2_* bots (so new bot names appear automatically)
+    db.from("bots").select("name,current_bankroll,starting_bankroll,is_active")
+      .like("name", "bot_cs2_%").order("name"),
+    // Supply funnel: matches in next 7d kickoff window with column-null booleans
+    db.from("cs2_upcoming_matches")
+      .select("threshold_odds1,bookie_odds1,coolbet_odds1,pinnacle_odds1")
+      .gte("kickoff_time", now.toISOString()).lte("kickoff_time", cutoff),
   ]);
 
-  // CS2 bots' current bankroll for the LogBetButton € display
-  const { data: cs2BotRows } = await db.from("bots")
-    .select("name,current_bankroll")
-    .in("name", ["bot_cs2_value_v1", "bot_cs2_hltv_v1"]);
+  // CS2 bot bankrolls map (drives the LogBetButton € sizing AND the per-bot panel).
+  const allCs2Bots: BotRow[] = (allCs2BotsRows ?? []) as BotRow[];
   const bankrollByBot = new Map<string, number>();
-  for (const b of (cs2BotRows ?? [])) {
+  for (const b of allCs2Bots) {
     bankrollByBot.set(b.name, Number(b.current_bankroll));
   }
-  // ELO-covered matches → bot_cs2_value_v1, HLTV-fallback → bot_cs2_hltv_v1.
-  // The button currently doesn't know which bot will fire, so pick the more
-  // conservative bankroll (smaller). Almost always the same anyway.
-  const minCs2Bankroll = Math.min(
-    bankrollByBot.get("bot_cs2_value_v1") ?? 1000,
-    bankrollByBot.get("bot_cs2_hltv_v1") ?? 1000,
-  );
-
-  // Scrapers state + backtest history for the new admin panels
-  const [scraperRowsResult, backtestRowsResult] = await Promise.all([
-    db.from("cs2_scraper_state").select("*").order("scraper_name", { ascending: true }),
-    db.from("cs2_model_backtest_history").select("*").order("run_at", { ascending: false }).limit(100),
-  ]);
-  const scraperRows = scraperRowsResult.data ?? [];
-  const backtestRows = backtestRowsResult.data ?? [];
+  // LogBetButton fallback: pick the most-conservative (lowest) bankroll
+  // across all enabled cs2 bots so the eur estimate never overshoots.
+  const minCs2Bankroll = allCs2Bots.length
+    ? Math.min(...allCs2Bots.filter((b) => b.is_active).map((b) => Number(b.current_bankroll)))
+    : 1000;
 
   // Fetch latest fallback predictions — prefer v8 (AUC 0.703) over v7 (0.694)
   // over hltv_v1 (0.673) when multiple exist for a match. Same preference
@@ -244,7 +285,7 @@ export default async function Cs2AdminPage() {
   };
 
   const matches = (rows ?? []) as Cs2Match[];
-  const bots = (botRows ?? []) as SimBet[];
+  const bots = (botRows30d ?? []) as SimBet[];
   const botByMatch = new Map<number, SimBet[]>();
   for (const b of bots) {
     const arr = botByMatch.get(b.bo3gg_id) ?? [];
@@ -328,25 +369,86 @@ export default async function Cs2AdminPage() {
   const anyCoverage = matches.filter((m) =>
     m.has_elo_history || (m.bo3gg_id != null && hltvByMatch.has(m.bo3gg_id))).length;
 
-  // After migration 210 the storage is one bet per (bot, match, market, pick),
-  // so no JS dedupe needed — every row IS a real-money decision.
+  // After migration 210 the storage is one bet per (bot, market, pick), so
+  // no JS dedupe needed — every row IS a real-money decision.
+  // Headline counters (30d window, all bots pooled) — feeds the KPI strip.
   const settledBots = bots.filter((b) => b.result === "won" || b.result === "lost");
   const wins = settledBots.filter((b) => b.result === "won").length;
   const losses = settledBots.length - wins;
-  const totalPnl = settledBots.reduce((acc, b) => acc + (b.pnl ?? 0), 0);
+  const totalPnlEur = settledBots.reduce((acc, b) => acc + (b.pnl_eur ?? 0), 0);
 
-  // Per-bot breakdown
-  type BotStats = { name: string; total: number; settled: number; wins: number; losses: number; pnl: number };
-  const botStatsMap = new Map<string, BotStats>();
-  for (const b of bots) {
-    const name = b.bot_name || "bot_cs2_value_v1";
-    const s = botStatsMap.get(name) ?? { name, total: 0, settled: 0, wins: 0, losses: 0, pnl: 0 };
-    s.total++;
-    if (b.result === "won") { s.settled++; s.wins++; s.pnl += b.pnl ?? 0; }
-    else if (b.result === "lost") { s.settled++; s.losses++; s.pnl += b.pnl ?? 0; }
-    botStatsMap.set(name, s);
+  // ── Per-bot 7d activity table (REPLACES the old fixed-2-bot per-bot
+  // breakdown). Mirrors cs2_bot_activity_report.py's 7d window. We start
+  // from the full bots table so EVERY enabled cs2_* bot appears (catches
+  // new bots like aggressive_v1/dog_v1/fav_v1 without code changes), then
+  // overlay the 7d aggregates from cs2_simulated_bets.
+  const activity7d: Map<string, BotActivity> = new Map();
+  for (const b of allCs2Bots) {
+    activity7d.set(b.name, {
+      name: b.name, fires: 0, settled: 0, wins: 0, losses: 0,
+      pnl_eur: 0, staked_eur: 0, avg_edge: null, avg_books: null,
+      single_book_fires: 0, market_winner: 0, market_atleast1map: 0,
+      market_clean_sweep: 0,
+    });
   }
-  const botStats = Array.from(botStatsMap.values()).sort((a, b) => b.total - a.total);
+  const edgeAcc: Map<string, { sum: number; n: number }> = new Map();
+  const booksAcc: Map<string, { sum: number; n: number }> = new Map();
+  for (const r of (bot7dRows ?? []) as Partial<SimBet>[]) {
+    const name = r.bot_name || "";
+    const a = activity7d.get(name);
+    if (!a) continue;
+    a.fires++;
+    if (r.market === "match_winner") a.market_winner++;
+    else if (r.market === "atleast1map") a.market_atleast1map++;
+    else if (r.market === "clean_sweep") a.market_clean_sweep++;
+    if (r.n_books_at_pick != null) {
+      const ba = booksAcc.get(name) ?? { sum: 0, n: 0 };
+      ba.sum += Number(r.n_books_at_pick); ba.n++;
+      booksAcc.set(name, ba);
+      if (Number(r.n_books_at_pick) === 1) a.single_book_fires++;
+    }
+    if (r.edge != null) {
+      const ea = edgeAcc.get(name) ?? { sum: 0, n: 0 };
+      ea.sum += Number(r.edge); ea.n++;
+      edgeAcc.set(name, ea);
+    }
+    if (r.result === "won" || r.result === "lost") {
+      a.settled++;
+      if (r.result === "won") a.wins++; else a.losses++;
+      if (r.pnl_eur != null) a.pnl_eur += Number(r.pnl_eur);
+      if (r.stake_eur != null) a.staked_eur += Number(r.stake_eur);
+    }
+  }
+  for (const [name, a] of activity7d) {
+    const ea = edgeAcc.get(name);
+    if (ea && ea.n > 0) a.avg_edge = ea.sum / ea.n;
+    const ba = booksAcc.get(name);
+    if (ba && ba.n > 0) a.avg_books = ba.sum / ba.n;
+  }
+  // Sort: fired bots first (descending), then silent bots alphabetically
+  const botActivityList = Array.from(activity7d.values()).sort((x, y) => {
+    if ((x.fires > 0) !== (y.fires > 0)) return y.fires - x.fires;
+    if (x.fires !== y.fires) return y.fires - x.fires;
+    return x.name.localeCompare(y.name);
+  });
+  const silentBots = botActivityList.filter((b) => b.fires === 0).map((b) => b.name);
+
+  // ── Supply funnel (7d kickoff window). Mirrors the activity-report CLI.
+  const pool: PoolRow[] = (poolFor30dRows ?? []) as PoolRow[];
+  const poolTotal = pool.length;
+  const poolWithThreshold = pool.filter((r) => r.threshold_odds1 != null).length;
+  const poolEligible1Book = pool.filter((r) =>
+    r.threshold_odds1 != null && (
+      r.bookie_odds1 != null || r.coolbet_odds1 != null || r.pinnacle_odds1 != null
+    )
+  ).length;
+  const poolEligible2Books = pool.filter((r) => {
+    if (r.threshold_odds1 == null) return false;
+    const n = (r.bookie_odds1 != null ? 1 : 0)
+            + (r.coolbet_odds1 != null ? 1 : 0)
+            + (r.pinnacle_odds1 != null ? 1 : 0);
+    return n >= 2;
+  }).length;
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-4">
@@ -365,43 +467,8 @@ export default async function Cs2AdminPage() {
         </div>
       </div>
 
-      {/* Pipeline / Model Stats */}
-      <div className="rounded border border-blue-500/20 bg-blue-500/5 p-3 text-xs grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div>
-          <div className="text-blue-400 text-[10px] uppercase tracking-wide font-semibold">Live predictions</div>
-          <div className="text-lg font-bold tabular-nums">{(livePredCount ?? 0).toLocaleString()}</div>
-          <div className="text-[10px] text-muted-foreground">
-            +{livePredTodayCount ?? 0} today · scanner every 4h
-          </div>
-        </div>
-        <div>
-          <div className="text-blue-400 text-[10px] uppercase tracking-wide font-semibold">Historical (backfill)</div>
-          <div className="text-lg font-bold tabular-nums">{(backfillPredCount ?? 0).toLocaleString()}</div>
-          <div className="text-[10px] text-muted-foreground">
-            Walk-forward, calibration source
-          </div>
-        </div>
-        <div>
-          <div className="text-blue-400 text-[10px] uppercase tracking-wide font-semibold">Bot picks total</div>
-          <div className="text-lg font-bold tabular-nums">{(simBetTotal ?? 0).toLocaleString()}</div>
-          <div className="text-[10px] text-muted-foreground">
-            one row per (match, market, side)
-          </div>
-        </div>
-        <div>
-          <div className="text-blue-400 text-[10px] uppercase tracking-wide font-semibold">Model accuracy</div>
-          <div className="text-lg font-bold tabular-nums">58.9%</div>
-          <div className="text-[10px] text-muted-foreground">
-            ECE 3.0% · 9.2k matches (ELO baseline)
-          </div>
-        </div>
-      </div>
-
       {/* Scrapers self-healing state */}
-      <ScrapersPanel rows={scraperRows} />
-
-      {/* Sneak-peek backtest history */}
-      <BacktestPanel rows={backtestRows} />
+      <ScrapersPanel rows={scraperRows ?? []} />
 
       {/* Pipeline Health */}
       <div className="rounded border border-border p-2 text-xs">
@@ -435,11 +502,14 @@ export default async function Cs2AdminPage() {
         </div>
       </div>
 
-      {/* KPI strip (today's slate) */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+      {/* KPI strip — slate + 30d bot record (footer summary merged in) */}
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-xs">
         <div className="rounded border border-border p-2">
-          <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Matches</div>
+          <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Matches (7d)</div>
           <div className="text-lg font-bold tabular-nums">{matches.length}</div>
+          <div className="text-[9px] text-muted-foreground tabular-nums">
+            {matches.filter((m) => m.best_of >= 3).length} BO3/5 · {matches.filter((m) => m.is_lan).length} LAN · {matches.filter((m) => m.state === "inProgress").length} live
+          </div>
         </div>
         <div className="rounded border border-border p-2">
           <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Model coverage</div>
@@ -454,113 +524,146 @@ export default async function Cs2AdminPage() {
         <div className="rounded border border-green-500/30 bg-green-500/5 p-2">
           <div className="text-green-400 text-[10px] uppercase tracking-wide font-semibold">Value picks</div>
           <div className="text-lg font-bold tabular-nums text-green-400">{valueCount}</div>
+          <div className="text-[9px] text-muted-foreground tabular-nums">
+            {matches.filter((m) => m.roster_change1 || m.roster_change2).length} roster-change
+          </div>
         </div>
         <div className="rounded border border-border p-2">
-          <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Bot record</div>
+          <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Bot record (30d)</div>
           <div className="text-sm font-bold tabular-nums">
             {wins}W-{losses}L
-            <span className={`ml-1 ${totalPnl >= 0 ? "text-green-400" : "text-red-400"}`}>
-              ({totalPnl >= 0 ? "+" : ""}{totalPnl.toFixed(2)}u)
+            <span className={`ml-1 ${totalPnlEur >= 0 ? "text-green-400" : "text-red-400"}`}>
+              ({totalPnlEur >= 0 ? "+" : ""}€{totalPnlEur.toFixed(2)})
             </span>
           </div>
         </div>
         <div className="rounded border border-border p-2">
-          <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Pending picks</div>
+          <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Pending</div>
           <div className="text-lg font-bold tabular-nums text-blue-400">
             {bots.filter((b) => b.result == null).length}
           </div>
           <div className="text-[9px] text-muted-foreground">awaiting settlement</div>
         </div>
+        <div className="rounded border border-border p-2">
+          <div className="text-muted-foreground text-[10px] uppercase tracking-wide">Bots (active)</div>
+          <div className="text-lg font-bold tabular-nums">
+            {allCs2Bots.filter((b) => b.is_active).length}
+          </div>
+          <div className="text-[9px] text-muted-foreground tabular-nums">
+            of {allCs2Bots.length} configured
+          </div>
+        </div>
       </div>
 
-      {/* Per-bot breakdown */}
-      {botStats.length > 0 && (
-        <div className="rounded border border-blue-500/20 bg-blue-500/5 p-2 text-xs">
-          <div className="text-blue-400 text-[10px] uppercase tracking-wide font-semibold mb-1.5">
-            Bots ({botStats.length})
+      {/* Activity & Supply panel — per-bot 7d table + supply funnel + silent-bot flag.
+          Direct mirror of cs2_bot_activity_report.py so the operator can confirm
+          the CLI's findings here too. */}
+      <div className="rounded border border-blue-500/20 bg-blue-500/5 p-3 text-xs space-y-3">
+        <div className="text-blue-400 text-[10px] uppercase tracking-wide font-semibold">
+          Per-bot activity (last 7d) — {allCs2Bots.length} bots configured
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[11px] tabular-nums">
+            <thead className="text-muted-foreground text-[10px] uppercase">
+              <tr>
+                <th className="text-left font-normal pr-2">Bot</th>
+                <th className="text-right font-normal px-2">Fires</th>
+                <th className="text-right font-normal px-2">Set</th>
+                <th className="text-right font-normal px-2">W-L</th>
+                <th className="text-right font-normal px-2">PnL</th>
+                <th className="text-right font-normal px-2">ROI</th>
+                <th className="text-right font-normal px-2">Avg edge</th>
+                <th className="text-right font-normal px-2">Avg #bk</th>
+                <th className="text-right font-normal px-2">1bk</th>
+                <th className="text-right font-normal px-2">MW</th>
+                <th className="text-right font-normal px-2">A1M</th>
+                <th className="text-right font-normal px-2">CS</th>
+                <th className="text-right font-normal pl-2">Bankroll</th>
+              </tr>
+            </thead>
+            <tbody>
+              {botActivityList.map((a) => {
+                const isFired = a.fires > 0;
+                const roi = a.staked_eur > 0 ? (a.pnl_eur / a.staked_eur) * 100 : null;
+                const bankroll = bankrollByBot.get(a.name);
+                return (
+                  <tr key={a.name} className={`border-t border-border/30 ${isFired ? "" : "opacity-50"}`}>
+                    <td className="pr-2 font-mono">{a.name.replace("bot_cs2_", "")}</td>
+                    <td className="text-right px-2">{a.fires || "—"}</td>
+                    <td className="text-right px-2 text-muted-foreground">{a.settled || "—"}</td>
+                    <td className="text-right px-2">{a.settled ? `${a.wins}-${a.losses}` : "—"}</td>
+                    <td className={`text-right px-2 ${a.pnl_eur > 0 ? "text-green-400" : a.pnl_eur < 0 ? "text-red-400" : "text-muted-foreground"}`}>
+                      {a.settled ? (a.pnl_eur >= 0 ? "+" : "") + `€${a.pnl_eur.toFixed(2)}` : "—"}
+                    </td>
+                    <td className={`text-right px-2 ${roi == null ? "text-muted-foreground" : roi >= 0 ? "text-green-400" : "text-red-400"}`}>
+                      {roi != null ? (roi >= 0 ? "+" : "") + roi.toFixed(1) + "%" : "—"}
+                    </td>
+                    <td className="text-right px-2 text-muted-foreground">
+                      {a.avg_edge != null ? "+" + (a.avg_edge * 100).toFixed(1) + "%" : "—"}
+                    </td>
+                    <td className="text-right px-2 text-muted-foreground">
+                      {a.avg_books != null ? a.avg_books.toFixed(2) : "—"}
+                    </td>
+                    <td className="text-right px-2 text-muted-foreground">{a.single_book_fires || "—"}</td>
+                    <td className="text-right px-2 text-muted-foreground">{a.market_winner || "—"}</td>
+                    <td className="text-right px-2 text-muted-foreground">{a.market_atleast1map || "—"}</td>
+                    <td className="text-right px-2 text-muted-foreground">{a.market_clean_sweep || "—"}</td>
+                    <td className="text-right pl-2 font-mono">
+                      {bankroll != null ? `€${bankroll.toFixed(0)}` : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {/* Silent-bot warning */}
+        {silentBots.length > 0 && (
+          <div className="text-[10px] text-orange-300/80 border-t border-orange-500/20 pt-2">
+            <span className="font-semibold uppercase tracking-wide">⚠ Silent (0 fires in 7d):</span>{" "}
+            <span className="font-mono">{silentBots.map((n) => n.replace("bot_cs2_", "")).join(", ")}</span>
+            <span className="text-muted-foreground"> — check supply funnel below + per-bot edge floors.</span>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {botStats.map((s) => {
-              const isHltv = s.name === "bot_cs2_hltv_v1";
-              const roi = s.settled > 0 ? (s.pnl / s.settled) * 100 : 0;
-              return (
-                <div key={s.name} className={`flex items-center gap-2 px-2 py-1.5 rounded ${isHltv ? "bg-purple-500/10 border border-purple-500/20" : "bg-card/30 border border-border"}`}>
-                  <span className={`text-[11px] font-mono font-semibold ${isHltv ? "text-purple-300" : "text-foreground"}`}>
-                    {s.name.replace("bot_cs2_", "")}
-                  </span>
-                  <span className="text-muted-foreground text-[10px]">
-                    {s.total} bets · {s.settled} settled
-                  </span>
-                  <span className="ml-auto font-mono text-[11px]">
-                    {s.wins}W-{s.losses}L
-                    <span className={`ml-1 ${s.pnl >= 0 ? "text-green-400" : "text-red-400"}`}>
-                      ({s.pnl >= 0 ? "+" : ""}{s.pnl.toFixed(2)}u)
-                    </span>
-                    {s.settled >= 5 && (
-                      <span className={`ml-1 text-[10px] ${roi >= 0 ? "text-green-400" : "text-red-400"}`}>
-                        ROI {roi >= 0 ? "+" : ""}{roi.toFixed(1)}%
-                      </span>
-                    )}
-                  </span>
-                </div>
-              );
-            })}
+        )}
+        {/* Supply funnel */}
+        <div className="border-t border-blue-500/20 pt-2">
+          <div className="text-blue-400 text-[10px] uppercase tracking-wide font-semibold mb-1">
+            Supply funnel (next 7d kickoff window)
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[11px] tabular-nums">
+            <div>
+              <div className="text-muted-foreground text-[10px]">Pool</div>
+              <div className="font-bold">{poolTotal}</div>
+            </div>
+            <div>
+              <div className="text-muted-foreground text-[10px]">+ Model coverage (thr)</div>
+              <div className="font-bold">{poolWithThreshold}</div>
+              <div className="text-[9px] text-muted-foreground">
+                {poolTotal ? ((poolWithThreshold / poolTotal) * 100).toFixed(1) : "0"}%
+              </div>
+            </div>
+            <div>
+              <div className="text-muted-foreground text-[10px]">+ ≥1 book (relaxed)</div>
+              <div className="font-bold text-emerald-400">{poolEligible1Book}</div>
+              <div className="text-[9px] text-muted-foreground">
+                new bots eligible
+              </div>
+            </div>
+            <div>
+              <div className="text-muted-foreground text-[10px]">+ ≥2 books (canonical)</div>
+              <div className="font-bold">{poolEligible2Books}</div>
+              <div className="text-[9px] text-muted-foreground">
+                {poolEligible2Books ? `${(poolEligible1Book / poolEligible2Books).toFixed(2)}× unlock` : "—"}
+              </div>
+            </div>
           </div>
         </div>
-      )}
-
-      {/* Recent picks history — last 20 across all bots */}
-      {bots.length > 0 && (
-        <div className="rounded border border-border bg-card/30 p-2 text-xs">
-          <div className="text-muted-foreground text-[10px] uppercase tracking-wide font-semibold mb-1.5">
-            Recent picks ({Math.min(bots.length, 20)} of {bots.length})
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-[11px] tabular-nums">
-              <thead className="text-muted-foreground text-[10px] uppercase">
-                <tr>
-                  <th className="text-left font-normal pr-2">Placed</th>
-                  <th className="text-left font-normal pr-2">Match</th>
-                  <th className="text-left font-normal pr-2">Pick</th>
-                  <th className="text-left font-normal pr-2">Bookie</th>
-                  <th className="text-right font-normal px-2">Odds</th>
-                  <th className="text-right font-normal px-2">Edge</th>
-                  <th className="text-right font-normal px-2">Result</th>
-                  <th className="text-right font-normal pl-2">PnL</th>
-                </tr>
-              </thead>
-              <tbody>
-                {bots.slice(0, 20).map((b) => {
-                  const resColor = b.result === "won" ? "text-green-400"
-                    : b.result === "lost" ? "text-red-400"
-                    : b.result === "voided" ? "text-muted-foreground"
-                    : "text-blue-400";
-                  const pnlColor = (b.pnl ?? 0) > 0 ? "text-green-400"
-                    : (b.pnl ?? 0) < 0 ? "text-red-400" : "text-muted-foreground";
-                  const placed = new Date(b.placed_at).toLocaleString("en-GB", {
-                    timeZone: "Europe/Tallinn", day: "2-digit", month: "short",
-                    hour: "2-digit", minute: "2-digit",
-                  });
-                  return (
-                    <tr key={b.id} className="border-t border-border/30">
-                      <td className="pr-2 text-muted-foreground">{placed}</td>
-                      <td className="pr-2 truncate max-w-[180px]">{b.team1} vs {b.team2}</td>
-                      <td className="pr-2 font-mono">{b.pick}</td>
-                      <td className="pr-2 text-muted-foreground">{b.bookie}</td>
-                      <td className="text-right px-2">{Number(b.odds_at_pick).toFixed(2)}</td>
-                      <td className="text-right px-2 text-green-400">{(Number(b.edge) * 100).toFixed(1)}%</td>
-                      <td className={`text-right px-2 ${resColor}`}>{b.result ?? "open"}</td>
-                      <td className={`text-right pl-2 ${pnlColor}`}>
-                        {b.pnl != null ? (b.pnl > 0 ? "+" : "") + Number(b.pnl).toFixed(3) : "—"}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+        <div className="text-[10px] text-muted-foreground italic border-t border-blue-500/10 pt-2">
+          For deeper inspection (n_books distribution per bot, full recent-picks log,
+          per-market ROI breakdown), run{" "}
+          <code className="font-mono">python3 scripts/esports/cs2_bot_activity_report.py</code>.
         </div>
-      )}
+      </div>
 
       {/* Match list */}
       {matches.length === 0 ? (
@@ -801,17 +904,8 @@ export default async function Cs2AdminPage() {
         </div>
       )}
 
-      {/* Footer summary */}
-      {matches.length > 0 && (
-        <div className="text-xs text-muted-foreground border-t pt-3 flex flex-wrap gap-6 mt-4">
-          <span>{matches.length} matches</span>
-          <span>{matches.filter((m) => m.best_of >= 3).length} BO3/5</span>
-          <span>{matches.filter((m) => m.is_lan).length} LAN</span>
-          <span>{matches.filter((m) => m.state === "inProgress").length} live</span>
-          <span className="text-green-400">{valueCount} value picks</span>
-          <span className="text-orange-400">{matches.filter((m) => m.roster_change1 || m.roster_change2).length} roster changes</span>
-        </div>
-      )}
+      {/* Footer summary merged into the KPI strip at the top (BO3/5,
+          LAN, live, roster-change counts) — section removed 2026-06-25. */}
     </div>
   );
 }
