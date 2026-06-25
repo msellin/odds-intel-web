@@ -197,11 +197,14 @@ export default async function PerformancePage() {
   };
 
   return (
-    // PERFORMANCE-NARROW (2026-06-24): wrap in max-w-4xl to match the
-    // landing page width, so the layout reads as one continuous brand
-    // surface rather than the wide /admin-style dashboard the (app)
-    // layout's max-w-7xl gave us.
-    <div className="mx-auto max-w-4xl -mx-2 sm:-mx-4">
+    // PERFORMANCE-NARROW (2026-06-24, fixed 2026-06-25):
+    // wrap in max-w-4xl to match the landing page width. The earlier
+    // version included `-mx-2 sm:-mx-4` to cancel the (app) layout's
+    // padding, but Tailwind applied that AFTER `mx-auto`, breaking
+    // centering and shifting the container off-screen on mobile.
+    // The (app) layout's px-2/px-4 is small enough that we don't
+    // need to fight it — just constrain to 4xl + auto-center.
+    <div className="mx-auto w-full max-w-4xl">
       {isPro ? (
         <Suspense fallback={<PerformanceClient {...cachedClientProps} />}>
           <ProPerformanceSection
