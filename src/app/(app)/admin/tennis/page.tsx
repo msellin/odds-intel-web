@@ -41,7 +41,7 @@ interface SettledBet {
   selection: string;
   bookmaker: string;
   book_odds: number;
-  edge_pct: number;
+  edge_pct: number | null;
   stake: number;
   result: string;
   pnl: number | null;
@@ -49,6 +49,17 @@ interface SettledBet {
   closing_odds: number | null;
   clv: number | null;
   bot_id: string | null;
+  fair_source: string | null;
+}
+
+interface SourceCount {
+  fair_source: string;
+  total: number;
+  settled: number;
+  unsettled: number;
+  wins: number;
+  losses: number;
+  voids: number;
 }
 
 interface BotBreakdown {
@@ -239,6 +250,7 @@ export default async function TennisAdminPage() {
     { data: settled },
     { data: pendingRows },
     { data: pipelineRuns },
+    { data: sourceRows },
   ] = await Promise.all([
     db
       .from("tennis_fixtures_today")
@@ -256,7 +268,7 @@ export default async function TennisAdminPage() {
     db
       .from("tennis_value_bets")
       .select(
-        "id, fixture_id, tournament_name, player_home, player_away, selection, bookmaker, book_odds, edge_pct, stake, result, pnl, kickoff_time, closing_odds, clv, bot_id"
+        "id, fixture_id, tournament_name, player_home, player_away, selection, bookmaker, book_odds, edge_pct, stake, result, pnl, kickoff_time, closing_odds, clv, bot_id, fair_source"
       )
       .not("result", "is", null)
       .gte("kickoff_time", settledFrom)
@@ -275,6 +287,14 @@ export default async function TennisAdminPage() {
       .in("job_name", ["tennis_scanner", "tennis_settlement"])
       .order("started_at", { ascending: false })
       .limit(20),
+    // Phase 4 — every row from last 30d grouped by fair_source. Includes
+    // unsettled coolbet_only observations, which are the main thing we
+    // want to see growing once the new scanner deploys.
+    db
+      .from("tennis_value_bets")
+      .select("fair_source, result")
+      .gte("kickoff_time", settledFrom)
+      .limit(20_000),
   ]);
 
   // Dedupe + filter numeric-ID legacy fixtures (same as before)
@@ -295,6 +315,32 @@ export default async function TennisAdminPage() {
   const valueBets_ = (valueBets ?? []) as ValueBet[];
   const settled_ = (settled ?? []) as SettledBet[];
   const runs_ = (pipelineRuns ?? []) as PipelineRun[];
+
+  // Phase 4 — aggregate by fair_source (30d window). Distinguishes
+  // Pinnacle-anchored actionable picks from Coolbet-only training
+  // observations awaiting backfill.
+  const sourceMap: Record<string, SourceCount> = {};
+  for (const row of (sourceRows ?? []) as Array<{ fair_source: string | null; result: string | null }>) {
+    const k = row.fair_source ?? "unknown";
+    if (!sourceMap[k]) {
+      sourceMap[k] = {
+        fair_source: k,
+        total: 0, settled: 0, unsettled: 0,
+        wins: 0, losses: 0, voids: 0,
+      };
+    }
+    const s = sourceMap[k];
+    s.total += 1;
+    if (row.result == null) {
+      s.unsettled += 1;
+    } else {
+      s.settled += 1;
+      if (row.result === "win") s.wins += 1;
+      else if (row.result === "loss") s.losses += 1;
+      else if (row.result === "void") s.voids += 1;
+    }
+  }
+  const sources: SourceCount[] = Object.values(sourceMap).sort((a, b) => b.total - a.total);
 
   // Group pending by fixture
   const pendingByFixture: Record<string, PendingBet> = {};
@@ -353,8 +399,12 @@ export default async function TennisAdminPage() {
     }))
     .sort((a, b) => b.n - a.n);
 
-  // Per-edge-band breakdown
-  const byEdge: EdgeBucket[] = aggBy(settledNonVoid, (r) => bucketEdge(r.edge_pct))
+  // Per-edge-band breakdown — exclude rows where edge_pct is null (Phase 4
+  // coolbet_only observations have no Pinnacle reference and therefore no edge).
+  const byEdge: EdgeBucket[] = aggBy(
+    settledNonVoid.filter((r) => r.edge_pct != null),
+    (r) => bucketEdge(r.edge_pct as number),
+  )
     .map((g) => ({
       label: g.key,
       n: g.n,
@@ -509,6 +559,59 @@ export default async function TennisAdminPage() {
               </table>
             </div>
           </details>
+        )}
+      </section>
+
+      {/* Data sources — Phase 4: shows volume per fair_source */}
+      <section>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+          Data sources — last 30 days
+        </h2>
+        {sources.length === 0 ? (
+          <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+            No rows in the last 30 days. Scanner may not be running.
+          </div>
+        ) : (
+          <>
+            <div className="rounded-lg border overflow-hidden">
+              <table className="w-full text-xs font-mono">
+                <thead className="bg-muted/30 text-muted-foreground">
+                  <tr>
+                    <th className="text-left p-2">fair_source</th>
+                    <th className="text-right p-2">total</th>
+                    <th className="text-right p-2">settled</th>
+                    <th className="text-right p-2">unsettled</th>
+                    <th className="text-right p-2">W/L/V</th>
+                    <th className="text-left p-2 pl-4">what this means</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sources.map((s) => {
+                    const label =
+                      s.fair_source === "odds_api_pinnacle" ? "Actionable picks (edge vs Pinnacle de-vigged fair odds)" :
+                      s.fair_source === "coolbet_only" ? "Training observations — no Pinnacle anchor, awaiting CSV backfill" :
+                      s.fair_source === "legacy_unsegmented" ? "Pre-Phase-2 rows (before bot routing landed)" :
+                      "—";
+                    return (
+                      <tr key={s.fair_source} className="border-t">
+                        <td className="p-2">{s.fair_source}</td>
+                        <td className="text-right p-2">{s.total}</td>
+                        <td className="text-right p-2">{s.settled}</td>
+                        <td className="text-right p-2 text-muted-foreground">{s.unsettled}</td>
+                        <td className="text-right p-2 text-muted-foreground">{s.wins}/{s.losses}/{s.voids}</td>
+                        <td className="p-2 pl-4 text-muted-foreground">{label}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {sources.some((s) => s.fair_source === "coolbet_only" && s.settled === 0 && s.unsettled > 0) && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Coolbet-only observations need a results-backfill source — Sackmann is license-blocked, tennis-data.co.uk is dead. Open task: probe api-tennis.com free tier or Apify Flashscore scraper.
+              </p>
+            )}
+          </>
         )}
       </section>
 
@@ -708,7 +811,7 @@ export default async function TennisAdminPage() {
                         <td className="p-2 truncate max-w-[12rem]">{player}</td>
                         <td className="p-2">{b.bookmaker}</td>
                         <td className="text-right p-2">{formatOdds(b.book_odds)}</td>
-                        <td className="text-right p-2">+{b.edge_pct.toFixed(1)}%</td>
+                        <td className="text-right p-2">{b.edge_pct == null ? "—" : `+${b.edge_pct.toFixed(1)}%`}</td>
                         <td className="text-center p-2"><ResultBadge result={b.result} /></td>
                         <td className={`text-right p-2 ${(b.pnl ?? 0) >= 0 ? "text-green-400" : "text-red-400"}`}>
                           {(b.pnl ?? 0) >= 0 ? "+" : ""}{(b.pnl ?? 0).toFixed(2)}
