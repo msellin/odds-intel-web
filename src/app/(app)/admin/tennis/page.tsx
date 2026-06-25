@@ -32,6 +32,41 @@ interface ValueBet {
   stake: number;
 }
 
+interface SettledBet {
+  id: string;
+  fixture_id: string;
+  tournament_name: string | null;
+  player_home: string;
+  player_away: string;
+  selection: string;
+  bookmaker: string;
+  book_odds: number;
+  edge_pct: number;
+  stake: number;
+  result: string;
+  pnl: number | null;
+  kickoff_time: string;
+  closing_odds: number | null;
+  clv: number | null;
+}
+
+interface PendingBet {
+  fixture_id: string;
+  tournament_name: string | null;
+  player_home: string;
+  player_away: string;
+  kickoff_time: string;
+  n: number;
+}
+
+interface PipelineRun {
+  job_name: string;
+  status: string;
+  started_at: string;
+  ended_at: string | null;
+  error_message: string | null;
+}
+
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString("en-GB", {
     hour: "2-digit",
@@ -40,8 +75,29 @@ function formatTime(iso: string) {
   });
 }
 
+function formatDateTime(iso: string) {
+  return new Date(iso).toLocaleString("en-GB", {
+    timeZone: "Europe/Tallinn",
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function formatOdds(n: number) {
   return n.toFixed(2);
+}
+
+function minutesAgo(iso: string): number {
+  return Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
+}
+
+function fmtAgo(iso: string): string {
+  const m = minutesAgo(iso);
+  if (m < 60) return `${m}m ago`;
+  if (m < 60 * 48) return `${Math.floor(m / 60)}h ago`;
+  return `${Math.floor(m / 1440)}d ago`;
 }
 
 function EdgeBadge({ edge }: { edge: number }) {
@@ -52,6 +108,82 @@ function EdgeBadge({ edge }: { edge: number }) {
       +{edge.toFixed(1)}%
     </span>
   );
+}
+
+function ResultBadge({ result }: { result: string }) {
+  const color =
+    result === "win" ? "bg-green-500" :
+    result === "loss" ? "bg-red-500" :
+    "bg-gray-500";
+  const label = result === "win" ? "W" : result === "loss" ? "L" : "V";
+  return (
+    <span className={`inline-block w-5 h-5 rounded text-xs font-bold text-white text-center leading-5 ${color}`}>
+      {label}
+    </span>
+  );
+}
+
+function HealthDot({ status }: { status: "healthy" | "warning" | "error" | "unknown" }) {
+  const color =
+    status === "healthy" ? "bg-green-500" :
+    status === "warning" ? "bg-yellow-500" :
+    status === "error" ? "bg-red-500" :
+    "bg-gray-500";
+  return <span className={`inline-block w-2.5 h-2.5 rounded-full ${color}`} />;
+}
+
+interface BookBreakdown {
+  bookmaker: string;
+  n: number;
+  wins: number;
+  hit_rate: number;
+  total_stake: number;
+  total_pnl: number;
+  roi: number;
+}
+
+interface EdgeBucket {
+  label: string;
+  n: number;
+  wins: number;
+  hit_rate: number;
+  total_stake: number;
+  total_pnl: number;
+  roi: number;
+}
+
+interface SportBreakdown {
+  tournament: string;
+  n: number;
+  wins: number;
+  hit_rate: number;
+  total_stake: number;
+  total_pnl: number;
+  roi: number;
+}
+
+function aggBy<T extends { stake: number; pnl: number | null; result: string }>(
+  rows: T[],
+  keyFn: (r: T) => string,
+): Array<{ key: string; n: number; wins: number; total_stake: number; total_pnl: number }> {
+  const acc: Record<string, { n: number; wins: number; total_stake: number; total_pnl: number }> = {};
+  for (const r of rows) {
+    const k = keyFn(r);
+    if (!acc[k]) acc[k] = { n: 0, wins: 0, total_stake: 0, total_pnl: 0 };
+    acc[k].n += 1;
+    if (r.result === "win") acc[k].wins += 1;
+    const stake = r.stake || 1.0;
+    acc[k].total_stake += stake;
+    acc[k].total_pnl += r.pnl ?? 0;
+  }
+  return Object.entries(acc).map(([key, v]) => ({ key, ...v }));
+}
+
+function bucketEdge(edge_pct: number): string {
+  if (edge_pct >= 10) return "≥10%";
+  if (edge_pct >= 5) return "5-10%";
+  if (edge_pct >= 3) return "3-5%";
+  return "0-3%";
 }
 
 export default async function TennisAdminPage() {
@@ -84,17 +216,24 @@ export default async function TennisAdminPage() {
 
   const db = serviceClient();
   const now = new Date();
-  // Exclude matches that started more than 5 minutes ago (already live)
   const startFloor = new Date(now.getTime() - 5 * 60 * 1000).toISOString();
   const cutoff = new Date(now.getTime() + 36 * 3600 * 1000).toISOString();
+  const settledFrom = new Date(now.getTime() - 30 * 24 * 3600 * 1000).toISOString();
+  const pendingCutoff = new Date(now.getTime() - 2 * 3600 * 1000).toISOString();
 
-  const [{ data: fixtures }, { data: valueBets }] = await Promise.all([
+  const [
+    { data: fixtures },
+    { data: valueBets },
+    { data: settled },
+    { data: pendingRows },
+    { data: pipelineRuns },
+  ] = await Promise.all([
     db
       .from("tennis_fixtures_today")
       .select("*")
       .gte("kickoff_time", startFloor)
       .lte("kickoff_time", cutoff)
-      .order("pin_margin_pct", { ascending: true, nullsFirst: false }),
+      .order("kickoff_time", { ascending: true }),
     db
       .from("tennis_value_bets")
       .select("fixture_id, selection, bookmaker, book_odds, edge_pct, stake")
@@ -102,18 +241,35 @@ export default async function TennisAdminPage() {
       .lte("kickoff_time", cutoff)
       .is("result", null)
       .order("edge_pct", { ascending: false }),
+    db
+      .from("tennis_value_bets")
+      .select(
+        "id, fixture_id, tournament_name, player_home, player_away, selection, bookmaker, book_odds, edge_pct, stake, result, pnl, kickoff_time, closing_odds, clv"
+      )
+      .not("result", "is", null)
+      .gte("kickoff_time", settledFrom)
+      .order("kickoff_time", { ascending: false })
+      .limit(500),
+    db
+      .from("tennis_value_bets")
+      .select("fixture_id, tournament_name, player_home, player_away, kickoff_time")
+      .is("result", null)
+      .lte("kickoff_time", pendingCutoff)
+      .order("kickoff_time", { ascending: false })
+      .limit(50),
+    db
+      .from("pipeline_runs")
+      .select("job_name, status, started_at, ended_at, error_message")
+      .in("job_name", ["tennis_scanner", "tennis_settlement"])
+      .order("started_at", { ascending: false })
+      .limit(20),
   ]);
 
-  // Drop fixtures that still have numeric player IDs (old Railway scans without
-  // the /participants name-resolution fix). These must be excluded BEFORE the
-  // dedup step — otherwise a numeric-ID duplicate with lower margin claims the
-  // dedup slot and the real-name fixture (with the value bet) gets thrown away.
+  // Dedupe + filter numeric-ID legacy fixtures (same as before)
   const isNumericId = (s: string) => /^\d+$/.test(s.trim());
   const named = (fixtures ?? []).filter(
     (f) => !isNumericId(f.player_home) && !isNumericId(f.player_away)
   );
-
-  // Deduplicate: same player pair + kickoff minute → keep lowest margin
   const seen = new Set<string>();
   const deduped = named.filter((f) => {
     const players = [f.player_home, f.player_away].sort().join("|");
@@ -123,11 +279,21 @@ export default async function TennisAdminPage() {
     seen.add(key);
     return true;
   });
-
   const fixtures_ = deduped as Fixture[];
   const valueBets_ = (valueBets ?? []) as ValueBet[];
+  const settled_ = (settled ?? []) as SettledBet[];
+  const runs_ = (pipelineRuns ?? []) as PipelineRun[];
 
-  // Index value bets by fixture_id + selection
+  // Group pending by fixture
+  const pendingByFixture: Record<string, PendingBet> = {};
+  for (const p of pendingRows ?? []) {
+    const k = p.fixture_id;
+    if (!pendingByFixture[k]) pendingByFixture[k] = { ...(p as PendingBet), n: 0 };
+    pendingByFixture[k].n += 1;
+  }
+  const pending = Object.values(pendingByFixture);
+
+  // Index value bets by fixture_id
   const vbIndex: Record<string, ValueBet[]> = {};
   for (const vb of valueBets_) {
     const key = `${vb.fixture_id}`;
@@ -135,173 +301,501 @@ export default async function TennisAdminPage() {
     vbIndex[key].push(vb);
   }
 
-  const scannedAt = fixtures_[0]?.scanned_at
-    ? new Date(fixtures_[0].scanned_at).toLocaleString("en-GB", {
-        timeZone: "Europe/Tallinn",
-        day: "2-digit",
-        month: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : null;
+  // System health from pipeline_runs
+  const lastScannerRun = runs_.find((r) => r.job_name === "tennis_scanner");
+  const lastSettlementRun = runs_.find((r) => r.job_name === "tennis_settlement");
+
+  const scannerStatus: "healthy" | "warning" | "error" | "unknown" =
+    !lastScannerRun ? "unknown" :
+    lastScannerRun.status !== "completed" ? "error" :
+    minutesAgo(lastScannerRun.started_at) > 12 * 60 ? "warning" :
+    "healthy";
+
+  const settlementStatus: "healthy" | "warning" | "error" | "unknown" =
+    !lastSettlementRun ? "unknown" :
+    lastSettlementRun.status !== "completed" ? "error" :
+    minutesAgo(lastSettlementRun.started_at) > 24 * 60 ? "warning" :
+    "healthy";
+
+  // 30d settled aggregates
+  const totSettled = settled_.length;
+  const totWins = settled_.filter((s) => s.result === "win").length;
+  const totLosses = settled_.filter((s) => s.result === "loss").length;
+  const totVoids = settled_.filter((s) => s.result === "void").length;
+  const settledNonVoid = settled_.filter((s) => s.result !== "void");
+  const totStake = settledNonVoid.reduce((s, r) => s + (r.stake || 1), 0);
+  const totPnl = settledNonVoid.reduce((s, r) => s + (r.pnl ?? 0), 0);
+  const totRoi = totStake > 0 ? (totPnl / totStake) * 100 : 0;
+  const hitRate = settledNonVoid.length > 0 ? (totWins / settledNonVoid.length) * 100 : 0;
+
+  // Per-book breakdown
+  const byBook: BookBreakdown[] = aggBy(settledNonVoid, (r) => r.bookmaker)
+    .map((g) => ({
+      bookmaker: g.key,
+      n: g.n,
+      wins: g.wins,
+      hit_rate: g.n > 0 ? (g.wins / g.n) * 100 : 0,
+      total_stake: g.total_stake,
+      total_pnl: g.total_pnl,
+      roi: g.total_stake > 0 ? (g.total_pnl / g.total_stake) * 100 : 0,
+    }))
+    .sort((a, b) => b.n - a.n);
+
+  // Per-edge-band breakdown
+  const byEdge: EdgeBucket[] = aggBy(settledNonVoid, (r) => bucketEdge(r.edge_pct))
+    .map((g) => ({
+      label: g.key,
+      n: g.n,
+      wins: g.wins,
+      hit_rate: g.n > 0 ? (g.wins / g.n) * 100 : 0,
+      total_stake: g.total_stake,
+      total_pnl: g.total_pnl,
+      roi: g.total_stake > 0 ? (g.total_pnl / g.total_stake) * 100 : 0,
+    }))
+    .sort((a, b) => {
+      const order = ["≥10%", "5-10%", "3-5%", "0-3%"];
+      return order.indexOf(a.label) - order.indexOf(b.label);
+    });
+
+  // Per-sport breakdown
+  const bySport: SportBreakdown[] = aggBy(
+    settledNonVoid,
+    (r) => r.tournament_name ?? "Unknown"
+  )
+    .map((g) => ({
+      tournament: g.key,
+      n: g.n,
+      wins: g.wins,
+      hit_rate: g.n > 0 ? (g.wins / g.n) * 100 : 0,
+      total_stake: g.total_stake,
+      total_pnl: g.total_pnl,
+      roi: g.total_stake > 0 ? (g.total_pnl / g.total_stake) * 100 : 0,
+    }))
+    .sort((a, b) => b.n - a.n);
+
+  const recentSettled = settled_.slice(0, 30);
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
+    <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Tennis — Value Threshold Sheet</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Bet if book odds exceed the threshold. Threshold = Pinnacle de-vigged fair price.
+      <div>
+        <h1 className="text-2xl font-bold">Tennis — System Overview</h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          Picks, settlement, and 30-day performance. Provider: The Odds API (Pinnacle + 5 soft books).
+        </p>
+      </div>
+
+      {/* System health */}
+      <section>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+          System health
+        </h2>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="rounded-lg border p-3">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-muted-foreground">Scanner</span>
+              <HealthDot status={scannerStatus} />
+            </div>
+            <div className="font-mono text-sm">
+              {lastScannerRun ? fmtAgo(lastScannerRun.started_at) : "never"}
+            </div>
+            <div className="text-xs text-muted-foreground mt-0.5">
+              {lastScannerRun ? `status: ${lastScannerRun.status}` : "no runs yet"}
+            </div>
+          </div>
+          <div className="rounded-lg border p-3">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-muted-foreground">Settlement</span>
+              <HealthDot status={settlementStatus} />
+            </div>
+            <div className="font-mono text-sm">
+              {lastSettlementRun ? fmtAgo(lastSettlementRun.started_at) : "never"}
+            </div>
+            <div className="text-xs text-muted-foreground mt-0.5">
+              {lastSettlementRun ? `status: ${lastSettlementRun.status}` : "no runs yet"}
+            </div>
+          </div>
+          <div className="rounded-lg border p-3">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-muted-foreground">Pending settlement</span>
+              <HealthDot status={pending.length === 0 ? "healthy" : pending.length < 10 ? "warning" : "error"} />
+            </div>
+            <div className="font-mono text-sm">{pending.length} fixtures</div>
+            <div className="text-xs text-muted-foreground mt-0.5">
+              past KO+2h, result NULL
+            </div>
+          </div>
+          <div className="rounded-lg border p-3">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-muted-foreground">Today's pool</span>
+              <HealthDot status={fixtures_.length > 0 ? "healthy" : "warning"} />
+            </div>
+            <div className="font-mono text-sm">{fixtures_.length} fixtures</div>
+            <div className="text-xs text-muted-foreground mt-0.5">
+              next 36h
+            </div>
+          </div>
+        </div>
+
+        {/* Recent pipeline runs */}
+        {runs_.length > 0 && (
+          <details className="mt-3 text-xs">
+            <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+              Recent pipeline runs ({runs_.length})
+            </summary>
+            <div className="mt-2 rounded-lg border overflow-hidden">
+              <table className="w-full font-mono">
+                <thead className="bg-muted/30">
+                  <tr>
+                    <th className="text-left p-2">job</th>
+                    <th className="text-left p-2">started</th>
+                    <th className="text-left p-2">status</th>
+                    <th className="text-left p-2">error</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {runs_.map((r, i) => (
+                    <tr key={i} className="border-t">
+                      <td className="p-2">{r.job_name}</td>
+                      <td className="p-2">{formatDateTime(r.started_at)}</td>
+                      <td className={`p-2 ${r.status === "completed" ? "text-green-400" : "text-red-400"}`}>
+                        {r.status}
+                      </td>
+                      <td className="p-2 text-muted-foreground truncate max-w-md">
+                        {r.error_message ? r.error_message.slice(0, 80) : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
+        )}
+      </section>
+
+      {/* 30-day performance */}
+      <section>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+          Settled — last 30 days
+        </h2>
+        {totSettled === 0 ? (
+          <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+            No settled bets yet. Settlement job populates this once matches finish.
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
+              <div className="rounded-lg border p-3">
+                <div className="text-xs text-muted-foreground">Settled</div>
+                <div className="font-mono text-xl">{totSettled}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  {totWins}W / {totLosses}L / {totVoids}V
+                </div>
+              </div>
+              <div className="rounded-lg border p-3">
+                <div className="text-xs text-muted-foreground">Hit rate</div>
+                <div className="font-mono text-xl">{hitRate.toFixed(1)}%</div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  excluding voids
+                </div>
+              </div>
+              <div className="rounded-lg border p-3">
+                <div className="text-xs text-muted-foreground">Total stake</div>
+                <div className="font-mono text-xl">{totStake.toFixed(1)}u</div>
+              </div>
+              <div className="rounded-lg border p-3">
+                <div className="text-xs text-muted-foreground">Total PnL</div>
+                <div className={`font-mono text-xl ${totPnl >= 0 ? "text-green-400" : "text-red-400"}`}>
+                  {totPnl >= 0 ? "+" : ""}{totPnl.toFixed(2)}u
+                </div>
+              </div>
+              <div className="rounded-lg border p-3">
+                <div className="text-xs text-muted-foreground">ROI</div>
+                <div className={`font-mono text-xl ${totRoi >= 0 ? "text-green-400" : "text-red-400"}`}>
+                  {totRoi >= 0 ? "+" : ""}{totRoi.toFixed(2)}%
+                </div>
+              </div>
+            </div>
+
+            {/* Breakdowns */}
+            <div className="grid lg:grid-cols-3 gap-4">
+              {/* By edge band */}
+              <div className="rounded-lg border overflow-hidden">
+                <div className="bg-muted/30 px-3 py-2 text-xs font-semibold uppercase">
+                  By edge band
+                </div>
+                <table className="w-full text-xs font-mono">
+                  <thead className="text-muted-foreground">
+                    <tr><th className="text-left p-2">band</th><th className="text-right p-2">n</th><th className="text-right p-2">hit</th><th className="text-right p-2">ROI</th></tr>
+                  </thead>
+                  <tbody>
+                    {byEdge.map((b) => (
+                      <tr key={b.label} className="border-t">
+                        <td className="p-2">{b.label}</td>
+                        <td className="text-right p-2">{b.n}</td>
+                        <td className="text-right p-2">{b.hit_rate.toFixed(0)}%</td>
+                        <td className={`text-right p-2 ${b.roi >= 0 ? "text-green-400" : "text-red-400"}`}>
+                          {b.roi >= 0 ? "+" : ""}{b.roi.toFixed(1)}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* By bookmaker */}
+              <div className="rounded-lg border overflow-hidden">
+                <div className="bg-muted/30 px-3 py-2 text-xs font-semibold uppercase">
+                  By bookmaker
+                </div>
+                <table className="w-full text-xs font-mono">
+                  <thead className="text-muted-foreground">
+                    <tr><th className="text-left p-2">book</th><th className="text-right p-2">n</th><th className="text-right p-2">hit</th><th className="text-right p-2">ROI</th></tr>
+                  </thead>
+                  <tbody>
+                    {byBook.map((b) => (
+                      <tr key={b.bookmaker} className="border-t">
+                        <td className="p-2">{b.bookmaker}</td>
+                        <td className="text-right p-2">{b.n}</td>
+                        <td className="text-right p-2">{b.hit_rate.toFixed(0)}%</td>
+                        <td className={`text-right p-2 ${b.roi >= 0 ? "text-green-400" : "text-red-400"}`}>
+                          {b.roi >= 0 ? "+" : ""}{b.roi.toFixed(1)}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* By tournament/sport */}
+              <div className="rounded-lg border overflow-hidden">
+                <div className="bg-muted/30 px-3 py-2 text-xs font-semibold uppercase">
+                  By tournament
+                </div>
+                <table className="w-full text-xs font-mono">
+                  <thead className="text-muted-foreground">
+                    <tr><th className="text-left p-2">tour</th><th className="text-right p-2">n</th><th className="text-right p-2">hit</th><th className="text-right p-2">ROI</th></tr>
+                  </thead>
+                  <tbody>
+                    {bySport.slice(0, 10).map((b) => (
+                      <tr key={b.tournament} className="border-t">
+                        <td className="p-2 truncate max-w-[12rem]">{b.tournament}</td>
+                        <td className="text-right p-2">{b.n}</td>
+                        <td className="text-right p-2">{b.hit_rate.toFixed(0)}%</td>
+                        <td className={`text-right p-2 ${b.roi >= 0 ? "text-green-400" : "text-red-400"}`}>
+                          {b.roi >= 0 ? "+" : ""}{b.roi.toFixed(1)}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Recent settled bets list */}
+            <div className="mt-4 rounded-lg border overflow-hidden">
+              <div className="bg-muted/30 px-3 py-2 text-xs font-semibold uppercase">
+                Recent settled picks (last {recentSettled.length})
+              </div>
+              <table className="w-full text-xs font-mono">
+                <thead className="text-muted-foreground">
+                  <tr>
+                    <th className="text-left p-2">date</th>
+                    <th className="text-left p-2">tour</th>
+                    <th className="text-left p-2">pick</th>
+                    <th className="text-left p-2">book</th>
+                    <th className="text-right p-2">odds</th>
+                    <th className="text-right p-2">edge</th>
+                    <th className="text-center p-2">res</th>
+                    <th className="text-right p-2">pnl</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentSettled.map((b) => {
+                    const player = b.selection === "home" ? b.player_home : b.player_away;
+                    return (
+                      <tr key={b.id} className="border-t">
+                        <td className="p-2">{formatDateTime(b.kickoff_time)}</td>
+                        <td className="p-2 truncate max-w-[10rem]">{b.tournament_name ?? "—"}</td>
+                        <td className="p-2 truncate max-w-[12rem]">{player}</td>
+                        <td className="p-2">{b.bookmaker}</td>
+                        <td className="text-right p-2">{formatOdds(b.book_odds)}</td>
+                        <td className="text-right p-2">+{b.edge_pct.toFixed(1)}%</td>
+                        <td className="text-center p-2"><ResultBadge result={b.result} /></td>
+                        <td className={`text-right p-2 ${(b.pnl ?? 0) >= 0 ? "text-green-400" : "text-red-400"}`}>
+                          {(b.pnl ?? 0) >= 0 ? "+" : ""}{(b.pnl ?? 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </section>
+
+      {/* Pending settlement */}
+      {pending.length > 0 && (
+        <section>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+            Pending settlement ({pending.length})
+          </h2>
+          <div className="rounded-lg border border-yellow-500/40 bg-yellow-500/5 overflow-hidden">
+            <table className="w-full text-xs font-mono">
+              <thead className="text-muted-foreground">
+                <tr>
+                  <th className="text-left p-2">kickoff</th>
+                  <th className="text-left p-2">tournament</th>
+                  <th className="text-left p-2">match</th>
+                  <th className="text-right p-2">rows</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pending.map((p) => (
+                  <tr key={p.fixture_id} className="border-t border-yellow-500/20">
+                    <td className="p-2">{formatDateTime(p.kickoff_time)}</td>
+                    <td className="p-2">{p.tournament_name ?? "—"}</td>
+                    <td className="p-2">{p.player_home} vs {p.player_away}</td>
+                    <td className="text-right p-2">{p.n}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            Settlement runs 02:00 + 14:15 UTC. Rows here past 24h suggest /scores didn't return the event — match may have been postponed or the sport key already deactivated.
           </p>
-        </div>
-        <div className="text-right text-xs text-muted-foreground">
-          {scannedAt ? (
-            <>
-              Last scan: <span className="font-mono">{scannedAt}</span>
-            </>
-          ) : (
-            <span className="text-yellow-400">No data — run the scanner first</span>
-          )}
-        </div>
-      </div>
+        </section>
+      )}
 
-      {/* How to use */}
-      <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-4 text-sm space-y-1">
-        <p className="font-semibold text-blue-400">How to use</p>
-        <p className="text-muted-foreground">
-          Open Coolbet tennis odds. For each match below, check if either player&apos;s
-          odds exceed the threshold shown. If yes → place the bet manually.
-          Green rows = value already found by scanner at time of last scan.
-        </p>
-        <p className="text-muted-foreground text-xs mt-1">
-          Run scanner: <code className="bg-muted px-1 rounded">python3 scripts/tennis/value_scanner.py</code>
-        </p>
-      </div>
-
-      {fixtures_.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-12 text-center text-muted-foreground">
-          No fixtures loaded. Run the scanner:
-          <br />
-          <code className="text-sm mt-2 block">
-            export OP_KEY=your_key && python3 scripts/tennis/value_scanner.py
-          </code>
+      {/* Today's value sheet */}
+      <section>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Today's value sheet
+          </h2>
+          <div className="text-xs text-muted-foreground">
+            Bet if book odds exceed the threshold (Pinnacle de-vigged fair price).
+          </div>
         </div>
-      ) : (
-        <div className="space-y-3">
-          {fixtures_.map((fix) => {
-            const vbs = vbIndex[fix.fixture_id] ?? [];
-            const homeVbs = vbs.filter((v) => v.selection === "home");
-            const awayVbs = vbs.filter((v) => v.selection === "away");
-            const hasValue = vbs.length > 0;
 
-            return (
-              <div
-                key={fix.fixture_id}
-                className={`rounded-lg border p-4 ${
-                  hasValue ? "border-green-500/40 bg-green-500/5" : "border-border"
-                }`}
-              >
-                {/* Match header */}
-                <div className="flex items-start justify-between gap-4 mb-3">
-                  <div>
+        {fixtures_.length === 0 ? (
+          <div className="rounded-lg border border-dashed p-12 text-center text-muted-foreground">
+            No fixtures loaded. Scanner runs 06:00 + 14:00 UTC. Manual run:
+            <br />
+            <code className="text-sm mt-2 block">
+              python3 scripts/tennis/odds_api_scanner.py
+            </code>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {fixtures_.map((fix) => {
+              const vbs = vbIndex[fix.fixture_id] ?? [];
+              const homeVbs = vbs.filter((v) => v.selection === "home");
+              const awayVbs = vbs.filter((v) => v.selection === "away");
+              const hasValue = vbs.length > 0;
+
+              return (
+                <div
+                  key={fix.fixture_id}
+                  className={`rounded-lg border p-4 ${
+                    hasValue ? "border-green-500/40 bg-green-500/5" : "border-border"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-4 mb-3">
                     <div className="text-xs text-muted-foreground">
                       {fix.tournament_name ?? "Unknown tournament"} · {formatTime(fix.kickoff_time)}
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
-                    {fix.pin_margin_pct != null && (
-                      <span>Pin margin: {fix.pin_margin_pct.toFixed(1)}%</span>
-                    )}
-                    {hasValue && (
-                      <span className="text-green-400 font-semibold">VALUE FOUND</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Two player rows */}
-                <div className="grid grid-cols-2 gap-3">
-                  {(
-                    [
-                      {
-                        label: fix.player_home,
-                        rawOdds: fix.pin_raw_home,
-                        threshold: fix.threshold_home,
-                        side: "home" as const,
-                        sideVbs: homeVbs,
-                      },
-                      {
-                        label: fix.player_away,
-                        rawOdds: fix.pin_raw_away,
-                        threshold: fix.threshold_away,
-                        side: "away" as const,
-                        sideVbs: awayVbs,
-                      },
-                    ] as const
-                  ).map(({ label, rawOdds, threshold, sideVbs }) => (
-                    <div
-                      key={label}
-                      className={`rounded-md p-3 border ${
-                        sideVbs.length > 0
-                          ? "border-green-500/50 bg-green-500/10"
-                          : "border-border bg-muted/20"
-                      }`}
-                    >
-                      <div className="text-xs font-mono text-muted-foreground mb-1">
-                        {label}
-                      </div>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-lg font-bold tabular-nums">
-                          {formatOdds(threshold)}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          min to bet
-                        </span>
-                      </div>
-                      {rawOdds != null && (
-                        <div className="text-xs text-muted-foreground mt-0.5">
-                          Pinnacle (raw): {formatOdds(rawOdds)}
-                        </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
+                      {fix.pin_margin_pct != null && (
+                        <span>Pin margin: {fix.pin_margin_pct.toFixed(1)}%</span>
                       )}
-
-                      {/* Value bets found */}
-                      {sideVbs.length > 0 && (
-                        <div className="mt-2 space-y-1">
-                          {sideVbs.map((vb, i) => (
-                            <div key={i} className="flex items-center gap-2 text-xs">
-                              <span className="font-semibold text-green-300 capitalize">
-                                {vb.bookmaker}
-                              </span>
-                              <span className="font-mono font-bold">
-                                {formatOdds(vb.book_odds)}
-                              </span>
-                              <EdgeBadge edge={vb.edge_pct} />
-                              <span className="text-muted-foreground">
-                                {vb.stake.toFixed(2)}u
-                              </span>
-                            </div>
-                          ))}
-                        </div>
+                      {hasValue && (
+                        <span className="text-green-400 font-semibold">VALUE FOUND</span>
                       )}
                     </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+                  </div>
 
-      {/* Summary */}
-      {fixtures_.length > 0 && (
-        <div className="text-xs text-muted-foreground border-t pt-4 flex gap-6">
-          <span>{fixtures_.length} fixtures loaded</span>
-          <span>{valueBets_.length} value bets found</span>
-          <span>
-            {valueBets_.filter((v) => v.edge_pct >= 5).length} at ≥5% edge
-          </span>
-        </div>
-      )}
+                  <div className="grid grid-cols-2 gap-3">
+                    {(
+                      [
+                        {
+                          label: fix.player_home,
+                          rawOdds: fix.pin_raw_home,
+                          threshold: fix.threshold_home,
+                          sideVbs: homeVbs,
+                        },
+                        {
+                          label: fix.player_away,
+                          rawOdds: fix.pin_raw_away,
+                          threshold: fix.threshold_away,
+                          sideVbs: awayVbs,
+                        },
+                      ] as const
+                    ).map(({ label, rawOdds, threshold, sideVbs }) => (
+                      <div
+                        key={label}
+                        className={`rounded-md p-3 border ${
+                          sideVbs.length > 0
+                            ? "border-green-500/50 bg-green-500/10"
+                            : "border-border bg-muted/20"
+                        }`}
+                      >
+                        <div className="text-xs font-mono text-muted-foreground mb-1">
+                          {label}
+                        </div>
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-lg font-bold tabular-nums">
+                            {formatOdds(threshold)}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            min to bet
+                          </span>
+                        </div>
+                        {rawOdds != null && (
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            Pinnacle (raw): {formatOdds(rawOdds)}
+                          </div>
+                        )}
+
+                        {sideVbs.length > 0 && (
+                          <div className="mt-2 space-y-1">
+                            {sideVbs.map((vb, i) => (
+                              <div key={i} className="flex items-center gap-2 text-xs">
+                                <span className="font-semibold text-green-300">
+                                  {vb.bookmaker}
+                                </span>
+                                <span className="font-mono font-bold">
+                                  {formatOdds(vb.book_odds)}
+                                </span>
+                                <EdgeBadge edge={vb.edge_pct} />
+                                <span className="text-muted-foreground">
+                                  {vb.stake.toFixed(2)}u
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {fixtures_.length > 0 && (
+          <div className="text-xs text-muted-foreground border-t pt-4 mt-4 flex gap-6">
+            <span>{fixtures_.length} fixtures loaded</span>
+            <span>{valueBets_.length} active value picks (unsettled, next 36h)</span>
+            <span>
+              {valueBets_.filter((v) => v.edge_pct >= 5).length} at ≥5% edge
+            </span>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
