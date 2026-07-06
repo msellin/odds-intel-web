@@ -239,8 +239,8 @@ export default async function PreviewLanding() {
           as empty gutter. The hero copy stays narrow via its own
           nested max-w wrapper so ledger CTAs don't spread thin. */}
       <main className="mx-auto max-w-5xl px-4">
-        <section className="pt-14 pb-10 sm:pt-20">
-          <div className="mx-auto max-w-3xl space-y-5 text-center">
+        <section className="pt-10 pb-8 sm:pt-20 sm:pb-10">
+          <div className="mx-auto max-w-3xl space-y-4 text-center sm:space-y-5">
             <p className="font-mono text-xs uppercase tracking-[0.2em] text-emerald-400">
               Verified football track record
             </p>
@@ -345,8 +345,8 @@ export default async function PreviewLanding() {
            three competitor rows below each with a delta. Reads top
            to bottom in 3 seconds: "we're +11.91% on 989 bets — here's
            how much we beat each competitor by." */}
-        <section className="mt-14">
-          <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-neutral-500">
+        <section className="mt-10 sm:mt-14">
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-neutral-500 sm:mb-4">
             Head-to-head vs other public models
           </h2>
 
@@ -487,7 +487,7 @@ export default async function PreviewLanding() {
             text after the icon container, but "Signed daily commits"
             needs ~124px), 4-col row on ≥sm. mt-8 tightened from mt-10
             per the desktop audit's whitespace nit above this strip. */}
-        <section className="mt-8" aria-label="Verification">
+        <section className="mt-6 sm:mt-8" aria-label="Verification">
           <p className="mb-3 text-center text-xs font-semibold uppercase tracking-widest text-neutral-500">
             Every pick is independently verifiable
           </p>
@@ -530,23 +530,28 @@ export default async function PreviewLanding() {
             the list honestly as a "notify me when something ships" signup
             — new picks, milestones, or a paid tier if we build one. Same
             underlying /api/v1/waitlist endpoint. */}
-        <section className="mt-12">
+        <section className="mt-8 sm:mt-12">
           <PremiumWaitlistForm />
         </section>
 
         {/* ───────── Responsible Gambling notice ───────── */}
-        <div className="mt-10 rounded-lg border border-white/[0.06] bg-white/[0.03] px-6 py-3 text-center text-xs text-neutral-400">
+        <div className="mt-8 rounded-lg border border-white/[0.06] bg-white/[0.03] px-6 py-3 text-center text-xs text-neutral-400">
           <span className="font-semibold text-neutral-100">Responsible Gambling:</span>{" "}
           Betting involves risk. Data provides intelligence, not certainty.
           18+ Only.
         </div>
 
         {/* ───────── Footer ─────────
-            Partner badges demoted from a standalone mt-12 section into
-            a subdued grayscale row here — preserves the reciprocal
-            backlinks (Twelve Tools + AIBoom poll this page) without
-            the "affiliate-y" visual weight the desktop audit flagged. */}
-        <footer className="mt-16 mb-12 border-t border-white/[0.06] pt-8 text-xs text-neutral-500">
+            Partner-directory badges (Twelve Tools / Wired Business /
+            AIBoom) were previously rendered here to preserve reciprocal
+            backlinks. Removed 2026-07-06 — at h-5 with opacity-40
+            grayscale they were near-invisible on mobile (defeating the
+            "featured on" purpose) and visually off-balance on desktop
+            (source SVGs have different aspect ratios). Any listing that
+            enforces badge presence will drop us; at pre-PMF user count
+            the traffic cost is negligible and the design churn on every
+            audit cycle isn't worth it. */}
+        <footer className="mt-10 mb-8 border-t border-white/[0.06] pt-6 text-xs text-neutral-500">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p>© OddsIntel · honest numbers, public ledger</p>
             <div className="flex items-center gap-4 font-mono">
@@ -563,58 +568,6 @@ export default async function PreviewLanding() {
                 Telegram
               </Link>
             </div>
-          </div>
-          {/* Partner badges — equal-column grid so the three badges
-              (which have different intrinsic widths) all center inside
-              consistent slots instead of clustering left with a lonely
-              orphan on the right. h-5 keeps them subordinate to the
-              footer copy above. */}
-          <div
-            aria-label="Featured on"
-            className="mt-6 grid grid-cols-3 items-center gap-4 opacity-40 grayscale transition-opacity hover:opacity-70"
-          >
-            <a
-              href="https://twelve.tools"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex justify-center"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="https://twelve.tools/badge0-dark.svg"
-                alt="Featured on Twelve Tools"
-                className="h-5 w-auto"
-                loading="lazy"
-              />
-            </a>
-            <a
-              href="https://wired.business"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex justify-center"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="https://wired.business/badge0-dark.svg"
-                alt="Featured on Wired Business"
-                className="h-5 w-auto"
-                loading="lazy"
-              />
-            </a>
-            <a
-              href="https://aiboom.tools"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex justify-center"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="https://aiboom.tools/badge/badge_dark.svg"
-                alt="Featured on AIBoom.Tools"
-                className="h-5 w-auto"
-                loading="lazy"
-              />
-            </a>
           </div>
         </footer>
       </main>
