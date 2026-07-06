@@ -88,15 +88,17 @@ const COMP_META: Omit<CompetitorRow, "theirN" | "theirRoi" | "ourN" | "ourRoi" |
   { name: "Forebet",     url: "https://www.forebet.com",    color: "amber",   ledgerKey: "forebet" },
 ];
 
-// Last-known good values committed 2026-06-25. If the GitHub fetch fails
-// or the JSON shape is unexpected, we fall back to these so the landing
-// never renders empty rows.
+// Last-known good values, refreshed weekly by odds-intel-engine's
+// competitor_audits_weekly.yml (Sunday 02:00 UTC). If the GitHub fetch
+// fails or the JSON shape is unexpected, we fall back to these so the
+// landing never renders empty rows.
+// LAST-REFRESH: 2026-07-06 audit snapshot.
 const COMP_FALLBACK: Record<string, { theirN: number; theirRoi: number; ourN: number; ourRoi: number }> = {
-  winnerodds:  { theirN: 1007, theirRoi: 6.78,  ourN: 991, ourRoi: 12.06 },
-  signalodds:  { theirN: 1157, theirRoi: -0.44, ourN: 989, ourRoi: 11.91 },
-  deepbetting: { theirN: 235,  theirRoi: -9.15, ourN: 989, ourRoi: 11.91 },
-  tipstrr:     { theirN: 209,  theirRoi: -5.22, ourN: 989, ourRoi: 11.91 },
-  forebet:     { theirN: 1434, theirRoi: 15.33, ourN: 989, ourRoi: 11.91 },
+  winnerodds:  { theirN: 1124, theirRoi:  6.49, ourN:  963, ourRoi: 12.97 },
+  signalodds:  { theirN: 1157, theirRoi: -0.44, ourN: 1039, ourRoi: 12.56 },
+  deepbetting: { theirN:  235, theirRoi: -9.15, ourN: 1039, ourRoi: 12.56 },
+  tipstrr:     { theirN:  209, theirRoi: -5.22, ourN: 1039, ourRoi: 12.56 },
+  forebet:     { theirN: 1434, theirRoi: 15.33, ourN: 1039, ourRoi: 12.56 },
 };
 
 const LEDGER_RAW =
@@ -166,7 +168,16 @@ export default async function PreviewLanding() {
   // ledger fetch. If a fetch fails, we fall back to the last-known
   // values committed below so the page never shows "—" rows.
   const competitors = await loadCompetitors();
-  const ourMatched = competitors[0]?.ourMatched ?? { roiPct: 11.91, n: 989 };
+  // COHORT-DISCLOSURE (2026-07-06): pick the widest-window competitor for
+  // the hero card, not competitors[0]. WinnerOdds' window closes ~10 days
+  // earlier than the others, so competitors[0] undercounts our matched
+  // cohort by ~75 bets. Pick by max n across all comparisons so the hero
+  // reflects the broadest same-window sample we can honestly show.
+  const ourMatched =
+    competitors.reduce<CompetitorRow | null>(
+      (best, c) => (best === null || c.ourN > best.ourN ? c : best),
+      null,
+    )?.ourMatched ?? { roiPct: 12.56, n: 1039 };
 
   return (
     <div className="min-h-dvh bg-neutral-950 text-neutral-50 antialiased">
@@ -369,7 +380,10 @@ export default async function PreviewLanding() {
           </div>
 
           <p className="mt-3 text-center text-xs text-neutral-500">
-            Same window, same stake, same markets.{" "}
+            Audit cohort — 1X2 + OU 2.5 only, each competitor&apos;s
+            publication window, €10 flat stake for parity. The ledger
+            metric strip above uses the full pre-match cohort at actual
+            placed stakes; that&apos;s why the two ROI figures differ.{" "}
             <Link href="/methodology" className="text-emerald-400 hover:underline">
               How we verify →
             </Link>
