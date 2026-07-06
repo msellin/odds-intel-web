@@ -128,6 +128,16 @@ function fmtDate(iso: string): string {
   return `${months[m - 1]} ${d}, ${y}`;
 }
 
+// Year-less variant for cramped meta rows (WinnerOdds' outlier-window
+// annotation inline with the bet count on iPhone SE). Year context
+// lives in the hero card date range above.
+function fmtShortDate(iso: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
+  const [, m, d] = iso.split("-").map(Number);
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return `${months[m - 1]} ${d}`;
+}
+
 async function loadCompetitors(): Promise<CompetitorRow[]> {
   const rows = await Promise.all(
     COMP_META.map(async (m) => {
@@ -427,7 +437,14 @@ export default async function PreviewLanding() {
                         {isOutlierWindow && (
                           <>
                             <span className="mx-1.5 text-neutral-700">·</span>
-                            through {fmtDate(c.windowEnd)}
+                            {/* Short form "→ Jun 25" fits on one line at
+                                iPhone SE (375px) alongside the bet count;
+                                the previous "through Jun 25, 2026" was 3
+                                chars too wide and wrapped to 3 lines,
+                                making WinnerOdds visibly taller than the
+                                other 4 rows. Year context stays in the
+                                hero card window above. */}
+                            → {fmtShortDate(c.windowEnd)}
                           </>
                         )}
                       </p>
@@ -465,14 +482,16 @@ export default async function PreviewLanding() {
             themselves. Sat previously as one inline "How we verify →"
             link buried in a footnote — the desktop UX audit called that
             the biggest credibility miss on the page.
-            Grid-cols-2 on mobile keeps each pill visible; sm:grid-cols-4
-            for a single-row layout on desktop. Icons from lucide-react
-            (already used elsewhere in the app). */}
-        <section className="mt-10" aria-label="Verification">
+            Layout: single column on mobile (the initial 2-col grid
+            truncated pill titles on iPhone SE — only ~99px available for
+            text after the icon container, but "Signed daily commits"
+            needs ~124px), 4-col row on ≥sm. mt-8 tightened from mt-10
+            per the desktop audit's whitespace nit above this strip. */}
+        <section className="mt-8" aria-label="Verification">
           <p className="mb-3 text-center text-xs font-semibold uppercase tracking-widest text-neutral-500">
             Every pick is independently verifiable
           </p>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
             <VerifyPill
               href="/api/v1/track-record"
               icon={<Database className="h-4 w-4" />}
