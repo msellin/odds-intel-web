@@ -545,34 +545,54 @@ export default async function PreviewLanding() {
               </Link>
             </div>
           </div>
+          {/* Partner badges — equal-column grid so the three badges
+              (which have different intrinsic widths) all center inside
+              consistent slots instead of clustering left with a lonely
+              orphan on the right. h-5 keeps them subordinate to the
+              footer copy above. */}
           <div
             aria-label="Featured on"
-            className="mt-6 flex flex-wrap items-center justify-center gap-4 opacity-40 grayscale transition-opacity hover:opacity-70"
+            className="mt-6 grid grid-cols-3 items-center gap-4 opacity-40 grayscale transition-opacity hover:opacity-70"
           >
-            <a href="https://twelve.tools" target="_blank" rel="noopener noreferrer">
+            <a
+              href="https://twelve.tools"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex justify-center"
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="https://twelve.tools/badge0-dark.svg"
                 alt="Featured on Twelve Tools"
-                className="h-6 w-auto"
+                className="h-5 w-auto"
                 loading="lazy"
               />
             </a>
-            <a href="https://wired.business" target="_blank" rel="noopener noreferrer">
+            <a
+              href="https://wired.business"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex justify-center"
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="https://wired.business/badge0-dark.svg"
                 alt="Featured on Wired Business"
-                className="h-6 w-auto"
+                className="h-5 w-auto"
                 loading="lazy"
               />
             </a>
-            <a href="https://aiboom.tools" target="_blank" rel="noopener noreferrer">
+            <a
+              href="https://aiboom.tools"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex justify-center"
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="https://aiboom.tools/badge/badge_dark.svg"
                 alt="Featured on AIBoom.Tools"
-                className="h-6 w-auto"
+                className="h-5 w-auto"
                 loading="lazy"
               />
             </a>
