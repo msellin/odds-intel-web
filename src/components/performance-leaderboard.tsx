@@ -370,16 +370,19 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets }: Props)
                 ? `${activeBots.length} active · click any row for bankroll chart`
                 : `${activeBots.length} active strategies · Pro unlocks W/L, P&L, charts`}
             </p>
-            <div className="flex items-center gap-2.5 mt-2 flex-wrap">
-              <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">calibrated</span>
-              <span className="text-[10px] text-muted-foreground">confirmed signals · league-whitelisted</span>
-              <span className="text-muted-foreground/30 mx-0.5">·</span>
-              <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-400 border border-amber-500/25">beta</span>
-              <span className="text-[10px] text-muted-foreground">backtest evidence, limited live history</span>
-              <span className="text-muted-foreground/30 mx-0.5">·</span>
-              <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-zinc-500/15 text-zinc-400 border border-zinc-500/25">testing</span>
-              <span className="text-[10px] text-muted-foreground">accumulating data, no confirmed signals yet</span>
-            </div>
+            {/* Chip legend prose (2026-07-06) — replaces the previous
+                chip-and-inline-description row which read as a jargon
+                strip most visitors skipped. Same information, but as
+                one line of readable prose. */}
+            <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+              Every strategy is tagged by how much live evidence backs it —
+              <span className="mx-1 rounded bg-emerald-500/15 px-1 py-0.5 text-[9px] font-bold uppercase text-emerald-400">calibrated</span>
+              (proven),
+              <span className="mx-1 rounded bg-amber-500/15 px-1 py-0.5 text-[9px] font-bold uppercase text-amber-400">beta</span>
+              (early live results),
+              <span className="mx-1 rounded bg-zinc-500/15 px-1 py-0.5 text-[9px] font-bold uppercase text-zinc-400">testing</span>
+              (still collecting).
+            </p>
           </div>
           {/* Pre-match / In-play tabs removed — in-play hidden from public,
               audit data lives in /admin. */}
@@ -391,7 +394,82 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets }: Props)
           Bots are accumulating data — results appear after 5 settled bets.
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+          {/* Mobile card list (2026-07-06) — the desktop table below
+              collapses to a 480px-wide horizontal-scroll on iPhone SE.
+              First-time visitors don't discover the scroll and only
+              see 2 columns. Cards let each strategy stand on its own
+              at 375px without cropping. */}
+          <ul className="divide-y divide-border/10 sm:hidden">
+            {visibleBots.map((bot) => {
+              const isMaturing = !bot.hasEnoughData;
+              const isLive = isLiveBot(bot.name);
+              const clickable = isPro && !!allBets;
+              return (
+                <li
+                  key={bot.name}
+                  className={`px-4 py-3 ${
+                    clickable ? "cursor-pointer active:bg-muted/40" : ""
+                  } ${isMaturing ? "opacity-60" : ""}`}
+                  onClick={() => clickable && setSelected(bot)}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-mono text-xs font-semibold truncate">
+                          {bot.name}
+                        </span>
+                        {isLive && (
+                          <Badge
+                            variant="outline"
+                            className="h-4 border-amber-500/30 px-1 py-0 text-[9px] text-amber-400/70"
+                          >
+                            live
+                          </Badge>
+                        )}
+                        <MaturityChip label={bot.maturityLabel ?? "active"} />
+                      </div>
+                      <p className="mt-1 text-[11px] tabular-nums text-muted-foreground">
+                        {isMaturing
+                          ? bot.settled > 0
+                            ? `${bot.settled} settled — accumulating`
+                            : "no settled bets yet"
+                          : `${bot.settled} settled`}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <span
+                          className={`font-mono text-lg font-semibold tabular-nums ${
+                            isMaturing || bot.roi == null
+                              ? "text-muted-foreground"
+                              : bot.roi > 0
+                                ? "text-emerald-400"
+                                : bot.roi < 0
+                                  ? "text-red-400"
+                                  : "text-muted-foreground"
+                          }`}
+                        >
+                          {isMaturing ? "—" : fmtPct(bot.roi)}
+                        </span>
+                        {!isMaturing && <ClvIcon dir={bot.clvDirection} />}
+                      </div>
+                      {isPro && bot.pnl != null && !isMaturing && (
+                        <p className={`mt-0.5 font-mono text-[11px] tabular-nums ${pnlColor(bot.pnl)}`}>
+                          {bot.pnl >= 0 ? "+" : ""}€{bot.pnl.toFixed(0)}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+
+          {/* Desktop table — hidden on mobile since the sm:hidden card
+              list above carries the same information without the
+              horizontal-scroll trap. */}
+          <div className="hidden overflow-x-auto sm:block">
           <table className="w-full min-w-[480px]">
             <thead>
               <tr className="border-b border-border/20 text-left text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -497,7 +575,8 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets }: Props)
               })}
             </tbody>
           </table>
-        </div>
+          </div>
+        </>
       )}
 
       {/* Underperforming + developing collapse toggles */}

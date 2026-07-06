@@ -1,5 +1,22 @@
-import { TrendingUp, Bot, BarChart2, Clock, Archive, Target } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+/**
+ * /performance hero — reworked 2026-07-06 to match the landing page's
+ * verification narrative instead of the previous 8-tile spreadsheet.
+ *
+ * Reason: a smart non-technical visitor landing on /performance
+ * previously saw "TOTAL SETTLED 3,617" as the first number — an ops
+ * metric, not the ROI story. On iPhone SE the ROI wasn't even in the
+ * first phone-height. Plus a purple "Model v2 · B-ML3 meta-model"
+ * banner and a "next upgrade · log-loss chips" callout that read as
+ * internal changelog leaked onto the marketing surface.
+ *
+ * Now: same visual language as the landing — big single ROI, a 4-tile
+ * strip covering the same metrics the landing exposes (all-time ROI,
+ * 30d ROI, Median CLV, Beat-the-close), the equity sparkline, and one
+ * subtle system-status line at the bottom. The Model V2 banner and
+ * NextModelCallout are gone; if we want to bring them back for Elite
+ * users behind a tier gate we can, but the audit called them the
+ * single biggest jargon offender on the public surface.
+ */
 import type {
   TrackRecordStats,
   DashboardCache,
@@ -12,299 +29,183 @@ interface Props {
   stats: TrackRecordStats;
   cache: DashboardCache | null;
   botsTracked?: number | null;
+  /** Retained in the signature so `PerformanceClient` doesn't need
+   *  churning while this hero rework settles; unused in the current
+   *  render. If Model-V2 provenance ends up wanted for Elite users
+   *  it can come back behind a tier gate. */
   modelV2Stats?: ModelV2Stats | null;
   activeBotCount?: number | null;
   retiredBotCount?: number | null;
   calibrated?: CalibratedHeadlineStats | null;
 }
 
-export function PerformanceHero({ stats, cache, modelV2Stats, activeBotCount, retiredBotCount, calibrated }: Props) {
-  const daysRunning = Math.floor((Date.now() - new Date("2026-05-01").getTime()) / 86400000);
+function fmtRoi(r: number | null): string {
+  if (r == null) return "—";
+  return `${r >= 0 ? "+" : ""}${r.toFixed(2)}%`;
+}
+
+function fmtDate(iso: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
+  const [y, m, d] = iso.split("-").map(Number);
+  const months = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  ];
+  return `${months[m - 1]} ${d}, ${y}`;
+}
+
+export function PerformanceHero({
+  stats,
+  cache,
+  activeBotCount,
+  retiredBotCount,
+  calibrated,
+}: Props) {
+  const daysRunning = Math.floor(
+    (Date.now() - new Date("2026-05-01").getTime()) / 86400000,
+  );
   const allTimeSettled = stats.settledBets;
 
-  // ── Block 2: all active bots performance ───────────────────────────────────
-  const clv = stats.avgClv;
-  const clvDisplay = clv != null
-    ? `${clv >= 0 ? "+" : ""}${(clv * 100).toFixed(1)}%`
-    : "Tracking…";
-  const clvPositive = clv != null && clv > 0;
-
-  const activeSettled  = cache?.active_settled_bets ?? null;
-  const activeRoi      = cache?.active_roi_pct ?? cache?.roi_pct ?? null;
-  const allTimeRoi     = cache?.roi_pct ?? null;
-  const fmtRoi = (r: number | null) =>
-    r != null ? `${r >= 0 ? "+" : ""}${r.toFixed(1)}%` : "—";
-  const showAllTime = allTimeRoi != null && activeRoi != null && Math.abs(activeRoi - allTimeRoi) >= 0.1;
-
-  // HEADLINE-COHORT (2026-06-24): public headline is calibrated bots,
-  // pre-match (1x2/OU/BTTS — no AH), since calibrated tier launched. The
-  // previous tiles split into pre-match-30d vs in-play-30d, which (a) hid
-  // the +9% all-time number behind a noisy 30d window, (b) mixed AH
-  // (calibrated AH = -13%) into the pre-match cohort, (c) gave in-play
-  // a headline tile despite higher variance and the InplayBot UUID
-  // history. The new tiles surface the honest cut: ROI since calibrated
-  // launch + 30d sub-stat for transparency. In-play stays in the system
-  // and is still tracked admin-side.
-  const cal             = calibrated?.allTime;
-  const cal30           = calibrated?.last30d;
-  const calRoi          = cal?.roiPct ?? null;
-  const calN            = cal?.n ?? 0;
-  const calSince        = cal?.sinceDate ?? "2026-05-04";
-  const cal30Roi        = cal30?.roiPct ?? null;
-  const cal30N          = cal30?.n ?? 0;
+  const cal = calibrated?.allTime;
+  const cal30 = calibrated?.last30d;
+  const calRoi = cal?.roiPct ?? null;
+  const calN = cal?.n ?? 0;
+  const calSince = cal?.sinceDate ?? "2026-05-04";
+  const cal30Roi = cal30?.roiPct ?? null;
+  const cal30N = cal30?.n ?? 0;
+  const clvMedian = cal?.medianClvPct ?? null;
+  const clvPinMedian = cal?.medianClvPinPct ?? null;
+  const clvBeat = cal?.clvBeatPct ?? null;
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-bold tracking-tight">Performance</h1>
-
-      {/* ── Block 1: system overview ─────────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Card className="border-border/50 bg-card/80">
-          <CardHeader className="pb-1 pt-3 px-4">
-            <CardTitle className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              <BarChart2 className="h-3 w-3" />
-              Total Settled
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-3 pt-0">
-            <span className="font-mono text-2xl font-bold tabular-nums text-foreground">
-              {allTimeSettled.toLocaleString()}
-            </span>
-            <p className="text-[10px] text-muted-foreground mt-1">bets logged, all strategies</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/50 bg-card/80">
-          <CardHeader className="pb-1 pt-3 px-4">
-            <CardTitle className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              <Bot className="h-3 w-3" />
-              Active Bots
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-3 pt-0">
-            <span className="font-mono text-2xl font-bold tabular-nums text-foreground">
-              {activeBotCount ?? "—"}
-            </span>
-            <p className="text-[10px] text-muted-foreground mt-1">strategies running now</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/50 bg-card/80">
-          <CardHeader className="pb-1 pt-3 px-4">
-            <CardTitle className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              <Archive className="h-3 w-3" />
-              Retired Bots
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-3 pt-0">
-            <span className="font-mono text-2xl font-bold tabular-nums text-foreground">
-              {retiredBotCount ?? "—"}
-            </span>
-            <p className="text-[10px] text-muted-foreground mt-1">strategies decommissioned</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/50 bg-card/80">
-          <CardHeader className="pb-1 pt-3 px-4">
-            <CardTitle className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              <Clock className="h-3 w-3" />
-              Days Running
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-3 pt-0">
-            <span className="font-mono text-2xl font-bold tabular-nums text-foreground">
-              {daysRunning}
-            </span>
-            <p className="text-[10px] text-muted-foreground mt-1">since May 1 · every bet logged</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* ── Block 2: active bots performance ────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Card className="border-border/50 bg-card/80">
-          <CardHeader className="pb-1 pt-3 px-4">
-            <CardTitle className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              <TrendingUp className="h-3 w-3" />
-              Avg CLV
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-3 pt-0">
-            <span className={`font-mono text-2xl font-bold tabular-nums ${
-              clv == null ? "text-muted-foreground" : clvPositive ? "text-emerald-400" : "text-red-400"
-            }`}>
-              {clvDisplay}
-            </span>
-            <p className="text-[10px] text-muted-foreground mt-1">active strategies</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/50 bg-card/80">
-          <CardHeader className="pb-1 pt-3 px-4">
-            <CardTitle className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              <BarChart2 className="h-3 w-3" />
-              Settled Bets
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-3 pt-0">
-            <span className="font-mono text-2xl font-bold tabular-nums text-foreground">
-              {activeSettled?.toLocaleString() ?? allTimeSettled.toLocaleString()}
-            </span>
-            <p className="text-[10px] text-muted-foreground mt-1">on active strategies</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-emerald-500/30 bg-emerald-500/[0.04]">
-          <CardHeader className="pb-1 pt-3 px-4">
-            <CardTitle className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              <Target className="h-3 w-3" />
-              ROI · calibrated · all-time
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-3 pt-0">
-            <span className={`font-mono text-2xl font-bold tabular-nums ${
+    <div className="space-y-6">
+      {/* ── Big ROI hero — matches landing page language ─────────────── */}
+      <section className="text-center pt-4 pb-4 sm:pt-6 sm:pb-6">
+        <p className="font-mono text-xs uppercase tracking-[0.2em] text-emerald-400">
+          Verified football track record
+        </p>
+        <h1 className="mt-3 text-balance text-4xl font-semibold tracking-tight sm:text-6xl">
+          <span className="sr-only">Performance — </span>
+          <span
+            className={
               calRoi == null
                 ? "text-muted-foreground"
                 : calRoi >= 0
                   ? "text-emerald-400"
                   : "text-red-400"
-            }`}>
-              {fmtRoi(calRoi)}
-            </span>
-            <p className="text-[10px] text-muted-foreground mt-1">
-              {calN.toLocaleString()} pre-match picks · since {calSince}
-            </p>
-          </CardContent>
-        </Card>
+            }
+          >
+            {fmtRoi(calRoi)} ROI
+          </span>
+        </h1>
+        <p className="mt-2 text-lg text-neutral-400 sm:text-2xl">
+          across {calN.toLocaleString()} verified pre-match picks
+        </p>
+        <p className="mt-2 text-xs text-neutral-500 sm:text-sm">
+          Calibrated cohort · 1X2 + OU 2.5 + BTTS · since {fmtDate(calSince)}
+        </p>
+      </section>
 
-        <Card className="border-border/50 bg-card/80">
-          <CardHeader className="pb-1 pt-3 px-4">
-            <CardTitle className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              <BarChart2 className="h-3 w-3" />
-              ROI · calibrated · 30d
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-3 pt-0">
-            <span className={`font-mono text-2xl font-bold tabular-nums ${
-              cal30Roi == null
-                ? "text-muted-foreground"
-                : cal30Roi >= 0
-                  ? "text-emerald-400"
-                  : "text-red-400"
-            }`}>
-              {fmtRoi(cal30Roi)}
-            </span>
-            <p className="text-[10px] text-muted-foreground mt-1">
-              {cal30N.toLocaleString()} bets · last 30d window
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      {/* ── 4-tile metric strip (matches landing exactly) ────────────── */}
+      <section className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.08]">
+        <div className="grid grid-cols-2 gap-px sm:grid-cols-4">
+          <Metric
+            label="ROI · all-time"
+            value={fmtRoi(calRoi)}
+            sub={`${calN.toLocaleString()} bets`}
+            accent={calRoi != null && calRoi > 0 ? "positive" : null}
+          />
+          <Metric
+            label="ROI · last 30d"
+            value={fmtRoi(cal30Roi)}
+            sub={`${cal30N.toLocaleString()} bets`}
+            accent={
+              cal30Roi != null && cal30Roi > 0
+                ? "positive"
+                : cal30Roi != null && cal30Roi < 0
+                  ? "negative"
+                  : null
+            }
+          />
+          <Metric
+            label="Median CLV"
+            value={
+              clvMedian != null
+                ? `${clvMedian > 0 ? "+" : ""}${clvMedian.toFixed(2)}%`
+                : "—"
+            }
+            sub={
+              clvPinMedian != null
+                ? `${clvPinMedian >= 0 ? "+" : ""}${clvPinMedian.toFixed(1)}% vs Pinnacle`
+                : "vs closing line"
+            }
+            accent={clvMedian != null && clvMedian > 0 ? "positive" : null}
+          />
+          <Metric
+            label="Beat the close"
+            value={clvBeat != null ? `${clvBeat.toFixed(0)}%` : "—"}
+            sub="of picks"
+            accent={clvBeat != null && clvBeat >= 50 ? "positive" : null}
+          />
+        </div>
+      </section>
 
-      {/* ── Equity sparkline ─────────────────────────────────────────────── */}
+      {/* ── Equity sparkline ─────────────────────────────────────────── */}
       <EquitySparkline curve={cache?.daily_pnl_curve_30d ?? null} />
 
-      {/* ── Model v2 era callout ─────────────────────────────────────────── */}
-      <div className="rounded-lg border border-purple-500/20 bg-purple-500/5 px-4 py-2 flex items-center gap-3 flex-wrap">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400">Model v2 · May 24</span>
-        <span className="text-[11px] text-muted-foreground">6 new signals · AH overhaul · B-ML3 meta-model · overnight prices</span>
-        {modelV2Stats && modelV2Stats.settled > 0 && (
-          <span className="ml-auto text-[11px] font-mono font-semibold text-emerald-400">
-            {modelV2Stats.settled} bets
-            {modelV2Stats.prematchRoi != null && ` · pre-match ${modelV2Stats.prematchRoi >= 0 ? "+" : ""}${modelV2Stats.prematchRoi.toFixed(1)}% ROI`}
-            {modelV2Stats.avgClv != null && ` · ${modelV2Stats.avgClv >= 0 ? "+" : ""}${(modelV2Stats.avgClv * 100).toFixed(1)}% CLV`}
-          </span>
+      {/* ── System status — one small line at the bottom ─────────────
+          Trivia that used to occupy 4 hero tiles is compressed here.
+          Retired-bot count is intentionally kept — it's the strongest
+          signal that we actually cull failed experiments. */}
+      <p className="text-center font-mono text-[11px] uppercase tracking-widest text-neutral-500">
+        {allTimeSettled.toLocaleString()} bets logged
+        {activeBotCount != null && (
+          <>
+            <span className="mx-2 text-neutral-700">·</span>
+            {activeBotCount} strategies live
+          </>
         )}
-      </div>
-
-      {/* ── Next model upgrade callout (PERF-HERO-NEXT-MODEL 2026-06-01) ─── */}
-      <NextModelCallout summary={cache?.upcoming_model_summary ?? null} />
+        {retiredBotCount != null && (
+          <>
+            <span className="mx-2 text-neutral-700">·</span>
+            {retiredBotCount} retired
+          </>
+        )}
+        <span className="mx-2 text-neutral-700">·</span>
+        {daysRunning} days running
+      </p>
     </div>
   );
 }
 
-function NextModelCallout({
-  summary,
+function Metric({
+  label,
+  value,
+  sub,
+  accent,
 }: {
-  summary: DashboardCache["upcoming_model_summary"];
+  label: string;
+  value: string;
+  sub?: string;
+  accent?: "positive" | "negative" | null;
 }) {
-  if (!summary) return null;
-  const deltas = summary.group_deltas ?? {};
-  const isPromoted = (summary as { mode?: string }).mode === "recently_promoted";
-
-  const fmtPct = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
-  const fmtMarket = (k: string) =>
-    k === "1x2" ? "1X2" : k === "ah" ? "AH" : k === "ou" ? "O/U" : k.toUpperCase();
-  const eventDate = summary.trained_at
-    ? new Date(summary.trained_at).toLocaleDateString("en", { month: "short", day: "numeric" })
-    : null;
-
-  const groupOrder = ["1x2", "ah", "btts", "ou"];
-  const chips = groupOrder
-    .filter((k) => deltas[k] != null)
-    .map((k) => ({ key: k, delta: deltas[k] }));
-
-  if (isPromoted) {
-    return (
-      <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/5 px-4 py-2 flex items-center gap-3 flex-wrap">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
-          ✓ Model updated{eventDate ? ` · ${eventDate}` : ""}
-        </span>
-        {chips.length > 0 && (
-          <span className="text-[11px] text-muted-foreground flex items-center gap-2 flex-wrap">
-            {chips.map(({ key, delta }) => {
-              const regressed = delta > 1;
-              const improved = delta < -1;
-              const cls = regressed
-                ? "text-rose-300"
-                : improved
-                  ? "text-emerald-300"
-                  : "text-muted-foreground";
-              return (
-                <span key={key} className={`font-mono font-semibold ${cls}`}>
-                  {fmtMarket(key)} {fmtPct(delta)}
-                </span>
-              );
-            })}
-            <span className="text-muted-foreground">log-loss vs prev model</span>
-          </span>
-        )}
-        <span className="ml-auto text-[10px] font-mono text-muted-foreground">
-          {summary.markets_better} improved / {summary.markets_worse} regressed
-          {summary.holdout_n ? ` · n=${summary.holdout_n.toLocaleString()}` : ""}
-        </span>
-      </div>
-    );
-  }
-
   return (
-    <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 px-4 py-2 flex items-center gap-3 flex-wrap">
-      <span className="text-[10px] font-bold uppercase tracking-wider text-sky-400">
-        Next upgrade{eventDate ? ` · trained ${eventDate}` : ""}
-      </span>
-      {chips.length > 0 && (
-        <span className="text-[11px] text-muted-foreground flex items-center gap-2 flex-wrap">
-          {chips.map(({ key, delta }) => {
-            const regressed = delta > 1;
-            const improved = delta < -1;
-            const cls = regressed
-              ? "text-rose-300"
-              : improved
-                ? "text-sky-300"
-                : "text-muted-foreground";
-            return (
-              <span key={key} className={`font-mono font-semibold ${cls}`}>
-                {fmtMarket(key)} {fmtPct(delta)}
-              </span>
-            );
-          })}
-          <span className="text-muted-foreground">log-loss · offline tests</span>
-        </span>
-      )}
-      <span className="ml-auto text-[10px] font-mono text-muted-foreground">
-        {summary.markets_better} better / {summary.markets_worse} worse
-        {summary.holdout_n ? ` · n=${summary.holdout_n.toLocaleString()}` : ""} · promoting after validation window
-      </span>
+    <div className="bg-neutral-950 px-4 py-5">
+      <p className="font-mono text-[11px] uppercase tracking-widest text-neutral-500">
+        {label}
+      </p>
+      <p
+        className={`mt-1 text-2xl font-semibold tracking-tight ${
+          accent === "positive"
+            ? "text-emerald-400"
+            : accent === "negative"
+              ? "text-red-400"
+              : "text-neutral-100"
+        }`}
+      >
+        {value}
+      </p>
+      {sub && <p className="mt-1.5 text-xs text-neutral-400">{sub}</p>}
     </div>
   );
 }

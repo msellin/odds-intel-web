@@ -77,10 +77,23 @@ function CalibrationCard({ buckets }: { buckets: CalibrationBucket[] }) {
   return (
     <div className="rounded-xl border border-border/40 bg-card/40 p-4">
       <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-        Calibration
+        Placed-bet calibration
       </h2>
+      {/* CALIBRATION-HONEST-COPY (2026-07-06): the old intro said "when
+          the model says 60%, it should hit ~60%" and every row showed
+          the opposite (systematic ~10pp under-hit). That framing was
+          dishonest — the model is a known 5-15pp over-confident on
+          picks in the 30-60% range (documented in MODEL_WHITEPAPER §3.7
+          GLOBAL-PLATT-OVERCONFIDENCE). Selection bias amplifies it:
+          every row here is a pick the bot placed at market edge, so
+          the sample sits on the model's optimistic tail by
+          construction. Kelly sizing + the edge gate compensate at the
+          P&L layer — ROI is still positive despite the visible gap.
+          Better to say that than pretend the table is broken. */}
       <p className="text-[10px] text-muted-foreground mb-3 leading-snug">
-        When the model says 60%, it should hit ~60%. Closer = sharper probabilities.
+        Bets we placed at market edge — our model is known 5–15pp
+        over-confident on mid-range picks. Kelly sizing + edge gate
+        compensate at the P&amp;L layer (still positive ROI).
       </p>
       {visible.length === 0 ? (
         <p className="text-xs text-muted-foreground">Need more settled bets per bucket.</p>
@@ -90,6 +103,7 @@ function CalibrationCard({ buckets }: { buckets: CalibrationBucket[] }) {
             <tr>
               <th className="text-left pb-1.5">Predicted</th>
               <th className="text-right pb-1.5">Actual</th>
+              <th className="text-right pb-1.5">Gap</th>
               <th className="text-right pb-1.5">N</th>
             </tr>
           </thead>
@@ -97,17 +111,25 @@ function CalibrationCard({ buckets }: { buckets: CalibrationBucket[] }) {
             {visible.map((b) => {
               const actual = b.actualHit ?? 0;
               const delta = actual - b.predictedMid;
-              const within3 = Math.abs(delta) < 0.03;
-              const cls = within3
-                ? "text-emerald-400"
-                : Math.abs(delta) < 0.07
-                  ? "text-amber-400"
-                  : "text-red-400";
+              // Neutral gray for all rows — the "red = broken" reading
+              // was misleading. The gap size is now displayed
+              // explicitly in a Gap column with a subtle sign, letting
+              // the reader form their own view without the panic-red.
               return (
                 <tr key={b.label} className="border-t border-border/30">
                   <td className="py-1.5 font-mono">{b.label}</td>
-                  <td className={`py-1.5 text-right font-mono ${cls}`}>
+                  <td className="py-1.5 text-right font-mono text-neutral-200">
                     {(actual * 100).toFixed(1)}%
+                  </td>
+                  <td
+                    className={`py-1.5 text-right font-mono ${
+                      Math.abs(delta) < 0.03
+                        ? "text-emerald-400"
+                        : "text-muted-foreground"
+                    }`}
+                  >
+                    {delta >= 0 ? "+" : ""}
+                    {(delta * 100).toFixed(1)}pp
                   </td>
                   <td className="py-1.5 text-right font-mono text-muted-foreground">{b.n}</td>
                 </tr>

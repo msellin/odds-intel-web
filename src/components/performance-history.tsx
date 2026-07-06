@@ -264,7 +264,11 @@ function FullBetsTable({ bets, isElite }: { bets: FullBetItem[]; isElite: boolea
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function PerformanceHistory({ fullBets, recentSettled, isPro, isElite }: Props) {
-  const [expanded, setExpanded] = useState(false);
+  // Default-open on the free-tier "Recent Results" view: page's whole
+  // pitch is "every bet logged" — hiding the ledger behind a click
+  // contradicts it. Pro users still get the collapsed default because
+  // their fuller table is longer and might drown the page.
+  const [expanded, setExpanded] = useState(!isPro);
 
   const header = (
     <button

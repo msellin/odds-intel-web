@@ -5131,7 +5131,9 @@ const _getPublicPerformanceExtrasUncached = async (): Promise<PublicPerformanceE
   const [{ data }, cache] = await Promise.all([
     admin
       .from("simulated_bets")
-      .select("pick_time, result, pnl, stake, model_probability, calibrated_prob, bot:bot_id(name)")
+      .select(
+        "pick_time, result, pnl, stake, model_probability, calibrated_prob, bot:bot_id(name, retired_at)",
+      )
       .in("result", ["won", "lost"])
       .gte("pick_time", since)
       .order("pick_time", { ascending: true })
@@ -5146,16 +5148,28 @@ const _getPublicPerformanceExtrasUncached = async (): Promise<PublicPerformanceE
     stake: number | string;
     model_probability: number | string;
     calibrated_prob: number | string | null;
-    bot: { name: string } | { name: string }[] | null;
+    bot:
+      | { name: string; retired_at: string | null }
+      | { name: string; retired_at: string | null }[]
+      | null;
   };
   const EXPERIMENTAL_BOT_NAMES = new Set([
     "bot_acca_value", "bot_acca_proven", "bot_acca_coolbet",
     "bot_combo_system", "bot_combo_proven_system", "bot_acca_leg_shadow",
   ]);
 
+  // CALIBRATION-COHORT-FIX (2026-07-06): previously the calibration table
+  // included retired bots — post-audit query showed this leaked ~10-15%
+  // more overconfidence-heavy legacy bets into the buckets vs. the
+  // headline ROI cohort. `getModelV2Stats` already filters retired; align
+  // this query with the same rule. The public calibration display should
+  // reflect currently-live strategies, not the graveyard.
   const rows = ((data ?? []) as Row[]).filter((r) => {
-    const botName = Array.isArray(r.bot) ? r.bot[0]?.name : r.bot?.name;
-    return botName ? !EXPERIMENTAL_BOT_NAMES.has(botName) : true;
+    const bot = Array.isArray(r.bot) ? r.bot[0] : r.bot;
+    if (!bot) return true;
+    if (EXPERIMENTAL_BOT_NAMES.has(bot.name)) return false;
+    if (bot.retired_at) return false;
+    return true;
   });
 
   // Cumulative series: read straight from cache. Same cohort as the hero
