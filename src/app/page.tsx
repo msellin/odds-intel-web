@@ -78,9 +78,12 @@ interface CompetitorRow {
   ourN: number;
   ourRoi: number;
   ourMatched: { roiPct: number; n: number };
+  windowStart: string;   // e.g. "2026-05-04" — from comparison_*.json .window.start
+  windowEnd: string;     // e.g. "2026-07-06"
+  snapshotAt: string;    // e.g. "2026-07-05" — date portion of snapshot_at_utc
 }
 
-const COMP_META: Omit<CompetitorRow, "theirN" | "theirRoi" | "ourN" | "ourRoi" | "ourMatched">[] = [
+const COMP_META: Omit<CompetitorRow, "theirN" | "theirRoi" | "ourN" | "ourRoi" | "ourMatched" | "windowStart" | "windowEnd" | "snapshotAt">[] = [
   { name: "WinnerOdds",  url: "https://winnerodds.com",     color: "emerald", ledgerKey: "winnerodds" },
   { name: "SignalOdds",  url: "https://signalodds.com",     color: "sky",     ledgerKey: "signalodds" },
   { name: "DeepBetting", url: "https://deepbetting.io",     color: "orange",  ledgerKey: "deepbetting" },
@@ -93,12 +96,21 @@ const COMP_META: Omit<CompetitorRow, "theirN" | "theirRoi" | "ourN" | "ourRoi" |
 // fails or the JSON shape is unexpected, we fall back to these so the
 // landing never renders empty rows.
 // LAST-REFRESH: 2026-07-06 audit snapshot.
-const COMP_FALLBACK: Record<string, { theirN: number; theirRoi: number; ourN: number; ourRoi: number }> = {
-  winnerodds:  { theirN: 1124, theirRoi:  6.49, ourN:  963, ourRoi: 12.97 },
-  signalodds:  { theirN: 1157, theirRoi: -0.44, ourN: 1039, ourRoi: 12.56 },
-  deepbetting: { theirN:  235, theirRoi: -9.15, ourN: 1039, ourRoi: 12.56 },
-  tipstrr:     { theirN:  209, theirRoi: -5.22, ourN: 1039, ourRoi: 12.56 },
-  forebet:     { theirN: 1434, theirRoi: 15.33, ourN: 1039, ourRoi: 12.56 },
+const COMP_FALLBACK: Record<
+  string,
+  { theirN: number; theirRoi: number; ourN: number; ourRoi: number;
+    windowStart: string; windowEnd: string; snapshotAt: string }
+> = {
+  winnerodds:  { theirN: 1124, theirRoi:  6.49, ourN:  963, ourRoi: 12.97,
+                 windowStart: "2026-05-04", windowEnd: "2026-06-25", snapshotAt: "2026-07-05" },
+  signalodds:  { theirN: 1157, theirRoi: -0.44, ourN: 1039, ourRoi: 12.56,
+                 windowStart: "2026-05-04", windowEnd: "2026-07-06", snapshotAt: "2026-07-05" },
+  deepbetting: { theirN:  235, theirRoi: -9.15, ourN: 1039, ourRoi: 12.56,
+                 windowStart: "2026-05-04", windowEnd: "2026-07-06", snapshotAt: "2026-07-05" },
+  tipstrr:     { theirN:  209, theirRoi: -5.22, ourN: 1039, ourRoi: 12.56,
+                 windowStart: "2026-05-04", windowEnd: "2026-07-06", snapshotAt: "2026-07-05" },
+  forebet:     { theirN: 1434, theirRoi: 15.33, ourN: 1039, ourRoi: 12.56,
+                 windowStart: "2026-05-04", windowEnd: "2026-07-06", snapshotAt: "2026-07-05" },
 };
 
 const LEDGER_RAW =
@@ -107,10 +119,14 @@ const LEDGER_RAW =
 async function loadCompetitors(): Promise<CompetitorRow[]> {
   const rows = await Promise.all(
     COMP_META.map(async (m) => {
-      let theirN = COMP_FALLBACK[m.ledgerKey].theirN;
-      let theirRoi = COMP_FALLBACK[m.ledgerKey].theirRoi;
-      let ourN = COMP_FALLBACK[m.ledgerKey].ourN;
-      let ourRoi = COMP_FALLBACK[m.ledgerKey].ourRoi;
+      const fb = COMP_FALLBACK[m.ledgerKey];
+      let theirN = fb.theirN;
+      let theirRoi = fb.theirRoi;
+      let ourN = fb.ourN;
+      let ourRoi = fb.ourRoi;
+      let windowStart = fb.windowStart;
+      let windowEnd = fb.windowEnd;
+      let snapshotAt = fb.snapshotAt;
       try {
         const res = await fetch(
           `${LEDGER_RAW}/comparison_${m.ledgerKey}.json`,
@@ -119,6 +135,8 @@ async function loadCompetitors(): Promise<CompetitorRow[]> {
         if (res.ok) {
           const j = (await res.json()) as {
             status?: string;
+            snapshot_at_utc?: string;
+            window?: { start?: string; end?: string };
             their_stats?: { n?: number; roi_pct?: number };
             our_stats_same_window?: { n?: number; roi_pct?: number };
           };
@@ -129,6 +147,11 @@ async function loadCompetitors(): Promise<CompetitorRow[]> {
             theirRoi = j.their_stats?.roi_pct ?? theirRoi;
             ourN = j.our_stats_same_window?.n ?? ourN;
             ourRoi = j.our_stats_same_window?.roi_pct ?? ourRoi;
+            windowStart = j.window?.start ?? windowStart;
+            windowEnd = j.window?.end ?? windowEnd;
+            // snapshot_at_utc is a full ISO datetime; the landing shows
+            // just the date portion so the string stays readable.
+            snapshotAt = j.snapshot_at_utc?.slice(0, 10) ?? snapshotAt;
           }
         }
       } catch {
@@ -138,6 +161,7 @@ async function loadCompetitors(): Promise<CompetitorRow[]> {
         ...m,
         theirN, theirRoi, ourN, ourRoi,
         ourMatched: { roiPct: ourRoi, n: ourN },
+        windowStart, windowEnd, snapshotAt,
       };
     }),
   );
@@ -173,11 +197,15 @@ export default async function PreviewLanding() {
   // earlier than the others, so competitors[0] undercounts our matched
   // cohort by ~75 bets. Pick by max n across all comparisons so the hero
   // reflects the broadest same-window sample we can honestly show.
-  const ourMatched =
+  const heroComp =
     competitors.reduce<CompetitorRow | null>(
       (best, c) => (best === null || c.ourN > best.ourN ? c : best),
       null,
-    )?.ourMatched ?? { roiPct: 12.56, n: 1039 };
+    );
+  const ourMatched = heroComp?.ourMatched ?? { roiPct: 12.56, n: 1039 };
+  const heroWindowStart = heroComp?.windowStart ?? "2026-05-04";
+  const heroWindowEnd = heroComp?.windowEnd ?? "2026-07-06";
+  const heroSnapshotAt = heroComp?.snapshotAt ?? "2026-07-05";
 
   return (
     <div className="min-h-dvh bg-neutral-950 text-neutral-50 antialiased">
@@ -284,7 +312,7 @@ export default async function PreviewLanding() {
               Head-to-head vs other public models
             </h2>
             <span className="text-[10px] font-mono uppercase tracking-wider text-neutral-600">
-              matched window · same markets
+              1X2 + OU 2.5 · €10 flat stake
             </span>
           </div>
 
@@ -302,6 +330,16 @@ export default async function PreviewLanding() {
                   {ourMatched.n.toLocaleString()}
                 </span>{" "}
                 settled bets
+              </p>
+              {/* Window disclosure — lets any reader see the exact date
+                  range these numbers cover. Fetched from the widest-
+                  window competitor's comparison_*.json so it stays fresh
+                  weekly (or from the fallback dates when the GitHub raw
+                  fetch fails). */}
+              <p className="mt-3 font-mono text-[10px] uppercase tracking-widest text-neutral-500">
+                {heroWindowStart} → {heroWindowEnd}
+                <span className="mx-2 text-neutral-700">·</span>
+                audit snapshot {heroSnapshotAt}
               </p>
             </div>
 
@@ -353,10 +391,17 @@ export default async function PreviewLanding() {
                       </p>
                       <p className="font-mono text-[10px] text-neutral-600 tabular-nums">
                         {c.theirN.toLocaleString()} bets
+                        <span className="mx-1.5 text-neutral-800">·</span>
+                        {c.windowStart} → {c.windowEnd}
                       </p>
                     </div>
 
-                    {/* Delta — hero of the row */}
+                    {/* Delta — hero of the row. Sign handled explicitly:
+                        toFixed() already emits "-" for negatives; adding
+                        a hardcoded "+" produced "▼ +-2.77pp" on rows
+                        where the competitor beats us. Label flips to
+                        "against us" so the negative case reads honestly
+                        instead of claiming everything is in our favour. */}
                     <div className="text-right">
                       <p
                         className={`font-mono text-xl font-bold tabular-nums sm:text-3xl ${
@@ -367,10 +412,15 @@ export default async function PreviewLanding() {
                               : "text-neutral-400"
                         }`}
                       >
-                        {delta > 0 ? "▲" : delta < 0 ? "▼" : "—"} +{delta.toFixed(2)}pp
+                        {delta > 0 ? "▲ +" : delta < 0 ? "▼ " : "— "}
+                        {delta.toFixed(2)}pp
                       </p>
                       <p className="font-mono text-[9px] uppercase tracking-widest text-neutral-600">
-                        in our favour
+                        {delta > 0
+                          ? "in our favour"
+                          : delta < 0
+                            ? "against us"
+                            : "tied"}
                       </p>
                     </div>
                   </div>
