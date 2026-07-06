@@ -21,6 +21,7 @@
  */
 import Link from "next/link";
 import { headers } from "next/headers";
+import { Database, GitCommit, Anchor, Terminal } from "lucide-react";
 import { PremiumWaitlistForm } from "@/components/premium-waitlist-form";
 import { Nav } from "@/components/nav";
 
@@ -115,6 +116,17 @@ const COMP_FALLBACK: Record<
 
 const LEDGER_RAW =
   "https://raw.githubusercontent.com/msellin/odds-intel-engine/main/ledger";
+
+// Human-friendly date rendering. Landing surfaces ISO strings from the
+// engine (2026-05-04) but they read as machine-y — mobile audit flagged
+// non-technical visitors parse "May 4" much faster. Kept short so the
+// audit-window line stays a single row on narrow viewports.
+function fmtDate(iso: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
+  const [y, m, d] = iso.split("-").map(Number);
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return `${months[m - 1]} ${d}, ${y}`;
+}
 
 async function loadCompetitors(): Promise<CompetitorRow[]> {
   const rows = await Promise.all(
@@ -212,10 +224,14 @@ export default async function PreviewLanding() {
       <Nav />
 
       {/* ───────── Hero ───────── */}
-      <main className="mx-auto max-w-4xl px-4">
-        <section className="pt-16 pb-12 sm:pt-24">
-          <div className="space-y-6 text-center">
-            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-emerald-400">
+      {/* Container widened max-w-4xl → max-w-5xl per desktop audit —
+          at ≥1440px the previous 896px column left ~54% of the viewport
+          as empty gutter. The hero copy stays narrow via its own
+          nested max-w wrapper so ledger CTAs don't spread thin. */}
+      <main className="mx-auto max-w-5xl px-4">
+        <section className="pt-14 pb-10 sm:pt-20">
+          <div className="mx-auto max-w-3xl space-y-5 text-center">
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-emerald-400">
               Verified football track record
             </p>
             <h1 className="text-balance text-4xl font-semibold tracking-tight sm:text-6xl">
@@ -225,7 +241,7 @@ export default async function PreviewLanding() {
                     {roi > 0 ? "+" : ""}
                     {roi.toFixed(2)}% ROI
                   </span>
-                  <span className="block text-2xl text-neutral-400 font-normal mt-3 sm:text-3xl">
+                  <span className="mt-2 block text-lg font-normal text-neutral-400 sm:text-2xl">
                     across {total.toLocaleString()} verified pre-match picks
                   </span>
                 </>
@@ -238,22 +254,24 @@ export default async function PreviewLanding() {
               every result settled against official scores, every closing line
               tracked. Public ledger; nothing hidden.
             </p>
-            <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            {/* CTAs stack vertically on mobile so Telegram doesn't orphan
+                onto its own row; row layout at ≥sm as before. */}
+            <div className="flex flex-col items-stretch justify-center gap-3 pt-1 sm:flex-row sm:items-center">
               <Link
                 href="/picks"
-                className="rounded-md bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-neutral-950 hover:bg-emerald-400"
+                className="rounded-md bg-emerald-500 px-5 py-2.5 text-center text-sm font-semibold text-neutral-950 hover:bg-emerald-400"
               >
                 See today&apos;s picks
               </Link>
               <Link
                 href="/performance"
-                className="rounded-md border border-white/15 bg-white/[0.04] px-5 py-2.5 text-sm font-semibold text-neutral-100 hover:bg-white/[0.08]"
+                className="rounded-md border border-white/15 bg-white/[0.04] px-5 py-2.5 text-center text-sm font-semibold text-neutral-100 hover:bg-white/[0.08]"
               >
                 View track record
               </Link>
               <Link
                 href="https://t.me/oddsintelpicks"
-                className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-5 py-2.5 text-sm font-semibold text-emerald-300 hover:bg-emerald-500/20"
+                className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-5 py-2.5 text-center text-sm font-semibold text-emerald-300 hover:bg-emerald-500/20"
               >
                 Telegram
               </Link>
@@ -261,39 +279,50 @@ export default async function PreviewLanding() {
           </div>
         </section>
 
-        {/* ───────── Metric strip ───────── */}
-        <section className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02] sm:grid-cols-4">
-          <Metric
-            label="Settled bets"
-            value={total.toLocaleString()}
-            sub={`since ${since}`}
-          />
-          <Metric
-            label="ROI"
-            value={roi !== null ? `${roi > 0 ? "+" : ""}${roi.toFixed(2)}%` : "—"}
-            sub={`P&L €${pnl.toFixed(0)} / €${stake.toFixed(0)} staked`}
-            accent={roi !== null && roi > 0 ? "positive" : null}
-          />
-          <Metric
-            label="Median CLV"
-            value={
-              clvMedian !== null
-                ? `${clvMedian > 0 ? "+" : ""}${clvMedian.toFixed(2)}%`
-                : "—"
-            }
-            sub={
-              clvPinMedian !== null
-                ? `+${clvPinMedian.toFixed(1)}% vs Pinnacle close`
-                : "vs closing line"
-            }
-            accent={clvMedian !== null && clvMedian > 0 ? "positive" : null}
-          />
-          <Metric
-            label="Beat the close"
-            value={beat !== null ? `${beat.toFixed(0)}%` : "—"}
-            sub="of picks"
-            accent={beat !== null && beat >= 50 ? "positive" : null}
-          />
+        {/* ───────── Metric strip — the ledger self-label ─────────
+            Divider color bumped from bg-white/[0.02] → bg-white/[0.08]
+            so the 4-cell grid stays visually separated on mobile
+            (previous contrast disappeared into a single blob).
+            The scope caption below is the anchor that answers
+            "which cohort is this?" without a separate footnote:
+            all pre-match markets, actual placed stakes. */}
+        <section className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.08]">
+          <div className="grid grid-cols-2 gap-px sm:grid-cols-4">
+            <Metric
+              label="Settled bets"
+              value={total.toLocaleString()}
+              sub={`since ${fmtDate(since)}`}
+            />
+            <Metric
+              label="ROI"
+              value={roi !== null ? `${roi > 0 ? "+" : ""}${roi.toFixed(2)}%` : "—"}
+              sub={`P&L €${pnl.toFixed(0)} / €${stake.toFixed(0)} staked`}
+              accent={roi !== null && roi > 0 ? "positive" : null}
+            />
+            <Metric
+              label="Median CLV"
+              value={
+                clvMedian !== null
+                  ? `${clvMedian > 0 ? "+" : ""}${clvMedian.toFixed(2)}%`
+                  : "—"
+              }
+              sub={
+                clvPinMedian !== null
+                  ? `+${clvPinMedian.toFixed(1)}% vs Pinnacle close`
+                  : "vs closing line"
+              }
+              accent={clvMedian !== null && clvMedian > 0 ? "positive" : null}
+            />
+            <Metric
+              label="Beat the close"
+              value={beat !== null ? `${beat.toFixed(0)}%` : "—"}
+              sub="vs closing line"
+              accent={beat !== null && beat >= 50 ? "positive" : null}
+            />
+          </div>
+          <p className="border-t border-white/[0.04] bg-neutral-950 px-4 py-2.5 text-center text-[11px] uppercase tracking-widest text-neutral-500">
+            Full pre-match cohort · 1X2 + OU 2.5 + BTTS · actual placed stakes
+          </p>
         </section>
 
         {/* ───────── One-line methodology — compact replacement for the
@@ -306,21 +335,21 @@ export default async function PreviewLanding() {
            three competitor rows below each with a delta. Reads top
            to bottom in 3 seconds: "we're +11.91% on 989 bets — here's
            how much we beat each competitor by." */}
-        <section className="mt-16">
-          <div className="mb-4 flex items-baseline justify-between gap-2">
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-neutral-500">
-              Head-to-head vs other public models
-            </h2>
-            <span className="text-[10px] font-mono uppercase tracking-wider text-neutral-600">
-              1X2 + OU 2.5 · €10 flat stake
-            </span>
-          </div>
+        <section className="mt-14">
+          <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-neutral-500">
+            Head-to-head vs other public models
+          </h2>
 
           <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.02]">
-            {/* OddsIntel hero strip — shown ONCE at the top */}
+            {/* OddsIntel hero strip — shown ONCE at the top. Now
+                self-labels its cohort inline (1X2 + OU 2.5 · €10 flat
+                stake · matched window) so the reader can see, at the
+                same visual level as the number, why this ROI differs
+                from the ledger strip above. Replaces the paragraph
+                footnote that used to live below the comparison block. */}
             <div className="border-b border-white/[0.06] bg-gradient-to-b from-emerald-500/[0.10] to-emerald-500/[0.02] px-5 py-6 text-center">
-              <p className="font-mono text-[10px] uppercase tracking-widest text-emerald-400">
-                OddsIntel · production
+              <p className="font-mono text-[11px] uppercase tracking-widest text-emerald-400">
+                Matched-window audit
               </p>
               <p className="mt-2 font-mono text-4xl font-semibold tabular-nums text-emerald-300 sm:text-5xl">
                 +{ourMatched.roiPct.toFixed(2)}% ROI
@@ -331,28 +360,34 @@ export default async function PreviewLanding() {
                 </span>{" "}
                 settled bets
               </p>
-              {/* Window disclosure — lets any reader see the exact date
-                  range these numbers cover. Fetched from the widest-
-                  window competitor's comparison_*.json so it stays fresh
-                  weekly (or from the fallback dates when the GitHub raw
-                  fetch fails). */}
-              <p className="mt-3 font-mono text-[10px] uppercase tracking-widest text-neutral-500">
-                {heroWindowStart} → {heroWindowEnd}
+              <p className="mt-3 text-[11px] uppercase tracking-widest text-neutral-500">
+                1X2 + OU 2.5 · €10 flat stake
+              </p>
+              <p className="mt-1 font-mono text-[11px] tabular-nums text-neutral-500">
+                {fmtDate(heroWindowStart)} → {fmtDate(heroWindowEnd)}
                 <span className="mx-2 text-neutral-700">·</span>
-                audit snapshot {heroSnapshotAt}
+                audit {fmtDate(heroSnapshotAt)}
               </p>
             </div>
 
-            {/* Competitor rows — each shows their ROI + delta vs us */}
+            {/* Competitor rows — trimmed per UX audit:
+                  · Dropped the text-[9px] "in our favour" / "against us"
+                    micro-label (arrow color already conveys direction).
+                  · Dropped per-row window strings (all four non-WinnerOdds
+                    rows had identical dates — repetition, and on iPhone SE
+                    the string wrapped to 3 lines and broke row alignment).
+                    Common window lives in the hero card above; only
+                    WinnerOdds — the outlier ending 2026-06-25 — is
+                    annotated inline so honest disclosure survives. */}
             <div className="divide-y divide-white/[0.04]">
               {competitors.map((c) => {
                 // Per-competitor delta: each row uses ITS OWN matched-window
                 // ourRoi (not the global one) so the math is internally
-                // consistent for any sub-window like Forebet's 38-day cap.
+                // consistent for any sub-window like WinnerOdds' shorter
+                // cutoff or Forebet's 38-day cap.
                 const delta = c.ourRoi - c.theirRoi;
                 const initial = c.name[0];
-                // Brand-coded letter avatar — better visual than a broken
-                // favicon fallback, deterministic, no external image deps.
+                const isOutlierWindow = c.windowEnd !== heroWindowEnd;
                 const avatarBg =
                   c.color === "emerald" ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30"
                   : c.color === "sky"    ? "bg-sky-500/15 text-sky-300 ring-sky-500/30"
@@ -365,7 +400,6 @@ export default async function PreviewLanding() {
                     key={c.name}
                     className="grid grid-cols-[auto_1fr_auto] items-center gap-4 px-4 py-4 sm:gap-5 sm:px-5"
                   >
-                    {/* Letter avatar */}
                     <div
                       className={`flex h-10 w-10 items-center justify-center rounded-full font-mono text-sm font-bold ring-1 ring-inset ${avatarBg}`}
                       aria-hidden
@@ -373,13 +407,12 @@ export default async function PreviewLanding() {
                       {initial}
                     </div>
 
-                    {/* Name + their ROI */}
                     <div className="min-w-0">
                       <a
                         href={c.url}
                         target="_blank"
                         rel="nofollow noopener noreferrer"
-                        className="block text-sm font-semibold text-neutral-200 hover:text-neutral-100 hover:underline truncate"
+                        className="block truncate text-sm font-semibold text-neutral-200 hover:text-neutral-100 hover:underline"
                       >
                         {c.name}{" "}
                         <span className="font-mono text-[10px] font-normal text-neutral-500">↗</span>
@@ -389,19 +422,21 @@ export default async function PreviewLanding() {
                       }`}>
                         {c.theirRoi > 0 ? "+" : ""}{c.theirRoi.toFixed(2)}% ROI
                       </p>
-                      <p className="font-mono text-[10px] text-neutral-600 tabular-nums">
+                      <p className="font-mono text-[11px] tabular-nums text-neutral-500">
                         {c.theirN.toLocaleString()} bets
-                        <span className="mx-1.5 text-neutral-800">·</span>
-                        {c.windowStart} → {c.windowEnd}
+                        {isOutlierWindow && (
+                          <>
+                            <span className="mx-1.5 text-neutral-700">·</span>
+                            through {fmtDate(c.windowEnd)}
+                          </>
+                        )}
                       </p>
                     </div>
 
-                    {/* Delta — hero of the row. Sign handled explicitly:
-                        toFixed() already emits "-" for negatives; adding
-                        a hardcoded "+" produced "▼ +-2.77pp" on rows
-                        where the competitor beats us. Label flips to
-                        "against us" so the negative case reads honestly
-                        instead of claiming everything is in our favour. */}
+                    {/* Delta — arrow + color carry direction; no
+                        text label needed. Sign handled inside toFixed(),
+                        prefix "+" added only for positive deltas so
+                        negative rows don't render "+-N.NN". */}
                     <div className="text-right">
                       <p
                         className={`font-mono text-xl font-bold tabular-nums sm:text-3xl ${
@@ -415,107 +450,84 @@ export default async function PreviewLanding() {
                         {delta > 0 ? "▲ +" : delta < 0 ? "▼ " : "— "}
                         {delta.toFixed(2)}pp
                       </p>
-                      <p className="font-mono text-[9px] uppercase tracking-widest text-neutral-600">
-                        {delta > 0
-                          ? "in our favour"
-                          : delta < 0
-                            ? "against us"
-                            : "tied"}
-                      </p>
                     </div>
                   </div>
                 );
               })}
             </div>
           </div>
+        </section>
 
-          <p className="mt-3 text-center text-xs text-neutral-500">
-            Audit cohort — 1X2 + OU 2.5 only, each competitor&apos;s
-            publication window, €10 flat stake for parity. The ledger
-            metric strip above uses the full pre-match cohort at actual
-            placed stakes; that&apos;s why the two ROI figures differ.{" "}
+        {/* ───────── Verification strip ─────────
+            Surfaces the 4 independent trust anchors that make the
+            landing's ROI numbers falsifiable: public API, GitHub-signed
+            commits, Bitcoin/OpenTimestamps proofs, and the audit scripts
+            themselves. Sat previously as one inline "How we verify →"
+            link buried in a footnote — the desktop UX audit called that
+            the biggest credibility miss on the page.
+            Grid-cols-2 on mobile keeps each pill visible; sm:grid-cols-4
+            for a single-row layout on desktop. Icons from lucide-react
+            (already used elsewhere in the app). */}
+        <section className="mt-10" aria-label="Verification">
+          <p className="mb-3 text-center text-xs font-semibold uppercase tracking-widest text-neutral-500">
+            Every pick is independently verifiable
+          </p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <VerifyPill
+              href="/api/v1/track-record"
+              icon={<Database className="h-4 w-4" />}
+              title="Public JSON API"
+              sub="every settled bet"
+            />
+            <VerifyPill
+              href="https://github.com/msellin/odds-intel-engine/tree/main/ledger"
+              icon={<GitCommit className="h-4 w-4" />}
+              title="Signed daily commits"
+              sub="GitHub-authored"
+            />
+            <VerifyPill
+              href="/methodology#opentimestamps"
+              icon={<Anchor className="h-4 w-4" />}
+              title="Bitcoin timestamps"
+              sub="tamper-evident"
+            />
+            <VerifyPill
+              href="https://github.com/msellin/odds-intel-engine/tree/main/scripts"
+              icon={<Terminal className="h-4 w-4" />}
+              title="Reproducible audits"
+              sub="rerun the scripts"
+            />
+          </div>
+          <p className="mt-3 text-center text-[11px] text-neutral-500">
             <Link href="/methodology" className="text-emerald-400 hover:underline">
-              How we verify →
+              Full methodology →
             </Link>
           </p>
         </section>
 
-        {/* Verification CTA card removed 2026-06-24 — the one-line methodology
-            above + the footer's API/GitHub links already carry this info; the
-            standalone card was page-weight without new content. */}
-
-        {/* ───────── Premium waitlist (demand-signal capture) ───────── */}
+        {/* ───────── Follow-along email capture ─────────
+            Reframed from "Premium tier — coming later" (which read as
+            a hesitant paid-tier tease at ~0 users pre-PMF). Now positions
+            the list honestly as a "notify me when something ships" signup
+            — new picks, milestones, or a paid tier if we build one. Same
+            underlying /api/v1/waitlist endpoint. */}
         <section className="mt-12">
           <PremiumWaitlistForm />
         </section>
 
-        {/* ───────── Partner badges (GROWTH-DIRECTORY-STACK 2026-06-05,
-            restored 2026-06-25 after product-collapse purge) ──────────
-            Reciprocal backlink row for directory listings that require
-            a live badge. Twelve Tools + AIBoom periodically poll this
-            page — if their badge disappears, they remove our listing
-            and we lose the inbound backlink. */}
-        <section
-          aria-label="Featured on"
-          className="mt-12 border-t border-white/[0.04] py-6"
-        >
-          <div className="flex flex-wrap items-center justify-center gap-4">
-            <a
-              href="https://twelve.tools"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="opacity-70 transition-opacity hover:opacity-100"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="https://twelve.tools/badge0-dark.svg"
-                alt="Featured on Twelve Tools"
-                className="h-9 w-auto"
-                loading="lazy"
-              />
-            </a>
-            <a
-              href="https://wired.business"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="opacity-70 transition-opacity hover:opacity-100"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="https://wired.business/badge0-dark.svg"
-                alt="Featured on Wired Business"
-                className="h-9 w-auto"
-                loading="lazy"
-              />
-            </a>
-            <a
-              href="https://aiboom.tools"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="opacity-70 transition-opacity hover:opacity-100"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="https://aiboom.tools/badge/badge_dark.svg"
-                alt="Featured on AIBoom.Tools"
-                className="h-9 w-auto"
-                loading="lazy"
-              />
-            </a>
-          </div>
-        </section>
-
-        {/* ───────── Responsible Gambling notice ─────────
-            Restored 2026-06-25. Both ethically and (in most jurisdictions)
-            legally required disclaimer for a site that discusses betting. */}
-        <div className="mt-6 rounded-lg border border-white/[0.06] bg-white/[0.03] px-6 py-3 text-center text-xs text-neutral-400">
+        {/* ───────── Responsible Gambling notice ───────── */}
+        <div className="mt-10 rounded-lg border border-white/[0.06] bg-white/[0.03] px-6 py-3 text-center text-xs text-neutral-400">
           <span className="font-semibold text-neutral-100">Responsible Gambling:</span>{" "}
           Betting involves risk. Data provides intelligence, not certainty.
           18+ Only.
         </div>
 
-        {/* ───────── Footer ───────── */}
-        <footer className="mt-20 mb-12 border-t border-white/[0.06] pt-8 text-xs text-neutral-500">
+        {/* ───────── Footer ─────────
+            Partner badges demoted from a standalone mt-12 section into
+            a subdued grayscale row here — preserves the reciprocal
+            backlinks (Twelve Tools + AIBoom poll this page) without
+            the "affiliate-y" visual weight the desktop audit flagged. */}
+        <footer className="mt-16 mb-12 border-t border-white/[0.06] pt-8 text-xs text-neutral-500">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p>© OddsIntel · honest numbers, public ledger</p>
             <div className="flex items-center gap-4 font-mono">
@@ -532,6 +544,38 @@ export default async function PreviewLanding() {
                 Telegram
               </Link>
             </div>
+          </div>
+          <div
+            aria-label="Featured on"
+            className="mt-6 flex flex-wrap items-center justify-center gap-4 opacity-40 grayscale transition-opacity hover:opacity-70"
+          >
+            <a href="https://twelve.tools" target="_blank" rel="noopener noreferrer">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="https://twelve.tools/badge0-dark.svg"
+                alt="Featured on Twelve Tools"
+                className="h-6 w-auto"
+                loading="lazy"
+              />
+            </a>
+            <a href="https://wired.business" target="_blank" rel="noopener noreferrer">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="https://wired.business/badge0-dark.svg"
+                alt="Featured on Wired Business"
+                className="h-6 w-auto"
+                loading="lazy"
+              />
+            </a>
+            <a href="https://aiboom.tools" target="_blank" rel="noopener noreferrer">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="https://aiboom.tools/badge/badge_dark.svg"
+                alt="Featured on AIBoom.Tools"
+                className="h-6 w-auto"
+                loading="lazy"
+              />
+            </a>
           </div>
         </footer>
       </main>
@@ -552,7 +596,7 @@ function Metric({
 }) {
   return (
     <div className="bg-neutral-950 px-4 py-5">
-      <p className="font-mono text-[10px] uppercase tracking-widest text-neutral-500">
+      <p className="font-mono text-[11px] uppercase tracking-widest text-neutral-500">
         {label}
       </p>
       <p
@@ -563,8 +607,56 @@ function Metric({
         {value}
       </p>
       {sub && (
-        <p className="mt-1 text-[11px] text-neutral-500">{sub}</p>
+        // Sub-label size + contrast bumped per mobile audit — these
+        // carry the most concrete verification detail (P&L, staked
+        // total, CLV vs Pinnacle) and were previously the smallest text
+        // on the page. text-xs is the WCAG-safe floor for small text.
+        <p className="mt-1.5 text-xs text-neutral-400">{sub}</p>
       )}
     </div>
+  );
+}
+
+// Verification-strip pill. External links get target=_blank; internal
+// links (/api/v1/track-record, /methodology) don't. Kept simple —
+// icon + two-line label — to fit four per row on desktop and two per
+// row on mobile without wrapping.
+function VerifyPill({
+  href,
+  icon,
+  title,
+  sub,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  title: string;
+  sub: string;
+}) {
+  const external = href.startsWith("http");
+  const cls =
+    "group flex items-center gap-3 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2.5 transition-colors hover:border-emerald-500/25 hover:bg-white/[0.04]";
+  const body = (
+    <>
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-400 group-hover:bg-emerald-500/15">
+        {icon}
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate text-xs font-semibold text-neutral-200">
+          {title}
+        </span>
+        <span className="block truncate text-[11px] text-neutral-500">
+          {sub}
+        </span>
+      </span>
+    </>
+  );
+  return external ? (
+    <a href={href} target="_blank" rel="nofollow noopener noreferrer" className={cls}>
+      {body}
+    </a>
+  ) : (
+    <Link href={href} className={cls}>
+      {body}
+    </Link>
   );
 }

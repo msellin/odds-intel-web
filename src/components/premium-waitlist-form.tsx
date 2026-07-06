@@ -62,12 +62,12 @@ export function PremiumWaitlistForm() {
       className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-5"
     >
       <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-neutral-500">
-        Premium tier — coming later
+        Follow along
       </p>
       <p className="mb-4 text-sm text-neutral-400">
-        The current product is free for everyone. If we build a paid tier
-        with deeper picks, earlier signals, or higher-edge selections, want
-        to know?
+        Occasional email when something worth reading ships — new signals,
+        a milestone worth flagging, or a paid tier if we build one.
+        Nothing on a schedule. Nothing you didn&apos;t ask for.
       </p>
       <div className="flex flex-col gap-2 sm:flex-row">
         <div className="relative flex-1">
@@ -88,14 +88,14 @@ export function PremiumWaitlistForm() {
           disabled={state.kind === "submitting" || !EMAIL_RE.test(email)}
           className="rounded-md bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-neutral-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {state.kind === "submitting" ? "Sending…" : "Notify me"}
+          {state.kind === "submitting" ? "Sending…" : "Keep me posted"}
         </button>
       </div>
       {state.kind === "error" && (
         <p className="mt-2 text-xs text-red-400">{state.message}</p>
       )}
       <p className="mt-3 text-xs text-neutral-600">
-        One email when (if) we launch. No spam, no newsletter.
+        No spam. No newsletter. Unsubscribe with one click.
       </p>
     </form>
   );
