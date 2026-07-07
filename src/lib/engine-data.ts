@@ -1411,9 +1411,12 @@ export interface BotRecord {
   maturityLabel: string;
 }
 
-export async function getAllBotsFromDB(): Promise<BotRecord[]> {
-  const supabase = await createSupabaseServer();
-  const { data, error } = await supabase
+// PERF-VPS-2026-07-07: switched from createSupabaseServer (cookies) to admin
+// client so this can be wrapped with unstable_cache. The frontend still gates
+// bankroll display per-user tier — caching the DB result doesn't leak data.
+const _getAllBotsFromDBUncached = async (): Promise<BotRecord[]> => {
+  const admin = createSupabaseAdmin();
+  const { data, error } = await admin
     .from("bots")
     .select("id, name, strategy, description, strategy_description, starting_bankroll, current_bankroll, is_active, retired_at, maturity_label")
     .order("name");
@@ -1433,7 +1436,13 @@ export async function getAllBotsFromDB(): Promise<BotRecord[]> {
     retiredAt: (r.retired_at as string | null) ?? null,
     maturityLabel: (r.maturity_label as string) ?? 'active',
   }));
-}
+};
+
+export const getAllBotsFromDB = unstable_cache(
+  _getAllBotsFromDBUncached,
+  ["getAllBotsFromDB_v1"],
+  { revalidate: 300 }
+);
 
 // Hard ceiling on bet rows returned. The previous .limit(500) silently truncated
 // the per-bot aggregate tables once total bets exceeded 500, making
@@ -3133,7 +3142,7 @@ export interface TrackRecordStats {
   bookmakersCovered: number;     // distinct bookmakers in odds
 }
 
-export async function getTrackRecordStats(): Promise<TrackRecordStats> {
+const _getTrackRecordStatsUncached = async (): Promise<TrackRecordStats> => {
   // Fast path: read from dashboard_cache (written by settlement at 21:00 UTC).
   // Use cache.settled_bets for the hero total so it stays in sync with the
   // per-bot breakdown (both from the same snapshot).
@@ -3202,7 +3211,16 @@ export async function getTrackRecordStats(): Promise<TrackRecordStats> {
     leaguesCovered: Number(countsRow?.league_count ?? 0),
     bookmakersCovered: Number(countsRow?.bookmaker_count ?? 0),
   };
-}
+};
+
+// PERF-VPS-2026-07-07: wrapped with unstable_cache (300s) — /performance
+// page renders 7 parallel queries; caching the slow ones drops render time
+// from ~20s to <1s on cache hit. Supabase IO is the bottleneck.
+export const getTrackRecordStats = unstable_cache(
+  _getTrackRecordStatsUncached,
+  ["getTrackRecordStats_v1"],
+  { revalidate: 300 }
+);
 
 // ─── Calibrated pre-match honest stats ─────────────────────────────────────
 //
@@ -5297,7 +5315,7 @@ const EXPERIMENTAL_BOTS_V2 = new Set([
  * filter here — date would include early May 24 pipeline runs that still
  * carried v14 before the model file was swapped.
  */
-export async function getModelV2Stats(): Promise<ModelV2Stats> {
+const _getModelV2StatsUncached = async (): Promise<ModelV2Stats> => {
   const admin = createSupabaseAdmin();
   const { data } = await admin
     .from("simulated_bets")
@@ -5350,7 +5368,15 @@ export async function getModelV2Stats(): Promise<ModelV2Stats> {
     inplaySettled:   inplay.length,
     inplayRoi:       calcRoi(inplay),
   };
-}
+};
+
+// PERF-VPS-2026-07-07: unstable_cache (300s) — full simulated_bets scan
+// filtered by model_version. Expensive; results change slowly.
+export const getModelV2Stats = unstable_cache(
+  _getModelV2StatsUncached,
+  ["getModelV2Stats_v1"],
+  { revalidate: 300 }
+);
 
 // ─── WC roster strength (Wave 3 B3) ─────────────────────────────────────────
 //
