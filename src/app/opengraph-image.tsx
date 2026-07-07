@@ -96,12 +96,12 @@ export default function OGImage() {
             alignItems: "center",
             gap: "20px",
             position: "relative",
-            zIndex: 10,
           }}
         >
           {/* Logo */}
           <div
             style={{
+              display: "flex",
               fontSize: "52px",
               fontWeight: 900,
               letterSpacing: "-1px",
@@ -109,12 +109,14 @@ export default function OGImage() {
               color: "#ffffff",
             }}
           >
-            ODDS<span style={{ color: "#22c55e" }}>INTEL</span>
+            <span>ODDS</span>
+            <span style={{ color: "#22c55e" }}>INTEL</span>
           </div>
 
           {/* Tagline */}
           <div
             style={{
+              display: "flex",
               fontSize: "22px",
               color: "#9ca3af",
               textAlign: "center",
@@ -123,8 +125,10 @@ export default function OGImage() {
               fontFamily: "sans-serif",
             }}
           >
-            Football picks logged before kickoff.{" "}
-            <span style={{ color: "#e5e7eb" }}>Public ledger. Bitcoin-anchored.</span>
+            <span>
+              Football picks logged before kickoff.{" "}
+              <span style={{ color: "#e5e7eb" }}>Public ledger. Bitcoin-anchored.</span>
+            </span>
           </div>
 
           {/* Pills */}
