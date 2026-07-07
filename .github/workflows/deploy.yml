@@ -22,3 +22,4 @@ jobs:
             npm run build
             pm2 restart odds-intel-web
             echo "Deploy complete at $(date)"
+# VPS self-hosted deploy active — 2026-07-07
