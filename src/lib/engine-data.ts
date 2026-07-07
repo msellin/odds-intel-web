@@ -1441,7 +1441,7 @@ const _getAllBotsFromDBUncached = async (): Promise<BotRecord[]> => {
 export const getAllBotsFromDB = unstable_cache(
   _getAllBotsFromDBUncached,
   ["getAllBotsFromDB_v1"],
-  { revalidate: 300 }
+  { revalidate: 1800 }
 );
 
 // Hard ceiling on bet rows returned. The previous .limit(500) silently truncated
@@ -3213,13 +3213,16 @@ const _getTrackRecordStatsUncached = async (): Promise<TrackRecordStats> => {
   };
 };
 
-// PERF-VPS-2026-07-07: wrapped with unstable_cache (300s) — /performance
-// page renders 7 parallel queries; caching the slow ones drops render time
-// from ~20s to <1s on cache hit. Supabase IO is the bottleneck.
+// PERF-VPS-2026-07-07: wrapped with unstable_cache (1800s = 30min).
+// /performance page renders 7 parallel queries; caching the slow ones drops
+// render time from ~20s to <1s on cache hit. Supabase IO is the bottleneck.
+// Raised 300s → 1800s: Uptime Kuma polls every 60s so with 300s TTL, one
+// slow (~20s) regeneration hit every 5 min. 30-min TTL means one every 30 min,
+// and 30-min-stale track record data is fine (settlement runs once daily).
 export const getTrackRecordStats = unstable_cache(
   _getTrackRecordStatsUncached,
   ["getTrackRecordStats_v1"],
-  { revalidate: 300 }
+  { revalidate: 1800 }
 );
 
 // ─── Calibrated pre-match honest stats ─────────────────────────────────────
@@ -5370,12 +5373,12 @@ const _getModelV2StatsUncached = async (): Promise<ModelV2Stats> => {
   };
 };
 
-// PERF-VPS-2026-07-07: unstable_cache (300s) — full simulated_bets scan
-// filtered by model_version. Expensive; results change slowly.
+// PERF-VPS-2026-07-07: unstable_cache (1800s = 30min) — full simulated_bets
+// scan filtered by model_version. Expensive; results change slowly.
 export const getModelV2Stats = unstable_cache(
   _getModelV2StatsUncached,
   ["getModelV2Stats_v1"],
-  { revalidate: 300 }
+  { revalidate: 1800 }
 );
 
 // ─── WC roster strength (Wave 3 B3) ─────────────────────────────────────────
