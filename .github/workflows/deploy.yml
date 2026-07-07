@@ -22,4 +22,16 @@ jobs:
             npm run build
             pm2 restart odds-intel-web
             echo "Deploy complete at $(date)"
+
+      - name: Wait for pm2 warmup
+        run: sleep 12
+
+      - name: Post-deploy smoke test
+        run: |
+          # Pull the shared smoke test from odds-intel-engine (public repo)
+          curl -sSL -o web_smoke_test.py \
+            https://raw.githubusercontent.com/msellin/odds-intel-engine/main/scripts/web_smoke_test.py
+          curl -sSL -o oddsintel.json \
+            https://raw.githubusercontent.com/msellin/odds-intel-engine/main/scripts/web_smoke_configs/oddsintel.json
+          python3 web_smoke_test.py --url https://oddsintel.app --config oddsintel.json
 # VPS self-hosted deploy active — 2026-07-07
