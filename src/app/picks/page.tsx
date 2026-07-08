@@ -1,12 +1,14 @@
 /**
- * /picks — public list of upcoming pre-match picks from production strategies.
+ * /picks — public list of recent + upcoming pre-match picks from production
+ * strategies.
  *
- * Counterpart to /performance (settled history). This page surfaces what's
- * LIVE right now — bets the model has flagged for matches in the next 36h,
- * with full match info, odds, edge, and the bookmaker our system recommends.
+ * Counterpart to /performance (full settled ledger). This page shows the
+ * -24h/+36h window: today's picks that have already settled (with W/L badge)
+ * plus everything upcoming. So the feed doesn't go empty the moment a match
+ * kicks off — the settled outcomes stay visible as social proof for the rest
+ * of the day.
  *
- * Free, no tier-gating, no signup. Same data as /api/v1/upcoming, just
- * rendered for humans.
+ * Free, no tier-gating, no signup. Same data as /api/v1/upcoming.
  */
 import Link from "next/link";
 import { headers } from "next/headers";
@@ -26,11 +28,13 @@ interface UpcomingPick {
   edge_pct: number | null;
   bookmaker: string | null;
   posted_at_utc: string;
+  result: "pending" | "won" | "lost" | "void";
 }
 
 interface UpcomingMeta {
   generated_at_utc: string;
-  horizon_hours: number;
+  horizon_hours_backward: number;
+  horizon_hours_forward: number;
   count: number;
   scope: string;
   notes: string;
@@ -90,6 +94,46 @@ function formatKickoff(iso: string | null): { date: string; time: string } {
   return { date, time };
 }
 
+function ResultBadge({ result, kickoff }: { result: string; kickoff: string | null }) {
+  // If a pick is still 'pending' but its kickoff has already passed, it's
+  // live in-play (settlement lands within ~2h of full-time). Label it so
+  // users don't confuse a live match with a still-to-come pick.
+  const kickoffPassed = kickoff ? new Date(kickoff).getTime() < Date.now() : false;
+  if (result === "pending") {
+    if (kickoffPassed) {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-amber-400">
+          <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
+          Live
+        </span>
+      );
+    }
+    return null;
+  }
+  if (result === "won") {
+    return (
+      <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-emerald-400">
+        Won
+      </span>
+    );
+  }
+  if (result === "lost") {
+    return (
+      <span className="rounded-md bg-rose-500/15 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-rose-400">
+        Lost
+      </span>
+    );
+  }
+  if (result === "void") {
+    return (
+      <span className="rounded-md bg-neutral-500/15 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-neutral-400">
+        Void
+      </span>
+    );
+  }
+  return null;
+}
+
 export default async function PicksPage() {
   const { meta, picks } = await fetchUpcoming();
 
@@ -108,7 +152,7 @@ export default async function PicksPage() {
       <main className="mx-auto max-w-4xl px-4 pt-12 pb-20">
         <div className="space-y-2 text-center">
           <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-emerald-400">
-            Live picks · next 36 hours
+            Recent + upcoming picks · last 24h through next 36h
           </p>
           <h1 className="text-balance text-3xl font-semibold tracking-tight sm:text-5xl">
             {picks.length > 0
@@ -177,8 +221,9 @@ export default async function PicksPage() {
                               <span className="text-neutral-500">vs</span>{" "}
                               {p.away_team ?? "Away"}
                             </p>
-                            <p className="mt-1 text-sm text-emerald-300">
-                              Pick: {formatMarket(p.market, p.selection)}
+                            <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-emerald-300">
+                              <span>Pick: {formatMarket(p.market, p.selection)}</span>
+                              <ResultBadge result={p.result} kickoff={p.kickoff_utc} />
                             </p>
                           </div>
                           <div className="flex items-baseline gap-4 text-right sm:gap-6">

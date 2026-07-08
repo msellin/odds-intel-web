@@ -1,16 +1,22 @@
 /**
  * GET /api/v1/upcoming
  *
- * Public, auth-free JSON feed of pending pre-match picks our production
- * strategies have flagged in the next 36 hours. Counterpart to
- * /api/v1/track-record (which only shows settled bets).
+ * Public, auth-free JSON feed of recent + upcoming pre-match picks. Serves
+ * the /picks live-feed page. Counterpart to /api/v1/track-record (settled
+ * history over the full ledger).
  *
  * Scope (intentional):
  *   - bots.maturity_label IN ('calibrated','beta','active')  — production
  *     strategies, no retired
  *   - market IN ('1x2', 'over_under_25', 'o/u', 'btts')  — pre-match only
- *   - sb.result = 'pending'                               — unsettled
- *   - match kickoff between NOW() and NOW() + 36 hours
+ *   - match kickoff between NOW() - 24h and NOW() + 36 hours  — recent past
+ *     picks (settled today) + all upcoming
+ *   - result IN ('pending','won','lost','void')  — everything, badge shows outcome
+ *
+ * PICKS-WIDEN (2026-07-08): earlier version was NOW→NOW+36h + result='pending'
+ * only, which made /picks look empty as soon as a match kicked off. Widening
+ * backward + surfacing result badges lets the page double as social proof
+ * ("here's what the model called today, and how it settled").
  *
  * Cache: 60s (the picks list itself updates as new bets fire each cron cycle).
  * Rate limit: 60 req/min/IP.
@@ -42,6 +48,7 @@ interface BetRow {
   odds_at_pick: number | null;
   edge_percent: number | null;
   recommended_bookmaker: string | null;
+  result: string | null;
   matches: {
     date: string;
     leagues: { name: string; country: string } | null;
@@ -66,14 +73,16 @@ export async function GET(req: Request) {
 
   const sb = adminClient();
   const now = new Date();
-  const horizonHours = 36;
-  const end = new Date(now.getTime() + horizonHours * 3600 * 1000);
+  const horizonHoursForward = 36;
+  const horizonHoursBackward = 24;
+  const start = new Date(now.getTime() - horizonHoursBackward * 3600 * 1000);
+  const end = new Date(now.getTime() + horizonHoursForward * 3600 * 1000);
 
   const { data, error } = await sb
     .from("simulated_bets")
     .select(
       `id, match_id, created_at, market, selection,
-       odds_at_pick, edge_percent, recommended_bookmaker,
+       odds_at_pick, edge_percent, recommended_bookmaker, result,
        matches!inner (
          date,
          leagues ( name, country ),
@@ -82,13 +91,13 @@ export async function GET(req: Request) {
        ),
        bots!inner ( name, maturity_label )`
     )
-    .eq("result", "pending")
+    .in("result", ["pending", "won", "lost", "void"])
     .in("bots.maturity_label", PUBLIC_MATURITY_LABELS)
     .in("market", PRE_MATCH_MARKETS)
-    .gte("matches.date", now.toISOString())
+    .gte("matches.date", start.toISOString())
     .lte("matches.date", end.toISOString())
     .order("matches(date)", { ascending: true })
-    .limit(200);
+    .limit(300);
 
   if (error) {
     return NextResponse.json(
@@ -124,18 +133,20 @@ export async function GET(req: Request) {
     edge_pct: r.edge_percent != null ? Number((Number(r.edge_percent) * 100).toFixed(2)) : null,
     bookmaker: r.recommended_bookmaker,
     posted_at_utc: r.created_at,
+    result: r.result ?? "pending",
   }));
 
   return NextResponse.json(
     {
       meta: {
         generated_at_utc: now.toISOString(),
-        horizon_hours: horizonHours,
+        horizon_hours_backward: horizonHoursBackward,
+        horizon_hours_forward: horizonHoursForward,
         count: picks.length,
         scope:
-          "pending pre-match picks from production strategies (calibrated + beta + active maturity), next 36h",
+          "pre-match picks from production strategies (calibrated + beta + active maturity), kickoffs from -24h to +36h. Includes settled picks (won/lost/void) so the feed doesn't go dark right after a match kicks off.",
         notes:
-          "These picks are live — they will move to /api/v1/track-record once the matches settle. Use the same match_id to track each pick from publication through settlement.",
+          "Picks with result='pending' are live. Settled picks (won/lost/void) come off /api/v1/track-record's ledger once the match finishes. Use match_id to correlate.",
       },
       picks,
     },
