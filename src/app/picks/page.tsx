@@ -33,7 +33,8 @@ interface UpcomingPick {
 
 interface UpcomingMeta {
   generated_at_utc: string;
-  horizon_hours_backward: number;
+  window_start_utc?: string;
+  window_end_utc?: string;
   horizon_hours_forward: number;
   count: number;
   scope: string;
@@ -152,7 +153,7 @@ export default async function PicksPage() {
       <main className="mx-auto max-w-4xl px-4 pt-12 pb-20">
         <div className="space-y-2 text-center">
           <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-emerald-400">
-            Recent + upcoming picks · last 24h through next 36h
+            Today&apos;s picks + next 36 hours
           </p>
           <h1 className="text-balance text-3xl font-semibold tracking-tight sm:text-5xl">
             {picks.length > 0

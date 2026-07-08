@@ -74,8 +74,14 @@ export async function GET(req: Request) {
   const sb = adminClient();
   const now = new Date();
   const horizonHoursForward = 36;
-  const horizonHoursBackward = 24;
-  const start = new Date(now.getTime() - horizonHoursBackward * 3600 * 1000);
+  // PICKS-TODAY-ONWARDS (2026-07-08): show all picks whose match kicks off
+  // TODAY UTC or later — clearer semantic than "rolling 24h back". Users
+  // browsing at any time of day see the same "today's picks" set from 00:00
+  // UTC forward, so no random pick drops off just because it kicked off
+  // earlier in the day.
+  const start = new Date(Date.UTC(
+    now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0,
+  ));
   const end = new Date(now.getTime() + horizonHoursForward * 3600 * 1000);
 
   const { data, error } = await sb
@@ -140,11 +146,12 @@ export async function GET(req: Request) {
     {
       meta: {
         generated_at_utc: now.toISOString(),
-        horizon_hours_backward: horizonHoursBackward,
+        window_start_utc: start.toISOString(),
+        window_end_utc: end.toISOString(),
         horizon_hours_forward: horizonHoursForward,
         count: picks.length,
         scope:
-          "pre-match picks from production strategies (calibrated + beta + active maturity), kickoffs from -24h to +36h. Includes settled picks (won/lost/void) so the feed doesn't go dark right after a match kicks off.",
+          "pre-match picks from production strategies (calibrated + beta + active maturity), kickoffs from start of today UTC through +36h. Includes settled picks (won/lost/void) so the feed doesn't go dark right after a match kicks off.",
         notes:
           "Picks with result='pending' are live. Settled picks (won/lost/void) come off /api/v1/track-record's ledger once the match finishes. Use match_id to correlate.",
       },
