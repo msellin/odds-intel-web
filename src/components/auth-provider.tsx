@@ -96,28 +96,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
   const closeUpgradeModal = useCallback(() => setUpgradeModalOpen(false), []);
 
-  const fetchProfile = useCallback(
-    async (userId: string) => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", userId)
-        .single();
-
-      if (error) {
-        console.error("Failed to fetch profile:", error.message);
+  const fetchProfile = useCallback(async () => {
+    try {
+      const res = await fetch("/api/me/profile", { cache: "no-store" });
+      if (!res.ok) {
+        if (res.status !== 401) {
+          console.error("Failed to fetch profile:", res.status);
+        }
         setProfile(null);
-      } else {
-        setProfile(data as UserProfile);
+        return;
       }
-    },
-    [supabase]
-  );
+      const data = await res.json();
+      setProfile(data as UserProfile);
+    } catch (err) {
+      console.error("Failed to fetch profile:", err);
+      setProfile(null);
+    }
+  }, []);
 
   const refreshProfile = useCallback(async () => {
-    const userId = session?.user?.id;
-    if (userId) {
-      await fetchProfile(userId);
+    if (session?.user?.id) {
+      await fetchProfile();
     }
   }, [session?.user?.id, fetchProfile]);
 
@@ -126,7 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       setSession(s);
       if (s?.user) {
-        fetchProfile(s.user.id).finally(() => setLoading(false));
+        fetchProfile().finally(() => setLoading(false));
       } else {
         setLoading(false);
       }
@@ -138,7 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
       if (s?.user) {
-        fetchProfile(s.user.id).finally(() => setLoading(false));
+        fetchProfile().finally(() => setLoading(false));
       } else {
         setProfile(null);
         setLoading(false);

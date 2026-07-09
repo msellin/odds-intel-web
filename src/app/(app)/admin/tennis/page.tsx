@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 
-import { createSupabaseServer } from "@/lib/supabase-server";
+import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
 import { createClient } from "@supabase/supabase-js";
 
 const serviceClient = () =>
@@ -225,7 +225,8 @@ export default async function TennisAdminPage() {
     );
   }
 
-  const { data: profile } = await supabase
+  const profilesDb = createServerServiceClient();
+  const { data: profile } = await profilesDb
     .from("profiles")
     .select("is_superadmin")
     .eq("id", user.id)

@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 
-import { createSupabaseServer } from "@/lib/supabase-server";
+import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
 import { createClient } from "@supabase/supabase-js";
 import { LogBetButton } from "./log-bet-button";
 import { ScrapersPanel } from "./scrapers-panel";
@@ -172,7 +172,8 @@ export default async function Cs2AdminPage() {
   const supabase = await createSupabaseServer();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return <div className="flex items-center justify-center py-24 text-muted-foreground">Access denied.</div>;
-  const { data: profile } = await supabase.from("profiles").select("is_superadmin").eq("id", user.id).single();
+  const profilesDb = createServerServiceClient();
+  const { data: profile } = await profilesDb.from("profiles").select("is_superadmin").eq("id", user.id).single();
   if (!profile?.is_superadmin) return <div className="flex items-center justify-center py-24 text-muted-foreground">Superadmin only.</div>;
 
   const db = serviceClient();

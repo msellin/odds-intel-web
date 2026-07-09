@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import Link from "next/link";
-import { createSupabaseServer } from "@/lib/supabase-server";
+import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
 
 const SECTIONS: { href: string; title: string; blurb: string }[] = [
   {
@@ -53,7 +53,8 @@ export default async function AdminIndexPage() {
       </div>
     );
   }
-  const { data: profile } = await supabase
+  const db = createServerServiceClient();
+  const { data: profile } = await db
     .from("profiles")
     .select("is_superadmin")
     .eq("id", user.id)

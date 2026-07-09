@@ -147,7 +147,7 @@ export default async function PerformancePage() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return { isPro: false, isElite: false, is_superadmin: false };
-      return getUserTier(user.id, supabase);
+      return getUserTier(user.id);
     })(),
     getTrackRecordStats(),
     getDashboardCache(),

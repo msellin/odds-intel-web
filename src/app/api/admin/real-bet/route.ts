@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { createSupabaseServer } from "@/lib/supabase-server";
+import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
 
 function admin() {
   const url =
@@ -21,7 +21,8 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 
-  const { data: profile } = await supabase
+  const db = createServerServiceClient();
+  const { data: profile } = await db
     .from("profiles")
     .select("is_superadmin")
     .eq("id", user.id)

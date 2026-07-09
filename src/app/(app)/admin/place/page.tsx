@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 
-import { createSupabaseServer } from "@/lib/supabase-server";
+import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
 import { getPlaceableBets, getCoolbetSnapshotFreshnessMinutes } from "@/lib/engine-data";
 import { PlaceBetTable } from "@/components/place-bet-table";
 import { CoolbetIngestBanner } from "@/components/coolbet-ingest-banner";
@@ -19,7 +19,8 @@ export default async function PlaceBetPage() {
     );
   }
 
-  const { data: profile } = await supabase
+  const db = createServerServiceClient();
+  const { data: profile } = await db
     .from("profiles")
     .select("is_superadmin")
     .eq("id", user.id)

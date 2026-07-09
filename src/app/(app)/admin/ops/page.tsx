@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import React from "react";
 import { AutoRefresh } from "./auto-refresh";
-import { createSupabaseServer } from "@/lib/supabase-server";
+import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
 import {
   getOpsSnapshot,
   getRecentPipelineRuns,
@@ -20,7 +20,8 @@ export default async function OpsDashboardPage() {
     return <div className="flex items-center justify-center py-24 text-muted-foreground">Access denied.</div>;
   }
 
-  const { data: profile } = await supabase
+  const db = createServerServiceClient();
+  const { data: profile } = await db
     .from("profiles")
     .select("is_superadmin")
     .eq("id", user.id)

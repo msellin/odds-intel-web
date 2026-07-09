@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 
-import { createSupabaseServer } from "@/lib/supabase-server";
+import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
 import { getRealBets, MARKET_THRESHOLDS_V2_EPOCH, type RealBet } from "@/lib/engine-data";
 import { RealBetsLog } from "@/components/real-bets-log";
 import { RealBetsChart, type RealBetsChartPoint } from "@/components/real-bets-chart";
@@ -200,7 +200,8 @@ export default async function RealBetsPage() {
   if (!user) {
     return <div className="py-24 text-center text-muted-foreground">Access denied.</div>;
   }
-  const { data: profile } = await supabase.from("profiles").select("is_superadmin").eq("id", user.id).single();
+  const db = createServerServiceClient();
+  const { data: profile } = await db.from("profiles").select("is_superadmin").eq("id", user.id).single();
   if (!profile?.is_superadmin) {
     return <div className="py-24 text-center text-muted-foreground">Access denied.</div>;
   }

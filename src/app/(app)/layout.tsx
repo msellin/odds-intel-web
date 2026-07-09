@@ -1,6 +1,6 @@
 import { Nav } from "@/components/nav";
 import { LoginModal } from "@/components/login-modal";
-import { createSupabaseServer } from "@/lib/supabase-server";
+import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
 import { cookies } from "next/headers";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -10,7 +10,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     const supabase = await createSupabaseServer();
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      const { data: profile } = await supabase
+      const db = createServerServiceClient();
+      const { data: profile } = await db
         .from("profiles")
         .select("is_superadmin")
         .eq("id", user.id)

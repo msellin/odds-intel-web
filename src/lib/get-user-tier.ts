@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { createServerServiceClient } from "./supabase-server";
 
 export type UserTierResult = {
   tier: "free" | "pro" | "elite";
@@ -13,9 +14,9 @@ export type UserTierResult = {
  * For superadmins, checks for a `preview_tier` cookie and overrides tier if set.
  * All other users get their real DB tier.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function getUserTier(userId: string, supabase: any): Promise<UserTierResult> {
-  const { data: profile } = await supabase
+export async function getUserTier(userId: string): Promise<UserTierResult> {
+  const db = createServerServiceClient();
+  const { data: profile } = await db
     .from("profiles")
     .select("tier, is_superadmin")
     .eq("id", userId)

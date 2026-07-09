@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 
-import { createSupabaseServer } from "@/lib/supabase-server";
+import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
 import { getAllBets, getAllBotsFromDB } from "@/lib/engine-data";
 import { BotDashboardClient } from "@/components/bot-dashboard-client";
 
@@ -23,7 +23,8 @@ export default async function BotDashboardPage() {
     );
   }
 
-  const { data: profile } = await supabase
+  const db = createServerServiceClient();
+  const { data: profile } = await db
     .from("profiles")
     .select("is_superadmin")
     .eq("id", user.id)

@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 
-import { createSupabaseServer } from "@/lib/supabase-server";
+import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
 import { createClient } from "@supabase/supabase-js";
 import { LogBetButton } from "./log-bet-button";
 
@@ -72,7 +72,8 @@ export default async function LolAdminPage() {
     <div className="flex items-center justify-center py-24 text-muted-foreground">Access denied.</div>
   );
 
-  const { data: profile } = await supabase
+  const profilesDb = createServerServiceClient();
+  const { data: profile } = await profilesDb
     .from("profiles").select("is_superadmin").eq("id", user.id).single();
 
   if (!profile?.is_superadmin) return (
