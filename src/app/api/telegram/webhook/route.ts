@@ -10,10 +10,13 @@ const ADMIN_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function createAdmin() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  );
+  const url =
+    process.env.NEXT_PUBLIC_POSTGREST_URL ??
+    process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const key =
+    process.env.POSTGREST_SERVICE_KEY ??
+    process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  return createClient(url, key);
 }
 
 async function sendReply(chatId: number, text: string, parseMode?: "Markdown" | "HTML") {

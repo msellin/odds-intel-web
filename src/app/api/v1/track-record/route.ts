@@ -33,11 +33,14 @@ const PRE_MATCH_MARKETS = ["1x2", "over_under_25", "o/u", "btts"];
 const PUBLIC_MATURITY_LABELS = ["calibrated", "beta", "active"];
 
 function adminClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    (process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY)!,
-    { auth: { persistSession: false } }
-  );
+  const url =
+    process.env.NEXT_PUBLIC_POSTGREST_URL ??
+    process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const key =
+    process.env.POSTGREST_SERVICE_KEY ??
+    process.env.SUPABASE_SECRET_KEY ??
+    process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  return createClient(url, key, { auth: { persistSession: false } });
 }
 
 interface BetRow {

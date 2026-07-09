@@ -1,6 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
 import { unstable_cache } from "next/cache";
-import { createSupabaseServer } from "./supabase-server";
 import { createSupabasePublic } from "./supabase-public";
 import { autoMinEdgeFor } from "./coolbet-edge";
 import {
@@ -28,11 +27,18 @@ const CACHE_300S = { revalidate: 300 };
 const CACHE_30S = { revalidate: 30 };
 
 // Service role client — bypasses RLS. Server-side only, never sent to browser.
+// PostgREST URL + service_role JWT under CrossRank pattern (Supabase→VPS
+// migration Phase 4). Env vars fall back to Supabase project so this deploys
+// without cutover; Phase 6 flips POSTGREST_URL to api.oddsintel.app.
 function createSupabaseAdmin() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    (process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY)!
-  );
+  const url =
+    process.env.NEXT_PUBLIC_POSTGREST_URL ??
+    process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const key =
+    process.env.POSTGREST_SERVICE_KEY ??
+    process.env.SUPABASE_SECRET_KEY ??
+    process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  return createClient(url, key);
 }
 
 // ─── Ops snapshot types ──────────────────────────────────────────────────────
@@ -1011,7 +1017,7 @@ export async function getPublicMatchBookmakerCount(matchId: string): Promise<num
 }
 
 async function getTodayOdds(): Promise<LiveMatch[]> {
-  const supabase = await createSupabaseServer();
+  const supabase = createSupabasePublic();
 
   const now = new Date();
   const todayStart = new Date(now);
@@ -1454,7 +1460,7 @@ export const getAllBotsFromDB = unstable_cache(
 const ALL_BETS_CEILING = 20000;
 
 export async function getAllBets(): Promise<LiveBet[]> {
-  const supabase = await createSupabaseServer();
+  const supabase = createSupabasePublic();
 
   const { data, error } = await supabase
     .from("simulated_bets")
@@ -2289,7 +2295,7 @@ export interface MatchPreview {
 }
 
 export async function getMatchPreview(matchId: string): Promise<MatchPreview | null> {
-  const supabase = await createSupabaseServer();
+  const supabase = createSupabasePublic();
   const { data } = await supabase
     .from("match_previews")
     .select("preview_short, preview_text, generated_at")
@@ -2320,7 +2326,7 @@ export interface TodayPick {
 }
 
 export async function getTodayPicks(): Promise<TodayPick[]> {
-  const supabase = await createSupabaseServer();
+  const supabase = createSupabasePublic();
   const today = new Date().toISOString().split("T")[0];
   const todayEnd = `${today}T23:59:59.999Z`;
 
@@ -2421,7 +2427,7 @@ export async function getTodayPicks(): Promise<TodayPick[]> {
 }
 
 export async function getModelAccuracy(): Promise<ModelAccuracyData> {
-  const supabase = await createSupabaseServer();
+  const supabase = createSupabasePublic();
 
   // Fetch finished matches that have a result
   const { data: matches, error: mErr } = await supabase
@@ -3091,7 +3097,7 @@ export interface MatchCLVData {
 }
 
 export async function getMatchCLVData(matchId: string): Promise<MatchCLVData> {
-  const supabase = await createSupabaseServer();
+  const supabase = createSupabasePublic();
 
   const [matchResult, betsResult] = await Promise.all([
     supabase
@@ -3910,7 +3916,7 @@ export async function getRecentSettledBets(limit = 10): Promise<SimpleSettledBet
 }
 
 export async function getBotConsensus(matchId: string): Promise<BotConsensusData | null> {
-  const supabase = await createSupabaseServer();
+  const supabase = createSupabasePublic();
 
   const { data, error } = await supabase
     .from("simulated_bets")
@@ -4292,7 +4298,7 @@ export async function getPredictionLeagueCounts(): Promise<Record<string, number
 export async function getLeaguePredictions(
   leagueSlug: string
 ): Promise<LeaguePredictionPage | null> {
-  const supabase = await createSupabaseServer();
+  const supabase = createSupabasePublic();
 
   // GROWTH-SEO-EXPAND-LEAGUES: dynamic slug lookup. Featured-first (cheap path),
   // then dynamic getAllPredictionLeagues if not in the featured list.
@@ -4459,7 +4465,7 @@ export interface ModelMarketUsersData {
 }
 
 export async function getModelMarketUsers(matchId: string): Promise<ModelMarketUsersData | null> {
-  const supabase = await createSupabaseServer();
+  const supabase = createSupabasePublic();
 
   // Fetch ensemble 1x2_home prediction + match odds + community votes in parallel
   const [predResult, voteResult] = await Promise.all([
@@ -4518,7 +4524,7 @@ export interface WhatChangedItem {
 }
 
 export async function getWhatChangedToday(): Promise<WhatChangedItem[]> {
-  const supabase = await createSupabaseServer();
+  const supabase = createSupabasePublic();
 
   // Find signals that changed significantly in the last 8 hours
   // by comparing the most recent value to a value from 20-32 hours ago
@@ -4732,7 +4738,7 @@ export interface BankrollData {
 }
 
 export async function getUserBankrollData(userId: string): Promise<BankrollData> {
-  const supabase = await createSupabaseServer();
+  const supabase = createSupabasePublic();
 
   // Fetch all user picks with match info (session-RLS filters to this user)
   const { data: rawPicks } = await supabase

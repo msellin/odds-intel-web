@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Webhook } from "svix";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 /**
  * POST /api/resend-webhook
@@ -14,10 +14,25 @@ import { createClient } from "@supabase/supabase-js";
  *   SUPABASE_SERVICE_ROLE_KEY — service role for RLS bypass
  */
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  (process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY)!
-);
+// Lazy client so build-time page collection doesn't need runtime env vars.
+let _supabaseAdmin: SupabaseClient | null = null;
+function supabaseAdmin() {
+  if (_supabaseAdmin) return _supabaseAdmin;
+  const url =
+    process.env.NEXT_PUBLIC_POSTGREST_URL ??
+    process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key =
+    process.env.POSTGREST_SERVICE_KEY ??
+    process.env.SUPABASE_SECRET_KEY ??
+    process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    throw new Error(
+      "Missing PostgREST/Supabase env vars for Resend webhook admin client"
+    );
+  }
+  _supabaseAdmin = createClient(url, key);
+  return _supabaseAdmin;
+}
 
 export async function POST(req: NextRequest) {
   const webhookSecret = process.env.RESEND_WEBHOOK_SECRET;
@@ -60,7 +75,7 @@ export async function POST(req: NextRequest) {
   if (type === "email.opened") {
     // Update last_email_opened_at on the profile matching this email address
     if (emailTo) {
-      await supabaseAdmin
+      await supabaseAdmin()
         .from("profiles")
         .update({ last_email_opened_at: now })
         .eq("email", emailTo);
@@ -68,7 +83,7 @@ export async function POST(req: NextRequest) {
 
     // Mark the digest log row as opened (only if currently "sent")
     if (emailId) {
-      await supabaseAdmin
+      await supabaseAdmin()
         .from("email_digest_log")
         .update({ status: "opened" })
         .eq("resend_id", emailId)
@@ -76,7 +91,7 @@ export async function POST(req: NextRequest) {
     }
   } else if (type === "email.clicked") {
     if (emailTo) {
-      await supabaseAdmin
+      await supabaseAdmin()
         .from("profiles")
         .update({ last_email_clicked_at: now })
         .eq("email", emailTo);

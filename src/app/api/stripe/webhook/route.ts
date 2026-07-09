@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 const SITE_URL = process.env.SITE_URL ?? "https://oddsintel.app";
 
@@ -83,11 +83,27 @@ async function sendUpgradeEmail(to: string, tier: string): Promise<void> {
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
-// Admin client bypasses RLS — needed because webhook has no user session
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  (process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY)!
-);
+// Admin client bypasses RLS — needed because webhook has no user session.
+// Lazy-initialized so build-time page collection doesn't evaluate env vars
+// that only exist at runtime.
+let _supabaseAdmin: SupabaseClient | null = null;
+function supabaseAdmin() {
+  if (_supabaseAdmin) return _supabaseAdmin;
+  const url =
+    process.env.NEXT_PUBLIC_POSTGREST_URL ??
+    process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key =
+    process.env.POSTGREST_SERVICE_KEY ??
+    process.env.SUPABASE_SECRET_KEY ??
+    process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    throw new Error(
+      "Missing PostgREST/Supabase env vars for Stripe webhook admin client"
+    );
+  }
+  _supabaseAdmin = createClient(url, key);
+  return _supabaseAdmin;
+}
 
 const TIER_BY_PRODUCT: Record<string, string> = {
   [process.env.STRIPE_PRO_PRODUCT_ID!]: "pro",
@@ -120,7 +136,7 @@ export async function POST(req: NextRequest) {
   // return 200 immediately without re-applying side effects.
   // event.id comes from the verified JSON payload — not the Stripe-Signature header,
   // which is per-attempt and would NOT deduplicate retries.
-  const { error: dupError } = await supabaseAdmin
+  const { error: dupError } = await supabaseAdmin()
     .from("processed_events")
     .insert({ event_id: event.id, event_type: event.type });
 
@@ -148,13 +164,13 @@ export async function POST(req: NextRequest) {
       const productId = subscription.items.data[0].price.product as string;
       const tier = TIER_BY_PRODUCT[productId] ?? "free";
 
-      await supabaseAdmin
+      await supabaseAdmin()
         .from("profiles")
         .update({ tier, stripe_customer_id: session.customer as string })
         .eq("id", userId);
 
       // Send upgrade confirmation email
-      const { data: profile } = await supabaseAdmin
+      const { data: profile } = await supabaseAdmin()
         .from("profiles")
         .select("email")
         .eq("id", userId)
@@ -173,7 +189,7 @@ export async function POST(req: NextRequest) {
       const isActive = ["active", "trialing"].includes(subscription.status);
       const tier = isActive ? (TIER_BY_PRODUCT[productId] ?? "free") : "free";
 
-      await supabaseAdmin
+      await supabaseAdmin()
         .from("profiles")
         .update({ tier })
         .eq("stripe_customer_id", customerId);
@@ -185,7 +201,7 @@ export async function POST(req: NextRequest) {
       const subscription = event.data.object as Stripe.Subscription;
       const customerId = subscription.customer as string;
 
-      await supabaseAdmin
+      await supabaseAdmin()
         .from("profiles")
         .update({ tier: "free" })
         .eq("stripe_customer_id", customerId);

@@ -6,8 +6,10 @@ import { LogBetButton } from "./log-bet-button";
 
 const serviceClient = () =>
   createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SECRET_KEY!,
+    process.env.NEXT_PUBLIC_POSTGREST_URL ??
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.POSTGREST_SERVICE_KEY ??
+      process.env.SUPABASE_SECRET_KEY!,
   );
 
 interface LolMatch {
