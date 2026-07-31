@@ -70,7 +70,15 @@ async function sendWelcomeEmail(to: string): Promise<void> {
 }
 
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url);
+  const requestUrl = new URL(request.url);
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const hostHeader = request.headers.get("host");
+  const forwardedProto = request.headers.get("x-forwarded-proto");
+  const host = forwardedHost ?? hostHeader;
+  const proto = forwardedProto ?? (host?.startsWith("localhost") ? "http" : "https");
+  const origin = host ? `${proto}://${host}` : requestUrl.origin;
+
+  const { searchParams } = requestUrl;
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? "/picks";
 
