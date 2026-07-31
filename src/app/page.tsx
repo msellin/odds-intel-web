@@ -152,7 +152,12 @@ async function loadCompetitors(): Promise<CompetitorRow[]> {
       try {
         const res = await fetch(
           `${LEDGER_RAW}/comparison_${m.ledgerKey}.json`,
-          { next: { revalidate: 21600 } }, // 6h
+          // COMPETITOR-AUDIT-STALENESS-FIX 2026-07-31: dropped 6h → 30min.
+          // The audit workflow now runs daily at 02:00 UTC. A 6h revalidate
+          // meant landing could show 30h-old numbers between cron + first
+          // stale request. 30min matches the "no user should ever see
+          // >1-day-old comparison numbers" bar.
+          { next: { revalidate: 1800 } }, // 30 min
         );
         if (res.ok) {
           const j = (await res.json()) as {
