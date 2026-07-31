@@ -73,9 +73,11 @@ export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const forwardedHost = request.headers.get("x-forwarded-host");
   const hostHeader = request.headers.get("host");
-  const forwardedProto = request.headers.get("x-forwarded-proto");
   const host = forwardedHost ?? hostHeader;
-  const proto = forwardedProto ?? (host?.startsWith("localhost") ? "http" : "https");
+  // Force https for any non-local host — we sit behind Cloudflare Flexible
+  // SSL, so nginx sees http and would forward X-Forwarded-Proto: http, but
+  // the public edge is always https and auth callbacks must return https.
+  const proto = host && !host.startsWith("localhost") ? "https" : "http";
   const origin = host ? `${proto}://${host}` : requestUrl.origin;
 
   const { searchParams } = requestUrl;
