@@ -477,6 +477,30 @@ export default async function PreviewLanding() {
                 );
               })}
             </div>
+            {/* COMPETITOR-PICKS-CSV (2026-08-01): downstream of the audit
+                aggregates above sits the per-pick data users can pull
+                fixture-by-fixture. picks_matched.csv is the fixture-level
+                matrix (OddsIntel + Forebet + SignalOdds side-by-side);
+                per-source CSVs live one level up. */}
+            <p className="mt-4 text-center text-[11px] text-neutral-500">
+              <a
+                href="https://github.com/msellin/odds-intel-engine/blob/main/ledger/picks_matched.csv"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-neutral-400 hover:text-emerald-400 hover:underline"
+              >
+                Verify · download fixture-by-fixture picks CSV ↗
+              </a>
+              <span className="mx-2 text-neutral-700">·</span>
+              <a
+                href="https://github.com/msellin/odds-intel-engine/tree/main/ledger"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-neutral-500 hover:text-neutral-300 hover:underline"
+              >
+                per-source picks_*.csv
+              </a>
+            </p>
           </div>
         </section>
 
