@@ -167,18 +167,28 @@ async function loadCompetitors(): Promise<CompetitorRow[]> {
             their_stats?: { n?: number; roi_pct?: number };
             our_stats_same_window?: { n?: number; roi_pct?: number };
           };
-          // Skip pulls flagged as auth_required / insufficient_sample — we
-          // already had this row before, fallback values stay in place.
+          // COHORT-CONSISTENCY-FIX-2026-08-03: previously the outer
+          // `if (j.status === "ok")` gate meant a competitor whose scrape
+          // returned insufficient data (SignalOdds / Tipstrr on a bad
+          // scrape day) fell back to the shipped-with-code fallback for
+          // BOTH `their_stats` AND `our_stats_same_window` — even though
+          // our-side numbers come from OUR DB and are always present.
+          // Result: some rows showed fresh +8.61% n=559, others showed
+          // stale +12.56% n=1039, and per-row deltas silently disagreed
+          // across the same page. Split the gate: our-side always uses
+          // the ledger fetch if the fetch succeeded (regardless of
+          // competitor-side status); their-side stays gated on
+          // status === "ok" so partial data doesn't misrepresent them.
+          if (j.our_stats_same_window?.n != null) {
+            ourN = j.our_stats_same_window.n;
+            ourRoi = j.our_stats_same_window.roi_pct ?? ourRoi;
+          }
+          if (j.window?.start) windowStart = j.window.start;
+          if (j.window?.end) windowEnd = j.window.end;
+          if (j.snapshot_at_utc) snapshotAt = j.snapshot_at_utc.slice(0, 10);
           if (j.status === "ok") {
             theirN = j.their_stats?.n ?? theirN;
             theirRoi = j.their_stats?.roi_pct ?? theirRoi;
-            ourN = j.our_stats_same_window?.n ?? ourN;
-            ourRoi = j.our_stats_same_window?.roi_pct ?? ourRoi;
-            windowStart = j.window?.start ?? windowStart;
-            windowEnd = j.window?.end ?? windowEnd;
-            // snapshot_at_utc is a full ISO datetime; the landing shows
-            // just the date portion so the string stays readable.
-            snapshotAt = j.snapshot_at_utc?.slice(0, 10) ?? snapshotAt;
           }
         }
       } catch {
