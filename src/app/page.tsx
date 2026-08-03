@@ -463,6 +463,29 @@ export default async function PreviewLanding() {
                           </>
                         )}
                       </p>
+                      {/* FOREBET-ODDS-AUDIT-FOOTNOTE-2026-08-03: on the
+                          Forebet row, surface the finding from
+                          FOREBET-OU-VERIFY (57% of Forebet's OU picks quote
+                          odds higher than the BEST book we ever saw for
+                          that fixture; median +0.36 inflation on winners
+                          vs Pinnacle close). Link points at the raw CSV
+                          on GitHub so a curious visitor can audit the
+                          claim row-by-row — the receipt IS the argument.
+                          Kept 10px + amber so it reads as a caveat, not
+                          an accusation. */}
+                      {c.ledgerKey === "forebet" && (
+                        <p className="mt-0.5 text-[10px] leading-tight text-amber-400/80">
+                          audited: 57% of picks quote odds beyond any reachable book ·{" "}
+                          <a
+                            href="https://github.com/msellin/odds-intel-engine/blob/main/ledger/forebet_ou_verify.csv"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="underline decoration-dotted underline-offset-2 hover:text-amber-300"
+                          >
+                            verify ↗
+                          </a>
+                        </p>
+                      )}
                     </div>
 
                     {/* Delta — arrow + color carry direction; no
