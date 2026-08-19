@@ -1,16 +1,23 @@
 /**
- * /admin/no-pin-shadow — bot_no_pin_shadow_v1 ledger.
+ * /admin/shadow-bots/[bot] — per-bot ledger for a single shadow bot.
  *
- * BOT-NO-PIN-SHADOW-2026-08-18 Phase 1 experiment: is there edge on 1X2
- * markets that Pinnacle doesn't quote? This page shows the running data.
- * Shadow bets only — no real placement, no bankroll effect.
- *
- * Superadmin-only for now (experimental / low signal-to-noise until n≥50).
+ * Restricted to the four known shadow bot names to prevent arbitrary bot
+ * inspection via URL path.
  */
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
+
+const ALLOWED_BOTS = new Set([
+  "bot_no_pin_shadow_v1",
+  "bot_sweep_1x2_home_v1",
+  "bot_sweep_1x2_draw_v1",
+  "bot_sweep_btts_yes_v1",
+]);
+
+const STAKE = 10;
 
 interface ShadowBetRow {
   id: string;
@@ -31,12 +38,18 @@ interface ShadowBetRow {
   } | null;
 }
 
-export default async function NoPinShadowPage() {
+export default async function ShadowBotDetailPage({
+  params,
+}: {
+  params: Promise<{ bot: string }>;
+}) {
+  const { bot: botName } = await params;
+  if (!ALLOWED_BOTS.has(botName)) notFound();
+
   const supabase = await createSupabaseServer();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
   if (!user) {
     return (
       <div className="flex items-center justify-center py-24 text-muted-foreground">
@@ -44,14 +57,12 @@ export default async function NoPinShadowPage() {
       </div>
     );
   }
-
   const db = createServerServiceClient();
   const { data: profile } = await db
     .from("profiles")
     .select("is_superadmin")
     .eq("id", user.id)
     .single();
-
   if (!profile?.is_superadmin) {
     return (
       <div className="flex items-center justify-center py-24 text-muted-foreground">
@@ -60,19 +71,23 @@ export default async function NoPinShadowPage() {
     );
   }
 
-  // Get bot_id first — RLS-safe on VPS Postgres
   const { data: botRow } = await db
     .from("bots")
-    .select("id, maturity_label")
-    .eq("name", "bot_no_pin_shadow_v1")
+    .select("id, name, description, maturity_label, strategy_description")
+    .eq("name", botName)
     .single();
 
   if (!botRow?.id) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold">No-Pinnacle Shadow Bot</h1>
+        <h1 className="text-2xl font-bold">{botName}</h1>
         <p className="mt-4 text-sm text-amber-400">
-          Bot not yet registered — migration 271 hasn&apos;t been applied.
+          Bot not yet registered — migration hasn&apos;t been applied.
+        </p>
+        <p className="mt-6 text-xs text-neutral-500">
+          <Link href="/admin/shadow-bots" className="underline hover:text-neutral-300">
+            ← Back to shadow bots
+          </Link>
         </p>
       </div>
     );
@@ -92,49 +107,44 @@ export default async function NoPinShadowPage() {
     )
     .eq("bot_id", botRow.id)
     .order("pick_time", { ascending: false })
-    .limit(300);
+    .limit(500);
 
   const bets = (rows ?? []) as unknown as ShadowBetRow[];
 
-  const settled = bets.filter((b) => b.result && b.result !== "pending" && b.result !== "void");
+  const settled = bets.filter((b) => b.result === "won" || b.result === "lost");
   const wins = settled.filter((b) => b.result === "won");
   const losses = settled.filter((b) => b.result === "lost");
+  const voided = bets.filter((b) => b.result === "void");
   const pending = bets.filter((b) => !b.result || b.result === "pending");
 
-  const stake = 10; // shadow stake is fixed 10u per bulk_store_shadow_bets
-  const totalStake = settled.length * stake;
-  const totalReturn = wins.reduce(
-    (s, b) => s + (Number(b.odds_at_pick ?? 0) * stake),
+  const totalStake = settled.length * STAKE;
+  const wonPnl = wins.reduce(
+    (s, b) => s + (Number(b.odds_at_pick ?? 0) - 1) * STAKE,
     0
   );
-  const pnl = totalReturn - totalStake;
+  const pnl = wonPnl - losses.length * STAKE;
   const roi = totalStake > 0 ? (pnl / totalStake) * 100 : 0;
   const hitRate = settled.length > 0 ? (wins.length / settled.length) * 100 : 0;
+  const toneROI: "good" | "bad" | "neutral" =
+    settled.length === 0 ? "neutral" : roi >= 3 ? "good" : roi <= -8 ? "bad" : "neutral";
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">No-Pinnacle Shadow Bot</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          <span className="font-mono text-xs uppercase tracking-wider text-amber-400">
-            {botRow.maturity_label}
-          </span>
-          {" · "}
-          <span>bot_no_pin_shadow_v1</span>
+    <div className="max-w-6xl mx-auto px-4 py-10 space-y-6">
+      <header className="space-y-2">
+        <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-amber-400">
+          {botRow.maturity_label ?? "—"}
         </p>
-        <p className="mt-3 text-sm text-neutral-400 max-w-3xl">
-          Phase 1 data collection. Fires on 1X2 markets where Pinnacle doesn&apos;t quote
-          but ≥3 accessible books do. Median of accessible-book prices used as local anchor.
-          Edge ≥ 8%. Writes to shadow_bets only — never places a real or paper bet.
-          Goal: measure whether the model has edge on the ~15-20% of daily fixtures
-          currently skipped by the Pinnacle-required gate. Promote to paper beta at
-          n≥50 &amp; ROI ≥ +3%; retire at ROI ≤ -8%.
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{botRow.name}</h1>
+        <p className="max-w-3xl text-sm text-neutral-400">
+          {botRow.description ?? "—"}
         </p>
-      </div>
+        {botRow.strategy_description ? (
+          <p className="max-w-3xl text-xs text-neutral-500">{botRow.strategy_description}</p>
+        ) : null}
+      </header>
 
-      {/* Summary strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <StatCard label="Total picks" value={bets.length.toString()} />
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <StatCard label="Picks" value={bets.length.toString()} />
         <StatCard label="Pending" value={pending.length.toString()} />
         <StatCard label="Settled" value={settled.length.toString()} />
         <StatCard
@@ -144,15 +154,13 @@ export default async function NoPinShadowPage() {
         <StatCard
           label="ROI"
           value={settled.length > 0 ? `${roi >= 0 ? "+" : ""}${roi.toFixed(1)}%` : "—"}
-          tone={roi >= 3 ? "good" : roi <= -8 ? "bad" : "neutral"}
+          tone={toneROI}
         />
-      </div>
+      </section>
 
       {bets.length === 0 ? (
-        <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-8 text-center text-sm text-neutral-400">
-          No shadow picks yet. Bot fires from run_morning after the acca pass —
-          check back after the next scheduler cycle. On thin days this bot may
-          write zero picks (correct behaviour).
+        <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-10 text-center text-sm text-neutral-400">
+          No picks yet. The bot fires on the next scheduler cycle. Thin days may produce zero picks (correct behaviour).
         </div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-white/[0.06] bg-white/[0.02]">
@@ -203,7 +211,7 @@ export default async function NoPinShadowPage() {
                       </div>
                     </td>
                     <td className="px-3 py-2 text-sm text-emerald-300">
-                      {b.selection}
+                      {b.market}·{b.selection}
                     </td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums">
                       {b.odds_at_pick != null ? Number(b.odds_at_pick).toFixed(2) : "—"}
@@ -233,8 +241,8 @@ export default async function NoPinShadowPage() {
       )}
 
       <p className="text-xs text-neutral-500">
-        <Link href="/admin/ops" className="underline hover:text-neutral-300">
-          ← Back to ops
+        <Link href="/admin/shadow-bots" className="underline hover:text-neutral-300">
+          ← Back to shadow bots
         </Link>
       </p>
     </div>
@@ -251,17 +259,11 @@ function StatCard({
   tone?: "good" | "bad" | "neutral";
 }) {
   const toneClass =
-    tone === "good"
-      ? "text-emerald-400"
-      : tone === "bad"
-      ? "text-rose-400"
-      : "text-neutral-100";
+    tone === "good" ? "text-emerald-400" : tone === "bad" ? "text-rose-400" : "text-neutral-100";
   return (
     <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-3">
-      <div className="text-xs uppercase tracking-wider font-mono text-neutral-500">
-        {label}
-      </div>
-      <div className={`mt-1 text-lg font-mono font-semibold tabular-nums ${toneClass}`}>
+      <div className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">{label}</div>
+      <div className={`mt-1 font-mono text-lg font-semibold tabular-nums ${toneClass}`}>
         {value}
       </div>
     </div>
