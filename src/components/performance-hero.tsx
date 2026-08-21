@@ -23,7 +23,6 @@ import type {
   ModelV2Stats,
   CalibratedHeadlineStats,
 } from "@/lib/engine-data";
-import { EquitySparkline } from "@/components/equity-sparkline";
 
 interface Props {
   stats: TrackRecordStats;
@@ -155,8 +154,9 @@ export function PerformanceHero({
         </div>
       </section>
 
-      {/* ── Equity sparkline ─────────────────────────────────────────── */}
-      <EquitySparkline curve={cache?.daily_pnl_curve_30d ?? null} />
+      {/* Equity sparkline removed 2026-08-21 (PERF-CHART-CONSOLIDATE) —
+          the single big chart with 7d/30d/90d toggle lower on the page
+          replaces both the sparkline here and the 90d card. */}
 
       {/* ── System status — one small line at the bottom ─────────────
           Trivia that used to occupy 4 hero tiles is compressed here.

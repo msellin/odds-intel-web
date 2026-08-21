@@ -188,7 +188,7 @@ async function LoggedInPerformanceSection({
         modelV2Stats={modelV2Stats}
         calibrated={calibrated}
       />
-      <PerformanceExtras data={extras} />
+      <PerformanceExtras data={extras} cache={cache} />
       <PerformanceHistory
         fullBets={fullBets}
         recentSettled={null}
@@ -278,7 +278,7 @@ export default async function PerformancePage() {
           fallback={
             <>
               <PerformanceClient {...cachedClientProps} />
-              <PerformanceExtras data={extras} />
+              <PerformanceExtras data={extras} cache={cache} />
               <PerformanceHistory
                 fullBets={null}
                 recentSettled={null}
@@ -303,7 +303,7 @@ export default async function PerformancePage() {
       ) : (
         <>
           <PerformanceClient {...cachedClientProps} />
-          <PerformanceExtras data={extras} />
+          <PerformanceExtras data={extras} cache={cache} />
           <PerformanceHistory
             fullBets={null}
             recentSettled={recentSettled}
