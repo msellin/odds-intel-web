@@ -3280,6 +3280,27 @@ export const CALIBRATED_SINCE = "2026-05-04";
 export const PUBLIC_MATURITY_LABELS = ["calibrated", "beta", "active"] as const;
 export const CALIBRATED_PUBLIC_MARKETS = ["1x2", "o/u", "over_under_25", "btts"] as const;
 
+// PERF-COHORT-FRESH-BOTS (2026-08-21): the /performance history filter
+// used to key on the cached `getAllBotsFromDB` (30-min TTL) — after a
+// retirement it took up to 30 min for the just-retired bots to disappear
+// from the ledger, while the hero (using a fresh DB join in the same
+// query as the stats) already showed the new state. Result: history
+// counted more settled bets than the hero for the same "same cohort"
+// language. This helper does an uncached fresh read of the current
+// public-cohort bot names so the two always reconcile immediately after
+// a retirement lands. Called on every /performance request but the query
+// is tiny (43-row scan) — total cost < 5ms.
+export async function getPublicCohortBotNames(): Promise<Set<string>> {
+  const supabase = createSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("bots")
+    .select("name")
+    .is("retired_at", null)
+    .in("maturity_label", PUBLIC_MATURITY_LABELS as unknown as string[]);
+  if (error || !data) return new Set();
+  return new Set((data as Array<{ name: string }>).map((r) => r.name));
+}
+
 const _getCalibratedHeadlineStatsUncached =
   async (): Promise<CalibratedHeadlineStats> => {
     const admin = createSupabaseAdmin();

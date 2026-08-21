@@ -19,7 +19,7 @@ import {
   getPublicPerformanceExtras,
   getModelV2Stats,
   getCalibratedHeadlineStats,
-  PUBLIC_MATURITY_LABELS,
+  getPublicCohortBotNames,
   CALIBRATED_PUBLIC_MARKETS,
   CALIBRATED_SINCE,
 } from "@/lib/engine-data";
@@ -159,11 +159,12 @@ async function LoggedInPerformanceSection({
   // history table shows the exact same cohort so the row count reconciles
   // with the headline. Filter mirrors getCalibratedHeadlineStats (kept in
   // one place via the exported constants).
-  const publicBotNames = new Set(
-    botsDB
-      .filter((b) => PUBLIC_MATURITY_LABELS.includes(b.maturityLabel as (typeof PUBLIC_MATURITY_LABELS)[number]))
-      .map((b) => b.name),
-  );
+  //
+  // PERF-COHORT-FRESH-BOTS (2026-08-21): read the bot-name allowlist fresh
+  // from DB (not from the 30-min-cached botsDB) so newly-retired bots
+  // disappear from the ledger immediately — otherwise history lagged hero
+  // by up to 30 min after a retirement.
+  const publicBotNames = await getPublicCohortBotNames();
   const publicMarkets = new Set<string>(CALIBRATED_PUBLIC_MARKETS as unknown as string[]);
   const sinceIso = `${CALIBRATED_SINCE}T00:00:00Z`;
   const cohortBets = sanitizedBets.filter(
