@@ -90,7 +90,7 @@ interface ShadowBetRow {
   result: string | null;
   matches: {
     date: string;
-    leagues: { name: string | null; country: string | null } | null;
+    leagues: { name: string | null; country: string | null; tier: number | null } | null;
     home_team: { name: string | null } | null;
     away_team: { name: string | null } | null;
   } | null;
@@ -142,7 +142,7 @@ export default async function ShadowBotDetailPage({
        edge_percent, recommended_bookmaker, pick_time, result,
        matches!inner (
          date,
-         leagues ( name, country ),
+         leagues ( name, country, tier ),
          home_team:teams!matches_home_team_id_fkey ( name ),
          away_team:teams!matches_away_team_id_fkey ( name )
        )`
@@ -266,9 +266,12 @@ export default async function ShadowBotDetailPage({
           </div>
         ) : (
           <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]">
-            <div className="hidden border-b border-white/[0.04] px-4 py-2 text-[10px] font-mono uppercase tracking-wider text-neutral-500 sm:grid sm:grid-cols-[100px_1fr_100px_60px_60px_75px_90px_65px]">
+            <div className="hidden border-b border-white/[0.04] px-4 py-2 text-[10px] font-mono uppercase tracking-wider text-neutral-500 sm:grid sm:grid-cols-[95px_1fr_45px_95px_55px_55px_70px_85px_60px]">
               <div>Kickoff</div>
               <div>Match</div>
+              <div className="text-center" title="League tier at time of pick. T1 = Big-5 + top leagues, T4 = amateur / lower tiers.">
+                Tier
+              </div>
               <div>Pick</div>
               <div className="text-right">Odds</div>
               <div className="text-right">Prob</div>
@@ -309,9 +312,21 @@ function BetRow({ bet: b, isFirst, threshold }: { bet: ShadowBetRow; isFirst: bo
     ? (1 + threshold) / modelProb
     : null;
 
+  const tier = b.matches?.leagues?.tier ?? null;
+  const tierTone =
+    tier === 1
+      ? "bg-emerald-500/15 text-emerald-300"
+      : tier === 2
+      ? "bg-sky-500/15 text-sky-300"
+      : tier === 3
+      ? "bg-amber-500/15 text-amber-300"
+      : tier === 4
+      ? "bg-fuchsia-500/15 text-fuchsia-300"
+      : "bg-neutral-500/15 text-neutral-400";
+
   return (
     <li
-      className={`px-4 py-3 text-sm sm:grid sm:grid-cols-[100px_1fr_100px_60px_60px_75px_90px_65px] sm:items-center sm:gap-3 sm:py-2 ${
+      className={`px-4 py-3 text-sm sm:grid sm:grid-cols-[95px_1fr_45px_95px_55px_55px_70px_85px_60px] sm:items-center sm:gap-3 sm:py-2 ${
         isFirst ? "" : "border-t border-white/[0.04]"
       }`}
     >
@@ -329,6 +344,14 @@ function BetRow({ bet: b, isFirst, threshold }: { bet: ShadowBetRow; isFirst: bo
           {b.matches?.leagues?.country ? `${b.matches.leagues.country} · ` : ""}
           {b.matches?.leagues?.name ?? ""}
         </div>
+      </div>
+      <div className="mt-0.5 text-center sm:mt-0">
+        <span
+          className={`inline-block rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold ${tierTone}`}
+          title={tier ? `Tier ${tier}` : "Tier unknown"}
+        >
+          {tier ? `T${tier}` : "—"}
+        </span>
       </div>
       <div className="mt-0.5 text-sm text-emerald-300 sm:mt-0">
         {formatPickLabel(b.market, b.selection)}
