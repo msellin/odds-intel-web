@@ -110,6 +110,9 @@ const SHADOW_BOTS: Array<{
 
 interface ShadowBet {
   bot_id: string;
+  match_id: string;
+  market: string;
+  selection: string;
   odds_at_pick: number | null;
   result: string | null;
   pick_time: string;
@@ -249,12 +252,28 @@ export default async function ShadowBotsPage() {
 
   const { data: betsRaw } = await db
     .from("shadow_bets")
-    .select("bot_id, odds_at_pick, result, pick_time")
+    .select("bot_id, match_id, market, selection, odds_at_pick, result, pick_time")
     .in(
       "bot_id",
       bots.map((b) => b.id)
     );
-  const bets = (betsRaw ?? []) as ShadowBet[];
+  const rawBets = (betsRaw ?? []) as ShadowBet[];
+
+  // SHADOW-BOTS-STATS-DEDUP-2026-08-22: multi-cohort writes duplicate rows
+  // for the same (bot × match × market × selection) as they persist across
+  // refresh windows. Portfolio ROI / hit rate / picks count should reflect
+  // UNIQUE picks, not the underlying cohort rows. Otherwise a €10 win at
+  // 2.5 that persisted for 5 cohorts counts as €50 stake with €75 pnl —
+  // 150% ROI on a single bet. Dedup here so stats math is honest.
+  const statsDedup = new Map<string, ShadowBet>();
+  for (const r of rawBets) {
+    const key = `${r.bot_id}|${r.match_id}|${r.market}|${r.selection}`;
+    const existing = statsDedup.get(key);
+    if (!existing || r.pick_time < existing.pick_time) {
+      statsDedup.set(key, r);
+    }
+  }
+  const bets = Array.from(statsDedup.values());
 
   // Upcoming picks — the "single place to look when placing real money"
   // section. All pending picks from ACTIVE bots on matches that haven't
