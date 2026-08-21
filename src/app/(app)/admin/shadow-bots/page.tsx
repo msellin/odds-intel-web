@@ -26,46 +26,87 @@ const MIN_SETTLED_FOR_DECISION = 50;
 const MIN_DAYS_FOR_DECISION = 14;
 
 // Compact per-bot config: DB name → human title + one-line strategy summary.
-const SHADOW_BOTS: Array<{ name: string; title: string; subtitle: string }> = [
+// backtestN + backtestRoi = historical simulation over 2026-05-04 → today at
+// each bot's exact config. Shown next to live shadow performance so operator
+// can spot signal drift.
+const SHADOW_BOTS: Array<{
+  name: string;
+  title: string;
+  subtitle: string;
+  backtestN: number;
+  backtestRoi: number;
+}> = [
+  // Active bots first
   {
-    name: "bot_no_pin_shadow_v1",
-    title: "Matches without Pinnacle",
-    subtitle: "1X2 · edge ≥ 8%",
+    name: "bot_no_pin_home_v1",
+    title: "1X2 home · matches without Pinnacle",
+    subtitle: "1X2 home · edge ≥ 8%",
+    backtestN: 39,
+    backtestRoi: 32.7,
   },
   {
     name: "bot_sweep_1x2_home_v1",
     title: "Home wins · tier 2-3",
     subtitle: "1X2 home · edge ≥ 10%",
+    backtestN: 501,
+    backtestRoi: 9.3,
   },
   {
     name: "bot_sweep_1x2_draw_v1",
     title: "Draws · tier 2-3",
     subtitle: "1X2 draw · edge ≥ 5%",
+    backtestN: 714,
+    backtestRoi: 7.3,
   },
   {
     name: "bot_sweep_btts_yes_v1",
     title: "Both teams to score · tier 2-3",
     subtitle: "BTTS yes · edge ≥ 5%",
+    backtestN: 318,
+    backtestRoi: 5.4,
   },
   {
     name: "bot_sweep_ou25_v1",
     title: "OU 2.5 · line-shopping vs Pinnacle",
     subtitle: "OU 2.5 · edge ≥ 8% · no model dep",
+    backtestN: 1846,
+    backtestRoi: 11.0,
   },
   {
     name: "bot_sweep_ou35_v1",
     title: "OU 3.5 · line-shopping vs Pinnacle",
     subtitle: "OU 3.5 · edge ≥ 8% · no model dep",
+    backtestN: 1740,
+    backtestRoi: 7.4,
   },
   {
     name: "bot_pin_1x2_home_v1",
     title: "1X2 home · tier 1-2 line-shopping",
     subtitle: "1X2 home · edge ≥ 12% · tiers 1-2",
+    backtestN: 1345,
+    backtestRoi: 13.3,
   },
   {
     name: "bot_pin_1x2_draw_tier4_v1",
     title: "1X2 draws · tier 4 line-shopping",
     subtitle: "1X2 draw · edge ≥ 5% · tier 4 only",
+    backtestN: 349,
+    backtestRoi: 12.4,
+  },
+  // Retired bots — historical data only, kept for reference
+  {
+    name: "bot_no_pin_shadow_v1",
+    title: "1X2 · matches without Pinnacle (retired 2026-08-21)",
+    subtitle: "1X2 any selection · edge ≥ 8%",
+    backtestN: 121,
+    backtestRoi: -4.3,
+  },
+  {
+    name: "bot_acca_leg_shadow",
+    title: "Acca legs as singles (retired 2026-08-21)",
+    subtitle: "Combo-leg audit · killed by ROI gate",
+    backtestN: 532,
+    backtestRoi: -9.2,
   },
 ];
 
@@ -79,12 +120,16 @@ interface BotRow {
   id: string;
   name: string;
   maturity_label: string | null;
+  retired_at: string | null;
 }
 interface Summary {
   name: string;
   title: string;
   subtitle: string;
   maturity: string | null;
+  retiredAt: string | null;
+  backtestN: number;
+  backtestRoi: number;
   total: number;
   pending: number;
   won: number;
@@ -154,6 +199,9 @@ function summarise(cfg: (typeof SHADOW_BOTS)[number], bot: BotRow, bets: ShadowB
     title: cfg.title,
     subtitle: cfg.subtitle,
     maturity: bot.maturity_label,
+    retiredAt: bot.retired_at,
+    backtestN: cfg.backtestN,
+    backtestRoi: cfg.backtestRoi,
     total: mine.length,
     pending,
     won,
@@ -186,7 +234,7 @@ export default async function ShadowBotsPage() {
   const names = SHADOW_BOTS.map((b) => b.name);
   const { data: botsRaw } = await db
     .from("bots")
-    .select("id, name, maturity_label")
+    .select("id, name, maturity_label, retired_at")
     .in("name", names);
   const bots = (botsRaw ?? []) as BotRow[];
 
@@ -268,12 +316,32 @@ export default async function ShadowBotsPage() {
         </section>
       ) : null}
 
-      {/* 2×2 grid of bot cards */}
-      <section className="grid gap-3 md:grid-cols-2">
-        {summaries.map((s) => (
-          <BotCard key={s.name} s={s} />
-        ))}
-      </section>
+      {/* Active bots first, retired bots in a separate muted section */}
+      {(() => {
+        const active = summaries.filter((s) => !s.retiredAt);
+        const retired = summaries.filter((s) => s.retiredAt);
+        return (
+          <>
+            <section className="grid gap-3 md:grid-cols-2">
+              {active.map((s) => (
+                <BotCard key={s.name} s={s} />
+              ))}
+            </section>
+            {retired.length > 0 && (
+              <>
+                <h2 className="mt-8 mb-3 text-xs font-mono uppercase tracking-widest text-neutral-500">
+                  Retired · historical data only
+                </h2>
+                <section className="grid gap-3 md:grid-cols-2 opacity-60">
+                  {retired.map((s) => (
+                    <BotCard key={s.name} s={s} />
+                  ))}
+                </section>
+              </>
+            )}
+          </>
+        );
+      })()}
 
       <p className="mt-10 text-xs text-neutral-500">
         <Link href="/admin/ops" className="underline underline-offset-4 hover:text-neutral-300">
@@ -294,17 +362,28 @@ function BotCard({ s }: { s: Summary }) {
   const roiTone =
     s.status.kind === "promote" ? "good" : s.status.kind === "retire" ? "bad" : "neutral";
 
+  const isRetired = !!s.retiredAt;
   return (
     <Link
       href={`/admin/shadow-bots/${s.name}`}
-      className="group flex flex-col justify-between rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 transition hover:border-white/20 hover:bg-white/[0.04]"
+      className={`group flex flex-col justify-between rounded-xl border p-4 transition ${
+        isRetired
+          ? "border-rose-500/20 bg-rose-500/[0.03] hover:bg-rose-500/[0.06]"
+          : "border-white/[0.06] bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.04]"
+      }`}
     >
       {/* Header row: title + primary metric */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h3 className="truncate text-sm font-semibold text-neutral-100">{s.title}</h3>
-            <StatusPill status={s.status} />
+            {isRetired ? (
+              <span className="rounded-full bg-rose-500/20 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-rose-300">
+                Retired
+              </span>
+            ) : (
+              <StatusPill status={s.status} />
+            )}
           </div>
           <p className="mt-0.5 text-xs text-neutral-500">{s.subtitle}</p>
         </div>
@@ -382,6 +461,25 @@ function BotCard({ s }: { s: Summary }) {
         <Dot className="bg-sky-400" />
         <span className="text-neutral-400">
           <span className="text-neutral-200">{s.pending}</span>P
+        </span>
+        <span
+          className="ml-auto text-[10px] text-neutral-500"
+          title="Historical backtest — bot's config applied to matches from 2026-05-04 → today (same window as landing/performance). Reference for what to expect once live data accumulates."
+        >
+          past{" "}
+          <span
+            className={`tabular-nums font-medium ${
+              s.backtestRoi >= 3
+                ? "text-emerald-400/80"
+                : s.backtestRoi <= -3
+                ? "text-rose-400/80"
+                : "text-neutral-400"
+            }`}
+          >
+            {s.backtestRoi >= 0 ? "+" : ""}
+            {s.backtestRoi.toFixed(1)}%
+          </span>
+          <span className="text-neutral-600"> n={s.backtestN}</span>
         </span>
       </div>
     </Link>
