@@ -88,6 +88,7 @@ interface ShadowBetRow {
   recommended_bookmaker: string | null;
   pick_time: string;
   result: string | null;
+  clv: number | null;
   matches: {
     date: string;
     leagues: { name: string | null; country: string | null; tier: number | null } | null;
@@ -139,7 +140,7 @@ export default async function ShadowBotDetailPage({
     .from("shadow_bets")
     .select(
       `id, match_id, market, selection, odds_at_pick, model_probability,
-       edge_percent, recommended_bookmaker, pick_time, result,
+       edge_percent, recommended_bookmaker, pick_time, result, clv,
        matches!inner (
          date,
          leagues ( name, country, tier ),
@@ -183,6 +184,15 @@ export default async function ShadowBotDetailPage({
   const roi = totalStake > 0 ? (pnl / totalStake) * 100 : 0;
   const hitRate = settled > 0 ? (wins.length / settled) * 100 : 0;
   const hasROI = settled > 0;
+  // CLV populated at settlement (settled shadow bets have closing_odds).
+  // Positive = market moved toward our price after we recorded it — evidence
+  // the shown odds were reachable and the edge was real signal.
+  const clvVals = bets
+    .map((b) => (b.clv != null ? Number(b.clv) : null))
+    .filter((v): v is number => v != null);
+  const avgClvPct = clvVals.length > 0
+    ? (clvVals.reduce((s, v) => s + v, 0) / clvVals.length) * 100
+    : null;
   const firstPick = bets.reduce<string | null>(
     (acc, b) => (!acc || b.pick_time < acc ? b.pick_time : acc),
     null
@@ -224,7 +234,7 @@ export default async function ShadowBotDetailPage({
 
       {/* Stats + progress panel */}
       <section className="mb-6 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
-        <div className="grid grid-cols-3 gap-4 sm:grid-cols-5">
+        <div className="grid grid-cols-3 gap-4 sm:grid-cols-6">
           <Stat label="Picks" value={bets.length.toString()} />
           <Stat label="Awaiting" value={pending.length.toString()} />
           <Stat label="Settled" value={settled.toString()} />
@@ -232,6 +242,16 @@ export default async function ShadowBotDetailPage({
             label="Hit rate"
             value={hasROI ? `${hitRate.toFixed(0)}%` : "—"}
             faded={!hasROI}
+          />
+          <Stat
+            label="Avg CLV"
+            value={avgClvPct != null
+              ? `${avgClvPct >= 0 ? "+" : ""}${avgClvPct.toFixed(1)}%`
+              : "—"}
+            faded={avgClvPct == null}
+            tone={avgClvPct != null
+              ? (avgClvPct >= 3 ? "good" : avgClvPct <= -3 ? "bad" : "neutral")
+              : "neutral"}
           />
           <Stat
             label="ROI"

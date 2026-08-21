@@ -116,6 +116,7 @@ interface ShadowBet {
   odds_at_pick: number | null;
   result: string | null;
   pick_time: string;
+  clv: number | null;
 }
 interface BotRow {
   id: string;
@@ -141,6 +142,8 @@ interface Summary {
   stake: number;
   roi: number;
   hitRate: number;
+  avgClvPct: number | null;
+  clvCount: number;
   observationDays: number;
   status: BotStatus;
 }
@@ -166,6 +169,14 @@ function summarise(cfg: (typeof SHADOW_BOTS)[number], bot: BotRow, bets: ShadowB
       .reduce((s, b) => s + (Number(b.odds_at_pick ?? 0) - 1) * STAKE, 0) - lost * STAKE;
   const roi = stake > 0 ? (pnl / stake) * 100 : 0;
   const hitRate = settled > 0 ? (won / settled) * 100 : 0;
+  // CLV populated at settlement (settled shadow bets only). Skip rows
+  // where clv is null (still pending or capture failed).
+  const clvVals = mine
+    .map((b) => (b.clv != null ? Number(b.clv) : null))
+    .filter((v): v is number => v != null);
+  const avgClvPct = clvVals.length > 0
+    ? (clvVals.reduce((s, v) => s + v, 0) / clvVals.length) * 100
+    : null;
 
   const first = mine.reduce<string | null>(
     (acc, b) => (!acc || b.pick_time < acc ? b.pick_time : acc),
@@ -213,6 +224,8 @@ function summarise(cfg: (typeof SHADOW_BOTS)[number], bot: BotRow, bets: ShadowB
     stake,
     roi,
     hitRate,
+    avgClvPct,
+    clvCount: clvVals.length,
     observationDays,
     status,
   };
@@ -252,7 +265,7 @@ export default async function ShadowBotsPage() {
 
   const { data: betsRaw } = await db
     .from("shadow_bets")
-    .select("bot_id, match_id, market, selection, odds_at_pick, result, pick_time")
+    .select("bot_id, match_id, market, selection, odds_at_pick, result, pick_time, clv")
     .in(
       "bot_id",
       bots.map((b) => b.id)
@@ -731,24 +744,44 @@ function BotCard({ s }: { s: Summary }) {
         <span className="text-neutral-400">
           <span className="text-neutral-200">{s.pending}</span>P
         </span>
-        <span
-          className="ml-auto text-[10px] text-neutral-500"
-          title="Historical backtest — bot's config applied to matches from 2026-05-04 → today (same window as landing/performance). Reference for what to expect once live data accumulates."
-        >
-          past{" "}
+        <span className="ml-auto flex items-center gap-2 text-[10px] text-neutral-500">
+          {s.avgClvPct != null && s.clvCount > 0 && (
+            <span
+              title={`Avg CLV across ${s.clvCount} settled pick${s.clvCount === 1 ? "" : "s"}. Positive means the market moved TOWARD our price after we recorded it — evidence the odds were reachable and the edge was real.`}
+            >
+              clv{" "}
+              <span
+                className={`tabular-nums font-medium ${
+                  s.avgClvPct >= 3
+                    ? "text-emerald-400/80"
+                    : s.avgClvPct <= -3
+                    ? "text-rose-400/80"
+                    : "text-neutral-400"
+                }`}
+              >
+                {s.avgClvPct >= 0 ? "+" : ""}
+                {s.avgClvPct.toFixed(1)}%
+              </span>
+            </span>
+          )}
           <span
-            className={`tabular-nums font-medium ${
-              s.backtestRoi >= 3
-                ? "text-emerald-400/80"
-                : s.backtestRoi <= -3
-                ? "text-rose-400/80"
-                : "text-neutral-400"
-            }`}
+            title="Historical backtest — bot's config applied to matches from 2026-05-04 → today (same window as landing/performance). Reference for what to expect once live data accumulates."
           >
-            {s.backtestRoi >= 0 ? "+" : ""}
-            {s.backtestRoi.toFixed(1)}%
+            past{" "}
+            <span
+              className={`tabular-nums font-medium ${
+                s.backtestRoi >= 3
+                  ? "text-emerald-400/80"
+                  : s.backtestRoi <= -3
+                  ? "text-rose-400/80"
+                  : "text-neutral-400"
+              }`}
+            >
+              {s.backtestRoi >= 0 ? "+" : ""}
+              {s.backtestRoi.toFixed(1)}%
+            </span>
+            <span className="text-neutral-600"> n={s.backtestN}</span>
           </span>
-          <span className="text-neutral-600"> n={s.backtestN}</span>
         </span>
       </div>
     </Link>
