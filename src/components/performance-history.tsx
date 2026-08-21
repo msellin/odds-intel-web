@@ -169,6 +169,20 @@ function FullBetsTable({ bets, isElite }: { bets: FullBetItem[]; isElite: boolea
     leagueFilter !== "all",
   ].filter(Boolean).length;
 
+  // PERF-HISTORY-DYNAMIC-ROI (2026-08-21): stake is null on the wire for
+  // non-Elite users (Elite-only field on SanitizedBotBet). Recover it from
+  // pnl + odds + result so the toolbar can show ROI for any filter slice.
+  //   won:  pnl = stake * (odds - 1)  → stake = pnl / (odds - 1)
+  //   lost: pnl = -stake              → stake = -pnl
+  // Void bets (pnl = 0) get stake=0 and are excluded from ROI anyway.
+  const totalStake = settledFiltered.reduce((s, b) => {
+    if (b.stake != null) return s + b.stake;
+    if (b.result === "won" && b.odds > 1) return s + b.pnl / (b.odds - 1);
+    if (b.result === "lost") return s - b.pnl;
+    return s;
+  }, 0);
+  const roi = totalStake > 0 ? (100 * totalPnl) / totalStake : null;
+
   return (
     <div>
       {/* Toolbar */}
@@ -209,7 +223,10 @@ function FullBetsTable({ bets, isElite }: { bets: FullBetItem[]; isElite: boolea
           {/* PERF-HISTORY-COUNTS (2026-08-21): match the subhead — show
               settled bets as the primary number so the ROI headline (settled-
               only) reconciles with the table's row count. Pending shown as
-              a secondary "+ N pending" note only when non-zero. */}
+              a secondary "+ N pending" note only when non-zero.
+              PERF-HISTORY-DYNAMIC-ROI (2026-08-21): ROI updates live with
+              the filter selection — so filtering by "bot_v10_all" or
+              "1x2 only" shows that slice's ROI right in the toolbar. */}
           {settledFiltered.length} settled
           {filtered.length > settledFiltered.length && (
             <span className="text-muted-foreground/60">
@@ -222,6 +239,11 @@ function FullBetsTable({ bets, isElite }: { bets: FullBetItem[]; isElite: boolea
               <span className={totalPnl >= 0 ? "text-emerald-400" : "text-red-400"}>
                 {fmt(totalPnl)}€
               </span>
+              {roi != null && (
+                <span className={`ml-1 ${roi >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                  ({roi >= 0 ? "+" : ""}{roi.toFixed(2)}% ROI)
+                </span>
+              )}
               {" · "}
               {won}W {settledFiltered.length - won}L
             </>
