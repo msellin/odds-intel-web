@@ -101,13 +101,11 @@ const SHADOW_BOTS: Array<{
     backtestN: 121,
     backtestRoi: -4.3,
   },
-  {
-    name: "bot_acca_leg_shadow",
-    title: "Acca legs as singles (retired 2026-08-21)",
-    subtitle: "Combo-leg audit · killed by ROI gate",
-    backtestN: 532,
-    backtestRoi: -9.2,
-  },
+  // bot_acca_leg_shadow removed from index 2026-08-22 — never had a
+  // detail-page ALLOWED entry (was a historical audit of "would acca
+  // legs work as singles?" conducted before this page existed). Its
+  // 532 shadow_bets rows stay in the DB for reference but don't
+  // deserve UI real estate — the audit concluded -9.2% ROI, killed.
 ];
 
 interface ShadowBet {
