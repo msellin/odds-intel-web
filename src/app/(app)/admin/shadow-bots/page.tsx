@@ -264,7 +264,7 @@ export default async function ShadowBotsPage() {
     ? await db
         .from("shadow_bets")
         .select(
-          `id, bot_id, market, selection, odds_at_pick, model_probability,
+          `id, bot_id, match_id, market, selection, odds_at_pick, model_probability,
            edge_percent, recommended_bookmaker, pick_time, shadow_cohort,
            matches!inner (
              date,
@@ -277,11 +277,12 @@ export default async function ShadowBotsPage() {
         .eq("result", "pending")
         .gte("matches.date", new Date().toISOString())
         .order("matches(date)", { ascending: true })
-        .limit(200)
+        .limit(500)  // fetch more to survive dedup + still show ~200 unique
     : { data: [] };
   const upcomingRawArr = (upcomingRaw ?? []) as unknown as Array<{
     id: string;
     bot_id: string;
+    match_id: string;
     market: string;
     selection: string;
     odds_at_pick: number | null;
@@ -308,7 +309,7 @@ export default async function ShadowBotsPage() {
   // Subsequent cohorts just re-record the same pick with drifted odds.
   const upcomingDedupMap = new Map<string, typeof upcomingRawArr[number]>();
   for (const r of upcomingRawArr) {
-    const key = `${r.bot_id}|${r.matches?.date ?? ""}|${r.market}|${r.selection}`;
+    const key = `${r.bot_id}|${r.match_id}|${r.market}|${r.selection}`;
     const existing = upcomingDedupMap.get(key);
     if (!existing || r.pick_time < existing.pick_time) {
       upcomingDedupMap.set(key, r);
