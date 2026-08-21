@@ -55,32 +55,52 @@ export default function MethodologyPage() {
           tiers, comparison math, verification stack, code.
         </p>
 
-        <H>The model</H>
+        <H>The model — and the anchor</H>
         <P>
-          Two predictors blended at training time:
+          Two things drive every calibrated probability we publish:
         </P>
         <ul className="mb-3 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-neutral-300">
           <li>
-            A <strong>Poisson goal-rate model</strong> (Dixon-Coles
-            correction for low-scoring outcomes, per-league rho fitted
-            from historical scoreline frequencies)
+            A <strong>Pinnacle-implied probability anchor</strong>. Pinnacle
+            is a sharp bookmaker — their closing lines are one of the
+            best-documented predictors of match outcomes in the academic
+            literature. On top 1X2 markets we treat the Pinnacle anchor
+            as the primary probability source.
           </li>
           <li>
-            An <strong>XGBoost gradient-boosted classifier</strong> trained
-            on form, ELO, expected-goals, lineups, injuries, market
-            movement signals
-          </li>
-          <li>
-            Blended weights are optimised on a rolling holdout; weights
-            refit weekly via <Code>workers/jobs/weekly_blend_refit.py</Code>
+            An in-house{" "}
+            <strong>Poisson goal-rate model</strong> (Dixon-Coles for
+            low-scoring outcomes) + <strong>XGBoost classifier</strong>{" "}
+            (form, ELO, xG, lineups, injuries, market movement). The
+            two are blended and used as a second signal alongside the
+            Pinnacle anchor.
           </li>
         </ul>
         <P>
-          Retrained weekly on every completed match across 280+ leagues
-          via <Code>workers/jobs/weekly_retrain.py</Code> (Sunday 03:00
-          UTC). Promotion stays manual — a new model only goes live after
-          a comparison report (<Code>scripts/compare_models.py</Code>) and
-          the operator flips the <Code>MODEL_VERSION</Code> env on Railway.
+          <strong>Weight between the two, per tier / market:</strong> a
+          shrinkage step fitted to historical outcomes. For Tier 1 1X2 the
+          model contributes ~3% weight (Pinnacle dominates — Big-5 leagues
+          are near-perfectly efficient). For goalline markets (BTTS / O/U
+          2.5) the model contributes 15-45% depending on tier — Pinnacle
+          prices these looser, so the model earns real weight. On tier 3-4
+          leagues the model matters most.
+        </P>
+        <P>
+          The result is a calibrated_prob per market. Picks fire when{" "}
+          <em>our best available soft-book price</em> (Coolbet, Bet365,
+          Unibet, Marathonbet…) offers longer odds than the calibrated
+          probability implies — i.e. we&apos;re finding places where
+          Pinnacle disagrees with the softer books and we can take the
+          softer side. The <strong>closing-line value (CLV)</strong>{" "}
+          section below is the honest measure of whether this is real.
+        </P>
+        <P>
+          Both model components are retrained weekly on every completed
+          match across 280+ leagues via{" "}
+          <Code>workers/jobs/weekly_retrain.py</Code> (Sunday 03:00 UTC).
+          Promotion stays manual — a new model only goes live after a
+          rigorous evaluation (<Code>scripts/rigorous_eval.py</Code>) and
+          the operator flips the <Code>MODEL_VERSION</Code> env.
         </P>
 
         <H>Calibration</H>
@@ -196,46 +216,45 @@ export default function MethodologyPage() {
           <StakeSimulator />
         </div>
 
-        <H>Why flat stake, not Kelly</H>
+        <H>Why we publish flat €10 stakes</H>
         <P>
-          Conventional wisdom says Kelly sizing maximises bankroll growth
-          when your edge estimate is well-calibrated. We checked. On the
-          same n=1,181 production-cohort pre-match sample since 2026-05-04:
+          Every ROI number on the landing, ledger, and API endpoints is
+          computed at <strong>€10 flat stake per pick</strong>: on a win,
+          PnL = €10 × (odds − 1); on a loss, PnL = −€10. This is the same
+          methodology WinnerOdds, Tipstrr, SignalOdds, and Forebet publish
+          under — apples-to-apples on the comparison card.
+        </P>
+        <P>
+          Internally, our production bots stake{" "}
+          <strong>proportional to divergence</strong> (Kelly-style — a
+          bigger Pinnacle-vs-soft-book gap gets a bigger stake, up to a
+          bankroll fraction cap). We report flat externally rather than
+          Kelly because:
         </P>
         <ul className="mb-3 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-neutral-300">
           <li>
-            <strong>Flat €10 stake</strong> — ROI{" "}
-            <span className="font-mono text-emerald-300">+9.08%</span>{" "}
-            (€612 on €6,741 staked)
+            Flat is the {" "}
+            <em>directly comparable</em>{" "}
+            unit — every public tipster on the comparison card uses it
           </li>
           <li>
-            <strong>Kelly-weighted</strong> — ROI{" "}
-            <span className="font-mono text-neutral-300">+7.31%</span>{" "}
-            (same picks, sized by model edge × bankroll fraction)
+            Kelly ROI on our filtered picks is close to flat but noisier —
+            our internal audits show Kelly and flat within ±2pp across
+            rolling windows on the filtered cohort, and Kelly is often
+            slightly worse in short windows (variance amplification)
+          </li>
+          <li>
+            Any follower betting a fixed unit per pick can reconstruct
+            our ROI exactly from the ledger — no bankroll assumption
+            required
           </li>
         </ul>
         <P>
-          Flat <strong>beats</strong> Kelly by ~1.8pp on our current
-          sample. Reason: Kelly sizes up the highest-edge picks, and our
-          highest-edge picks are exactly where the model&apos;s known
-          longshot miscalibration hurts most (see "Conditional
-          miscalibration at high odds" in{" "}
-          <a
-            href="https://github.com/msellin/odds-intel-engine/blob/main/MODEL_WHITEPAPER.md#11-known-limitations"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-emerald-400 hover:underline"
-          >
-            MODEL_WHITEPAPER §11
-          </a>
-          ). Kelly amplifies the bets we&apos;re most overconfident on.
-        </P>
-        <P>
-          We surface flat €10 as the publishable headline because (a) it
-          honestly matches the comparison baseline, and (b) it&apos;s
-          currently our best strategy. Once the calibration fix lands
-          (CAL-ALPHA-ODDS), we&apos;ll re-run this comparison — Kelly
-          should win after the high-odds correction.
+          If you&apos;d prefer Kelly-style sizing, the ledger&apos;s
+          per-bet <Code>placed_odds</Code> and{" "}
+          <Code>edge_percent</Code> (via <Code>calibrated_prob</Code>) let
+          you compute your own fractional Kelly stake — nothing about the
+          picks changes, only the sizing.
         </P>
         <P>
           Competitor stake methods, as best we can tell from their

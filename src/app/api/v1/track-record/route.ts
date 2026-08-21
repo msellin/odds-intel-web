@@ -130,11 +130,16 @@ export async function GET(req: Request) {
   }
   const rows = (rowsRaw ?? []) as unknown as BetRow[];
 
-  // 2) aggregate stats (count, ROI, CLV) — full window, not just this page
+  // 2) aggregate stats (count, ROI, CLV) — full window, not just this page.
+  // FLAT-ROI-EVERYWHERE (2026-08-21): fetch odds_at_pick + result so ROI can
+  // be computed at €10 flat stake per pick, matching WinnerOdds / Tipstrr /
+  // SignalOdds / Forebet publication methodology. Internal Kelly stakes in
+  // simulated_bets.stake are ignored for this public endpoint.
+  const FLAT_STAKE = 10;
   const aggRes = await sb
     .from("simulated_bets")
     .select(
-      "stake, pnl, clv, clv_pinnacle, bots!inner(name, maturity_label)",
+      "odds_at_pick, result, clv, clv_pinnacle, bots!inner(name, maturity_label)",
       { count: "exact" }
     )
     .in("bots.maturity_label", PUBLIC_MATURITY_LABELS)
@@ -155,13 +160,15 @@ export async function GET(req: Request) {
   if (!aggRes.error && aggRes.data) {
     total = aggRes.count ?? aggRes.data.length;
     for (const r of aggRes.data as Array<{
-      stake: number | null;
-      pnl: number | null;
+      odds_at_pick: number | null;
+      result: string | null;
       clv: number | null;
       clv_pinnacle: number | null;
     }>) {
-      stake += Number(r.stake ?? 0);
-      pnl += Number(r.pnl ?? 0);
+      const odds = Number(r.odds_at_pick ?? 0);
+      // Flat €10 stake: win = 10*(odds-1), loss = -10.
+      pnl += r.result === "won" ? FLAT_STAKE * (odds - 1) : -FLAT_STAKE;
+      stake += FLAT_STAKE;
       if (r.clv != null) {
         const c = Number(r.clv);
         clvAnyVals.push(c);
@@ -187,33 +194,43 @@ export async function GET(req: Request) {
     : null;
   const clvN = clvAnyVals.length;
 
-  const bets = rows.map((r) => ({
-    id: r.id,
-    match_id: r.match_id,
-    kickoff_utc: r.matches?.date ?? null,
-    league: r.matches?.leagues?.name ?? null,
-    country: r.matches?.leagues?.country ?? null,
-    market: r.market,
-    selection: r.selection,
-    placed_odds: r.odds_at_pick,
-    bookmaker: r.recommended_bookmaker,
-    placed_at_utc: r.created_at,
-    closing_odds: r.closing_odds,
-    clv_any_pct: r.clv != null ? Number((Number(r.clv) * 100).toFixed(2)) : null,
-    clv_pin_pct:
-      r.clv_pinnacle != null
-        ? Number((Number(r.clv_pinnacle) * 100).toFixed(2))
+  const bets = rows.map((r) => {
+    // FLAT-ROI-EVERYWHERE (2026-08-21): per-bet stake/pnl in the public
+    // response are €10-flat so summing rows reconciles with meta.roi_pct.
+    // Kelly numbers from r.stake / r.pnl remain internal (admin dashboards).
+    const oddsN = r.odds_at_pick != null ? Number(r.odds_at_pick) : 0;
+    const flatStake = FLAT_STAKE;
+    const flatPnl = r.result === "won" ? FLAT_STAKE * (oddsN - 1)
+                    : r.result === "lost" ? -FLAT_STAKE
+                    : 0;  // void / pending — no PnL
+    return {
+      id: r.id,
+      match_id: r.match_id,
+      kickoff_utc: r.matches?.date ?? null,
+      league: r.matches?.leagues?.name ?? null,
+      country: r.matches?.leagues?.country ?? null,
+      market: r.market,
+      selection: r.selection,
+      placed_odds: r.odds_at_pick,
+      bookmaker: r.recommended_bookmaker,
+      placed_at_utc: r.created_at,
+      closing_odds: r.closing_odds,
+      clv_any_pct: r.clv != null ? Number((Number(r.clv) * 100).toFixed(2)) : null,
+      clv_pin_pct:
+        r.clv_pinnacle != null
+          ? Number((Number(r.clv_pinnacle) * 100).toFixed(2))
+          : null,
+      stake: flatStake,
+      pnl: Number(flatPnl.toFixed(2)),
+      result: r.result,
+      bot: r.bots?.name ?? null,
+      score: r.matches
+        ? r.matches.score_home != null && r.matches.score_away != null
+          ? `${r.matches.score_home}-${r.matches.score_away}`
+          : null
         : null,
-    stake: r.stake,
-    pnl: r.pnl,
-    result: r.result,
-    bot: r.bots?.name ?? null,
-    score: r.matches
-      ? r.matches.score_home != null && r.matches.score_away != null
-        ? `${r.matches.score_home}-${r.matches.score_away}`
-        : null
-      : null,
-  }));
+    };
+  });
 
   const meta = {
     since,
@@ -228,9 +245,9 @@ export async function GET(req: Request) {
     clv_coverage_pct: total > 0 ? Number(((100 * clvN) / total).toFixed(1)) : 0,
     clv_beat_pct: clvN > 0 ? Number(((100 * clvBeats) / clvN).toFixed(1)) : null,
     scope:
-      "pre-match strategies only (calibrated + beta + active maturity, no retired, no in-play bots), pre-match markets (1x2, OU 2.5, BTTS), settled only. Matches /performance's headline cohort.",
+      "pre-match strategies only (calibrated + beta + active maturity, no retired, no in-play bots), pre-match markets (1x2, OU 2.5, BTTS), settled only. Matches /performance's headline cohort. ROI computed at €10 flat stake per pick — matches WinnerOdds / Tipstrr / SignalOdds / Forebet publication methodology so head-to-head comparison is apples-to-apples.",
     notes:
-      "Every row is an independently re-settleable bet. Use match_id (UUID) + kickoff_utc + market + selection + placed_at_utc to verify against ESPN/Flashscore. Track record published unfiltered — losing bets are present.",
+      "Every row is an independently re-settleable bet. Use match_id (UUID) + kickoff_utc + market + selection + placed_at_utc to verify against ESPN/Flashscore. Track record published unfiltered — losing bets are present. `stake` and `pnl` per row are €10-flat; internal bots stake proportional to divergence (Kelly) but that's admin-only.",
     next_cursor:
       bets.length === limit ? bets[bets.length - 1]?.placed_at_utc : null,
   };

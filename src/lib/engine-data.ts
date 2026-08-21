@@ -3305,6 +3305,14 @@ export const CALIBRATED_SINCE = "2026-05-04";
 export const PUBLIC_MATURITY_LABELS = ["calibrated", "beta", "active"] as const;
 export const CALIBRATED_PUBLIC_MARKETS = ["1x2", "o/u", "over_under_25", "btts"] as const;
 
+// FLAT-ROI-EVERYWHERE (2026-08-21): all public-facing ROI numbers use €10
+// flat stake per pick, matching the methodology every public tipster
+// comparison service (WinnerOdds, Tipstrr, SignalOdds, Forebet) publishes
+// under. Internal bots continue staking Kelly (proportional to divergence)
+// — this constant is ONLY for representation on the ledger/hero/tiles.
+// Kept as its own export so callers can compute matching numbers.
+export const FLAT_STAKE_EUR = 10;
+
 // PERF-COHORT-FRESH-BOTS (2026-08-21): the /performance history filter
 // used to key on the cached `getAllBotsFromDB` (30-min TTL) — after a
 // retirement it took up to 30 min for the just-retired bots to disappear
@@ -3346,10 +3354,15 @@ const _getCalibratedHeadlineStatsUncached =
     // rule + the /performance ledger's getPublicCohortBotNames filter.
     // Prevents the "hero says 1025 / leaderboard says 8 proven / ledger
     // dropdown shows 16 bots" three-way inconsistency.
+    // FLAT-ROI-EVERYWHERE (2026-08-21): fetch odds_at_pick + result so the
+    // ROI numerator can be computed as €10-flat-stake PnL. Internal bot
+    // stakes (r.stake) stay Kelly-weighted; we ignore them for the public
+    // headline and use flat instead so this reconciles with WinnerOdds,
+    // Tipstrr, SignalOdds, Forebet — all of which publish flat-stake ROI.
     const { data, error } = await admin
       .from("simulated_bets")
       .select(
-        "created_at, stake, pnl, clv, clv_pinnacle, bots!inner(name, maturity_label)",
+        "created_at, odds_at_pick, result, clv, clv_pinnacle, bots!inner(name, maturity_label)",
       )
       .in("bots.maturity_label", PUBLIC_MATURITY_LABELS as unknown as string[])
       .not("bots.name", "like", "inplay_%")
@@ -3369,24 +3382,26 @@ const _getCalibratedHeadlineStatsUncached =
       };
     }
 
-    let n = 0, stake = 0, pnl = 0;
-    let n30 = 0, stake30 = 0, pnl30 = 0;
+    let n = 0, pnlFlat = 0;
+    let n30 = 0, pnlFlat30 = 0;
     let clvBeats = 0;
     let clvSum = 0;
     const clvVals: number[] = [];
     const clvPinVals: number[] = [];
     for (const r of data as Array<{
       created_at: string;
-      stake: number | string | null;
-      pnl: number | string | null;
+      odds_at_pick: number | string | null;
+      result: string | null;
       clv: number | string | null;
       clv_pinnacle: number | string | null;
     }>) {
-      const s = Number(r.stake ?? 0);
-      const p = Number(r.pnl ?? 0);
+      const odds = Number(r.odds_at_pick ?? 0);
+      // Flat €10 stake — win = 10*(odds - 1), loss = -10.
+      const pFlat = r.result === "won"
+        ? FLAT_STAKE_EUR * (odds - 1)
+        : -FLAT_STAKE_EUR;
       n += 1;
-      stake += s;
-      pnl += p;
+      pnlFlat += pFlat;
       if (r.clv != null) {
         const c = Number(r.clv) * 100;
         clvVals.push(c);
@@ -3398,10 +3413,11 @@ const _getCalibratedHeadlineStatsUncached =
       }
       if (r.created_at >= cutoff30) {
         n30 += 1;
-        stake30 += s;
-        pnl30 += p;
+        pnlFlat30 += pFlat;
       }
     }
+    const stakeFlat = n * FLAT_STAKE_EUR;
+    const stakeFlat30 = n30 * FLAT_STAKE_EUR;
 
     function median(xs: number[]): number | null {
       if (xs.length === 0) return null;
@@ -3415,9 +3431,9 @@ const _getCalibratedHeadlineStatsUncached =
     return {
       allTime: {
         n,
-        stakeEur: Number(stake.toFixed(2)),
-        pnlEur: Number(pnl.toFixed(2)),
-        roiPct: stake > 0 ? Number(((100 * pnl) / stake).toFixed(2)) : null,
+        stakeEur: Number(stakeFlat.toFixed(2)),
+        pnlEur: Number(pnlFlat.toFixed(2)),
+        roiPct: stakeFlat > 0 ? Number(((100 * pnlFlat) / stakeFlat).toFixed(2)) : null,
         medianClvPct: median(clvVals),
         meanClvPct: clvVals.length
           ? Number((clvSum / clvVals.length).toFixed(2))
@@ -3431,7 +3447,7 @@ const _getCalibratedHeadlineStatsUncached =
       },
       last30d: {
         n: n30,
-        roiPct: stake30 > 0 ? Number(((100 * pnl30) / stake30).toFixed(2)) : null,
+        roiPct: stakeFlat30 > 0 ? Number(((100 * pnlFlat30) / stakeFlat30).toFixed(2)) : null,
       },
     };
   };
