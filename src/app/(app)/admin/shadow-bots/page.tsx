@@ -238,7 +238,7 @@ export default async function ShadowBotsPage() {
 
   if (bots.length === 0) {
     return (
-      <div className="mx-auto max-w-4xl px-6 py-12">
+      <div className="mx-auto max-w-6xl px-6 py-12">
         <h1 className="text-xl font-semibold">Shadow bots</h1>
         <p className="mt-4 text-sm text-amber-400">
           No shadow bots registered yet — migrations 271 &amp; 272 haven&apos;t been applied.
@@ -339,7 +339,7 @@ export default async function ShadowBotsPage() {
   const nRetired = summaries.filter((s) => s.retiredAt).length;
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-10">
+    <div className="mx-auto max-w-6xl px-6 py-10">
       {/* Header — small, admin-tool weight, one-line meta */}
       <header className="mb-6">
         <h1 className="text-xl font-semibold text-neutral-100">Shadow bots</h1>
@@ -398,7 +398,7 @@ export default async function ShadowBotsPage() {
             </div>
           </summary>
           <div className="border-t border-emerald-500/10">
-            <div className="hidden border-b border-white/[0.04] px-4 py-2 text-[10px] font-mono uppercase tracking-wider text-neutral-500 sm:grid sm:grid-cols-[85px_1fr_40px_130px_95px_55px_55px_65px_80px]">
+            <div className="hidden border-b border-white/[0.04] px-4 py-2 text-[10px] font-mono uppercase tracking-wider text-neutral-500 sm:grid sm:grid-cols-[85px_minmax(0,1fr)_40px_115px_90px_55px_50px_70px_75px]">
               <div>Kickoff</div>
               <div>Match</div>
               <div className="text-center">Tier</div>
@@ -432,7 +432,7 @@ export default async function ShadowBotsPage() {
                 return (
                   <li
                     key={u.id}
-                    className={`px-4 py-2 text-sm sm:grid sm:grid-cols-[85px_1fr_40px_130px_95px_55px_55px_65px_80px] sm:items-center sm:gap-3 ${
+                    className={`px-4 py-2 text-sm sm:grid sm:grid-cols-[85px_minmax(0,1fr)_40px_115px_90px_55px_50px_70px_75px] sm:items-center sm:gap-3 ${
                       i > 0 ? "border-t border-white/[0.04]" : ""
                     }`}
                   >
