@@ -96,6 +96,11 @@ export async function GET(req: Request) {
   const sb = adminClient();
 
   // 1) page of bets
+  // PERF-COHORT-PREMATCH-ONLY (2026-08-21): exclude inplay bots so this
+  // matches /performance's getCalibratedHeadlineStats + the leaderboard's
+  // PERFORMANCE-PUBLIC-PREMATCH-ONLY rule. Landing pulls its ROI headline
+  // from this endpoint, so this drives the landing's "N verified pre-match
+  // picks" number too.
   let q = sb
     .from("simulated_bets")
     .select(
@@ -108,6 +113,7 @@ export async function GET(req: Request) {
        bots!inner ( name, maturity_label )`
     )
     .in("bots.maturity_label", PUBLIC_MATURITY_LABELS)
+    .not("bots.name", "like", "inplay_%")
     .in("market", PRE_MATCH_MARKETS)
     .in("result", ["won", "lost"])
     .gte("created_at", `${since}T00:00:00Z`)
@@ -128,10 +134,11 @@ export async function GET(req: Request) {
   const aggRes = await sb
     .from("simulated_bets")
     .select(
-      "stake, pnl, clv, clv_pinnacle, bots!inner(maturity_label)",
+      "stake, pnl, clv, clv_pinnacle, bots!inner(name, maturity_label)",
       { count: "exact" }
     )
     .in("bots.maturity_label", PUBLIC_MATURITY_LABELS)
+    .not("bots.name", "like", "inplay_%")
     .in("market", PRE_MATCH_MARKETS)
     .in("result", ["won", "lost"])
     .gte("created_at", `${since}T00:00:00Z`);
@@ -221,7 +228,7 @@ export async function GET(req: Request) {
     clv_coverage_pct: total > 0 ? Number(((100 * clvN) / total).toFixed(1)) : 0,
     clv_beat_pct: clvN > 0 ? Number(((100 * clvBeats) / clvN).toFixed(1)) : null,
     scope:
-      "production strategies (calibrated + beta + active maturity, no retired), pre-match markets (1x2, OU 2.5, BTTS), settled only",
+      "pre-match strategies only (calibrated + beta + active maturity, no retired, no in-play bots), pre-match markets (1x2, OU 2.5, BTTS), settled only. Matches /performance's headline cohort.",
     notes:
       "Every row is an independently re-settleable bet. Use match_id (UUID) + kickoff_utc + market + selection + placed_at_utc to verify against ESPN/Flashscore. Track record published unfiltered — losing bets are present.",
     next_cursor:
