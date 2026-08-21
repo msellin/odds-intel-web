@@ -1769,7 +1769,7 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
     .select(
       `id, match_id, market, selection, odds_at_pick, pick_time, stake,
        model_probability, calibrated_prob, edge_percent, combo_legs, admin_offered_at,
-       bot:bot_id(id, name),
+       bot:bot_id(id, name, maturity_label, retired_at),
        match:match_id(id, date, status,
          home_team:home_team_id(name),
          away_team:away_team_id(name),
@@ -1793,7 +1793,32 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
   // legMatchInfo is populated below.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows = bets as any[];
+  // ADMIN-PLACE-COHORT-CLEANUP (2026-08-21): filter out three classes of
+  // rows that shouldn't be on the operator's placement queue — surface
+  // now describes the same cohort as /picks + /performance (pre-match
+  // production bots × standard markets):
+  //  (a) retired bots — even after ACCA-RETIRED-LEAK-FIX-2026-08-16 stopped
+  //      the source, mid-flight retirements leave pending bets on the
+  //      queue for hours/days until the match kicks off.
+  //  (b) inplay bots — different placement mechanics (live odds, seconds
+  //      latency) that belong on their own operator surface if we ever
+  //      want it, not mixed with the prematch queue.
+  //  (c) exotic markets (combo, double_chance) — combo is 100% loss over
+  //      the last 60d whenever it leaks through; double_chance is retired
+  //      via null floor in coolbet-edge.ts. Both belong out of view.
+  // Backed by /admin/place composition audit 2026-08-21 (see
+  // PICKS-COHORT-ALIGN entry). The audit showed retired combo/acca bots
+  // contributed −€501 PnL in 60d while the winning prematch subset
+  // (bot_v10_all, calibrated) contributed +€223.
   const upcoming = rows.filter((b) => {
+    // (a) + (b): bot maturity/state gates
+    const bot = b.bot ? (Array.isArray(b.bot) ? b.bot[0] : b.bot) : null;
+    if (bot?.retired_at) return false;
+    if (bot?.name && String(bot.name).startsWith("inplay_")) return false;
+    // (c): exotic-market gate (case-insensitive)
+    const marketLc = String(b.market ?? "").toLowerCase();
+    if (marketLc === "combo" || marketLc === "double_chance") return false;
+
     if (Array.isArray(b.combo_legs) && b.combo_legs.length > 0) return true;
     const m = Array.isArray(b.match) ? b.match[0] : b.match;
     if (!m) return false;
