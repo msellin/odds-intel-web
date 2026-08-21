@@ -55,6 +55,7 @@ export interface SanitizedBotBet {
   bankrollAfter: number | null;
   modelProb: number;
   clv: number | null;
+  closingOdds: number | null;
   edge: number | null;  // model edge % at pick time (Elite-only)
   bot: string;
   strategyProfile: string | null;
@@ -65,6 +66,7 @@ interface Props {
   isPro: boolean;
   isElite: boolean;
   allBets: SanitizedBotBet[] | null;
+  retiredBotCount?: number;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -337,7 +339,7 @@ function BotModal({
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function PerformanceLeaderboard({ bots, isPro, isElite, allBets }: Props) {
+export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredBotCount = 0 }: Props) {
   const [selected, setSelected] = useState<PublicBotStat | null>(null);
   const [showUnderperforming, setShowUnderperforming] = useState(false);
   const [showDeveloping, setShowDeveloping] = useState(false);
@@ -370,6 +372,20 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets }: Props)
                 ? `${activeBots.length} active · click any row for bankroll chart`
                 : `${activeBots.length} active strategies · Pro unlocks W/L, P&L, charts`}
             </p>
+            {/* PERF-BOT-FUNNEL (2026-08-21) — surface the full strategy funnel
+                so visitors see how many total strategies we've tested, not
+                just the survivors. Only render when we have a retired count
+                to avoid a lonely "0 retired". */}
+            {retiredBotCount > 0 && (
+              <p className="text-[11px] text-muted-foreground/70 mt-1">
+                Tested to date:{" "}
+                <span className="text-foreground">{activeBots.length + underperformingBots.length + developingBots.length + retiredBotCount}</span>{" "}
+                strategies · <span className="text-emerald-400/80">{activeBots.length} proven</span> ·{" "}
+                <span className="text-red-400/70">{underperformingBots.length} underperforming</span> ·{" "}
+                <span className="text-muted-foreground">{developingBots.length} maturing</span> ·{" "}
+                <span className="text-muted-foreground">{retiredBotCount} retired</span>
+              </p>
+            )}
             {/* Chip legend prose (2026-07-06) — replaces the previous
                 chip-and-inline-description row which read as a jargon
                 strip most visitors skipped. Same information, but as

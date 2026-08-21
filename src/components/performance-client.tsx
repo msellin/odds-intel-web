@@ -101,6 +101,7 @@ export function PerformanceClient({
         isPro={isPro}
         isElite={isElite}
         allBets={allBets}
+        retiredBotCount={retiredBotCount ?? 0}
       />
     </div>
   );

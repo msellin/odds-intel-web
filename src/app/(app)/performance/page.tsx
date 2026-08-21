@@ -24,6 +24,7 @@ import type { LiveBet, ModelV2Stats, CalibratedHeadlineStats } from "@/lib/engin
 import { PerformanceClient } from "@/components/performance-client";
 import type { PublicBotStat, SanitizedBotBet } from "@/components/performance-leaderboard";
 import { PerformanceHistory } from "@/components/performance-history";
+import type { FullBetItem } from "@/components/performance-history";
 import { PerformanceExtras } from "@/components/performance-extras";
 
 // ── Server-side cache → public stats fallback ────────────────────────────────
@@ -87,16 +88,44 @@ function sanitizeBets(bets: LiveBet[], isElite: boolean): SanitizedBotBet[] {
     bankrollAfter: isElite ? b.bankrollAfter : null,
     modelProb: b.modelProb,
     clv: b.clv,
+    closingOdds: isElite ? b.closingOdds : null,
     edge: isElite ? b.edge : null,
     bot: b.bot,
     strategyProfile: b.strategyProfile,
   }));
 }
 
-// ── Streaming component for Pro bets (slow query) ─────────────────────────────
-// Rendered inside Suspense so the cached hero/leaderboard shows immediately.
+function toFullBetItems(bets: SanitizedBotBet[]): FullBetItem[] {
+  return bets.map((b) => {
+    const clvExact = b.clv;
+    const clvSign: "positive" | "negative" | "neutral" | null =
+      clvExact == null ? null : clvExact > 0 ? "positive" : clvExact < 0 ? "negative" : "neutral";
+    return {
+      id: b.id,
+      match: b.match,
+      league: b.league,
+      date: b.placedAt,
+      market: b.market,
+      selection: b.selection,
+      odds: b.odds,
+      stake: b.stake,
+      result: b.result,
+      pnl: b.pnl,
+      clvSign,
+      clvExact,
+      closingOdds: b.closingOdds,
+      botName: b.bot,
+    };
+  });
+}
 
-interface ProSectionProps {
+// ── Streaming section for logged-in users (slow allBets query) ────────────────
+// Renders the leaderboard recompute (fresh retirement state) AND the full
+// filterable bet history. Both need the same allBets fetch, so they share one
+// Suspense boundary. Anonymous users skip this entirely — they get the cached
+// leaderboard + a 10-bet ledger teaser.
+
+interface LoggedInSectionProps {
   isPro: boolean;
   isElite: boolean;
   trackStats: Awaited<ReturnType<typeof getTrackRecordStats>>;
@@ -105,9 +134,10 @@ interface ProSectionProps {
   botsDB: Awaited<ReturnType<typeof getAllBotsFromDB>>;
   modelV2Stats: ModelV2Stats | null;
   calibrated: CalibratedHeadlineStats | null;
+  extras: Awaited<ReturnType<typeof getPublicPerformanceExtras>>;
 }
 
-async function ProPerformanceSection({
+async function LoggedInPerformanceSection({
   isPro,
   isElite,
   trackStats,
@@ -116,23 +146,34 @@ async function ProPerformanceSection({
   botsDB,
   modelV2Stats,
   calibrated,
-}: ProSectionProps) {
+  extras,
+}: LoggedInSectionProps) {
   const allBetsRaw = await getAllBets();
   const sanitizedBets = sanitizeBets(allBetsRaw, isElite);
+  const fullBets: FullBetItem[] = toFullBetItems(sanitizedBets);
 
   return (
-    <PerformanceClient
-      trackStats={trackStats}
-      cache={cache}
-      cachedBots={cachedBots}
-      isPro={isPro}
-      isElite={isElite}
-      allBets={sanitizedBets}
-      aggregateBets={allBetsRaw}
-      botsDB={botsDB}
-      modelV2Stats={modelV2Stats}
-      calibrated={calibrated}
-    />
+    <>
+      <PerformanceClient
+        trackStats={trackStats}
+        cache={cache}
+        cachedBots={cachedBots}
+        isPro={isPro}
+        isElite={isElite}
+        allBets={sanitizedBets}
+        aggregateBets={allBetsRaw}
+        botsDB={botsDB}
+        modelV2Stats={modelV2Stats}
+        calibrated={calibrated}
+      />
+      <PerformanceExtras data={extras} />
+      <PerformanceHistory
+        fullBets={fullBets}
+        recentSettled={null}
+        isLoggedIn={true}
+        isElite={isElite}
+      />
+    </>
   );
 }
 
@@ -146,8 +187,9 @@ export default async function PerformancePage() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (!user) return { isPro: false, isElite: false, is_superadmin: false };
-      return getUserTier(user.id);
+      if (!user) return { userId: null as string | null, isPro: false, isElite: false, is_superadmin: false };
+      const tier = await getUserTier(user.id);
+      return { userId: user.id, ...tier };
     })(),
     getTrackRecordStats(),
     getDashboardCache(),
@@ -157,14 +199,18 @@ export default async function PerformancePage() {
     getCalibratedHeadlineStats(),
   ]);
 
-  const { isPro, isElite } = authResult as {
+  const { userId, isPro, isElite } = authResult as {
+    userId: string | null;
     isPro: boolean;
     isElite: boolean;
     is_superadmin: boolean;
   };
+  const isLoggedIn = !!userId;
 
-  // Free users: fetch last 10 settled bets (small, fast).
-  const recentSettled = !isPro ? await getRecentSettledBets(10) : null;
+  // Anonymous only: last 10 settled bets for the ledger teaser.
+  // PERF-SIGNUP-HISTORY (2026-08-21): logged-in users get the full filterable
+  // history via the streaming section below — no need to fetch the small feed.
+  const recentSettled = !isLoggedIn ? await getRecentSettledBets(10) : null;
 
   // Live retirement state. Drives two cache-staleness fixes below so the
   // /performance page reflects a fresh retirement without waiting up to 30min
@@ -205,9 +251,22 @@ export default async function PerformancePage() {
     // The (app) layout's px-2/px-4 is small enough that we don't
     // need to fight it — just constrain to 4xl + auto-center.
     <div className="mx-auto w-full max-w-4xl">
-      {isPro ? (
-        <Suspense fallback={<PerformanceClient {...cachedClientProps} />}>
-          <ProPerformanceSection
+      {isLoggedIn ? (
+        <Suspense
+          fallback={
+            <>
+              <PerformanceClient {...cachedClientProps} />
+              <PerformanceExtras data={extras} />
+              <PerformanceHistory
+                fullBets={null}
+                recentSettled={null}
+                isLoggedIn={true}
+                isElite={isElite}
+              />
+            </>
+          }
+        >
+          <LoggedInPerformanceSection
             isPro={isPro}
             isElite={isElite}
             trackStats={trackStats}
@@ -216,24 +275,20 @@ export default async function PerformancePage() {
             botsDB={botsDB}
             modelV2Stats={modelV2Stats}
             calibrated={calibrated}
+            extras={extras}
           />
         </Suspense>
       ) : (
-        <PerformanceClient {...cachedClientProps} />
-      )}
-
-      {/* Cumulative P&L chart + streak badges + calibration table. */}
-      <PerformanceExtras data={extras} />
-
-      {/* Recent settled bets — short ledger strip. The full JSON feed at
-          /api/v1/track-record is the canonical source. */}
-      {!isPro && (
-        <PerformanceHistory
-          fullBets={null}
-          recentSettled={recentSettled}
-          isPro={false}
-          isElite={false}
-        />
+        <>
+          <PerformanceClient {...cachedClientProps} />
+          <PerformanceExtras data={extras} />
+          <PerformanceHistory
+            fullBets={null}
+            recentSettled={recentSettled}
+            isLoggedIn={false}
+            isElite={false}
+          />
+        </>
       )}
     </div>
   );

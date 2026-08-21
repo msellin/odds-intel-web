@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Lock, TrendingUp, TrendingDown, Minus, Filter } from "lucide-react";
+import { Lock, TrendingUp, TrendingDown, Minus, Filter, ArrowUpDown } from "lucide-react";
 import Link from "next/link";
 import type { SimpleSettledBet } from "@/lib/engine-data";
 
@@ -25,9 +25,20 @@ export interface FullBetItem {
 interface Props {
   fullBets: FullBetItem[] | null;
   recentSettled: SimpleSettledBet[] | null;
-  isPro: boolean;
+  isLoggedIn: boolean;
   isElite: boolean;
 }
+
+type SortKey = "date_desc" | "date_asc" | "pnl_desc" | "pnl_asc" | "odds_desc" | "odds_asc";
+
+const SORT_LABELS: Record<SortKey, string> = {
+  date_desc: "Newest first",
+  date_asc: "Oldest first",
+  pnl_desc: "Biggest wins",
+  pnl_asc: "Biggest losses",
+  odds_desc: "Highest odds",
+  odds_asc: "Lowest odds",
+};
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -61,7 +72,7 @@ function ClvCell({ sign, exact }: { sign: "positive" | "negative" | "neutral" | 
   return <span className="text-muted-foreground">—</span>;
 }
 
-// ── Free: simple 10-bet table ─────────────────────────────────────────────────
+// ── Anonymous: simple 10-bet teaser ───────────────────────────────────────────
 
 function SimpleBetsTable({ bets }: { bets: SimpleSettledBet[] }) {
   return (
@@ -94,11 +105,13 @@ function SimpleBetsTable({ bets }: { bets: SimpleSettledBet[] }) {
   );
 }
 
-// ── Pro+: full history with filters ──────────────────────────────────────────
+// ── Logged-in: full history with filters + sort ───────────────────────────────
 
 function FullBetsTable({ bets, isElite }: { bets: FullBetItem[]; isElite: boolean }) {
   const [botFilter, setBotFilter] = useState("all");
   const [marketFilter, setMarketFilter] = useState("all");
+  const [leagueFilter, setLeagueFilter] = useState("all");
+  const [sortKey, setSortKey] = useState<SortKey>("date_desc");
   const [showFilters, setShowFilters] = useState(false);
 
   const bots = useMemo(() => {
@@ -111,32 +124,88 @@ function FullBetsTable({ bets, isElite }: { bets: FullBetItem[]; isElite: boolea
     return Array.from(names).sort();
   }, [bets]);
 
+  const leagues = useMemo(() => {
+    const names = new Set(bets.map((b) => b.league).filter(Boolean));
+    return Array.from(names).sort();
+  }, [bets]);
+
   const filtered = useMemo(() => {
-    return bets.filter((b) => {
+    const rows = bets.filter((b) => {
       if (botFilter !== "all" && b.botName !== botFilter) return false;
       if (marketFilter !== "all" && b.market !== marketFilter) return false;
+      if (leagueFilter !== "all" && b.league !== leagueFilter) return false;
       return true;
     });
-  }, [bets, botFilter, marketFilter]);
+    const sorted = [...rows];
+    switch (sortKey) {
+      case "date_desc":
+        sorted.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        break;
+      case "date_asc":
+        sorted.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        break;
+      case "pnl_desc":
+        sorted.sort((a, b) => b.pnl - a.pnl);
+        break;
+      case "pnl_asc":
+        sorted.sort((a, b) => a.pnl - b.pnl);
+        break;
+      case "odds_desc":
+        sorted.sort((a, b) => b.odds - a.odds);
+        break;
+      case "odds_asc":
+        sorted.sort((a, b) => a.odds - b.odds);
+        break;
+    }
+    return sorted;
+  }, [bets, botFilter, marketFilter, leagueFilter, sortKey]);
 
   const settledFiltered = filtered.filter((b) => b.result !== "pending");
   const totalPnl = settledFiltered.reduce((s, b) => s + b.pnl, 0);
   const won = settledFiltered.filter((b) => b.result === "won").length;
+  const activeFilterCount = [
+    botFilter !== "all",
+    marketFilter !== "all",
+    leagueFilter !== "all",
+  ].filter(Boolean).length;
 
   return (
     <div>
-      {/* Filter bar */}
-      <div className="flex items-center gap-2 px-5 py-3 border-b border-border/20">
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-2 px-5 py-3 border-b border-border/20">
         <button
           onClick={() => setShowFilters((f) => !f)}
           className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs transition-colors ${
-            showFilters ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+            showFilters || activeFilterCount > 0
+              ? "bg-muted text-foreground"
+              : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
           }`}
         >
           <Filter className="h-3 w-3" />
           Filters
+          {activeFilterCount > 0 && (
+            <span className="rounded bg-blue-500/20 px-1 text-[10px] font-semibold text-blue-400">
+              {activeFilterCount}
+            </span>
+          )}
         </button>
-        <span className="text-xs text-muted-foreground">
+
+        <div className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-muted-foreground">
+          <ArrowUpDown className="h-3 w-3" />
+          <select
+            value={sortKey}
+            onChange={(e) => setSortKey(e.target.value as SortKey)}
+            className="bg-transparent text-xs text-foreground focus:outline-none"
+          >
+            {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
+              <option key={k} value={k} className="bg-background">
+                {SORT_LABELS[k]}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <span className="ml-auto text-xs text-muted-foreground">
           {filtered.length} bets
           {settledFiltered.length > 0 && (
             <>
@@ -152,19 +221,19 @@ function FullBetsTable({ bets, isElite }: { bets: FullBetItem[]; isElite: boolea
       </div>
 
       {showFilters && (
-        <div className="flex flex-wrap gap-3 px-5 py-3 border-b border-border/20 bg-muted/20">
-          <div className="flex items-center gap-2">
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Bot</label>
+        <div className="grid grid-cols-2 gap-3 px-5 py-3 border-b border-border/20 bg-muted/20 sm:flex sm:flex-wrap">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+            <label className="text-[10px] uppercase tracking-wider text-muted-foreground">League</label>
             <select
-              value={botFilter}
-              onChange={(e) => setBotFilter(e.target.value)}
-              className="rounded border border-border/50 bg-background px-2 py-1 text-xs"
+              value={leagueFilter}
+              onChange={(e) => setLeagueFilter(e.target.value)}
+              className="rounded border border-border/50 bg-background px-2 py-1 text-xs max-w-[180px] truncate"
             >
-              <option value="all">All bots</option>
-              {bots.map((b) => <option key={b} value={b}>{b}</option>)}
+              <option value="all">All leagues</option>
+              {leagues.map((l) => <option key={l} value={l}>{l}</option>)}
             </select>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
             <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Market</label>
             <select
               value={marketFilter}
@@ -175,12 +244,23 @@ function FullBetsTable({ bets, isElite }: { bets: FullBetItem[]; isElite: boolea
               {markets.map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
           </div>
-          {(botFilter !== "all" || marketFilter !== "all") && (
-            <button
-              onClick={() => { setBotFilter("all"); setMarketFilter("all"); }}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+            <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Bot</label>
+            <select
+              value={botFilter}
+              onChange={(e) => setBotFilter(e.target.value)}
+              className="rounded border border-border/50 bg-background px-2 py-1 text-xs max-w-[180px] truncate"
             >
-              Clear
+              <option value="all">All bots</option>
+              {bots.map((b) => <option key={b} value={b}>{b}</option>)}
+            </select>
+          </div>
+          {activeFilterCount > 0 && (
+            <button
+              onClick={() => { setBotFilter("all"); setMarketFilter("all"); setLeagueFilter("all"); }}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors sm:self-center"
+            >
+              Clear all
             </button>
           )}
         </div>
@@ -192,6 +272,7 @@ function FullBetsTable({ bets, isElite }: { bets: FullBetItem[]; isElite: boolea
             <tr className="border-b border-border/20 text-left text-[10px] uppercase tracking-wider text-muted-foreground">
               <th className="py-2.5 pl-5 pr-2">Date</th>
               <th className="py-2.5 px-2">Match</th>
+              <th className="py-2.5 px-2 hidden md:table-cell">League</th>
               <th className="py-2.5 px-2">Bot</th>
               <th className="py-2.5 px-2">Market</th>
               <th className="py-2.5 px-2 text-right">Odds</th>
@@ -199,16 +280,7 @@ function FullBetsTable({ bets, isElite }: { bets: FullBetItem[]; isElite: boolea
               {isElite && <th className="py-2.5 px-2 text-right">Close</th>}
               <th className="py-2.5 px-2 text-center">Result</th>
               <th className="py-2.5 px-2 text-right">P&L</th>
-              <th className="py-2.5 pr-5 text-center">
-                {isElite ? (
-                  "CLV %"
-                ) : (
-                  <span className="flex items-center justify-center gap-1">
-                    CLV
-                    <span className="rounded bg-emerald-500/10 px-1 py-0.5 text-[8px] font-bold text-emerald-400">ELITE</span>
-                  </span>
-                )}
-              </th>
+              <th className="py-2.5 pr-5 text-center">CLV</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/10">
@@ -218,6 +290,9 @@ function FullBetsTable({ bets, isElite }: { bets: FullBetItem[]; isElite: boolea
                   {new Date(b.date).toLocaleDateString("en-GB", { month: "short", day: "numeric" })}
                 </td>
                 <td className="py-2.5 px-2 max-w-[160px] truncate font-medium" title={b.match}>{b.match}</td>
+                <td className="py-2.5 px-2 max-w-[140px] truncate text-muted-foreground text-[11px] hidden md:table-cell" title={b.league}>
+                  {b.league || "—"}
+                </td>
                 <td className="py-2.5 px-2 font-mono text-[10px] text-muted-foreground truncate max-w-[100px]">{b.botName}</td>
                 <td className="py-2.5 px-2 font-mono uppercase text-muted-foreground text-[10px] whitespace-nowrap">
                   {b.market} · {b.selection}
@@ -248,7 +323,13 @@ function FullBetsTable({ bets, isElite }: { bets: FullBetItem[]; isElite: boolea
 
       {filtered.length > 200 && (
         <div className="border-t border-border/20 px-5 py-3 text-center text-xs text-muted-foreground">
-          Showing 200 of {filtered.length} bets. Use filters to narrow down.
+          Showing 200 of {filtered.length} bets. Narrow the filters to see more.
+        </div>
+      )}
+
+      {filtered.length === 0 && (
+        <div className="border-t border-border/20 px-5 py-10 text-center text-sm text-muted-foreground">
+          No bets match these filters.
         </div>
       )}
 
@@ -263,12 +344,16 @@ function FullBetsTable({ bets, isElite }: { bets: FullBetItem[]; isElite: boolea
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function PerformanceHistory({ fullBets, recentSettled, isPro, isElite }: Props) {
-  // Default-open on the free-tier "Recent Results" view: page's whole
-  // pitch is "every bet logged" — hiding the ledger behind a click
-  // contradicts it. Pro users still get the collapsed default because
-  // their fuller table is longer and might drown the page.
-  const [expanded, setExpanded] = useState(!isPro);
+export function PerformanceHistory({ fullBets, recentSettled, isLoggedIn, isElite }: Props) {
+  // Default-open on the anonymous 10-bet view: page's whole pitch is "every
+  // bet logged" — hiding the ledger behind a click contradicts it. Logged-in
+  // users default collapsed because their fuller table is longer and might
+  // drown the page. Loading state (fullBets === null while streaming) also
+  // starts collapsed so we don't show an empty box.
+  const [expanded, setExpanded] = useState(!isLoggedIn);
+
+  const isLoading = isLoggedIn && fullBets === null;
+  const settledCount = fullBets?.filter((b) => b.result !== "pending").length ?? 0;
 
   const header = (
     <button
@@ -277,12 +362,14 @@ export function PerformanceHistory({ fullBets, recentSettled, isPro, isElite }: 
     >
       <div>
         <h2 className="text-sm font-semibold">
-          {isPro ? "Bet History" : "Recent Results"}
+          {isLoggedIn ? "Full Bet History" : "Recent Results"}
         </h2>
         <p className="text-[11px] text-muted-foreground mt-0.5">
-          {isPro
-            ? `${fullBets?.length ?? 0} settled bets — full history`
-            : `Last ${recentSettled?.length ?? 0} settled bets — no cherry-picking`}
+          {isLoading
+            ? "Loading full ledger…"
+            : isLoggedIn
+              ? `${settledCount} settled bets — filter by league, market, bot`
+              : `Last ${recentSettled?.length ?? 0} settled bets — no cherry-picking`}
         </p>
       </div>
       <svg
@@ -303,27 +390,38 @@ export function PerformanceHistory({ fullBets, recentSettled, isPro, isElite }: 
 
       {expanded && (
         <div className="border-t border-border/30">
-          {isPro && fullBets ? (
-            <FullBetsTable bets={fullBets} isElite={isElite} />
+          {isLoading ? (
+            <div className="px-5 py-10 text-center text-sm text-muted-foreground animate-pulse">
+              Loading bet history…
+            </div>
+          ) : isLoggedIn && fullBets ? (
+            fullBets.length > 0 ? (
+              <FullBetsTable bets={fullBets} isElite={isElite} />
+            ) : (
+              <div className="px-5 py-8 text-center text-sm text-muted-foreground">
+                No settled bets yet.
+              </div>
+            )
           ) : recentSettled && recentSettled.length > 0 ? (
             <>
               <SimpleBetsTable bets={recentSettled} />
-              {/* Upsell */}
+              {/* Sign-up upsell for anonymous — the paywall for filters/history
+                  is now behind sign-up, not behind Pro (TIER-COLLAPSE 2026-06-24). */}
               <div className="border-t border-border/20 px-5 py-4 bg-blue-500/5">
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <p className="text-xs font-medium text-foreground">Full bet history with odds & P&L</p>
+                    <p className="text-xs font-medium text-foreground">See every bet, ever placed</p>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Pro shows up to 500 bets with odds, P&L, CLV direction, and bot/market filters.
+                      Sign up free to unlock the full ledger with league, market, and bot filters.
                     </p>
                   </div>
                   <Link
-                    href="/performance"
+                    href="/signup"
                     className="shrink-0 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 transition-colors"
                   >
                     <span className="flex items-center gap-1">
                       <Lock className="h-3 w-3" />
-                      Upgrade to Pro
+                      Sign up free
                     </span>
                   </Link>
                 </div>
