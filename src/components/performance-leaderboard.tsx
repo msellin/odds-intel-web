@@ -369,8 +369,8 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
             <h2 className="text-sm font-semibold">Bot Leaderboard</h2>
             <p className="text-[11px] text-muted-foreground mt-0.5">
               {isPro
-                ? `${activeBots.length} active · click any row for bankroll chart`
-                : `${activeBots.length} active strategies · Pro unlocks W/L, P&L, charts`}
+                ? `${activeBots.length} proven · click any row for bankroll chart`
+                : `${activeBots.length} proven strategies · Pro unlocks W/L, P&L, charts`}
             </p>
             {/* PERF-BOT-FUNNEL (2026-08-21) — surface the full strategy funnel
                 so visitors see how many total strategies we've tested, not

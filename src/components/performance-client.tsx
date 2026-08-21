@@ -15,6 +15,7 @@ import type { TrackRecordStats, DashboardCache, LiveBet, ModelV2Stats, Calibrate
 import {
   filterExperimental,
   buildPublicBotStats,
+  isLiveBot,
 } from "@/lib/bot-aggregates";
 
 interface BotDbRow {
@@ -80,7 +81,21 @@ export function PerformanceClient({
   // Count non-experimental active bots with enough data for the scale row
   const botsTracked = leaderboardBots.filter(b => b.hasEnoughData).length || null;
 
-  const activeBotCount  = botsDB ? botsDB.filter((b) => !b.retiredAt).length : null;
+  // PERF-COHORT-RECONCILE (2026-08-21): "strategies live" in the hero must
+  // match the leaderboard funnel line ("Tested to date: N · X proven · ...").
+  // The leaderboard funnel counts non-in-play, non-experimental, non-retired
+  // strategies (5 proven + 5 underperforming + 15 maturing = 25 typical);
+  // the previous `!retiredAt` count was 43 because it also included in-play
+  // + experimental bots, which produced a confusing 43 vs 25 mismatch on the
+  // same page.
+  const activeBotCount = botsDB
+    ? botsDB.filter(
+        (b) =>
+          !b.retiredAt &&
+          !isLiveBot(b.name) &&
+          (b.maturityLabel ?? "active") !== "experimental",
+      ).length
+    : null;
   const retiredBotCount = botsDB ? botsDB.filter((b) => !!b.retiredAt).length : null;
 
   return (

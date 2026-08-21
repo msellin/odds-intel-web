@@ -64,9 +64,14 @@ export function PerformanceHero({
   const daysRunning = Math.floor(
     (Date.now() - new Date("2026-05-01").getTime()) / 86400000,
   );
-  const allTimeSettled = stats.settledBets;
-
   const cal = calibrated?.allTime;
+  // PERF-COHORT-RECONCILE (2026-08-21): "bets logged" in the hero must match
+  // the ROI headline n above and the ledger row count below. All three now
+  // read from the same calibrated cohort. `stats.settledBets` is the wider
+  // all-time-all-bots count and was creating a 4192 vs 1208 vs history-row-
+  // count mismatch on the same page — fall back to it only when calibrated
+  // is missing (cold cache).
+  const allTimeSettled = cal?.n ?? stats.settledBets;
   const cal30 = calibrated?.last30d;
   const calRoi = cal?.roiPct ?? null;
   const calN = cal?.n ?? 0;
