@@ -218,7 +218,12 @@ function FullBetsTable({ bets, isElite }: { bets: FullBetItem[]; isElite: boolea
     return sorted;
   }, [bets, botFilter, marketFilter, leagueFilter, sortKey]);
 
-  const settledFiltered = filtered.filter((b) => b.result !== "pending");
+  // Settled = won/lost only. Void bets (match voided, CLV-AUTOVOID etc.) have
+  // pnl=0 and don't count as W/L — treat them like pending for header math so
+  // the count reconciles with the hero (which uses `result IN ('won','lost')`).
+  const settledFiltered = filtered.filter((b) => b.result === "won" || b.result === "lost");
+  const voidCount = filtered.filter((b) => b.result === "void").length;
+  const pendingCount = filtered.filter((b) => b.result === "pending").length;
   const totalPnl = settledFiltered.reduce((s, b) => s + b.pnl, 0);
   const won = settledFiltered.filter((b) => b.result === "won").length;
   const activeFilterCount = [
@@ -286,9 +291,17 @@ function FullBetsTable({ bets, isElite }: { bets: FullBetItem[]; isElite: boolea
               the filter selection — so filtering by "bot_v10_all" or
               "1x2 only" shows that slice's ROI right in the toolbar. */}
           {settledFiltered.length} settled
-          {filtered.length > settledFiltered.length && (
+          {pendingCount > 0 && (
             <span className="text-muted-foreground/60">
-              {" + "}{filtered.length - settledFiltered.length} pending
+              {" + "}{pendingCount} pending
+            </span>
+          )}
+          {voidCount > 0 && (
+            <span
+              className="text-muted-foreground/60"
+              title="Void bets are canceled at settlement (match voided, odds data cleanup, etc.) — PnL is €0"
+            >
+              {" + "}{voidCount} void
             </span>
           )}
           {settledFiltered.length > 0 && (
@@ -469,7 +482,10 @@ export function PerformanceHistory({ fullBets, recentSettled, isLoggedIn, isElit
   }, []);
 
   const isLoading = isLoggedIn && fullBets === null;
-  const settledCount = fullBets?.filter((b) => b.result !== "pending").length ?? 0;
+  // Settled count = won/lost only (excludes void + pending) so it matches
+  // the hero's cohort math exactly (getCalibratedHeadlineStats filters on
+  // result IN ('won','lost')).
+  const settledCount = fullBets?.filter((b) => b.result === "won" || b.result === "lost").length ?? 0;
 
   const header = (
     <button
