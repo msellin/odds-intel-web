@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Lock, TrendingUp, TrendingDown, Minus, Filter, ArrowUpDown } from "lucide-react";
 import Link from "next/link";
 import type { SimpleSettledBet } from "@/lib/engine-data";
@@ -351,6 +351,27 @@ export function PerformanceHistory({ fullBets, recentSettled, isLoggedIn, isElit
   // drown the page. Loading state (fullBets === null while streaming) also
   // starts collapsed so we don't show an empty box.
   const [expanded, setExpanded] = useState(!isLoggedIn);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  // PERF-HISTORY-ANCHOR (2026-08-21): support /performance#history deep
+  // links — auto-open the collapse + scroll into view so shared links land
+  // on the ledger. Runs on mount and on hashchange (some SPAs rewrite hash
+  // without a reload).
+  useEffect(() => {
+    const openIfMatch = () => {
+      if (typeof window === "undefined") return;
+      if (window.location.hash !== "#history") return;
+      setExpanded(true);
+      // Wait a tick for the DOM to reflow before scrolling; the collapse
+      // content mounts synchronously after setExpanded(true).
+      requestAnimationFrame(() => {
+        rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    };
+    openIfMatch();
+    window.addEventListener("hashchange", openIfMatch);
+    return () => window.removeEventListener("hashchange", openIfMatch);
+  }, []);
 
   const isLoading = isLoggedIn && fullBets === null;
   const settledCount = fullBets?.filter((b) => b.result !== "pending").length ?? 0;
@@ -385,7 +406,11 @@ export function PerformanceHistory({ fullBets, recentSettled, isLoggedIn, isElit
   );
 
   return (
-    <div className="rounded-xl border border-border/50 bg-card/60 overflow-hidden">
+    <div
+      ref={rootRef}
+      id="history"
+      className="scroll-mt-16 rounded-xl border border-border/50 bg-card/60 overflow-hidden"
+    >
       {header}
 
       {expanded && (
