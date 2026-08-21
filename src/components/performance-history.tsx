@@ -206,7 +206,16 @@ function FullBetsTable({ bets, isElite }: { bets: FullBetItem[]; isElite: boolea
         </div>
 
         <span className="ml-auto text-xs text-muted-foreground">
-          {filtered.length} bets
+          {/* PERF-HISTORY-COUNTS (2026-08-21): match the subhead — show
+              settled bets as the primary number so the ROI headline (settled-
+              only) reconciles with the table's row count. Pending shown as
+              a secondary "+ N pending" note only when non-zero. */}
+          {settledFiltered.length} settled
+          {filtered.length > settledFiltered.length && (
+            <span className="text-muted-foreground/60">
+              {" + "}{filtered.length - settledFiltered.length} pending
+            </span>
+          )}
           {settledFiltered.length > 0 && (
             <>
               {" · "}
