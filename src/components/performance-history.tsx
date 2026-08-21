@@ -114,20 +114,78 @@ function FullBetsTable({ bets, isElite }: { bets: FullBetItem[]; isElite: boolea
   const [sortKey, setSortKey] = useState<SortKey>("date_desc");
   const [showFilters, setShowFilters] = useState(false);
 
-  const bots = useMemo(() => {
-    const names = new Set(bets.map((b) => b.botName));
-    return Array.from(names).sort();
-  }, [bets]);
+  // PERF-HISTORY-CROSSFILTER (2026-08-21): precompute a flat projection of
+  // just (bot, market, league) once when `bets` changes, then derive each
+  // dropdown's options from the projection filtered by the OTHER active
+  // filters. Small tuples + a single pass per dropdown change keep this
+  // <1ms even at 20K rows. Counts show next to each option so the user
+  // can see how much data backs each choice before clicking.
+  const projection = useMemo(
+    () =>
+      bets.map((b) => ({ bot: b.botName, market: b.market, league: b.league || "Unknown" })),
+    [bets],
+  );
 
-  const markets = useMemo(() => {
-    const names = new Set(bets.map((b) => b.market));
-    return Array.from(names).sort();
-  }, [bets]);
+  const buildOptions = (
+    getter: (row: (typeof projection)[number]) => string,
+    passesOthers: (row: (typeof projection)[number]) => boolean,
+  ): Array<{ value: string; count: number }> => {
+    const counts = new Map<string, number>();
+    for (const r of projection) {
+      if (!passesOthers(r)) continue;
+      const v = getter(r);
+      counts.set(v, (counts.get(v) ?? 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .map(([value, count]) => ({ value, count }))
+      .sort((a, b) => a.value.localeCompare(b.value));
+  };
 
-  const leagues = useMemo(() => {
-    const names = new Set(bets.map((b) => b.league).filter(Boolean));
-    return Array.from(names).sort();
-  }, [bets]);
+  const availableBots = useMemo(
+    () =>
+      buildOptions(
+        (r) => r.bot,
+        (r) =>
+          (marketFilter === "all" || r.market === marketFilter) &&
+          (leagueFilter === "all" || r.league === leagueFilter),
+      ),
+    [projection, marketFilter, leagueFilter],
+  );
+
+  const availableMarkets = useMemo(
+    () =>
+      buildOptions(
+        (r) => r.market,
+        (r) =>
+          (botFilter === "all" || r.bot === botFilter) &&
+          (leagueFilter === "all" || r.league === leagueFilter),
+      ),
+    [projection, botFilter, leagueFilter],
+  );
+
+  const availableLeagues = useMemo(
+    () =>
+      buildOptions(
+        (r) => r.league,
+        (r) =>
+          (botFilter === "all" || r.bot === botFilter) &&
+          (marketFilter === "all" || r.market === marketFilter),
+      ),
+    [projection, botFilter, marketFilter],
+  );
+
+  // If a previously-selected value no longer exists in its dropdown after
+  // the user changed a sibling filter, snap back to "all" so the user
+  // isn't stuck with a filter that would show 0 rows.
+  useEffect(() => {
+    if (botFilter !== "all" && !availableBots.some((o) => o.value === botFilter)) setBotFilter("all");
+  }, [availableBots, botFilter]);
+  useEffect(() => {
+    if (marketFilter !== "all" && !availableMarkets.some((o) => o.value === marketFilter)) setMarketFilter("all");
+  }, [availableMarkets, marketFilter]);
+  useEffect(() => {
+    if (leagueFilter !== "all" && !availableLeagues.some((o) => o.value === leagueFilter)) setLeagueFilter("all");
+  }, [availableLeagues, leagueFilter]);
 
   const filtered = useMemo(() => {
     const rows = bets.filter((b) => {
@@ -261,7 +319,9 @@ function FullBetsTable({ bets, isElite }: { bets: FullBetItem[]; isElite: boolea
               className="rounded border border-border/50 bg-background px-2 py-1 text-xs max-w-[180px] truncate"
             >
               <option value="all">All leagues</option>
-              {leagues.map((l) => <option key={l} value={l}>{l}</option>)}
+              {availableLeagues.map((l) => (
+                <option key={l.value} value={l.value}>{l.value} ({l.count})</option>
+              ))}
             </select>
           </div>
           <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
@@ -272,7 +332,9 @@ function FullBetsTable({ bets, isElite }: { bets: FullBetItem[]; isElite: boolea
               className="rounded border border-border/50 bg-background px-2 py-1 text-xs"
             >
               <option value="all">All markets</option>
-              {markets.map((m) => <option key={m} value={m}>{m}</option>)}
+              {availableMarkets.map((m) => (
+                <option key={m.value} value={m.value}>{m.value} ({m.count})</option>
+              ))}
             </select>
           </div>
           <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
@@ -283,7 +345,9 @@ function FullBetsTable({ bets, isElite }: { bets: FullBetItem[]; isElite: boolea
               className="rounded border border-border/50 bg-background px-2 py-1 text-xs max-w-[180px] truncate"
             >
               <option value="all">All bots</option>
-              {bots.map((b) => <option key={b} value={b}>{b}</option>)}
+              {availableBots.map((b) => (
+                <option key={b.value} value={b.value}>{b.value} ({b.count})</option>
+              ))}
             </select>
           </div>
           {activeFilterCount > 0 && (

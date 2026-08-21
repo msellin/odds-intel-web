@@ -92,8 +92,17 @@ export function PerformancePnlChartToggle({ curve30d, curve90d }: Props) {
   const positive = delta >= 0;
 
   const peak = hasData ? Math.max(...activeCurve.map((p) => p.cum)) : 0;
-  const trough = hasData ? Math.min(...activeCurve.map((p) => p.cum)) : 0;
-  const maxDrawdown = hasData ? peak - trough : 0;
+  // PERF-CHART-DRAWDOWN-FIX (2026-08-21): max drawdown is the largest
+  // peak-to-trough drop IN SEQUENCE (a low that came after a peak), not
+  // simply max(curve) - min(curve). Previous formula gave wrong results
+  // when the trough happened before the peak.
+  let runningMax = -Infinity;
+  let maxDrawdown = 0;
+  for (const p of activeCurve) {
+    if (p.cum > runningMax) runningMax = p.cum;
+    const dd = runningMax - p.cum;
+    if (dd > maxDrawdown) maxDrawdown = dd;
+  }
 
   const points = activeCurve.map((p) => ({
     d: p.d,
