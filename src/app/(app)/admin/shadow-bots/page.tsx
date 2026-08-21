@@ -279,7 +279,7 @@ export default async function ShadowBotsPage() {
         .order("matches(date)", { ascending: true })
         .limit(200)
     : { data: [] };
-  const upcoming = (upcomingRaw ?? []) as unknown as Array<{
+  const upcomingRawArr = (upcomingRaw ?? []) as unknown as Array<{
     id: string;
     bot_id: string;
     market: string;
@@ -297,6 +297,28 @@ export default async function ShadowBotsPage() {
       away_team: { name: string | null } | null;
     } | null;
   }>;
+
+  // SHADOW-BOTS-UPCOMING-DEDUP-2026-08-22: multi-cohort fires (every :10/:40
+  // 24/7) create one shadow_bets row per (cohort × bot × match × market ×
+  // selection). Great for tracking odds drift across the day, but the
+  // "Upcoming picks" list should show ONE row per pick.
+  //
+  // Keep the row with the EARLIEST pick_time — that's when we first spotted
+  // the edge, matching what the operator saw when the alert first fired.
+  // Subsequent cohorts just re-record the same pick with drifted odds.
+  const upcomingDedupMap = new Map<string, typeof upcomingRawArr[number]>();
+  for (const r of upcomingRawArr) {
+    const key = `${r.bot_id}|${r.matches?.date ?? ""}|${r.market}|${r.selection}`;
+    const existing = upcomingDedupMap.get(key);
+    if (!existing || r.pick_time < existing.pick_time) {
+      upcomingDedupMap.set(key, r);
+    }
+  }
+  const upcoming = Array.from(upcomingDedupMap.values()).sort((a, b) => {
+    const da = a.matches?.date ?? "";
+    const db = b.matches?.date ?? "";
+    return da.localeCompare(db);
+  });
   const botNameById = new Map(bots.map((b) => [b.id, b.name]));
   // BOT_EDGE_THRESHOLDS mirrors the map on the per-bot detail page.
   const BOT_EDGE_THRESHOLDS: Record<string, number> = {
