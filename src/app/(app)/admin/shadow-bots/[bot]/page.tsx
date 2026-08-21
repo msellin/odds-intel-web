@@ -138,7 +138,7 @@ export default async function ShadowBotDetailPage({
   const { data: rows } = await db
     .from("shadow_bets")
     .select(
-      `id, market, selection, odds_at_pick, model_probability,
+      `id, match_id, market, selection, odds_at_pick, model_probability,
        edge_percent, recommended_bookmaker, pick_time, result,
        matches!inner (
          date,
@@ -151,7 +151,25 @@ export default async function ShadowBotDetailPage({
     .order("pick_time", { ascending: false })
     .limit(500);
 
-  const bets = (rows ?? []) as unknown as ShadowBetRow[];
+  const rawRows = (rows ?? []) as unknown as (ShadowBetRow & { match_id: string })[];
+
+  // SHADOW-BOTS-BOT-LEDGER-DEDUP-2026-08-22: same-cohort persistence writes
+  // one row per (cohort × match × market × selection). For the per-bot
+  // ledger we want ONE row per pick — the earliest sighting is the "real"
+  // record of when we first spotted this edge. Later cohort re-recordings
+  // are just drift-tracking noise here. (Same dedup as the upcoming-picks
+  // index. Odds-drift history is available via raw DB query if needed.)
+  const dedupMap = new Map<string, (typeof rawRows)[number]>();
+  for (const r of rawRows) {
+    const key = `${r.match_id}|${r.market}|${r.selection}`;
+    const existing = dedupMap.get(key);
+    if (!existing || r.pick_time < existing.pick_time) {
+      dedupMap.set(key, r);
+    }
+  }
+  const bets = Array.from(dedupMap.values()).sort((a, b) =>
+    (b.pick_time ?? "").localeCompare(a.pick_time ?? "")
+  ) as unknown as ShadowBetRow[];
 
   const wins = bets.filter((b) => b.result === "won");
   const losses = bets.filter((b) => b.result === "lost");
