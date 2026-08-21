@@ -3272,13 +3272,13 @@ export interface CalibratedHeadlineStats {
   };
 }
 
-const CALIBRATED_SINCE = "2026-05-04";
+export const CALIBRATED_SINCE = "2026-05-04";
 // Headline cohort: all production strategies (calibrated + beta + active
 // maturities — same cohort the dashboard_cache.active_avg_clv historically
 // used). EXCLUDES retired bots (failed experiments) so the headline isn't
 // dragged by deactivated losers.
-const PUBLIC_MATURITY_LABELS = ["calibrated", "beta", "active"] as const;
-const CALIBRATED_PUBLIC_MARKETS = ["1x2", "o/u", "over_under_25", "btts"] as const;
+export const PUBLIC_MATURITY_LABELS = ["calibrated", "beta", "active"] as const;
+export const CALIBRATED_PUBLIC_MARKETS = ["1x2", "o/u", "over_under_25", "btts"] as const;
 
 const _getCalibratedHeadlineStatsUncached =
   async (): Promise<CalibratedHeadlineStats> => {

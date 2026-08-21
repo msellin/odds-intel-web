@@ -19,6 +19,9 @@ import {
   getPublicPerformanceExtras,
   getModelV2Stats,
   getCalibratedHeadlineStats,
+  PUBLIC_MATURITY_LABELS,
+  CALIBRATED_PUBLIC_MARKETS,
+  CALIBRATED_SINCE,
 } from "@/lib/engine-data";
 import type { LiveBet, ModelV2Stats, CalibratedHeadlineStats } from "@/lib/engine-data";
 import { PerformanceClient } from "@/components/performance-client";
@@ -150,7 +153,26 @@ async function LoggedInPerformanceSection({
 }: LoggedInSectionProps) {
   const allBetsRaw = await getAllBets();
   const sanitizedBets = sanitizeBets(allBetsRaw, isElite);
-  const fullBets: FullBetItem[] = toFullBetItems(sanitizedBets);
+
+  // PERF-HISTORY-COHORT-MATCH (2026-08-21): the "+X% n=Y" ROI headline is
+  // getCalibratedHeadlineStats — filtered to production public cohort. The
+  // history table shows the exact same cohort so the row count reconciles
+  // with the headline. Filter mirrors getCalibratedHeadlineStats (kept in
+  // one place via the exported constants).
+  const publicBotNames = new Set(
+    botsDB
+      .filter((b) => PUBLIC_MATURITY_LABELS.includes(b.maturityLabel as (typeof PUBLIC_MATURITY_LABELS)[number]))
+      .map((b) => b.name),
+  );
+  const publicMarkets = new Set<string>(CALIBRATED_PUBLIC_MARKETS as unknown as string[]);
+  const sinceIso = `${CALIBRATED_SINCE}T00:00:00Z`;
+  const cohortBets = sanitizedBets.filter(
+    (b) =>
+      publicBotNames.has(b.bot) &&
+      publicMarkets.has(b.market) &&
+      b.placedAt >= sinceIso,
+  );
+  const fullBets: FullBetItem[] = toFullBetItems(cohortBets);
 
   return (
     <>

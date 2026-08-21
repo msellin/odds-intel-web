@@ -368,7 +368,7 @@ export function PerformanceHistory({ fullBets, recentSettled, isLoggedIn, isElit
           {isLoading
             ? "Loading full ledger…"
             : isLoggedIn
-              ? `${settledCount} settled bets — filter by league, market, bot`
+              ? `${settledCount} settled bets — matches the ROI headline · filter by league, market, bot`
               : `Last ${recentSettled?.length ?? 0} settled bets — no cherry-picking`}
         </p>
       </div>
