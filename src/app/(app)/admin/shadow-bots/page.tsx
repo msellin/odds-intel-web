@@ -392,6 +392,20 @@ export default async function ShadowBotsPage() {
   const activeLost = totalsActive.settled - totalsActive.won;
   const allLost = totalsAll.settled - totalsAll.won;
   const nRetired = summaries.filter((s) => s.retiredAt).length;
+  // Portfolio CLV — weighted average across bots (each bot's avgClvPct
+  // weighted by its clvCount). Skips bots without settled picks.
+  const _clvAgg = (arr: Summary[]) => {
+    let sum = 0, n = 0;
+    for (const s of arr) {
+      if (s.avgClvPct != null && s.clvCount > 0) {
+        sum += s.avgClvPct * s.clvCount;
+        n += s.clvCount;
+      }
+    }
+    return n > 0 ? { pct: sum / n, n } : { pct: null as number | null, n: 0 };
+  };
+  const activeClv = _clvAgg(activeSummaries);
+  const allClv = _clvAgg(summaries);
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
@@ -415,6 +429,8 @@ export default async function ShadowBotsPage() {
             won={totalsActive.won}
             lost={activeLost}
             pnl={totalsActive.pnl}
+            clvPct={activeClv.pct}
+            clvN={activeClv.n}
             emphasize
           />
           <PortfolioCard
@@ -424,6 +440,8 @@ export default async function ShadowBotsPage() {
             won={totalsAll.won}
             lost={allLost}
             pnl={totalsAll.pnl}
+            clvPct={allClv.pct}
+            clvN={allClv.n}
             emphasize={false}
           />
         </section>
@@ -588,6 +606,8 @@ function PortfolioCard({
   won,
   lost,
   pnl,
+  clvPct,
+  clvN,
   emphasize,
 }: {
   label: string;
@@ -596,10 +616,17 @@ function PortfolioCard({
   won: number;
   lost: number;
   pnl: number;
+  clvPct: number | null;
+  clvN: number;
   emphasize: boolean;
 }) {
   const roiTone =
     roi >= 3 ? "text-emerald-400" : roi <= -8 ? "text-rose-400" : "text-neutral-100";
+  const clvTone =
+    clvPct == null ? "text-neutral-500"
+    : clvPct >= 3 ? "text-emerald-400"
+    : clvPct <= -3 ? "text-rose-400"
+    : "text-neutral-300";
   return (
     <div
       className={`rounded-xl border px-4 py-3 ${
@@ -613,13 +640,24 @@ function PortfolioCard({
           <div className="text-xs uppercase tracking-wider text-neutral-500">{label}</div>
           <div className="mt-0.5 text-[10px] text-neutral-600">{sub}</div>
         </div>
-        <div
-          className={`font-mono ${
-            emphasize ? "text-2xl" : "text-lg"
-          } font-semibold tabular-nums ${roiTone}`}
-        >
-          {roi >= 0 ? "+" : ""}
-          {roi.toFixed(1)}%
+        <div className="text-right">
+          <div
+            className={`font-mono ${
+              emphasize ? "text-2xl" : "text-lg"
+            } font-semibold tabular-nums ${roiTone}`}
+            title="Portfolio flat-stake ROI across settled picks"
+          >
+            {roi >= 0 ? "+" : ""}
+            {roi.toFixed(1)}%
+          </div>
+          <div
+            className={`mt-0.5 font-mono text-[10px] tabular-nums ${clvTone}`}
+            title={clvPct != null
+              ? `Weighted CLV across ${clvN} settled picks. Positive = market moved toward our price after we recorded it — evidence the odds were real signal.`
+              : "No settled picks with CLV yet"}
+          >
+            clv {clvPct != null ? `${clvPct >= 0 ? "+" : ""}${clvPct.toFixed(1)}%` : "—"}
+          </div>
         </div>
       </div>
       <div className="mt-2 text-[11px] text-neutral-500">
