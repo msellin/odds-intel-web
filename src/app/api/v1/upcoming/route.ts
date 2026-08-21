@@ -7,11 +7,19 @@
  *
  * Scope (intentional):
  *   - bots.maturity_label IN ('calibrated','beta','active')  — production
- *     strategies, no retired
+ *     strategies
+ *   - bots.retired_at IS NULL  — exclude retired bots (matches /performance)
+ *   - bots.name NOT LIKE 'inplay_%'  — pre-match cohort only (matches /performance)
  *   - market IN ('1x2', 'over_under_25', 'o/u', 'btts')  — pre-match only
  *   - match kickoff between NOW() - 24h and NOW() + 36 hours  — recent past
  *     picks (settled today) + all upcoming
  *   - result IN ('pending','won','lost','void')  — everything, badge shows outcome
+ *
+ * PICKS-COHORT-ALIGN (2026-08-21): added retired_at + inplay_% filters so
+ * /picks describes the SAME cohort as /performance's ledger + hero. Previously
+ * /picks showed inplay-bot picks and could show retired-bot picks — Telegram
+ * subscribers clicking through from /picks → /performance saw the picks
+ * disappear from the ledger. Now both surfaces reconcile row-for-row.
  *
  * PICKS-WIDEN (2026-07-08): earlier version was NOW→NOW+36h + result='pending'
  * only, which made /picks look empty as soon as a match kicked off. Widening
@@ -102,6 +110,8 @@ export async function GET(req: Request) {
     )
     .in("result", ["pending", "won", "lost", "void"])
     .in("bots.maturity_label", PUBLIC_MATURITY_LABELS)
+    .is("bots.retired_at", null)
+    .not("bots.name", "like", "inplay_%")
     .in("market", PRE_MATCH_MARKETS)
     .gte("matches.date", start.toISOString())
     .lte("matches.date", end.toISOString())
@@ -154,7 +164,7 @@ export async function GET(req: Request) {
         horizon_hours_forward: horizonHoursForward,
         count: picks.length,
         scope:
-          "pre-match picks from production strategies (calibrated + beta + active maturity), kickoffs from start of today UTC through +36h. Includes settled picks (won/lost/void) so the feed doesn't go dark right after a match kicks off.",
+          "pre-match picks from active production strategies (calibrated + beta + active maturity, non-retired, non-inplay), kickoffs from start of today UTC through +36h. Same cohort as /api/v1/track-record + /performance so every /picks row appears on the ledger once settled. Includes settled picks (won/lost/void) so the feed doesn't go dark right after a match kicks off.",
         notes:
           "Picks with result='pending' are live. Settled picks (won/lost/void) come off /api/v1/track-record's ledger once the match finishes. Use match_id to correlate.",
       },
