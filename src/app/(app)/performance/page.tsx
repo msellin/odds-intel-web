@@ -5,9 +5,33 @@ import { Suspense } from "react";
 import { createSupabaseServer } from "@/lib/supabase-server";
 
 export const metadata: Metadata = {
-  title: "Model Performance — OddsIntel",
-  description: "Live track record for OddsIntel's AI prediction models. Every bet logged, no cherry-picking — ROI, CLV, and win rate across 16 paper-trading bots.",
+  title: "Track Record — OddsIntel",
+  description:
+    "Live football prediction track record. Every bet logged before kickoff, every result settled against official scores, every closing line tracked. Filter by league, market, or strategy.",
   alternates: { canonical: "https://oddsintel.app/performance" },
+  openGraph: {
+    title: "OddsIntel — Live Track Record",
+    description:
+      "Every pre-match football pick logged with odds, result, and CLV. Filter by league, market, or bot. Public JSON API + Bitcoin-anchored ledger.",
+    url: "https://oddsintel.app/performance",
+    siteName: "OddsIntel",
+    type: "website",
+    images: [
+      {
+        url: "https://oddsintel.app/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "OddsIntel Live Track Record — verified football model performance",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "OddsIntel — Live Track Record",
+    description:
+      "Every pre-match football pick logged. Full ledger, filters, CLV, ROI. Public JSON + Bitcoin-anchored.",
+    images: ["https://oddsintel.app/opengraph-image"],
+  },
 };
 import { getUserTier } from "@/lib/get-user-tier";
 import {
