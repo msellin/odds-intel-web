@@ -3290,13 +3290,22 @@ export const CALIBRATED_PUBLIC_MARKETS = ["1x2", "o/u", "over_under_25", "btts"]
 // public-cohort bot names so the two always reconcile immediately after
 // a retirement lands. Called on every /performance request but the query
 // is tiny (43-row scan) — total cost < 5ms.
+//
+// PERF-COHORT-PREMATCH-ONLY (2026-08-21): also exclude inplay bots so the
+// hero + ledger + leaderboard all describe the same "public prematch
+// strategies" cohort. Was already the leaderboard's rule since
+// PERFORMANCE-PUBLIC-PREMATCH-ONLY 2026-06-24; hero + ledger drifted from
+// it and users noticed (leaderboard said 8 proven, ledger dropdown showed
+// 16 bots). Cost: headline ROI drops ~5pp because inplay was a strong
+// contributor. Benefit: everything reconciles + matches the design note.
 export async function getPublicCohortBotNames(): Promise<Set<string>> {
   const supabase = createSupabaseAdmin();
   const { data, error } = await supabase
     .from("bots")
     .select("name")
     .is("retired_at", null)
-    .in("maturity_label", PUBLIC_MATURITY_LABELS as unknown as string[]);
+    .in("maturity_label", PUBLIC_MATURITY_LABELS as unknown as string[])
+    .not("name", "like", "inplay_%");
   if (error || !data) return new Set();
   return new Set((data as Array<{ name: string }>).map((r) => r.name));
 }
@@ -3307,12 +3316,18 @@ const _getCalibratedHeadlineStatsUncached =
     const cutoff30 = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
 
     // Pull all production pre-match settled bets since launch in one shot.
+    // PERF-COHORT-PREMATCH-ONLY (2026-08-21): exclude inplay bots so this
+    // cohort matches the leaderboard's PERFORMANCE-PUBLIC-PREMATCH-ONLY
+    // rule + the /performance ledger's getPublicCohortBotNames filter.
+    // Prevents the "hero says 1025 / leaderboard says 8 proven / ledger
+    // dropdown shows 16 bots" three-way inconsistency.
     const { data, error } = await admin
       .from("simulated_bets")
       .select(
-        "created_at, stake, pnl, clv, clv_pinnacle, bots!inner(maturity_label)",
+        "created_at, stake, pnl, clv, clv_pinnacle, bots!inner(name, maturity_label)",
       )
       .in("bots.maturity_label", PUBLIC_MATURITY_LABELS as unknown as string[])
+      .not("bots.name", "like", "inplay_%")
       .in("market", CALIBRATED_PUBLIC_MARKETS as unknown as string[])
       .in("result", ["won", "lost"])
       .gte("created_at", `${CALIBRATED_SINCE}T00:00:00Z`)
