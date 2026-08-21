@@ -263,18 +263,28 @@ export default async function ShadowBotsPage() {
     return bot ? summarise(cfg, bot, bets) : null;
   }).filter((s): s is Summary => s !== null);
 
-  const totals = summaries.reduce(
-    (acc, s) => ({
-      total: acc.total + s.total,
-      settled: acc.settled + s.settled,
-      won: acc.won + s.won,
-      pnl: acc.pnl + s.pnl,
-      stake: acc.stake + s.stake,
-    }),
-    { total: 0, settled: 0, won: 0, pnl: 0, stake: 0 }
-  );
-  const anySettled = totals.settled > 0;
-  const portfolioROI = totals.stake > 0 ? (totals.pnl / totals.stake) * 100 : 0;
+  // Portfolio metric split active vs all — retired bots' historical losses
+  // shouldn't drag the "how are current bots doing" read.
+  const activeSummaries = summaries.filter((s) => !s.retiredAt);
+  const _sum = (arr: Summary[]) =>
+    arr.reduce(
+      (acc, s) => ({
+        total: acc.total + s.total,
+        settled: acc.settled + s.settled,
+        won: acc.won + s.won,
+        pnl: acc.pnl + s.pnl,
+        stake: acc.stake + s.stake,
+      }),
+      { total: 0, settled: 0, won: 0, pnl: 0, stake: 0 }
+    );
+  const totalsActive = _sum(activeSummaries);
+  const totalsAll = _sum(summaries);
+  const anySettled = totalsAll.settled > 0;
+  const activeROI = totalsActive.stake > 0 ? (totalsActive.pnl / totalsActive.stake) * 100 : 0;
+  const allROI = totalsAll.stake > 0 ? (totalsAll.pnl / totalsAll.stake) * 100 : 0;
+  const activeLost = totalsActive.settled - totalsActive.won;
+  const allLost = totalsAll.settled - totalsAll.won;
+  const nRetired = summaries.filter((s) => s.retiredAt).length;
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-10">
@@ -282,37 +292,33 @@ export default async function ShadowBotsPage() {
       <header className="mb-6">
         <h1 className="text-xl font-semibold text-neutral-100">Shadow bots</h1>
         <p className="mt-1 text-xs text-neutral-500">
-          {summaries.length} bots · {totals.total.toLocaleString()} picks · {totals.settled.toLocaleString()} settled · promote/retire at {MIN_SETTLED_FOR_DECISION} settled &amp; {MIN_DAYS_FOR_DECISION} days
+          {activeSummaries.length} active · {nRetired} retired · {totalsAll.total.toLocaleString()} picks · {totalsAll.settled.toLocaleString()} settled · promote/retire at {MIN_SETTLED_FOR_DECISION} settled &amp; {MIN_DAYS_FOR_DECISION} days
         </p>
       </header>
 
-      {/* Portfolio metric — only render when we have signal */}
+      {/* Portfolio ROI split — active-only is the "how are current bots
+          doing" number; all is included for completeness. Retired bots'
+          historical losses shouldn't drag the current read. */}
       {anySettled ? (
-        <section className="mb-6 rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3">
-          <div className="flex flex-wrap items-baseline justify-between gap-4">
-            <div>
-              <span className="text-xs uppercase tracking-wider text-neutral-500">Portfolio ROI</span>
-              <span
-                className={`ml-3 font-mono text-2xl font-semibold tabular-nums ${
-                  portfolioROI >= 3
-                    ? "text-emerald-400"
-                    : portfolioROI <= -8
-                    ? "text-rose-400"
-                    : "text-neutral-100"
-                }`}
-              >
-                {portfolioROI >= 0 ? "+" : ""}
-                {portfolioROI.toFixed(1)}%
-              </span>
-            </div>
-            <div className="text-xs text-neutral-500">
-              <span className="text-emerald-400">{totals.won} won</span>
-              {" · "}
-              <span className="text-rose-400">{totals.settled - totals.won} lost</span>
-              {" · "}
-              <span className="tabular-nums text-neutral-300">€{totals.pnl.toFixed(0)}</span> P&amp;L
-            </div>
-          </div>
+        <section className="mb-6 grid gap-3 sm:grid-cols-2">
+          <PortfolioCard
+            label="Active bots"
+            sub={`${activeSummaries.length} bot${activeSummaries.length === 1 ? "" : "s"}`}
+            roi={activeROI}
+            won={totalsActive.won}
+            lost={activeLost}
+            pnl={totalsActive.pnl}
+            emphasize
+          />
+          <PortfolioCard
+            label="Including retired"
+            sub={`${summaries.length} bots total`}
+            roi={allROI}
+            won={totalsAll.won}
+            lost={allLost}
+            pnl={totalsAll.pnl}
+            emphasize={false}
+          />
         </section>
       ) : null}
 
@@ -351,6 +357,59 @@ export default async function ShadowBotsPage() {
     </div>
   );
 }
+
+function PortfolioCard({
+  label,
+  sub,
+  roi,
+  won,
+  lost,
+  pnl,
+  emphasize,
+}: {
+  label: string;
+  sub: string;
+  roi: number;
+  won: number;
+  lost: number;
+  pnl: number;
+  emphasize: boolean;
+}) {
+  const roiTone =
+    roi >= 3 ? "text-emerald-400" : roi <= -8 ? "text-rose-400" : "text-neutral-100";
+  return (
+    <div
+      className={`rounded-xl border px-4 py-3 ${
+        emphasize
+          ? "border-white/10 bg-white/[0.03]"
+          : "border-white/[0.04] bg-white/[0.01] opacity-80"
+      }`}
+    >
+      <div className="flex items-baseline justify-between gap-3">
+        <div>
+          <div className="text-xs uppercase tracking-wider text-neutral-500">{label}</div>
+          <div className="mt-0.5 text-[10px] text-neutral-600">{sub}</div>
+        </div>
+        <div
+          className={`font-mono ${
+            emphasize ? "text-2xl" : "text-lg"
+          } font-semibold tabular-nums ${roiTone}`}
+        >
+          {roi >= 0 ? "+" : ""}
+          {roi.toFixed(1)}%
+        </div>
+      </div>
+      <div className="mt-2 text-[11px] text-neutral-500">
+        <span className="text-emerald-400">{won} won</span>
+        {" · "}
+        <span className="text-rose-400">{lost} lost</span>
+        {" · "}
+        <span className="tabular-nums text-neutral-300">€{pnl.toFixed(0)}</span> P&amp;L
+      </div>
+    </div>
+  );
+}
+
 
 function BotCard({ s }: { s: Summary }) {
   // Progress bar keys off SETTLED, not total. High-volume bots that pile
