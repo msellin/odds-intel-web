@@ -20,6 +20,7 @@ const MIN_DAYS_FOR_DECISION = 14;
 // at placement time, the pick still passes the bot's threshold.
 const BOT_EDGE_THRESHOLDS: Record<string, number> = {
   bot_no_pin_shadow_v1: 0.08,
+  bot_no_pin_home_v1: 0.08,
   bot_sweep_1x2_home_v1: 0.10,
   bot_sweep_1x2_draw_v1: 0.05,
   bot_sweep_btts_yes_v1: 0.05,
@@ -31,9 +32,14 @@ const BOT_EDGE_THRESHOLDS: Record<string, number> = {
 
 const ALLOWED: Record<string, { title: string; subtitle: string; detail: string }> = {
   bot_no_pin_shadow_v1: {
-    title: "Matches without Pinnacle",
-    subtitle: "Any market · edge ≥ 8%",
-    detail: "Fires on 1X2 markets when Pinnacle doesn't quote but ≥3 accessible books do.",
+    title: "Matches without Pinnacle (retired 2026-08-21)",
+    subtitle: "1X2 any selection · edge ≥ 8%",
+    detail: "RETIRED — home slice was winning (+33%) but draw/away were losing. Refined home-only version at bot_no_pin_home_v1. Historical data kept for reference.",
+  },
+  bot_no_pin_home_v1: {
+    title: "1X2 home · no Pinnacle",
+    subtitle: "1X2 home · edge ≥ 8% · matches without Pinnacle",
+    detail: "Refined replacement for bot_no_pin_shadow_v1. Fires only on home picks (the winning slice from the audit). Uses ensemble model prob + ≥3 accessible-book anchor.",
   },
   bot_sweep_1x2_home_v1: {
     title: "Home wins · tier 2-3",
@@ -267,8 +273,8 @@ export default async function ShadowBotDetailPage({
               <div className="text-right">Odds</div>
               <div className="text-right">Prob</div>
               <div>Book</div>
-              <div className="text-right" title="Minimum odds needed at Coolbet (or any book) for this pick to still meet the bot's edge threshold">
-                Min bet ⓘ
+              <div className="text-right" title="Target minimum odds. Check manually at your book of choice — if the current price is ≥ this number, the pick still meets the bot's edge threshold. If lower, the edge has eroded past the threshold — skip.">
+                Min odds ⓘ
               </div>
               <div className="text-right">Result</div>
             </div>
@@ -336,7 +342,7 @@ function BetRow({ bet: b, isFirst, threshold }: { bet: ShadowBetRow; isFirst: bo
       <div className="mt-0.5 text-xs text-neutral-300 sm:mt-0">
         {b.recommended_bookmaker ?? "—"}
       </div>
-      <div className="mt-0.5 text-right font-mono text-sm tabular-nums sm:mt-0" title="Minimum accessible-book odds needed for this pick to still meet the bot's edge threshold at placement time">
+      <div className="mt-0.5 text-right font-mono text-sm tabular-nums sm:mt-0" title="Manually check this at your book of choice (Coolbet, Bet365, whatever). If the current price meets or beats this number, the pick still has real edge. If not, skip.">
         {minBetOdds != null
           ? <span className="text-amber-300">≥{minBetOdds.toFixed(2)}</span>
           : <span className="text-neutral-600">—</span>}
