@@ -14,6 +14,21 @@ const STAKE = 10;
 const MIN_SETTLED_FOR_DECISION = 50;
 const MIN_DAYS_FOR_DECISION = 14;
 
+// Per-bot edge threshold (mirrors the bot's config in daily_pipeline_v2.py).
+// Used to compute "min odds to bet at" per pick: min_odds = (1 + threshold)
+// / model_probability. If Coolbet (or any accessible book) offers ≥ min_odds
+// at placement time, the pick still passes the bot's threshold.
+const BOT_EDGE_THRESHOLDS: Record<string, number> = {
+  bot_no_pin_shadow_v1: 0.08,
+  bot_sweep_1x2_home_v1: 0.10,
+  bot_sweep_1x2_draw_v1: 0.05,
+  bot_sweep_btts_yes_v1: 0.05,
+  bot_sweep_ou25_v1: 0.08,
+  bot_sweep_ou35_v1: 0.08,
+  bot_pin_1x2_home_v1: 0.12,
+  bot_pin_1x2_draw_tier4_v1: 0.05,
+};
+
 const ALLOWED: Record<string, { title: string; subtitle: string; detail: string }> = {
   bot_no_pin_shadow_v1: {
     title: "Matches without Pinnacle",
@@ -34,6 +49,26 @@ const ALLOWED: Record<string, { title: string; subtitle: string; detail: string 
     title: "Both teams to score · tier 2-3",
     subtitle: "BTTS yes · edge ≥ 5%",
     detail: "Sweep-derived. Fires on tier 2-3 leagues, BTTS-yes odds 2.0-2.5.",
+  },
+  bot_sweep_ou25_v1: {
+    title: "OU 2.5 · line-shopping vs Pinnacle",
+    subtitle: "Over/Under 2.5 · edge ≥ 8%",
+    detail: "Pure Pinnacle-vs-soft-book edge. No model dependency. Historical simulation +7-25% ROI per tier.",
+  },
+  bot_sweep_ou35_v1: {
+    title: "OU 3.5 · line-shopping vs Pinnacle",
+    subtitle: "Over/Under 3.5 · edge ≥ 8%",
+    detail: "Pure Pinnacle-vs-soft-book edge. Historical simulation +15-40% ROI per tier — strongest OU line.",
+  },
+  bot_pin_1x2_home_v1: {
+    title: "1X2 home wins · tier 1-2",
+    subtitle: "1X2 home · edge ≥ 12%",
+    detail: "Pure line-shopping on home wins in top-tier leagues. Historical: tier 1 +12%, tier 2 +31% ROI.",
+  },
+  bot_pin_1x2_draw_tier4_v1: {
+    title: "1X2 draws · tier 4 only",
+    subtitle: "1X2 draw · edge ≥ 5% · tier 4",
+    detail: "Pure line-shopping on draws in tier 4 leagues. Consistent +6-18% ROI across edge buckets.",
   },
 };
 
@@ -225,18 +260,21 @@ export default async function ShadowBotDetailPage({
           </div>
         ) : (
           <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]">
-            <div className="hidden border-b border-white/[0.04] px-4 py-2 text-[10px] font-mono uppercase tracking-wider text-neutral-500 sm:grid sm:grid-cols-[110px_1fr_110px_70px_60px_100px_75px]">
+            <div className="hidden border-b border-white/[0.04] px-4 py-2 text-[10px] font-mono uppercase tracking-wider text-neutral-500 sm:grid sm:grid-cols-[100px_1fr_100px_60px_60px_75px_90px_65px]">
               <div>Kickoff</div>
               <div>Match</div>
               <div>Pick</div>
               <div className="text-right">Odds</div>
               <div className="text-right">Prob</div>
               <div>Book</div>
+              <div className="text-right" title="Minimum odds needed at Coolbet (or any book) for this pick to still meet the bot's edge threshold">
+                Min bet ⓘ
+              </div>
               <div className="text-right">Result</div>
             </div>
             <ul>
               {bets.map((b, i) => (
-                <BetRow key={b.id} bet={b} isFirst={i === 0} />
+                <BetRow key={b.id} bet={b} isFirst={i === 0} threshold={BOT_EDGE_THRESHOLDS[botName] ?? 0.08} />
               ))}
             </ul>
           </div>
@@ -246,7 +284,7 @@ export default async function ShadowBotDetailPage({
   );
 }
 
-function BetRow({ bet: b, isFirst }: { bet: ShadowBetRow; isFirst: boolean }) {
+function BetRow({ bet: b, isFirst, threshold }: { bet: ShadowBetRow; isFirst: boolean; threshold: number }) {
   const ko = b.matches?.date ? new Date(b.matches.date) : null;
   const kickoffDate = ko
     ? ko.toLocaleString("en-GB", { day: "2-digit", month: "short", timeZone: "UTC" })
@@ -255,9 +293,19 @@ function BetRow({ bet: b, isFirst }: { bet: ShadowBetRow; isFirst: boolean }) {
     ? ko.toLocaleString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" })
     : "";
 
+  // Min odds to bet: minimum price at which this pick would still fire the bot's
+  // edge threshold. Formula: min_odds = (1 + threshold) / model_probability.
+  // Example: threshold 8%, model_probability 40% → min_odds = 1.08 / 0.40 = 2.70.
+  // If Coolbet (or any book) shows ≥ 2.70 at placement time, the bet is worth
+  // taking. If lower, edge has eroded past the threshold — skip.
+  const modelProb = b.model_probability != null ? Number(b.model_probability) : null;
+  const minBetOdds = modelProb && modelProb > 0
+    ? (1 + threshold) / modelProb
+    : null;
+
   return (
     <li
-      className={`px-4 py-3 text-sm sm:grid sm:grid-cols-[110px_1fr_110px_70px_60px_100px_75px] sm:items-center sm:gap-3 sm:py-2 ${
+      className={`px-4 py-3 text-sm sm:grid sm:grid-cols-[100px_1fr_100px_60px_60px_75px_90px_65px] sm:items-center sm:gap-3 sm:py-2 ${
         isFirst ? "" : "border-t border-white/[0.04]"
       }`}
     >
@@ -283,12 +331,15 @@ function BetRow({ bet: b, isFirst }: { bet: ShadowBetRow; isFirst: boolean }) {
         {b.odds_at_pick != null ? Number(b.odds_at_pick).toFixed(2) : "—"}
       </div>
       <div className="mt-0.5 text-right font-mono text-xs tabular-nums text-neutral-400 sm:mt-0">
-        {b.model_probability != null
-          ? `${(Number(b.model_probability) * 100).toFixed(0)}%`
-          : "—"}
+        {modelProb != null ? `${(modelProb * 100).toFixed(0)}%` : "—"}
       </div>
       <div className="mt-0.5 text-xs text-neutral-300 sm:mt-0">
         {b.recommended_bookmaker ?? "—"}
+      </div>
+      <div className="mt-0.5 text-right font-mono text-sm tabular-nums sm:mt-0" title="Minimum accessible-book odds needed for this pick to still meet the bot's edge threshold at placement time">
+        {minBetOdds != null
+          ? <span className="text-amber-300">≥{minBetOdds.toFixed(2)}</span>
+          : <span className="text-neutral-600">—</span>}
       </div>
       <div className="mt-1 text-right sm:mt-0">
         <ResultBadge result={b.result} />

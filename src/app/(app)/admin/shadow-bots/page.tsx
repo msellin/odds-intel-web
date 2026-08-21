@@ -1,11 +1,15 @@
 /**
  * /admin/shadow-bots — summary dashboard for all shadow-only bots.
  *
- * Four experimental bots writing to shadow_bets (never simulated_bets):
+ * Eight experimental bots writing to shadow_bets (never simulated_bets):
  *   • bot_no_pin_shadow_v1        (2026-08-18)  — matches without Pinnacle
  *   • bot_sweep_1x2_home_v1       (2026-08-19)  — sweep-derived, 1X2 home tier 2-3
  *   • bot_sweep_1x2_draw_v1       (2026-08-19)  — sweep-derived, 1X2 draw tier 2-3
  *   • bot_sweep_btts_yes_v1       (2026-08-19)  — sweep-derived, BTTS yes tier 2-3
+ *   • bot_sweep_ou25_v1           (2026-08-21)  — Pinnacle-vs-soft OU 2.5 line-shop
+ *   • bot_sweep_ou35_v1           (2026-08-21)  — Pinnacle-vs-soft OU 3.5 line-shop
+ *   • bot_pin_1x2_home_v1         (2026-08-21)  — 1X2 home line-shop, tier 1-2
+ *   • bot_pin_1x2_draw_tier4_v1   (2026-08-21)  — 1X2 draw line-shop, tier 4 only
  *
  * Promotion decision requires BOTH:
  *   • n_settled ≥ MIN_SETTLED_FOR_DECISION (50) — statistical power
@@ -26,7 +30,7 @@ const SHADOW_BOTS: Array<{ name: string; title: string; subtitle: string }> = [
   {
     name: "bot_no_pin_shadow_v1",
     title: "Matches without Pinnacle",
-    subtitle: "Any market · edge ≥ 8%",
+    subtitle: "1X2 · edge ≥ 8%",
   },
   {
     name: "bot_sweep_1x2_home_v1",
@@ -42,6 +46,26 @@ const SHADOW_BOTS: Array<{ name: string; title: string; subtitle: string }> = [
     name: "bot_sweep_btts_yes_v1",
     title: "Both teams to score · tier 2-3",
     subtitle: "BTTS yes · edge ≥ 5%",
+  },
+  {
+    name: "bot_sweep_ou25_v1",
+    title: "OU 2.5 · line-shopping vs Pinnacle",
+    subtitle: "OU 2.5 · edge ≥ 8% · no model dep",
+  },
+  {
+    name: "bot_sweep_ou35_v1",
+    title: "OU 3.5 · line-shopping vs Pinnacle",
+    subtitle: "OU 3.5 · edge ≥ 8% · no model dep",
+  },
+  {
+    name: "bot_pin_1x2_home_v1",
+    title: "1X2 home · tier 1-2 line-shopping",
+    subtitle: "1X2 home · edge ≥ 12% · tiers 1-2",
+  },
+  {
+    name: "bot_pin_1x2_draw_tier4_v1",
+    title: "1X2 draws · tier 4 line-shopping",
+    subtitle: "1X2 draw · edge ≥ 5% · tier 4 only",
   },
 ];
 
