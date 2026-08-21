@@ -256,6 +256,60 @@ export default async function ShadowBotsPage() {
     );
   const bets = (betsRaw ?? []) as ShadowBet[];
 
+  // Upcoming picks — the "single place to look when placing real money"
+  // section. All pending picks from ACTIVE bots on matches that haven't
+  // kicked off yet. Sorted by kickoff ascending (soonest first).
+  const activeBotIds = bots.filter((b) => !b.retired_at).map((b) => b.id);
+  const { data: upcomingRaw } = activeBotIds.length > 0
+    ? await db
+        .from("shadow_bets")
+        .select(
+          `id, bot_id, market, selection, odds_at_pick, model_probability,
+           edge_percent, recommended_bookmaker, pick_time, shadow_cohort,
+           matches!inner (
+             date,
+             leagues ( name, country, tier ),
+             home_team:teams!matches_home_team_id_fkey ( name ),
+             away_team:teams!matches_away_team_id_fkey ( name )
+           )`
+        )
+        .in("bot_id", activeBotIds)
+        .eq("result", "pending")
+        .gte("matches.date", new Date().toISOString())
+        .order("matches(date)", { ascending: true })
+        .limit(200)
+    : { data: [] };
+  const upcoming = (upcomingRaw ?? []) as unknown as Array<{
+    id: string;
+    bot_id: string;
+    market: string;
+    selection: string;
+    odds_at_pick: number | null;
+    model_probability: number | null;
+    edge_percent: number | null;
+    recommended_bookmaker: string | null;
+    pick_time: string;
+    shadow_cohort: string | null;
+    matches: {
+      date: string;
+      leagues: { name: string | null; country: string | null; tier: number | null } | null;
+      home_team: { name: string | null } | null;
+      away_team: { name: string | null } | null;
+    } | null;
+  }>;
+  const botNameById = new Map(bots.map((b) => [b.id, b.name]));
+  // BOT_EDGE_THRESHOLDS mirrors the map on the per-bot detail page.
+  const BOT_EDGE_THRESHOLDS: Record<string, number> = {
+    bot_no_pin_home_v1: 0.08,
+    bot_sweep_1x2_home_v1: 0.10,
+    bot_sweep_1x2_draw_v1: 0.05,
+    bot_sweep_btts_yes_v1: 0.05,
+    bot_sweep_ou25_v1: 0.08,
+    bot_sweep_ou35_v1: 0.08,
+    bot_pin_1x2_home_v1: 0.12,
+    bot_pin_1x2_draw_tier4_v1: 0.05,
+  };
+
   const summaries: Summary[] = SHADOW_BOTS.map((cfg) => {
     const bot = bots.find((b) => b.name === cfg.name);
     return bot ? summarise(cfg, bot, bets) : null;
@@ -319,6 +373,122 @@ export default async function ShadowBotsPage() {
           />
         </section>
       ) : null}
+
+      {/* Upcoming picks — pending picks from active bots, kickoff in future.
+          Native <details> for zero-JS collapse. Opens by default so the
+          operator sees pending picks immediately on page load. */}
+      {upcoming.length > 0 && (
+        <details open className="mb-6 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.03]">
+          <summary className="cursor-pointer select-none list-none px-4 py-3 hover:bg-emerald-500/[0.05]">
+            <div className="flex items-baseline justify-between gap-4">
+              <div>
+                <span className="text-sm font-semibold text-emerald-300">
+                  Upcoming picks
+                </span>
+                <span className="ml-2 rounded-full bg-emerald-500/15 px-2 py-0.5 font-mono text-[10px] text-emerald-300">
+                  {upcoming.length}
+                </span>
+                <span className="ml-2 text-xs text-neutral-500">
+                  pending · sorted by kickoff · click to collapse
+                </span>
+              </div>
+              <span className="text-[11px] text-neutral-500">
+                One-stop review for placing real money
+              </span>
+            </div>
+          </summary>
+          <div className="border-t border-emerald-500/10">
+            <div className="hidden border-b border-white/[0.04] px-4 py-2 text-[10px] font-mono uppercase tracking-wider text-neutral-500 sm:grid sm:grid-cols-[85px_1fr_40px_130px_95px_55px_55px_65px_80px]">
+              <div>Kickoff</div>
+              <div>Match</div>
+              <div className="text-center">Tier</div>
+              <div>Bot</div>
+              <div>Pick</div>
+              <div className="text-right">Odds</div>
+              <div className="text-right">Prob</div>
+              <div>Book</div>
+              <div className="text-right">Min odds</div>
+            </div>
+            <ul>
+              {upcoming.map((u, i) => {
+                const ko = u.matches?.date ? new Date(u.matches.date) : null;
+                const kd = ko
+                  ? ko.toLocaleString("en-GB", { day: "2-digit", month: "short", timeZone: "UTC" })
+                  : "—";
+                const kt = ko
+                  ? ko.toLocaleString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" })
+                  : "";
+                const tier = u.matches?.leagues?.tier ?? null;
+                const tierTone =
+                  tier === 1 ? "bg-emerald-500/15 text-emerald-300"
+                  : tier === 2 ? "bg-sky-500/15 text-sky-300"
+                  : tier === 3 ? "bg-amber-500/15 text-amber-300"
+                  : tier === 4 ? "bg-fuchsia-500/15 text-fuchsia-300"
+                  : "bg-neutral-500/15 text-neutral-400";
+                const botName = botNameById.get(u.bot_id) ?? "?";
+                const threshold = BOT_EDGE_THRESHOLDS[botName] ?? 0.08;
+                const modelProb = u.model_probability != null ? Number(u.model_probability) : null;
+                const minOdds = modelProb && modelProb > 0 ? (1 + threshold) / modelProb : null;
+                return (
+                  <li
+                    key={u.id}
+                    className={`px-4 py-2 text-sm sm:grid sm:grid-cols-[85px_1fr_40px_130px_95px_55px_55px_65px_80px] sm:items-center sm:gap-3 ${
+                      i > 0 ? "border-t border-white/[0.04]" : ""
+                    }`}
+                  >
+                    <div className="font-mono text-xs text-neutral-400">
+                      <span className="text-neutral-200">{kd}</span>
+                      <span className="ml-1 text-neutral-500">{kt}</span>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="truncate text-sm text-neutral-100">
+                        {u.matches?.home_team?.name ?? "Home"}{" "}
+                        <span className="text-neutral-500">vs</span>{" "}
+                        {u.matches?.away_team?.name ?? "Away"}
+                      </div>
+                      <div className="truncate text-[11px] text-neutral-500">
+                        {u.matches?.leagues?.country ? `${u.matches.leagues.country} · ` : ""}
+                        {u.matches?.leagues?.name ?? ""}
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <span className={`inline-block rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold ${tierTone}`}>
+                        {tier ? `T${tier}` : "—"}
+                      </span>
+                    </div>
+                    <div className="min-w-0">
+                      <Link
+                        href={`/admin/shadow-bots/${botName}`}
+                        className="truncate font-mono text-[11px] text-emerald-400/80 hover:text-emerald-300 hover:underline"
+                        title={botName}
+                      >
+                        {botName.replace(/^bot_/, "")}
+                      </Link>
+                    </div>
+                    <div className="text-sm text-emerald-300">
+                      {formatPickLabel(u.market, u.selection)}
+                    </div>
+                    <div className="text-right font-mono text-sm tabular-nums text-neutral-100">
+                      {u.odds_at_pick != null ? Number(u.odds_at_pick).toFixed(2) : "—"}
+                    </div>
+                    <div className="text-right font-mono text-xs tabular-nums text-neutral-400">
+                      {modelProb != null ? `${(modelProb * 100).toFixed(0)}%` : "—"}
+                    </div>
+                    <div className="text-xs text-neutral-300 truncate">
+                      {u.recommended_bookmaker ?? "—"}
+                    </div>
+                    <div className="text-right font-mono text-sm tabular-nums" title="Check manually at your book — bet only if it meets or beats this price.">
+                      {minOdds != null
+                        ? <span className="text-amber-300">≥{minOdds.toFixed(2)}</span>
+                        : <span className="text-neutral-600">—</span>}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </details>
+      )}
 
       {/* Active bots first, retired bots in a separate muted section */}
       {(() => {
@@ -578,6 +748,22 @@ function StatusPill({ status }: { status: BotStatus }) {
     </span>
   );
 }
+
+function formatPickLabel(market: string, selection: string): string {
+  const sel = (selection ?? "").toLowerCase();
+  if (market === "1x2") {
+    if (sel === "home") return "Home";
+    if (sel === "draw") return "Draw";
+    if (sel === "away") return "Away";
+  }
+  if (market === "btts") return sel === "yes" ? "BTTS yes" : "BTTS no";
+  if (market.startsWith("over_under_")) {
+    const line = market.replace("over_under_", "").replace(/^(\d)(\d)$/, "$1.$2");
+    return sel === "over" ? `Over ${line}` : `Under ${line}`;
+  }
+  return `${market} ${sel}`;
+}
+
 
 function Dot({ className }: { className: string }) {
   return <span className={`inline-block h-1.5 w-1.5 rounded-full ${className}`} />;
