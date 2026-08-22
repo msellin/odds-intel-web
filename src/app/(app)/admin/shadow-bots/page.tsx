@@ -309,7 +309,13 @@ export default async function ShadowBotsPage() {
         .eq("result", "pending")
         .gte("matches.date", new Date().toISOString())
         .order("matches(date)", { ascending: true })
-        .limit(500)  // fetch more to survive dedup + still show ~200 unique
+        // SHADOW-BOTS-LIMIT-FIX-2026-08-22: bumped 500 → 5000. Multi-cohort
+        // fires (:10/:40 every 30min 24h) mean each unique pick has 4-6 rows.
+        // At 500 the panel was cut off around 14:00 UTC kickoff, hiding
+        // evening matches (18-23 UTC). Diagnosed with 2,270 pending future
+        // rows → 147 unique picks visible at 5000 (vs 56 at 500). If we ever
+        // approach 5000 raw rows we'll switch to a DISTINCT ON strategy.
+        .limit(5000)
     : { data: [] };
   const upcomingRawArr = (upcomingRaw ?? []) as unknown as Array<{
     id: string;
