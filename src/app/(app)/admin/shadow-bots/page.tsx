@@ -360,6 +360,31 @@ export default async function ShadowBotsPage() {
     if (a.market !== b.market) return a.market.localeCompare(b.market);
     return a.selection.localeCompare(b.selection);
   });
+
+  // SHADOW-BOTS-COOLBET-CURRENT-2026-08-22: fetch latest Coolbet snapshot per
+  // (match, market, selection) for every upcoming pick, so the operator sees
+  // the current placement price + drift vs signal price. Solves the stale-odds
+  // trap (Gimnástica case: signal odds 2.75, current Coolbet 3.15 hours later).
+  const uniqueMatchIds = Array.from(new Set(upcoming.map((u) => u.match_id)));
+  const { data: cbSnapshots } = uniqueMatchIds.length > 0
+    ? await db
+        .from("odds_snapshots")
+        .select("match_id, market, selection, odds, timestamp")
+        .in("match_id", uniqueMatchIds)
+        .eq("bookmaker", "Coolbet")
+        .eq("is_live", false)
+        .order("timestamp", { ascending: false })
+        .limit(5000)
+    : { data: [] };
+  const coolbetCurrent = new Map<string, { odds: number; ts: string }>();
+  for (const row of (cbSnapshots ?? []) as Array<{
+    match_id: string; market: string; selection: string; odds: number | string; timestamp: string;
+  }>) {
+    const key = `${row.match_id}|${row.market}|${row.selection}`;
+    if (!coolbetCurrent.has(key)) {
+      coolbetCurrent.set(key, { odds: Number(row.odds), ts: row.timestamp });
+    }
+  }
   const botNameById = new Map(bots.map((b) => [b.id, b.name]));
   // BOT_EDGE_THRESHOLDS mirrors the map on the per-bot detail page.
   const BOT_EDGE_THRESHOLDS: Record<string, number> = {
@@ -479,7 +504,13 @@ export default async function ShadowBotsPage() {
             </div>
           </summary>
           <div className="border-t border-emerald-500/10">
-            <div className="hidden border-b border-white/[0.04] px-4 py-2 text-[10px] font-mono uppercase tracking-wider text-neutral-500 sm:grid sm:grid-cols-[85px_minmax(0,1fr)_40px_115px_90px_55px_50px_70px_75px]">
+            {/* SHADOW-BOTS-COLUMNS-2026-08-22: added Gap (model vs market) and
+                Now @ CB (current Coolbet price + drift) columns. Gap surfaces
+                calibration issues at a glance (>20pp = red = usually a broken
+                calibration on young bots, not real edge). Now @ CB shows the
+                actual placement price so the operator can compare it against
+                Min odds without a manual site lookup. */}
+            <div className="hidden border-b border-white/[0.04] px-4 py-2 text-[10px] font-mono uppercase tracking-wider text-neutral-500 sm:grid sm:grid-cols-[85px_minmax(0,1fr)_40px_115px_90px_55px_50px_60px_70px_75px_75px]">
               <div>Kickoff</div>
               <div>Match</div>
               <div className="text-center">Tier</div>
@@ -487,7 +518,9 @@ export default async function ShadowBotsPage() {
               <div>Pick</div>
               <div className="text-right">Odds</div>
               <div className="text-right">Prob</div>
+              <div className="text-right" title="Model probability minus market-implied probability (from odds), in percentage points. Green ≤10pp, amber 10-20pp, red >20pp (calibration flag on young bots).">Gap</div>
               <div>Book</div>
+              <div className="text-right" title="Coolbet's latest snapshot price for this exact selection. Arrow shows drift vs signal odds. — means no Coolbet coverage.">Now @ CB</div>
               <div className="text-right">Min odds</div>
             </div>
             <ul>
@@ -510,10 +543,44 @@ export default async function ShadowBotsPage() {
                 const threshold = BOT_EDGE_THRESHOLDS[botName] ?? 0.08;
                 const modelProb = u.model_probability != null ? Number(u.model_probability) : null;
                 const minOdds = modelProb && modelProb > 0 ? (1 + threshold) / modelProb : null;
+
+                // Gap = model_prob − market_implied_prob, in percentage points.
+                // Positive = model thinks the outcome is more likely than the
+                // market prices it (which is the whole point of a value bet).
+                // Very large positive gaps on young bots are usually a
+                // calibration issue, not real edge.
+                const signalOdds = u.odds_at_pick != null ? Number(u.odds_at_pick) : null;
+                const marketImplied = signalOdds && signalOdds > 0 ? 1 / signalOdds : null;
+                const gapPp = modelProb != null && marketImplied != null
+                  ? (modelProb - marketImplied) * 100
+                  : null;
+                const gapTone =
+                  gapPp == null ? "text-neutral-600"
+                  : gapPp <= 10 ? "text-emerald-400"
+                  : gapPp <= 20 ? "text-amber-400"
+                  : "text-rose-400";
+
+                // Current Coolbet price + drift vs signal.
+                //   ▲ = odds moved up (better price for bettor, market disagrees)
+                //   ▼ = odds moved down (worse price, sharp money confirms)
+                //   → = within 3% (stable)
+                //   — = no Coolbet coverage
+                const cbKey = `${u.match_id}|${u.market}|${u.selection}`;
+                const cb = coolbetCurrent.get(cbKey);
+                let cbArrow = "";
+                let cbArrowTone = "text-neutral-500";
+                if (cb && signalOdds && signalOdds > 0) {
+                  const diffPct = (cb.odds - signalOdds) / signalOdds;
+                  if (diffPct > 0.03) { cbArrow = "▲"; cbArrowTone = "text-emerald-400"; }
+                  else if (diffPct < -0.03) { cbArrow = "▼"; cbArrowTone = "text-amber-400"; }
+                  else { cbArrow = "→"; cbArrowTone = "text-neutral-500"; }
+                }
+                const cbBelowFloor = cb && minOdds != null && cb.odds < minOdds;
+
                 return (
                   <li
                     key={u.id}
-                    className={`px-4 py-2 text-sm sm:grid sm:grid-cols-[85px_minmax(0,1fr)_40px_115px_90px_55px_50px_70px_75px] sm:items-center sm:gap-3 ${
+                    className={`px-4 py-2 text-sm sm:grid sm:grid-cols-[85px_minmax(0,1fr)_40px_115px_90px_55px_50px_60px_70px_75px_75px] sm:items-center sm:gap-3 ${
                       i > 0 ? "border-t border-white/[0.04]" : ""
                     }`}
                   >
@@ -555,8 +622,42 @@ export default async function ShadowBotsPage() {
                     <div className="text-right font-mono text-xs tabular-nums text-neutral-400">
                       {modelProb != null ? `${(modelProb * 100).toFixed(0)}%` : "—"}
                     </div>
+                    <div
+                      className={`text-right font-mono text-xs tabular-nums ${gapTone}`}
+                      title={
+                        gapPp == null
+                          ? "Not enough data to compute gap."
+                          : gapPp > 20
+                            ? "Extreme gap — usually a calibration issue on young bots, not real edge. Skip unless bot has n≥100 settled with positive CLV."
+                            : gapPp > 10
+                              ? "Strong edge, plausibly real. Extra look before placing."
+                              : "Normal edge, model in agreement with market direction."
+                      }
+                    >
+                      {gapPp != null ? `${gapPp >= 0 ? "+" : ""}${gapPp.toFixed(0)}pp` : "—"}
+                    </div>
                     <div className="text-xs text-neutral-300 truncate">
                       {u.recommended_bookmaker ?? "—"}
+                    </div>
+                    <div
+                      className="text-right font-mono text-sm tabular-nums"
+                      title={
+                        cb == null
+                          ? "Coolbet doesn't cover this match/market — verify at another book or skip."
+                          : cbBelowFloor
+                            ? `Coolbet ${cb.odds.toFixed(2)} is BELOW min-odds floor ${minOdds?.toFixed(2)} — do NOT place. Signal fired at ${signalOdds?.toFixed(2)}, market has moved.`
+                            : `Coolbet current ${cb.odds.toFixed(2)} · signal was ${signalOdds?.toFixed(2)} · snapshot ${new Date(cb.ts).toUTCString()}`
+                      }
+                    >
+                      {cb == null
+                        ? <span className="text-neutral-600">—</span>
+                        : <>
+                            <span className={cbBelowFloor ? "text-rose-400" : "text-sky-300"}>
+                              {cb.odds.toFixed(2)}
+                            </span>
+                            {cbArrow && <span className={`ml-1 ${cbArrowTone}`}>{cbArrow}</span>}
+                          </>
+                      }
                     </div>
                     <div className="text-right font-mono text-sm tabular-nums" title="Check manually at your book — bet only if it meets or beats this price.">
                       {minOdds != null
