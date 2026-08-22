@@ -524,7 +524,7 @@ export default async function ShadowBotsPage() {
               <div>Pick</div>
               <div className="text-right">Odds</div>
               <div className="text-right">Prob</div>
-              <div className="text-right" title="Model probability minus market-implied probability (from odds), in percentage points. Green ≤10pp, amber 10-20pp, red >20pp (calibration flag on young bots).">Gap</div>
+              <div className="text-right" title="Model probability minus market-implied probability (from odds), in percentage points. Larger positive = bigger claimed edge. Interpret per bot — settled data shows different bots calibrate very differently, no universal good/bad threshold.">Gap</div>
               <div>Book</div>
               <div className="text-right" title="Coolbet's latest snapshot price for this exact selection. Arrow shows drift vs signal odds. — means no Coolbet coverage.">Now @ CB</div>
               <div className="text-right">Min odds</div>
@@ -553,18 +553,16 @@ export default async function ShadowBotsPage() {
                 // Gap = model_prob − market_implied_prob, in percentage points.
                 // Positive = model thinks the outcome is more likely than the
                 // market prices it (which is the whole point of a value bet).
-                // Very large positive gaps on young bots are usually a
-                // calibration issue, not real edge.
+                // Color coding intentionally removed 2026-08-22 after settled
+                // data audit contradicted the initial thresholds — active
+                // bots actually convert 20-40pp gaps at +46% ROI, while
+                // 5-20pp is the bleed band. Show raw number, let operator
+                // use judgment + per-bot track record.
                 const signalOdds = u.odds_at_pick != null ? Number(u.odds_at_pick) : null;
                 const marketImplied = signalOdds && signalOdds > 0 ? 1 / signalOdds : null;
                 const gapPp = modelProb != null && marketImplied != null
                   ? (modelProb - marketImplied) * 100
                   : null;
-                const gapTone =
-                  gapPp == null ? "text-neutral-600"
-                  : gapPp <= 10 ? "text-emerald-400"
-                  : gapPp <= 20 ? "text-amber-400"
-                  : "text-rose-400";
 
                 // Current Coolbet price + drift vs signal.
                 //   ▲ = odds moved up (better price for bettor, market disagrees)
@@ -629,16 +627,8 @@ export default async function ShadowBotsPage() {
                       {modelProb != null ? `${(modelProb * 100).toFixed(0)}%` : "—"}
                     </div>
                     <div
-                      className={`text-right font-mono text-xs tabular-nums ${gapTone}`}
-                      title={
-                        gapPp == null
-                          ? "Not enough data to compute gap."
-                          : gapPp > 20
-                            ? "Extreme gap — usually a calibration issue on young bots, not real edge. Skip unless bot has n≥100 settled with positive CLV."
-                            : gapPp > 10
-                              ? "Strong edge, plausibly real. Extra look before placing."
-                              : "Normal edge, model in agreement with market direction."
-                      }
+                      className="text-right font-mono text-xs tabular-nums text-neutral-400"
+                      title="Model probability minus market-implied probability (from odds), in percentage points. Larger positive = model thinks the outcome is more likely than the market prices it. Interpret alongside the bot's own track record + CLV — no universal 'good/bad' threshold, calibration varies by bot."
                     >
                       {gapPp != null ? `${gapPp >= 0 ? "+" : ""}${gapPp.toFixed(0)}pp` : "—"}
                     </div>
