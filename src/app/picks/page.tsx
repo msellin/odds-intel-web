@@ -122,11 +122,16 @@ export default async function PicksPage() {
     : PUBLIC_MATURITY_LABELS;
 
   let picks: UpcomingPick[] = [];
+  let hiddenPickCount = 0;
   let generatedAt = new Date().toISOString();
   try {
     const result = await fetchUpcomingPicks(maturityLabels);
     picks = result.picks;
     generatedAt = new Date().toISOString();
+    if (!isSignedIn) {
+      const fullResult = await fetchUpcomingPicks(SIGNED_IN_MATURITY_LABELS);
+      hiddenPickCount = Math.max(0, fullResult.picks.length - picks.length);
+    }
   } catch {
     picks = [];
   }
@@ -162,17 +167,26 @@ export default async function PicksPage() {
             </Link>
             . Results settle automatically.
           </p>
-          {!isSignedIn && (
-            <p className="mx-auto max-w-xl text-balance rounded-md border border-emerald-500/20 bg-emerald-500/[0.06] px-3 py-2 text-xs text-emerald-200/90">
-              You&apos;re seeing the public cohort (same set that goes to the Telegram channel).{" "}
-              <Link href="/login?next=/picks" className="font-semibold underline">
-                Sign in
-              </Link>{" "}
-              to see every pick the model flagged today — including beta + active bots — and to
-              tick off the ones you&apos;ve placed.
-            </p>
-          )}
         </div>
+
+        {!isSignedIn && hiddenPickCount > 0 && (
+          <div className="mt-8 flex flex-col gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.05] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-emerald-300">
+                {hiddenPickCount} more pick{hiddenPickCount === 1 ? "" : "s"} from beta bots today
+              </p>
+              <p className="mt-0.5 text-xs text-neutral-400">
+                You&apos;re seeing the public cohort — same as Telegram. Sign in to unlock the full list and track which ones you&apos;ve placed.
+              </p>
+            </div>
+            <Link
+              href="/login?next=/picks"
+              className="shrink-0 rounded-md bg-emerald-500 px-4 py-2 text-sm font-semibold text-neutral-950 hover:bg-emerald-400"
+            >
+              Sign in →
+            </Link>
+          </div>
+        )}
 
         {publicPickCount === 0 ? (
           <div className="mt-12 rounded-xl border border-white/[0.06] bg-white/[0.02] p-10 text-center">
