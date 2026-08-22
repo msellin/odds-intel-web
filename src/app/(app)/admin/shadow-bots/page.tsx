@@ -347,10 +347,18 @@ export default async function ShadowBotsPage() {
       upcomingDedupMap.set(key, r);
     }
   }
+  // PICKS-DEDUPE-ORDER-2026-08-22: sort by (kickoff, match_id, market,
+  // selection) so identical (match, market, sel) picks from different bots
+  // land adjacent — makes it obvious when two bots point at the same bet
+  // and prevents the operator from double-placing. Full de-duplication
+  // across bots is filed as PICKS-DEDUPE-2026-08-22.
   const upcoming = Array.from(upcomingDedupMap.values()).sort((a, b) => {
     const da = a.matches?.date ?? "";
     const db = b.matches?.date ?? "";
-    return da.localeCompare(db);
+    if (da !== db) return da.localeCompare(db);
+    if (a.match_id !== b.match_id) return a.match_id.localeCompare(b.match_id);
+    if (a.market !== b.market) return a.market.localeCompare(b.market);
+    return a.selection.localeCompare(b.selection);
   });
   const botNameById = new Map(bots.map((b) => [b.id, b.name]));
   // BOT_EDGE_THRESHOLDS mirrors the map on the per-bot detail page.
