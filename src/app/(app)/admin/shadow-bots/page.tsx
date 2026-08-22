@@ -20,6 +20,8 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
+import { PickBetMark } from "@/components/pick-bet-mark";
+import { fetchUserMarkedPickIds } from "@/lib/upcoming-picks";
 
 const STAKE = 10;
 const MIN_SETTLED_FOR_DECISION = 50;
@@ -244,6 +246,16 @@ export default async function ShadowBotsPage() {
     .eq("id", user.id)
     .single();
   if (!profile?.is_superadmin) return <Denied text="Superadmin only." />;
+
+  // Per-user "I placed this bet" state — powers the checkbox in the
+  // Upcoming picks table. Read once here so every row renders with the
+  // correct initial state (no flash of unticked → ticked).
+  let markedPickIds = new Set<string>();
+  try {
+    markedPickIds = await fetchUserMarkedPickIds(user.id);
+  } catch {
+    markedPickIds = new Set();
+  }
 
   const names = SHADOW_BOTS.map((b) => b.name);
   const { data: botsRaw } = await db
@@ -516,7 +528,8 @@ export default async function ShadowBotsPage() {
                 calibration on young bots, not real edge). Now @ CB shows the
                 actual placement price so the operator can compare it against
                 Min odds without a manual site lookup. */}
-            <div className="hidden border-b border-white/[0.04] px-4 py-2 text-[10px] font-mono uppercase tracking-wider text-neutral-500 sm:grid sm:grid-cols-[85px_minmax(0,1fr)_40px_115px_90px_55px_50px_60px_70px_75px_75px]">
+            <div className="hidden border-b border-white/[0.04] px-4 py-2 text-[10px] font-mono uppercase tracking-wider text-neutral-500 sm:grid sm:grid-cols-[28px_85px_minmax(0,1fr)_40px_115px_90px_55px_50px_60px_70px_75px_75px] sm:gap-3">
+              <div className="text-center" title="Tick once you've placed this bet with a book. Persists across sessions.">Bet</div>
               <div>Kickoff</div>
               <div>Match</div>
               <div className="text-center">Tier</div>
@@ -584,10 +597,17 @@ export default async function ShadowBotsPage() {
                 return (
                   <li
                     key={u.id}
-                    className={`px-4 py-2 text-sm sm:grid sm:grid-cols-[85px_minmax(0,1fr)_40px_115px_90px_55px_50px_60px_70px_75px_75px] sm:items-center sm:gap-3 ${
+                    className={`px-4 py-2 text-sm sm:grid sm:grid-cols-[28px_85px_minmax(0,1fr)_40px_115px_90px_55px_50px_60px_70px_75px_75px] sm:items-center sm:gap-3 ${
                       i > 0 ? "border-t border-white/[0.04]" : ""
                     }`}
                   >
+                    <div className="flex items-center justify-center">
+                      <PickBetMark
+                        pickId={u.id}
+                        initialMarked={markedPickIds.has(u.id)}
+                        compact
+                      />
+                    </div>
                     <div className="font-mono text-xs text-neutral-400">
                       <span className="text-neutral-200">{kd}</span>
                       <span className="ml-1 text-neutral-500">{kt}</span>

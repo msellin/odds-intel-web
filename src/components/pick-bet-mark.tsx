@@ -3,16 +3,24 @@
 import { useState, useTransition } from "react";
 
 /**
- * "I placed this bet" checkbox for a single pick on /picks. Signed-in only —
- * the parent gates rendering. Optimistic toggle: flip state first, POST to
- * /api/me/pick-marks, revert if the request fails.
+ * "I placed this bet" checkbox for a single pick. Superadmin-facing surface —
+ * operator ticks off shadow-bot picks they've placed manually so they don't
+ * double-place or forget which ones are still open.
+ *
+ * Optimistic toggle: flip state first, POST to /api/me/pick-marks, revert
+ * if the request fails.
+ *
+ * `compact` renders a bare checkbox for dense admin tables (shadow-bots
+ * upcoming grid); default renders a labeled pill for wider layouts.
  */
 export function PickBetMark({
   pickId,
   initialMarked,
+  compact = false,
 }: {
   pickId: string;
   initialMarked: boolean;
+  compact?: boolean;
 }) {
   const [marked, setMarked] = useState(initialMarked);
   const [pending, startTransition] = useTransition();
@@ -36,6 +44,25 @@ export function PickBetMark({
       }
     });
   };
+
+  if (compact) {
+    return (
+      <label
+        className={`inline-flex cursor-pointer select-none items-center justify-center ${
+          pending ? "opacity-70" : ""
+        }`}
+        title={error ?? (marked ? "Bet placed — click to unmark" : "Mark this pick as bet placed")}
+      >
+        <input
+          type="checkbox"
+          className="h-4 w-4 cursor-pointer accent-emerald-500"
+          checked={marked}
+          onChange={toggle}
+          disabled={pending}
+        />
+      </label>
+    );
+  }
 
   return (
     <label

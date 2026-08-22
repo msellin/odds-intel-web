@@ -18,11 +18,9 @@
  */
 import Link from "next/link";
 import { Nav } from "@/components/nav";
-import { PickBetMark } from "@/components/pick-bet-mark";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import {
   fetchUpcomingPicks,
-  fetchUserMarkedPickIds,
   PUBLIC_MATURITY_LABELS,
   SIGNED_IN_MATURITY_LABELS,
   type UpcomingPick,
@@ -133,15 +131,6 @@ export default async function PicksPage() {
     picks = [];
   }
 
-  let markedIds = new Set<string>();
-  if (user) {
-    try {
-      markedIds = await fetchUserMarkedPickIds(user.id);
-    } catch {
-      markedIds = new Set();
-    }
-  }
-
   // Group by kickoff date for cleaner reading
   const groups = new Map<string, UpcomingPick[]>();
   for (const p of picks) {
@@ -244,12 +233,6 @@ export default async function PicksPage() {
                             <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-emerald-300">
                               <span>Pick: {formatMarket(p.market, p.selection)}</span>
                               <ResultBadge result={p.result} kickoff={p.kickoff_utc} />
-                              {isSignedIn && (
-                                <PickBetMark
-                                  pickId={p.id}
-                                  initialMarked={markedIds.has(p.id)}
-                                />
-                              )}
                             </p>
                           </div>
                           <div className="flex items-baseline gap-4 text-right sm:gap-6">
