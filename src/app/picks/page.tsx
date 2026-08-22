@@ -1,60 +1,34 @@
 /**
- * /picks — public list of recent + upcoming pre-match picks from production
- * strategies.
+ * /picks — recent + upcoming pre-match picks.
+ *
+ * PICKS-USER-GATE 2026-08-22 — auth-aware:
+ *   - Signed-out visitors see the calibrated-only cohort (same set the
+ *     public Telegram channel ships and the same set /api/v1/upcoming
+ *     returns publicly).
+ *   - Signed-in visitors see the wider calibrated+beta+active cohort, plus
+ *     a per-row "Mark bet" checkbox that persists to `user_pick_marks` so
+ *     they can track which picks they've manually placed with a book. The
+ *     wider cohort is fetched server-side inside this component and never
+ *     exposed via any JSON endpoint — anonymous scrapers cannot pull it
+ *     from the network tab.
  *
  * Counterpart to /performance (full settled ledger). This page shows the
  * -24h/+36h window: today's picks that have already settled (with W/L badge)
- * plus everything upcoming. So the feed doesn't go empty the moment a match
- * kicks off — the settled outcomes stay visible as social proof for the rest
- * of the day.
- *
- * Free, no tier-gating, no signup. Same data as /api/v1/upcoming.
+ * plus everything upcoming.
  */
 import Link from "next/link";
-import { headers } from "next/headers";
 import { Nav } from "@/components/nav";
+import { PickBetMark } from "@/components/pick-bet-mark";
+import { createSupabaseServer } from "@/lib/supabase-server";
+import {
+  fetchUpcomingPicks,
+  fetchUserMarkedPickIds,
+  PUBLIC_MATURITY_LABELS,
+  SIGNED_IN_MATURITY_LABELS,
+  type UpcomingPick,
+} from "@/lib/upcoming-picks";
 
-interface UpcomingPick {
-  id: string;
-  match_id: string;
-  kickoff_utc: string | null;
-  league: string | null;
-  country: string | null;
-  home_team: string | null;
-  away_team: string | null;
-  market: string;
-  selection: string;
-  odds: number | null;
-  edge_pct: number | null;
-  bookmaker: string | null;
-  posted_at_utc: string;
-  result: "pending" | "won" | "lost" | "void";
-}
-
-interface UpcomingMeta {
-  generated_at_utc: string;
-  window_start_utc?: string;
-  window_end_utc?: string;
-  horizon_hours_forward: number;
-  count: number;
-  scope: string;
-  notes: string;
-}
-
-async function fetchUpcoming(): Promise<{ meta: UpcomingMeta | null; picks: UpcomingPick[] }> {
-  const h = await headers();
-  const host = h.get("host") ?? "localhost:3000";
-  const proto = host.startsWith("localhost") ? "http" : "https";
-  try {
-    const res = await fetch(`${proto}://${host}/api/v1/upcoming`, {
-      next: { revalidate: 60 },
-    });
-    if (!res.ok) return { meta: null, picks: [] };
-    return (await res.json()) as { meta: UpcomingMeta; picks: UpcomingPick[] };
-  } catch {
-    return { meta: null, picks: [] };
-  }
-}
+export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Live picks — OddsIntel",
@@ -90,15 +64,18 @@ function formatKickoff(iso: string | null): { date: string; time: string } {
   const tomorrow = new Date(today.getTime() + 24 * 3600 * 1000);
   const isToday = d.toDateString() === today.toDateString();
   const isTomorrow = d.toDateString() === tomorrow.toDateString();
-  const date = isToday ? "Today" : isTomorrow ? "Tomorrow" : d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
-  const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }) + " UTC";
+  const date = isToday
+    ? "Today"
+    : isTomorrow
+      ? "Tomorrow"
+      : d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+  const time =
+    d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }) +
+    " UTC";
   return { date, time };
 }
 
 function ResultBadge({ result, kickoff }: { result: string; kickoff: string | null }) {
-  // If a pick is still 'pending' but its kickoff has already passed, it's
-  // live in-play (settlement lands within ~2h of full-time). Label it so
-  // users don't confuse a live match with a still-to-come pick.
   const kickoffPassed = kickoff ? new Date(kickoff).getTime() < Date.now() : false;
   if (result === "pending") {
     if (kickoffPassed) {
@@ -136,7 +113,34 @@ function ResultBadge({ result, kickoff }: { result: string; kickoff: string | nu
 }
 
 export default async function PicksPage() {
-  const { meta, picks } = await fetchUpcoming();
+  const auth = await createSupabaseServer();
+  const {
+    data: { user },
+  } = await auth.auth.getUser();
+  const isSignedIn = !!user;
+
+  const maturityLabels = isSignedIn
+    ? SIGNED_IN_MATURITY_LABELS
+    : PUBLIC_MATURITY_LABELS;
+
+  let picks: UpcomingPick[] = [];
+  let generatedAt = new Date().toISOString();
+  try {
+    const result = await fetchUpcomingPicks(maturityLabels);
+    picks = result.picks;
+    generatedAt = new Date().toISOString();
+  } catch {
+    picks = [];
+  }
+
+  let markedIds = new Set<string>();
+  if (user) {
+    try {
+      markedIds = await fetchUserMarkedPickIds(user.id);
+    } catch {
+      markedIds = new Set();
+    }
+  }
 
   // Group by kickoff date for cleaner reading
   const groups = new Map<string, UpcomingPick[]>();
@@ -145,6 +149,8 @@ export default async function PicksPage() {
     if (!groups.has(date)) groups.set(date, []);
     groups.get(date)!.push(p);
   }
+
+  const publicPickCount = picks.length; // for header count
 
   return (
     <div className="min-h-dvh bg-neutral-950 text-neutral-50 antialiased">
@@ -156,8 +162,8 @@ export default async function PicksPage() {
             Today&apos;s picks + next 36 hours
           </p>
           <h1 className="text-balance text-3xl font-semibold tracking-tight sm:text-5xl">
-            {picks.length > 0
-              ? `${picks.length} pick${picks.length === 1 ? "" : "s"} the model has flagged`
+            {publicPickCount > 0
+              ? `${publicPickCount} pick${publicPickCount === 1 ? "" : "s"} the model has flagged`
               : "No active picks right now"}
           </h1>
           <p className="mx-auto max-w-xl text-balance text-sm text-neutral-400 sm:text-base">
@@ -165,11 +171,21 @@ export default async function PicksPage() {
             <Link href="/performance" className="text-emerald-400 hover:underline">
               public ledger
             </Link>
-            . Free for everyone — no signup, no paywall. Results settle automatically.
+            . Results settle automatically.
           </p>
+          {!isSignedIn && (
+            <p className="mx-auto max-w-xl text-balance rounded-md border border-emerald-500/20 bg-emerald-500/[0.06] px-3 py-2 text-xs text-emerald-200/90">
+              You&apos;re seeing the public cohort (same set that goes to the Telegram channel).{" "}
+              <Link href="/login?next=/picks" className="font-semibold underline">
+                Sign in
+              </Link>{" "}
+              to see every pick the model flagged today — including beta + active bots — and to
+              tick off the ones you&apos;ve placed.
+            </p>
+          )}
         </div>
 
-        {picks.length === 0 ? (
+        {publicPickCount === 0 ? (
           <div className="mt-12 rounded-xl border border-white/[0.06] bg-white/[0.02] p-10 text-center">
             <p className="text-sm text-neutral-400">
               The model didn&apos;t find any value bets in the next 36 hours.
@@ -181,7 +197,10 @@ export default async function PicksPage() {
                 track record
               </Link>{" "}
               and the{" "}
-              <Link href="/api/v1/track-record" className="font-mono text-emerald-400 hover:underline">
+              <Link
+                href="/api/v1/track-record"
+                className="font-mono text-emerald-400 hover:underline"
+              >
                 /api/v1/track-record
               </Link>{" "}
               JSON feed.
@@ -225,17 +244,27 @@ export default async function PicksPage() {
                             <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-emerald-300">
                               <span>Pick: {formatMarket(p.market, p.selection)}</span>
                               <ResultBadge result={p.result} kickoff={p.kickoff_utc} />
+                              {isSignedIn && (
+                                <PickBetMark
+                                  pickId={p.id}
+                                  initialMarked={markedIds.has(p.id)}
+                                />
+                              )}
                             </p>
                           </div>
                           <div className="flex items-baseline gap-4 text-right sm:gap-6">
                             <div>
-                              <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">Odds</p>
+                              <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
+                                Odds
+                              </p>
                               <p className="font-mono text-base font-semibold tabular-nums text-neutral-100 sm:text-lg">
                                 {p.odds?.toFixed(2) ?? "—"}
                               </p>
                             </div>
                             <div>
-                              <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">Edge</p>
+                              <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
+                                Edge
+                              </p>
                               <p
                                 className={`font-mono text-base font-semibold tabular-nums sm:text-lg ${
                                   edgeHigh ? "text-emerald-400" : "text-neutral-100"
@@ -246,7 +275,9 @@ export default async function PicksPage() {
                             </div>
                             {p.bookmaker && (
                               <div className="hidden sm:block">
-                                <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">Book</p>
+                                <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
+                                  Book
+                                </p>
                                 <p className="text-xs text-neutral-300">{p.bookmaker}</p>
                               </div>
                             )}
@@ -285,12 +316,12 @@ export default async function PicksPage() {
           </div>
         </section>
 
-        {meta && (
-          <p className="mt-6 text-center text-xs text-neutral-500">
-            {meta.scope}.{" "}
-            Generated at {new Date(meta.generated_at_utc).toLocaleString()}.
-          </p>
-        )}
+        <p className="mt-6 text-center text-xs text-neutral-500">
+          {isSignedIn
+            ? "Signed in — showing calibrated + beta + active production strategies."
+            : "Public cohort — calibrated strategies only (same set as Telegram)."}{" "}
+          Generated at {new Date(generatedAt).toLocaleString()}.
+        </p>
       </main>
     </div>
   );

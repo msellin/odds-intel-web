@@ -1,33 +1,33 @@
 /**
  * GET /api/v1/upcoming
  *
- * Public, auth-free JSON feed of recent + upcoming pre-match picks. Serves
- * the /picks live-feed page. Counterpart to /api/v1/track-record (settled
- * history over the full ledger).
+ * PUBLIC, auth-free JSON feed of recent + upcoming pre-match picks. This is
+ * the ONLY externally-fetchable feed of picks, and it is deliberately
+ * narrowed to the same cohort the public Telegram channel ships
+ * (@oddsintelpicks) so the two surfaces match one-to-one.
+ *
+ * PICKS-USER-GATE (2026-08-22): narrowed from calibrated+beta+active down to
+ * calibrated only. Signed-in users get the wider cohort when they load
+ * /picks — that widening happens server-side inside the page render, never
+ * via a JSON endpoint. This means the beta+active picks cannot be scraped
+ * from the network tab by an anon caller.
  *
  * Scope (intentional):
- *   - bots.maturity_label IN ('calibrated','beta','active')  — production
- *     strategies
- *   - bots.retired_at IS NULL  — exclude retired bots (matches /performance)
- *   - bots.name NOT LIKE 'inplay_%'  — pre-match cohort only (matches /performance)
+ *   - bots.maturity_label = 'calibrated'  — same set the public Telegram sends
+ *   - bots.retired_at IS NULL  — exclude retired bots
+ *   - bots.name NOT LIKE 'inplay_%'  — pre-match cohort only
  *   - market IN ('1x2', 'over_under_25', 'o/u', 'btts')  — pre-match only
- *   - match kickoff between NOW() - 24h and NOW() + 36 hours  — recent past
- *     picks (settled today) + all upcoming
- *   - result IN ('pending','won','lost','void')  — everything, badge shows outcome
+ *   - match kickoff between start of today UTC and NOW() + 36 hours
+ *   - result IN ('pending','won','lost','void')  — badge shows outcome
  *
  * PICKS-COHORT-ALIGN (2026-08-21): added retired_at + inplay_% filters so
- * /picks describes the SAME cohort as /performance's ledger + hero. Previously
- * /picks showed inplay-bot picks and could show retired-bot picks — Telegram
- * subscribers clicking through from /picks → /performance saw the picks
- * disappear from the ledger. Now both surfaces reconcile row-for-row.
+ * /picks describes the SAME cohort as /performance's ledger + hero.
  *
  * PICKS-WIDEN (2026-07-08): earlier version was NOW→NOW+36h + result='pending'
  * only, which made /picks look empty as soon as a match kicked off. Widening
- * backward + surfacing result badges lets the page double as social proof
- * ("here's what the model called today, and how it settled").
+ * backward + surfacing result badges lets the page double as social proof.
  *
- * Cache: 60s (the picks list itself updates as new bets fire each cron cycle).
- * Rate limit: 60 req/min/IP.
+ * Cache: 60s. Rate limit: 60 req/min/IP.
  */
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -37,7 +37,13 @@ export const dynamic = "force-dynamic";
 export const revalidate = 60;
 
 const PRE_MATCH_MARKETS = ["1x2", "over_under_25", "o/u", "btts"];
-const PUBLIC_MATURITY_LABELS = ["calibrated", "beta", "active"];
+// PICKS-USER-GATE 2026-08-22 — public endpoint is calibrated-only (matches
+// the Telegram public channel cohort). Signed-in users get the wider set
+// (calibrated+beta+active) via lib/upcoming-picks#SIGNED_IN_MATURITY_LABELS,
+// called directly from the /picks server component. Never expose the wider
+// cohort here — that would leak beta+active picks to unauthenticated
+// scrapers.
+const PUBLIC_MATURITY_LABELS = ["calibrated"];
 
 function adminClient() {
   const url =
@@ -164,7 +170,7 @@ export async function GET(req: Request) {
         horizon_hours_forward: horizonHoursForward,
         count: picks.length,
         scope:
-          "pre-match picks from active production strategies (calibrated + beta + active maturity, non-retired, non-inplay), kickoffs from start of today UTC through +36h. Same cohort as /api/v1/track-record + /performance so every /picks row appears on the ledger once settled. Includes settled picks (won/lost/void) so the feed doesn't go dark right after a match kicks off.",
+          "public feed — pre-match picks from calibrated bots only (same cohort as the Telegram public channel), non-retired, non-inplay, kickoffs from start of today UTC through +36h. Signed-in users see a wider cohort (calibrated + beta + active) inline on /picks; that wider set is not available via any JSON endpoint. Includes settled picks (won/lost/void) so the feed doesn't go dark right after a match kicks off.",
         notes:
           "Picks with result='pending' are live. Settled picks (won/lost/void) come off /api/v1/track-record's ledger once the match finishes. Use match_id to correlate.",
       },
