@@ -604,11 +604,15 @@ export default async function ShadowBotsPage() {
                 if (!cFlag && (tier === null || tier === 0)) {
                   cFlag = { level: "red", reason: "No model coverage: ensemble falls back to Poisson guess for this untiered league. Edge is unreliable." };
                 }
-                if (!cFlag && gapPp !== null && gapPp < 10) {
-                  cFlag = { level: "red", reason: `${gapPp.toFixed(0)}pp edge: every bot shows negative ROI below 10pp in settled data. Narrowly above the bot's minimum gate — skip.` };
+                // u.edge_percent is stored as a decimal fraction (0.086 = 8.6% relative edge).
+                // The settled-data buckets (<10%, 10-15%, etc.) are relative edge — use this,
+                // not gapPp (absolute pp), which is a different metric.
+                const edgePct = u.edge_percent != null ? Number(u.edge_percent) * 100 : null;
+                if (!cFlag && edgePct !== null && edgePct < 10) {
+                  cFlag = { level: "red", reason: `${edgePct.toFixed(1)}% edge: every bot shows negative ROI below 10% in settled data. This pick barely cleared the bot's minimum gate — skip.` };
                 }
-                if (!cFlag && gapPp !== null && gapPp >= 25 && (u.market === "ou35" || u.selection === "draw")) {
-                  cFlag = { level: "yellow", reason: `${gapPp.toFixed(0)}pp edge on ${u.market}/${u.selection}: 25%+ edge on draw/OU35 underperforms — likely a Coolbet phantom line. Verify at Pinnacle before placing.` };
+                if (!cFlag && edgePct !== null && edgePct >= 25 && (u.market === "ou35" || u.selection === "draw")) {
+                  cFlag = { level: "yellow", reason: `${edgePct.toFixed(1)}% edge on ${u.market}/${u.selection}: 25%+ edge on draw/OU35 underperforms — likely a Coolbet phantom line. Verify at Pinnacle before placing.` };
                 }
                 if (!cFlag && signalOdds !== null && signalOdds >= 3.5 && u.selection === "home") {
                   cFlag = { level: "yellow", reason: `Home at ${signalOdds.toFixed(2)} odds: pin_home bets at 3.5+ underperform (−4.7% vs +58% at 2.5–3.5 in settled data). Verify carefully.` };
