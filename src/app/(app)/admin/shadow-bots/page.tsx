@@ -594,12 +594,34 @@ export default async function ShadowBotsPage() {
                 }
                 const cbBelowFloor = cb && minOdds != null && cb.odds < minOdds;
 
+                // Real-money confidence flag — visual warning for patterns confirmed negative in settled data.
+                // Bots keep firing to collect data; this flag is for operator's manual betting decisions.
+                type CFlag = { level: "red" | "yellow"; reason: string } | null;
+                let cFlag: CFlag = null;
+                if (!cFlag && botName === "bot_pin_1x2_draw_tier4_v1") {
+                  cFlag = { level: "red", reason: "Draw/T4 bot: 10 settled bets, 1W/9L (−65% ROI). Skip until 50+ sample." };
+                }
+                if (!cFlag && (tier === null || tier === 0)) {
+                  cFlag = { level: "red", reason: "No model coverage: ensemble falls back to Poisson guess for this untiered league. Edge is unreliable." };
+                }
+                if (!cFlag && gapPp !== null && gapPp < 10) {
+                  cFlag = { level: "red", reason: `${gapPp.toFixed(0)}pp edge: every bot shows negative ROI below 10pp in settled data. Narrowly above the bot's minimum gate — skip.` };
+                }
+                if (!cFlag && gapPp !== null && gapPp >= 25 && (u.market === "ou35" || u.selection === "draw")) {
+                  cFlag = { level: "yellow", reason: `${gapPp.toFixed(0)}pp edge on ${u.market}/${u.selection}: 25%+ edge on draw/OU35 underperforms — likely a Coolbet phantom line. Verify at Pinnacle before placing.` };
+                }
+                if (!cFlag && signalOdds !== null && signalOdds >= 3.5 && u.selection === "home") {
+                  cFlag = { level: "yellow", reason: `Home at ${signalOdds.toFixed(2)} odds: pin_home bets at 3.5+ underperform (−4.7% vs +58% at 2.5–3.5 in settled data). Verify carefully.` };
+                }
+
                 return (
                   <li
                     key={u.id}
-                    className={`px-4 py-2 text-sm sm:grid sm:grid-cols-[28px_85px_minmax(0,1fr)_40px_115px_90px_55px_50px_60px_70px_75px_75px] sm:items-center sm:gap-3 ${
-                      i > 0 ? "border-t border-white/[0.04]" : ""
-                    }`}
+                    className={`px-4 py-2 text-sm sm:grid sm:grid-cols-[28px_85px_minmax(0,1fr)_40px_115px_90px_55px_50px_60px_70px_75px_75px] sm:items-center sm:gap-3 border-l-2 ${
+                      cFlag?.level === "red" ? "border-rose-500/60" :
+                      cFlag?.level === "yellow" ? "border-amber-500/50" :
+                      "border-transparent"
+                    } ${i > 0 ? "border-t border-white/[0.04]" : ""}`}
                   >
                     <div className="flex items-center justify-center">
                       <PickBetMark
@@ -636,8 +658,20 @@ export default async function ShadowBotsPage() {
                         {botName.replace(/^bot_/, "")}
                       </Link>
                     </div>
-                    <div className="text-sm text-emerald-300">
+                    <div className="flex items-center gap-1.5 text-sm text-emerald-300">
                       {formatPickLabel(u.market, u.selection)}
+                      {cFlag && (
+                        <span
+                          title={cFlag.reason}
+                          className={`shrink-0 rounded px-1 py-px font-mono text-[10px] font-bold ${
+                            cFlag.level === "red"
+                              ? "bg-rose-500/20 text-rose-400"
+                              : "bg-amber-500/20 text-amber-400"
+                          }`}
+                        >
+                          {cFlag.level === "red" ? "✕" : "⚠"}
+                        </span>
+                      )}
                     </div>
                     <div className="text-right font-mono text-sm tabular-nums text-neutral-100">
                       {u.odds_at_pick != null ? Number(u.odds_at_pick).toFixed(2) : "—"}
