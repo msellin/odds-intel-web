@@ -21,7 +21,7 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
 import { PickBetMark } from "@/components/pick-bet-mark";
-import { fetchUserMarkedPickIds } from "@/lib/upcoming-picks";
+import { fetchUserPickMarkStates } from "@/lib/upcoming-picks";
 
 const STAKE = 10;
 const MIN_SETTLED_FOR_DECISION = 50;
@@ -250,11 +250,11 @@ export default async function ShadowBotsPage() {
   // Per-user "I placed this bet" state — powers the checkbox in the
   // Upcoming picks table. Read once here so every row renders with the
   // correct initial state (no flash of unticked → ticked).
-  let markedPickIds = new Set<string>();
+  let pickMarkStates = new Map<string, 1 | 2>();
   try {
-    markedPickIds = await fetchUserMarkedPickIds(user.id);
+    pickMarkStates = await fetchUserPickMarkStates(user.id);
   } catch {
-    markedPickIds = new Set();
+    pickMarkStates = new Map();
   }
 
   const names = SHADOW_BOTS.map((b) => b.name);
@@ -604,8 +604,7 @@ export default async function ShadowBotsPage() {
                     <div className="flex items-center justify-center">
                       <PickBetMark
                         pickId={u.id}
-                        initialMarked={markedPickIds.has(u.id)}
-                        compact
+                        initialState={pickMarkStates.get(u.id) ?? 0}
                       />
                     </div>
                     <div className="font-mono text-xs text-neutral-400">

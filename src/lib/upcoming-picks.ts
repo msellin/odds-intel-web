@@ -140,14 +140,18 @@ export async function fetchUpcomingPicks(
   };
 }
 
-export async function fetchUserMarkedPickIds(
+export async function fetchUserPickMarkStates(
   userId: string,
-): Promise<Set<string>> {
+): Promise<Map<string, 1 | 2>> {
   const sb = adminClient();
   const { data, error } = await sb
     .from("user_pick_marks")
-    .select("pick_id")
+    .select("pick_id, state")
     .eq("user_id", userId);
   if (error) throw new Error(`user_pick_marks: ${error.message}`);
-  return new Set((data ?? []).map((r: { pick_id: string }) => r.pick_id));
+  const map = new Map<string, 1 | 2>();
+  for (const r of (data ?? []) as { pick_id: string; state: number }[]) {
+    map.set(r.pick_id, r.state === 1 ? 1 : 2);
+  }
+  return map;
 }

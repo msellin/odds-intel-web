@@ -3,84 +3,88 @@
 import { useState, useTransition } from "react";
 
 /**
- * "I placed this bet" checkbox for a single pick. Superadmin-facing surface —
- * operator ticks off shadow-bot picks they've placed manually so they don't
- * double-place or forget which ones are still open.
+ * Tri-state pick review marker for the shadow-bots upcoming picks table.
  *
- * Optimistic toggle: flip state first, POST to /api/me/pick-marks, revert
- * if the request fails.
+ * States (cycle on click: 0 → 1 → 2 → 0):
+ *   0 = untouched  — empty circle (neutral)
+ *   1 = reviewed   — eye icon (amber) — looked at, possibly waiting for better odds
+ *   2 = bet placed — checkmark (emerald) — manually placed at a book
  *
- * `compact` renders a bare checkbox for dense admin tables (shadow-bots
- * upcoming grid); default renders a labeled pill for wider layouts.
+ * Optimistic update: state flips immediately, POST to /api/me/pick-marks,
+ * reverts on failure.
  */
+
+type MarkState = 0 | 1 | 2;
+
+function StateIcon({ state, pending }: { state: MarkState; pending: boolean }) {
+  const base = `h-4 w-4 rounded-sm transition-colors ${pending ? "opacity-50" : ""}`;
+  if (state === 0) {
+    return (
+      <svg className={`${base} text-neutral-600 hover:text-neutral-400`} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5}>
+        <circle cx="8" cy="8" r="6" />
+      </svg>
+    );
+  }
+  if (state === 1) {
+    return (
+      <svg className={`${base} text-amber-400`} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5}>
+        <ellipse cx="8" cy="8" rx="7" ry="4.5" />
+        <circle cx="8" cy="8" r="1.5" fill="currentColor" stroke="none" />
+      </svg>
+    );
+  }
+  return (
+    <svg className={`${base} text-emerald-400`} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={2}>
+      <polyline points="3,8 6.5,11.5 13,4.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+const TITLES: Record<MarkState, string> = {
+  0: "Not reviewed — click to mark as reviewed",
+  1: "Reviewed — click to mark as bet placed",
+  2: "Bet placed — click to reset",
+};
+
 export function PickBetMark({
   pickId,
-  initialMarked,
-  compact = false,
+  initialState = 0,
 }: {
   pickId: string;
-  initialMarked: boolean;
-  compact?: boolean;
+  initialState?: MarkState;
 }) {
-  const [marked, setMarked] = useState(initialMarked);
+  const [state, setState] = useState<MarkState>(initialState);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  const toggle = () => {
-    const next = !marked;
-    setMarked(next);
+  const cycle = () => {
+    const next: MarkState = state === 0 ? 1 : state === 1 ? 2 : 0;
+    setState(next);
     setError(null);
     startTransition(async () => {
       try {
         const res = await fetch("/api/me/pick-marks", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pickId, marked: next }),
+          body: JSON.stringify({ pickId, state: next }),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
       } catch (e) {
-        setMarked(!next);
+        setState(state);
         setError(e instanceof Error ? e.message : "failed");
       }
     });
   };
 
-  if (compact) {
-    return (
-      <label
-        className={`inline-flex cursor-pointer select-none items-center justify-center ${
-          pending ? "opacity-70" : ""
-        }`}
-        title={error ?? (marked ? "Bet placed — click to unmark" : "Mark this pick as bet placed")}
-      >
-        <input
-          type="checkbox"
-          className="h-4 w-4 cursor-pointer accent-emerald-500"
-          checked={marked}
-          onChange={toggle}
-          disabled={pending}
-        />
-      </label>
-    );
-  }
-
   return (
-    <label
-      className={`inline-flex cursor-pointer select-none items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-[10px] uppercase tracking-wider transition-colors ${
-        marked
-          ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
-          : "border-white/10 bg-white/[0.02] text-neutral-400 hover:border-white/25 hover:text-neutral-200"
-      } ${pending ? "opacity-70" : ""}`}
-      title={error ?? "Mark this pick as bet placed"}
+    <button
+      type="button"
+      onClick={cycle}
+      disabled={pending}
+      className="flex cursor-pointer items-center justify-center rounded p-0.5 hover:bg-white/[0.04]"
+      title={error ?? TITLES[state]}
     >
-      <input
-        type="checkbox"
-        className="h-3 w-3 accent-emerald-500"
-        checked={marked}
-        onChange={toggle}
-        disabled={pending}
-      />
-      <span>{marked ? "Bet placed" : "Mark bet"}</span>
-    </label>
+      <StateIcon state={state} pending={pending} />
+    </button>
   );
 }
