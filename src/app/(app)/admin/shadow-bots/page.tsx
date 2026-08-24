@@ -38,64 +38,76 @@ const SHADOW_BOTS: Array<{
   backtestN: number;
   backtestRoi: number;
 }> = [
+  // PER-BOT-SWEEP-2026-08-24: backtestN/backtestRoi replaced. The previous
+  // values came from an ad-hoc simulation whose script was never committed
+  // (migrations 274/275) and could not be reproduced. These are from
+  // scripts/per_bot_backtest_sweep.py — a point-in-time replay priced at
+  // kickoff-3h with no look-ahead, 2026-05-01 → 08-21, at each bot's
+  // as-deployed config. They are lower and less flattering, but real.
+  //
+  // Caveat worth remembering when reading them: that same sweep showed
+  // selecting configs on backtest ROI is ANTI-predictive (-9.2% out of
+  // sample). Treat these as context, not as a target.
+
   // Active bots first
   {
-    name: "bot_no_pin_home_v1",
-    title: "1X2 home · matches without Pinnacle",
-    subtitle: "1X2 home · edge ≥ 8%",
-    backtestN: 39,
-    backtestRoi: 32.7,
+    name: "bot_pin_1x2_home_v1",
+    title: "1X2 home · tier 1-2 line-shopping",
+    subtitle: "1X2 home · de-vigged edge ≥ 3% · tiers 1-2",
+    backtestN: 692,
+    backtestRoi: 7.3,
   },
   {
     name: "bot_sweep_1x2_home_v1",
     title: "Home wins · tier 2-3",
-    subtitle: "1X2 home · edge ≥ 10%",
-    backtestN: 501,
-    backtestRoi: 9.3,
-  },
-  {
-    name: "bot_sweep_1x2_draw_v1",
-    title: "Draws · tier 2-3",
-    subtitle: "1X2 draw · edge ≥ 5%",
-    backtestN: 714,
-    backtestRoi: 7.3,
-  },
-  {
-    name: "bot_sweep_btts_yes_v1",
-    title: "Both teams to score · tier 2-3",
-    subtitle: "BTTS yes · edge ≥ 5%",
-    backtestN: 318,
-    backtestRoi: 5.4,
+    subtitle: "1X2 home · model edge ≥ 10%",
+    backtestN: 411,
+    backtestRoi: 2.1,
   },
   {
     name: "bot_sweep_ou25_v1",
     title: "OU 2.5 · line-shopping vs Pinnacle",
-    subtitle: "OU 2.5 · edge ≥ 8% · no model dep",
-    backtestN: 1846,
-    backtestRoi: 11.0,
+    subtitle: "OU 2.5 · de-vigged edge ≥ 3% · tiers 1-2 · one side only",
+    backtestN: 1005,
+    backtestRoi: 1.7,
+  },
+  {
+    name: "bot_sweep_1x2_draw_v1",
+    title: "Draws · tier 2-3",
+    subtitle: "1X2 draw · model edge ≥ 5% · watch: recent window weak",
+    backtestN: 614,
+    backtestRoi: 1.1,
   },
   {
     name: "bot_sweep_ou35_v1",
     title: "OU 3.5 · line-shopping vs Pinnacle",
-    subtitle: "OU 3.5 · edge ≥ 8% · no model dep",
-    backtestN: 1740,
-    backtestRoi: 7.4,
+    subtitle: "OU 3.5 · de-vigged edge ≥ 3% · tiers 1-2 · one side only",
+    backtestN: 992,
+    backtestRoi: -0.2,
   },
   {
-    name: "bot_pin_1x2_home_v1",
-    title: "1X2 home · tier 1-2 line-shopping",
-    subtitle: "1X2 home · edge ≥ 12% · tiers 1-2",
-    backtestN: 1345,
-    backtestRoi: 13.3,
+    name: "bot_sweep_btts_yes_v1",
+    title: "Both teams to score · tier 2-3",
+    subtitle: "BTTS yes · model edge ≥ 5%",
+    backtestN: 240,
+    backtestRoi: -1.7,
   },
+
+  // Retired bots — historical data only, kept for reference
   {
     name: "bot_pin_1x2_draw_tier4_v1",
-    title: "1X2 draws · tier 4 line-shopping",
-    subtitle: "1X2 draw · edge ≥ 5% · tier 4 only",
-    backtestN: 349,
-    backtestRoi: 12.4,
+    title: "1X2 draws · tier 4 line-shopping (retired 2026-08-24)",
+    subtitle: "Retired: 5% gate sat below the 12.2% tier-4 overround — 85% of picks were negative-EV",
+    backtestN: 339,
+    backtestRoi: 7.8,
   },
-  // Retired bots — historical data only, kept for reference
+  {
+    name: "bot_no_pin_home_v1",
+    title: "1X2 home · no Pinnacle (retired 2026-08-24)",
+    subtitle: "Retired: negative at every edge threshold tested; model 17.3pp overconfident",
+    backtestN: 187,
+    backtestRoi: -6.2,
+  },
   {
     name: "bot_no_pin_shadow_v1",
     title: "1X2 · matches without Pinnacle (retired 2026-08-21)",
@@ -405,14 +417,19 @@ export default async function ShadowBotsPage() {
   }
   const botNameById = new Map(bots.map((b) => [b.id, b.name]));
   // BOT_EDGE_THRESHOLDS mirrors the map on the per-bot detail page.
+  // PER-BOT-SWEEP-2026-08-24: the three line-shop bots moved to a DE-VIGGED
+  // 3% floor (daily_pipeline_v2.py `_LINESHOP_TRUE_EDGE_MIN`). Their stored
+  // edge_percent is now true post-vig edge, so it is not comparable to the
+  // old vig-inclusive numbers on pre-2026-08-24 picks.
   const BOT_EDGE_THRESHOLDS: Record<string, number> = {
-    bot_no_pin_home_v1: 0.08,
     bot_sweep_1x2_home_v1: 0.10,
     bot_sweep_1x2_draw_v1: 0.05,
     bot_sweep_btts_yes_v1: 0.05,
-    bot_sweep_ou25_v1: 0.08,
-    bot_sweep_ou35_v1: 0.08,
-    bot_pin_1x2_home_v1: 0.12,
+    bot_sweep_ou25_v1: 0.03,
+    bot_sweep_ou35_v1: 0.03,
+    bot_pin_1x2_home_v1: 0.03,
+    // Retired 2026-08-24 — kept so historical rows still resolve a threshold.
+    bot_no_pin_home_v1: 0.08,
     bot_pin_1x2_draw_tier4_v1: 0.05,
   };
 
@@ -597,25 +614,37 @@ export default async function ShadowBotsPage() {
                 // Real-money confidence flag — visual warning for patterns confirmed negative in settled data.
                 // Bots keep firing to collect data; this flag is for operator's manual betting decisions.
                 type CFlag = { level: "red" | "yellow"; reason: string } | null;
+                // PER-BOT-SWEEP-2026-08-24 cut this from five flags to one.
+                // Four of the five are now enforced in bot config instead of
+                // being warned about at placement time, which is strictly
+                // better — the bets are never generated at all:
+                //   • draw_tier4 bot        → retired (migration 281)
+                //   • tier 0 / NULL leagues → excluded at the SQL layer
+                //   • sub-10% edge          → obsolete basis. It was calibrated
+                //     on vig-inclusive line-shop edge; those bots now gate on
+                //     DE-VIGGED edge ≥ 3%, so a 4% edge is genuinely +EV and
+                //     flagging it red would flag nearly every pick.
+                //   • home @ 3.5+ odds      → never supported. pin_home at 3.5+
+                //     was −24.7% but sweep_home was +104% — opposite directions
+                //     with error bars far wider than the effect.
+                //
+                // What remains is the one problem still open and unfixed:
+                // SWEEP-HOME-BOTS-CALIBRATION-2026-08-22. The model-driven bots
+                // produce extreme model-vs-market gaps on reserve/II teams and
+                // cross-tier ties (+142% on Zvijezda 09, +134% on Sparta Praha II).
+                // Every model bot measured 6–17pp overconfident, worst in the
+                // 0.50–0.60 probability band (predicts 54%, actual 29%).
+                const MODEL_DRIVEN = new Set([
+                  "bot_sweep_1x2_home_v1",
+                  "bot_sweep_1x2_draw_v1",
+                  "bot_sweep_btts_yes_v1",
+                ]);
                 let cFlag: CFlag = null;
-                if (!cFlag && botName === "bot_pin_1x2_draw_tier4_v1") {
-                  cFlag = { level: "red", reason: "Draw/T4 bot: 10 settled bets, 1W/9L (−65% ROI). Skip until 50+ sample." };
-                }
-                if (!cFlag && (tier === null || tier === 0)) {
-                  cFlag = { level: "red", reason: "No model coverage: ensemble falls back to Poisson guess for this untiered league. Edge is unreliable." };
-                }
-                // u.edge_percent is stored as a decimal fraction (0.086 = 8.6% relative edge).
-                // The settled-data buckets (<10%, 10-15%, etc.) are relative edge — use this,
-                // not gapPp (absolute pp), which is a different metric.
-                const edgePct = u.edge_percent != null ? Number(u.edge_percent) * 100 : null;
-                if (!cFlag && edgePct !== null && edgePct < 10) {
-                  cFlag = { level: "red", reason: `${edgePct.toFixed(1)}% edge: every bot shows negative ROI below 10% in settled data. This pick barely cleared the bot's minimum gate — skip.` };
-                }
-                if (!cFlag && edgePct !== null && edgePct >= 25 && (u.market === "ou35" || u.selection === "draw")) {
-                  cFlag = { level: "yellow", reason: `${edgePct.toFixed(1)}% edge on ${u.market}/${u.selection}: 25%+ edge on draw/OU35 underperforms — likely a Coolbet phantom line. Verify at Pinnacle before placing.` };
-                }
-                if (!cFlag && signalOdds !== null && signalOdds >= 3.5 && u.selection === "home") {
-                  cFlag = { level: "yellow", reason: `Home at ${signalOdds.toFixed(2)} odds: pin_home bets at 3.5+ underperform (−4.7% vs +58% at 2.5–3.5 in settled data). Verify carefully.` };
+                if (botName && MODEL_DRIVEN.has(botName) && gapPp != null && gapPp >= 25) {
+                  cFlag = {
+                    level: "yellow",
+                    reason: `Model is ${gapPp.toFixed(0)}pp above the market. The model-driven bots run 6–17pp overconfident and this size of gap clusters on reserve/II teams and cross-tier ties (SWEEP-HOME-BOTS-CALIBRATION, still open). Check who is actually playing before placing.`,
+                  };
                 }
 
                 return (

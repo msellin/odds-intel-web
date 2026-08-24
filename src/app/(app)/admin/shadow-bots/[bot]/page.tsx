@@ -18,63 +18,66 @@ const MIN_DAYS_FOR_DECISION = 14;
 // Used to compute "min odds to bet at" per pick: min_odds = (1 + threshold)
 // / model_probability. If Coolbet (or any accessible book) offers ≥ min_odds
 // at placement time, the pick still passes the bot's threshold.
+// PER-BOT-SWEEP-2026-08-24: the three line-shop bots gate on DE-VIGGED edge
+// (daily_pipeline_v2.py `_LINESHOP_TRUE_EDGE_MIN`). Picks written before
+// 2026-08-24 carry vig-inclusive edge and are not comparable.
 const BOT_EDGE_THRESHOLDS: Record<string, number> = {
   bot_no_pin_shadow_v1: 0.08,
   bot_no_pin_home_v1: 0.08,
   bot_sweep_1x2_home_v1: 0.10,
   bot_sweep_1x2_draw_v1: 0.05,
   bot_sweep_btts_yes_v1: 0.05,
-  bot_sweep_ou25_v1: 0.08,
-  bot_sweep_ou35_v1: 0.08,
-  bot_pin_1x2_home_v1: 0.12,
+  bot_sweep_ou25_v1: 0.03,
+  bot_sweep_ou35_v1: 0.03,
+  bot_pin_1x2_home_v1: 0.03,
   bot_pin_1x2_draw_tier4_v1: 0.05,
 };
 
 const ALLOWED: Record<string, { title: string; subtitle: string; detail: string }> = {
   bot_no_pin_shadow_v1: {
     title: "Matches without Pinnacle (retired 2026-08-21)",
-    subtitle: "1X2 any selection · edge ≥ 8%",
-    detail: "RETIRED — home slice was winning (+33%) but draw/away were losing. Refined home-only version at bot_no_pin_home_v1. Historical data kept for reference.",
+    subtitle: "1X2 any selection · edge \u2265 8%",
+    detail: "RETIRED \u2014 home slice was winning (+33%) but draw/away were losing. Refined home-only version at bot_no_pin_home_v1. Historical data kept for reference.",
   },
   bot_no_pin_home_v1: {
-    title: "1X2 home · no Pinnacle",
-    subtitle: "1X2 home · edge ≥ 8% · matches without Pinnacle",
-    detail: "Refined replacement for bot_no_pin_shadow_v1. Fires only on home picks (the winning slice from the audit). Uses ensemble model prob + ≥3 accessible-book anchor.",
+    title: "1X2 home \u00b7 no Pinnacle (retired 2026-08-24)",
+    subtitle: "1X2 home \u00b7 edge \u2265 8% \u00b7 matches without Pinnacle",
+    detail: "RETIRED \u2014 PER-BOT-SWEEP-2026-08-24. Negative at EVERY edge threshold tested (\u22125.3% to \u22127.4% across 0.02\u20130.20) and in 2 of 3 backtest windows; live \u221210.6% on n=66. No Pinnacle means no sharp anchor, so an unchecked model ran on the most obscure fixtures on the board \u2014 it measured 17.3pp overconfident, the worst of the eight.",
   },
   bot_sweep_1x2_home_v1: {
-    title: "Home wins · tier 2-3",
-    subtitle: "1X2 home · edge ≥ 10%",
-    detail: "Sweep-derived. Fires on tier 2-3 leagues, home odds 2.0-5.0, Pinnacle required.",
+    title: "Home wins \u00b7 tier 2-3",
+    subtitle: "1X2 home \u00b7 model edge \u2265 10%",
+    detail: "Sweep-derived. Fires on tier 2-3 leagues, home odds 2.0-5.0, Pinnacle required. Replay 2026-05-01\u219208-21: n=411, +2.1% ROI, CLV +5.0%, positive in 2 of 3 windows. Tier 3 is this bot's better half (+7.2% vs tier 2 \u22121.2%), so the general tier-3 exclusion does not apply here.",
   },
   bot_sweep_1x2_draw_v1: {
-    title: "Draws · tier 2-3",
-    subtitle: "1X2 draw · edge ≥ 5%",
-    detail: "Sweep-derived. Fires on tier 2-3 leagues, draw odds 1.3-3.5, Pinnacle required.",
+    title: "Draws \u00b7 tier 2-3",
+    subtitle: "1X2 draw \u00b7 model edge \u2265 5%",
+    detail: "Sweep-derived. Fires on tier 2-3 leagues, draw odds 1.3-3.5, Pinnacle required. Replay: n=614, +1.1% ROI. WATCH \u2014 the most recent window is \u221223% to \u221259% at every edge threshold tested, which no other bot shows. That is a regime signal a re-gate cannot fix; kill at n=100 live if it persists.",
   },
   bot_sweep_btts_yes_v1: {
-    title: "Both teams to score · tier 2-3",
-    subtitle: "BTTS yes · edge ≥ 5%",
-    detail: "Sweep-derived. Fires on tier 2-3 leagues, BTTS-yes odds 2.0-2.5.",
+    title: "Both teams to score \u00b7 tier 2-3",
+    subtitle: "BTTS yes \u00b7 model edge \u2265 5%",
+    detail: "Sweep-derived. Fires on tier 2-3 leagues, BTTS-yes odds 2.0-2.5. Replay: n=240, \u22121.7% ROI. Lowest volume of the set (~10 picks/day) \u2014 too little data to conclude either way.",
   },
   bot_sweep_ou25_v1: {
-    title: "OU 2.5 · line-shopping vs Pinnacle",
-    subtitle: "Over/Under 2.5 · edge ≥ 8%",
-    detail: "Pure Pinnacle-vs-soft-book edge. No model dependency. Historical simulation +7-25% ROI per tier.",
+    title: "OU 2.5 \u00b7 line-shopping vs Pinnacle",
+    subtitle: "Over/Under 2.5 \u00b7 de-vigged edge \u2265 3% \u00b7 tiers 1-2",
+    detail: "Pure Pinnacle-vs-soft-book edge, no model dependency. Re-gated 2026-08-24: edge is now measured against the DE-VIGGED Pinnacle probability, a tier filter was added (it previously had NONE and fired on untiered leagues), and only the higher-edge side of a total is written. Replay at the old config: n=1005, +1.7% ROI; tier 3 was \u221216.3%, tier 1 +4.7%.",
   },
   bot_sweep_ou35_v1: {
-    title: "OU 3.5 · line-shopping vs Pinnacle",
-    subtitle: "Over/Under 3.5 · edge ≥ 8%",
-    detail: "Pure Pinnacle-vs-soft-book edge. Historical simulation +15-40% ROI per tier — strongest OU line.",
+    title: "OU 3.5 \u00b7 line-shopping vs Pinnacle",
+    subtitle: "Over/Under 3.5 \u00b7 de-vigged edge \u2265 3% \u00b7 tiers 1-2",
+    detail: "Same re-gate as OU 2.5. The side lock also fixes a real bug \u2014 across refresh cohorts this bot flipped over\u2192under on the same total in 2 matches, ending up holding both sides. Replay at the old config: n=992, \u22120.2% ROI, positive in only 1 of 3 windows.",
   },
   bot_pin_1x2_home_v1: {
-    title: "1X2 home wins · tier 1-2",
-    subtitle: "1X2 home · edge ≥ 12%",
-    detail: "Pure line-shopping on home wins in top-tier leagues. Historical: tier 1 +12%, tier 2 +31% ROI.",
+    title: "1X2 home wins \u00b7 tier 1-2",
+    subtitle: "1X2 home \u00b7 de-vigged edge \u2265 3% \u00b7 tiers 1-2",
+    detail: "The one genuine winner of the eight. Replay: n=692, +7.3% ROI, CLV +15.6%, positive in ALL THREE windows (+10.4 / +10.0 / +3.9) and positive across every tier variation tested rather than one lucky cell. Zero negative-true-edge picks live \u2014 its gate always cleared the ~9% overround. Live +16.2% on n=62.",
   },
   bot_pin_1x2_draw_tier4_v1: {
-    title: "1X2 draws · tier 4 only",
-    subtitle: "1X2 draw · edge ≥ 5% · tier 4",
-    detail: "Pure line-shopping on draws in tier 4 leagues. Consistent +6-18% ROI across edge buckets.",
+    title: "1X2 draws \u00b7 tier 4 only (retired 2026-08-24)",
+    subtitle: "1X2 draw \u00b7 edge \u2265 5% \u00b7 tier 4",
+    detail: "RETIRED \u2014 PER-BOT-SWEEP-2026-08-24. A 5% edge gate cannot beat the 12.2% Pinnacle overround on tier-4 draws, so 85% of its live picks were negative-EV by construction. Live \u221240.8% (n=27); the operator went 0W/11L for \u2212\u20ac110. Its +7.8% backtest was the single positive cell of 8 tier sets on a strategy that is \u22123.6% overall, and turns to \u221210.0% once de-vigged.",
   },
 };
 
