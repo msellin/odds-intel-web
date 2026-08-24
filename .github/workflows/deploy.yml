@@ -1,8 +1,22 @@
+# Deploy odds-intel-web to the VPS on every push to main.
+#
+# ENGINE-DEPLOY-2026-08-24: kept deliberately in step with
+# odds-intel-engine/.github/workflows/deploy.yml so both halves of a task ship
+# the same way. Before that date the engine had no deploy automation at all,
+# which let the VPS fall 21 commits behind while this workflow kept the
+# frontend current — so a task whose UI half went live looked fully shipped
+# when its betting-logic half had not.
+
 name: Deploy to VPS
 
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: web-deploy
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -14,24 +28,53 @@ jobs:
           host: ${{ secrets.VPS_IP }}
           username: root
           key: ${{ secrets.VPS_DEPLOY_KEY }}
+          command_timeout: 15m
           script: |
-            set -e
+            set -euo pipefail
             cd /opt/odds-intel-web
-            git pull origin main
+            git pull --ff-only origin main
             npm ci --prefer-offline
+
+            # STALE-MANIFEST-FIX-2026-08-24: build into a clean .next.
+            # Building over a live .next left a partial tree and the server
+            # threw `InvariantError: The client reference manifest for route
+            # "/admin/shadow-bots" does not exist` — hit for real on
+            # 2026-08-24. Next serves a 200 error page in that state, so an
+            # HTTP check alone will not catch it.
+            rm -rf .next
             npm run build
-            pm2 restart odds-intel-web
-            echo "Deploy complete at $(date)"
+
+            # --update-env: NEXT_PUBLIC_* are baked at build time, so any env
+            # change needs both a fresh build and a fresh env on the process.
+            pm2 restart odds-intel-web --update-env
+            echo "Deploy complete at $(date -u)"
 
       - name: Wait for pm2 warmup
         run: sleep 12
 
       - name: Post-deploy smoke test
         run: |
-          # Pull the shared smoke test from odds-intel-engine (public repo)
+          # Shared smoke test lives in odds-intel-engine (public repo)
           curl -sSL -o web_smoke_test.py \
             https://raw.githubusercontent.com/msellin/odds-intel-engine/main/scripts/web_smoke_test.py
           curl -sSL -o oddsintel.json \
             https://raw.githubusercontent.com/msellin/odds-intel-engine/main/scripts/web_smoke_configs/oddsintel.json
           python3 web_smoke_test.py --url https://oddsintel.app --config oddsintel.json
-# VPS self-hosted deploy active — 2026-07-07
+
+      - name: Check server-side render errors
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_IP }}
+          username: root
+          key: ${{ secrets.VPS_DEPLOY_KEY }}
+          script: |
+            set -uo pipefail
+            # A broken build can still answer 200 with Next's error page, so
+            # check the process log rather than trusting the status code.
+            if pm2 logs odds-intel-web --lines 60 --nostream 2>&1 \
+                 | grep -qiE "InvariantError|client reference manifest"; then
+              echo "Build is serving errors despite HTTP 200:"
+              pm2 logs odds-intel-web --lines 40 --nostream 2>&1 | tail -20
+              exit 1
+            fi
+            echo "no render errors in recent log"
