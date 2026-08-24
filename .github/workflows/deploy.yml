@@ -49,8 +49,19 @@ jobs:
             pm2 restart odds-intel-web --update-env
             echo "Deploy complete at $(date -u)"
 
-      - name: Wait for pm2 warmup
-        run: sleep 12
+      - name: Warm critical routes
+        # STALE-MANIFEST-FIX-2026-08-24 follow-up: `rm -rf .next` above means
+        # the first request to each route renders cold. /performance is heavy
+        # enough to blow the smoke test's 30s timeout that way — it failed on
+        # exactly that, then answered in 0.25s once warm. Warm the slow routes
+        # here so the smoke test measures steady state, not first-paint.
+        run: |
+          sleep 12
+          for path in / /performance /picks /track-record; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 90 \
+                   "https://oddsintel.app${path}" || echo "timeout")
+            echo "warm ${path} -> ${code}"
+          done
 
       - name: Post-deploy smoke test
         run: |
