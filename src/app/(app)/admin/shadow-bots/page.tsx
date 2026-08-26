@@ -24,8 +24,35 @@ import { PickBetMark } from "@/components/pick-bet-mark";
 import { fetchUserPickMarkStates } from "@/lib/upcoming-picks";
 
 const STAKE = 10;
-const MIN_SETTLED_FOR_DECISION = 50;
+
+// SHADOW-PROMOTION-GATE-2026-08-26.
+//
+// The old gate was `settled >= 50 && observationDays >= 14`, then promote at
+// ROI >= 3% / retire at ROI <= -8%. Monte-Carlo over the empirical odds
+// distribution these bots actually bet at (mean odds 3.01, n=659 real picks,
+// scripts/promotion_gate_simulation.py, 20k trials per cell) showed that gate
+// is close to uninformative:
+//
+//     true edge   promote   retire
+//        -10%      24.6%     55.6%
+//          0%      42.8%     35.9%     <- a break-even bot promotes 43% of the time
+//         +5%      52.8%     26.7%     <- a genuinely good bot is retired 27% of the time
+//
+// Raising n does not fix it, because the failure is the *threshold*, not the
+// sample size: at n=2000 a break-even bot still promotes 17% of the time, since
+// "ROI >= 3%" is cleared whenever noise happens to land above 3%.
+//
+// A t-statistic gate does fix it. Requiring mean/SE >= 1.65 holds the false
+// promote rate at ~4% at every n — that is what a one-sided 5% test means —
+// and the power to detect a real +5% edge then grows with n as it should
+// (7.9% at n=100, 18.4% at n=500, 28.3% at n=1000).
+//
+// The honest consequence: promotion becomes rare and slow. That is the correct
+// answer, not a problem to tune away. No active bot currently has |t| > 0.7.
+const MIN_SETTLED_FOR_DECISION = 200;
 const MIN_DAYS_FOR_DECISION = 14;
+const PROMOTE_T = 1.65;
+const RETIRE_T = -1.65;
 
 // Compact per-bot config: DB name → human title + one-line strategy summary.
 // backtestN + backtestRoi = historical simulation over 2026-05-04 → today at
@@ -131,6 +158,7 @@ interface ShadowBet {
   result: string | null;
   pick_time: string;
   clv: number | null;
+  clv_pinnacle: number | null;
 }
 interface BotRow {
   id: string;
@@ -158,6 +186,9 @@ interface Summary {
   hitRate: number;
   avgClvPct: number | null;
   clvCount: number;
+  avgPinClvPct: number | null;
+  pinClvCount: number;
+  tStat: number | null;
   observationDays: number;
   status: BotStatus;
 }
@@ -192,6 +223,37 @@ function summarise(cfg: (typeof SHADOW_BOTS)[number], bot: BotRow, bets: ShadowB
     ? (clvVals.reduce((s, v) => s + v, 0) / clvVals.length) * 100
     : null;
 
+  // SHADOW-CLV-BOOKMAKER-FIX-2026-08-26: the validator to actually read.
+  // `clv` above compares odds_at_pick against whichever bookmaker happened to
+  // sort last in the closing snapshot; since odds_at_pick is the MAX across
+  // accessible books, that comparison reads positive whether or not the bet had
+  // edge. clv_pinnacle is anchored to the de-vigged Pinnacle close, so 0 means
+  // Pinnacle-fair. Backfilling it flipped the sign for every bot that was
+  // retired on mechanism grounds — the old column had all nine bots positive.
+  // Null for BTTS: API-Football's Pinnacle feed carries only 8 bet types and
+  // Both Teams Score is not one of them, so that bot has no sharp anchor at all.
+  const pinClvVals = mine
+    .map((b) => (b.clv_pinnacle != null ? Number(b.clv_pinnacle) : null))
+    .filter((v): v is number => v != null);
+  const avgPinClvPct = pinClvVals.length > 0
+    ? (pinClvVals.reduce((s, v) => s + v, 0) / pinClvVals.length) * 100
+    : null;
+
+  // Per-bet returns, for the t-statistic the promotion gate now uses. A bet
+  // returns (odds - 1) when it wins and -1 when it loses; ROI is the mean of
+  // that and the t-stat is mean / standard error.
+  const rets = mine
+    .filter((b) => b.result === "won" || b.result === "lost")
+    .map((b) => (b.result === "won" ? Number(b.odds_at_pick ?? 0) - 1 : -1));
+  let tStat: number | null = null;
+  if (rets.length > 1) {
+    const mean = rets.reduce((a, b) => a + b, 0) / rets.length;
+    const variance =
+      rets.reduce((a, b) => a + (b - mean) ** 2, 0) / (rets.length - 1);
+    const se = Math.sqrt(variance / rets.length);
+    tStat = se > 0 ? mean / se : null;
+  }
+
   const first = mine.reduce<string | null>(
     (acc, b) => (!acc || b.pick_time < acc ? b.pick_time : acc),
     null
@@ -211,10 +273,12 @@ function summarise(cfg: (typeof SHADOW_BOTS)[number], bot: BotRow, bets: ShadowB
     const bottleneck = !enoughN
       ? `${settled}/${MIN_SETTLED_FOR_DECISION} settled`
       : `${observationDays}/${MIN_DAYS_FOR_DECISION} days observed`;
+    // t is shown alongside so it is obvious how far off significance a bot is,
+    // rather than only how far off the sample-size threshold.
     status = { kind: "collecting", msg: bottleneck };
-  } else if (roi >= 3) {
+  } else if (tStat != null && tStat >= PROMOTE_T && roi > 0) {
     status = { kind: "promote", roi };
-  } else if (roi <= -8) {
+  } else if (tStat != null && tStat <= RETIRE_T) {
     status = { kind: "retire", roi };
   } else {
     status = { kind: "watching", roi };
@@ -240,6 +304,9 @@ function summarise(cfg: (typeof SHADOW_BOTS)[number], bot: BotRow, bets: ShadowB
     hitRate,
     avgClvPct,
     clvCount: clvVals.length,
+    avgPinClvPct,
+    pinClvCount: pinClvVals.length,
+    tStat,
     observationDays,
     status,
   };
@@ -289,7 +356,9 @@ export default async function ShadowBotsPage() {
 
   const { data: betsRaw } = await db
     .from("shadow_bets")
-    .select("bot_id, match_id, market, selection, odds_at_pick, result, pick_time, clv")
+    .select(
+      "bot_id, match_id, market, selection, odds_at_pick, result, pick_time, clv, clv_pinnacle"
+    )
     .in(
       "bot_id",
       bots.map((b) => b.id)
@@ -974,23 +1043,49 @@ function BotCard({ s }: { s: Summary }) {
           <span className="text-neutral-200">{s.pending}</span>P
         </span>
         <span className="ml-auto flex items-center gap-2 text-[10px] text-neutral-500">
-          {s.avgClvPct != null && s.clvCount > 0 && (
+          {s.tStat != null && (
             <span
-              title={`Avg CLV across ${s.clvCount} settled pick${s.clvCount === 1 ? "" : "s"}. Positive means the market moved TOWARD our price after we recorded it — evidence the odds were reachable and the edge was real.`}
+              title={`t = ${s.tStat.toFixed(2)} on ${s.settled} settled picks. This is the promotion gate: |t| >= 1.65 is a one-sided 5% test. Raw ROI is not used because at these odds a break-even bot clears "ROI >= 3%" 43% of the time.`}
             >
-              clv{" "}
+              t{" "}
               <span
                 className={`tabular-nums font-medium ${
-                  s.avgClvPct >= 3
+                  s.tStat >= PROMOTE_T
                     ? "text-emerald-400/80"
-                    : s.avgClvPct <= -3
+                    : s.tStat <= RETIRE_T
                     ? "text-rose-400/80"
                     : "text-neutral-400"
                 }`}
               >
-                {s.avgClvPct >= 0 ? "+" : ""}
-                {s.avgClvPct.toFixed(1)}%
+                {s.tStat >= 0 ? "+" : ""}
+                {s.tStat.toFixed(2)}
               </span>
+            </span>
+          )}
+          {s.pinClvCount > 0 && s.avgPinClvPct != null ? (
+            <span
+              title={`Pinnacle CLV across ${s.pinClvCount} settled pick${s.pinClvCount === 1 ? "" : "s"} — odds_at_pick vs the DE-VIGGED Pinnacle close, so 0 means exactly Pinnacle-fair. This is the validator to trust; it needs far fewer picks than ROI to say something. The old any-book "clv" showed all nine bots positive, including the two retired for being negative-EV by construction.`}
+            >
+              pin clv{" "}
+              <span
+                className={`tabular-nums font-medium ${
+                  s.avgPinClvPct >= 2
+                    ? "text-emerald-400/80"
+                    : s.avgPinClvPct <= -2
+                    ? "text-rose-400/80"
+                    : "text-neutral-400"
+                }`}
+              >
+                {s.avgPinClvPct >= 0 ? "+" : ""}
+                {s.avgPinClvPct.toFixed(1)}%
+              </span>
+            </span>
+          ) : (
+            <span
+              title="No Pinnacle anchor available. API-Football's Pinnacle feed carries only 8 bet types (Match Winner, Asian Handicap, Goals O/U, team totals) and Both Teams Score is not among them — so this bot cannot be validated against a sharp line at all."
+              className="text-amber-500/70"
+            >
+              pin clv n/a
             </span>
           )}
           <span
