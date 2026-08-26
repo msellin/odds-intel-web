@@ -99,6 +99,22 @@ const SHADOW_BOTS: Array<{
 
   // Active bots first
   {
+    // COOLBET-VALUE-BOT-2026-08-26. The only bot here whose quoted price the
+    // operator can actually take — every other line-shop bot quotes the best of
+    // six accessible books, and he places at Coolbet. On 2026-08-26, 57 of their
+    // 58 live picks were negative-EV at Coolbet despite showing +7% on the page.
+    //
+    // backtestN 0 on purpose: this config has never been replayed. Inventing a
+    // number here would be worse than showing none — the sweep that produced the
+    // others also showed backtest ROI is anti-predictive out of sample.
+    name: "bot_coolbet_value_v1",
+    title: "Coolbet value · price you can actually take",
+    subtitle:
+      "Bets COOLBET's own quote vs de-vigged Pinnacle · edge ≥ 3% · tiers 1-2 · no backtest yet",
+    backtestN: 0,
+    backtestRoi: 0,
+  },
+  {
     name: "bot_pin_1x2_home_v1",
     title: "1X2 home · tier 1-2 line-shopping",
     subtitle: "1X2 home · de-vigged edge ≥ 3% · tiers 1-2",
@@ -1217,6 +1233,17 @@ function BotCard({ s }: { s: Summary }) {
               pin clv n/a
             </span>
           )}
+          {/* backtestN === 0 means the config has never been replayed. Rendering
+              "+0.0% n=0" would read as a measured zero rather than an absence,
+              which is a worse lie than showing nothing. */}
+          {s.backtestN === 0 ? (
+            <span
+              title="This config has never been replayed, so there is no historical figure. Judge it on CLV once picks accumulate — and note the per-bot sweep found backtest ROI anti-predictive out of sample anyway."
+              className="text-neutral-600"
+            >
+              no backtest
+            </span>
+          ) : (
           <span
             title="Historical backtest — bot's config applied to matches from 2026-05-04 → today (same window as landing/performance). Reference for what to expect once live data accumulates."
           >
@@ -1235,6 +1262,7 @@ function BotCard({ s }: { s: Summary }) {
             </span>
             <span className="text-neutral-600"> n={s.backtestN}</span>
           </span>
+          )}
         </span>
       </div>
     </Link>
