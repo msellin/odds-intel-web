@@ -27,6 +27,7 @@ const BOT_EDGE_THRESHOLDS: Record<string, number> = {
   bot_sweep_1x2_home_v1: 0.10,
   bot_sweep_1x2_draw_v1: 0.05,
   bot_sweep_btts_yes_v1: 0.05,
+  bot_coolbet_value_v1: 0.03,
   bot_sweep_ou25_v1: 0.03,
   bot_sweep_ou35_v1: 0.03,
   bot_pin_1x2_home_v1: 0.03,
@@ -58,6 +59,11 @@ const ALLOWED: Record<string, { title: string; subtitle: string; detail: string 
     title: "Both teams to score \u00b7 tier 2-3",
     subtitle: "BTTS yes \u00b7 model edge \u2265 5%",
     detail: "Sweep-derived. Fires on tier 2-3 leagues, BTTS-yes odds 2.0-2.5. Replay: n=240, \u22121.7% ROI. Lowest volume of the set (~10 picks/day) \u2014 too little data to conclude either way.",
+  },
+  bot_coolbet_value_v1: {
+    title: "Coolbet value \u00b7 price you can actually take",
+    subtitle: "Coolbet's own quote vs de-vigged Pinnacle \u00b7 edge \u2265 3% \u00b7 tiers 1-2",
+    detail: "The only bot here whose quoted price is obtainable. Every other line-shop bot gates on the best of six accessible books; the operator places at Coolbet. Measured 2026-08-26 on the live list: bot_sweep_ou25_v1 showed +7.0% edge and \u22127.0% at Coolbet, bot_sweep_ou35_v1 +7.5% \u2192 \u22125.2% \u2014 57 of 58 picks negative-EV at the only venue reachable. Not because Coolbet is uncompetitive: it is the best price 38.1% of the time, more often than any book in the set, and beats Pinnacle's raw 1X2 quote 61.8% of the time. Taking the max across books also selects for whichever book is most WRONG, and those are the worst calibrated. Fair value still comes from de-vigged Pinnacle, never from Coolbet \u2014 a book cannot look mispriced against itself. No backtest: this config has never been replayed, so judge it on CLV. Expect single-digit picks/day, and roughly three weeks before the CLV gate can decide.",
   },
   bot_sweep_ou25_v1: {
     title: "OU 2.5 \u00b7 line-shopping vs Pinnacle",
