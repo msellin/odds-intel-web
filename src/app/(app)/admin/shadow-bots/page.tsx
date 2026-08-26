@@ -150,6 +150,7 @@ const SHADOW_BOTS: Array<{
 ];
 
 interface ShadowBet {
+  id: string;
   bot_id: string;
   match_id: string;
   market: string;
@@ -357,7 +358,7 @@ export default async function ShadowBotsPage() {
   const { data: betsRaw } = await db
     .from("shadow_bets")
     .select(
-      "bot_id, match_id, market, selection, odds_at_pick, result, pick_time, clv, clv_pinnacle"
+      "id, bot_id, match_id, market, selection, odds_at_pick, result, pick_time, clv, clv_pinnacle"
     )
     .in(
       "bot_id",
@@ -544,6 +545,36 @@ export default async function ShadowBotsPage() {
   const activeClv = _clvAgg(activeSummaries);
   const allClv = _clvAgg(summaries);
 
+  // SHADOW-DISCRETION-BLEED-2026-08-26 — does hand-picking help or hurt?
+  //
+  // user_pick_marks.state 2 = "bet placed with real money". Comparing that
+  // subset against the picks left untouched is the only read we have on whether
+  // the discretionary layer adds value. It is shown here, at the point of
+  // placing, because that is where it can change a decision.
+  //
+  // Framed carefully on purpose. The pooled numbers look alarming, but bets
+  // placed on the same day share match outcomes and one model run, so they are
+  // not independent observations; clustering by day gives t = -2.15 on df = 3
+  // against a critical value of 3.18 — suggestive, NOT established. Overstating
+  // it would be its own error. scripts/discretion_bleed_report.py re-runs the
+  // clustered test as marking days accumulate.
+  const disc = (want: number | null) => {
+    const rows = bets.filter((b) => {
+      if (b.result !== "won" && b.result !== "lost") return false;
+      const st = pickMarkStates.get(b.id) ?? 0;
+      return want == null ? st === 0 : st === want;
+    });
+    if (rows.length === 0) return null;
+    const rets = rows.map((b) =>
+      b.result === "won" ? Number(b.odds_at_pick ?? 0) - 1 : -1
+    );
+    const mean = rets.reduce((a, c) => a + c, 0) / rets.length;
+    const days = new Set(rows.map((b) => b.pick_time.slice(0, 10))).size;
+    return { n: rows.length, roi: mean * 100, days };
+  };
+  const discPlaced = disc(2);
+  const discUntouched = disc(null);
+
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
       {/* Header — small, admin-tool weight, one-line meta */}
@@ -553,6 +584,63 @@ export default async function ShadowBotsPage() {
           {activeSummaries.length} active · {nRetired} retired · {totalsAll.total.toLocaleString()} picks · {totalsAll.settled.toLocaleString()} settled · promote/retire at {MIN_SETTLED_FOR_DECISION} settled &amp; {MIN_DAYS_FOR_DECISION} days
         </p>
       </header>
+
+      {/* Discipline check — hand-picked vs left alone. Deliberately placed
+          above the portfolio numbers: if the discretionary layer is costing
+          money, that dominates any per-bot tuning below it. */}
+      {discPlaced && discUntouched && discPlaced.n >= 20 ? (
+        <section className="mb-6 rounded-lg border border-amber-500/20 bg-amber-500/[0.03] px-4 py-3">
+          <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
+            <span className="text-xs font-medium text-amber-300/90">
+              Discipline check
+            </span>
+            <span className="text-xs text-neutral-400">
+              bet placed{" "}
+              <span
+                className={`tabular-nums font-medium ${
+                  discPlaced.roi >= 0 ? "text-emerald-400" : "text-rose-400"
+                }`}
+              >
+                {discPlaced.roi >= 0 ? "+" : ""}
+                {discPlaced.roi.toFixed(1)}%
+              </span>{" "}
+              <span className="text-neutral-600">({discPlaced.n})</span>
+            </span>
+            <span className="text-xs text-neutral-400">
+              left untouched{" "}
+              <span
+                className={`tabular-nums font-medium ${
+                  discUntouched.roi >= 0 ? "text-emerald-400" : "text-rose-400"
+                }`}
+              >
+                {discUntouched.roi >= 0 ? "+" : ""}
+                {discUntouched.roi.toFixed(1)}%
+              </span>{" "}
+              <span className="text-neutral-600">({discUntouched.n})</span>
+            </span>
+            <span className="text-xs text-neutral-400">
+              gap{" "}
+              <span className="tabular-nums font-medium text-neutral-200">
+                {discPlaced.roi - discUntouched.roi >= 0 ? "+" : ""}
+                {(discPlaced.roi - discUntouched.roi).toFixed(1)}pp
+              </span>
+            </span>
+          </div>
+          <p className="mt-1.5 text-[11px] leading-relaxed text-neutral-500">
+            Picks you marked as placed vs picks you left alone.{" "}
+            <strong className="font-medium text-neutral-400">
+              Only {discPlaced.days} day{discPlaced.days === 1 ? "" : "s"} of marks
+            </strong>{" "}
+            — bets on one day share match outcomes, so the pooled gap overstates
+            its own significance. Clustered by day this is not yet statistically
+            established. Watch it, don&apos;t act on it alone;{" "}
+            <code className="text-neutral-500">
+              scripts/discretion_bleed_report.py
+            </code>{" "}
+            runs the honest test.
+          </p>
+        </section>
+      ) : null}
 
       {/* Portfolio ROI split — active-only is the "how are current bots
           doing" number; all is included for completeness. Retired bots'
