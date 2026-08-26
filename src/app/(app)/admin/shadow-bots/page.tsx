@@ -54,6 +54,27 @@ const MIN_DAYS_FOR_DECISION = 14;
 const PROMOTE_T = 1.65;
 const RETIRE_T = -1.65;
 
+// CLV-FIRST-DEV-LOOP-2026-08-26 — the gate reads CLV, not ROI.
+//
+// ROI is what we care about; it is a poor instrument for measuring it. Per-bet
+// SD is 1.341 for ROI against 0.090 for de-vigged Pinnacle CLV — a 14.9x ratio,
+// so ROI needs ~222x more bets for equal precision (17,259 vs 78 for +/-2%).
+//
+// The double-chance bots made that concrete. At n=2,436:
+//     bot_dc_value       ROI -3.14% (t -1.83)   CLV -4.29% (t -28.18)
+//     bot_dc_strong_fav  ROI +0.40% (t +0.18)   CLV -4.02% (t -21.08)
+// ROI cannot decide on 2,436 bets. CLV decides at t=-28. And bot_dc_strong_fav
+// reads PROFITABLE on ROI while sitting 4% below fair value — exactly the false
+// positive a ROI gate promotes.
+//
+// So CLV gates and ROI is shown alongside as a cross-check. Where the two
+// disagree, CLV is the lower-variance estimator and is the one to believe.
+//
+// CLV_MIN_N is 100 rather than 200: at CLV's variance that is already past the
+// 78 needed for +/-2%, so demanding more only delays a decision the data can
+// already make.
+const CLV_MIN_N = 100;
+
 // Compact per-bot config: DB name → human title + one-line strategy summary.
 // backtestN + backtestRoi = historical simulation over 2026-05-04 → today at
 // each bot's exact config. Shown next to live shadow performance so operator
@@ -190,6 +211,7 @@ interface Summary {
   avgPinClvPct: number | null;
   pinClvCount: number;
   tStat: number | null;
+  clvTStat: number | null;
   observationDays: number;
   status: BotStatus;
 }
@@ -255,6 +277,16 @@ function summarise(cfg: (typeof SHADOW_BOTS)[number], bot: BotRow, bets: ShadowB
     tStat = se > 0 ? mean / se : null;
   }
 
+  // The gating statistic. Same t-test, applied to the metric that converges.
+  let clvTStat: number | null = null;
+  if (pinClvVals.length > 1) {
+    const m = pinClvVals.reduce((a, b) => a + b, 0) / pinClvVals.length;
+    const v =
+      pinClvVals.reduce((a, b) => a + (b - m) ** 2, 0) / (pinClvVals.length - 1);
+    const se = Math.sqrt(v / pinClvVals.length);
+    clvTStat = se > 0 ? m / se : null;
+  }
+
   const first = mine.reduce<string | null>(
     (acc, b) => (!acc || b.pick_time < acc ? b.pick_time : acc),
     null
@@ -263,23 +295,31 @@ function summarise(cfg: (typeof SHADOW_BOTS)[number], bot: BotRow, bets: ShadowB
     ? Math.max(1, Math.floor((Date.now() - new Date(first).getTime()) / (1000 * 60 * 60 * 24)))
     : 0;
 
-  const enoughN = settled >= MIN_SETTLED_FOR_DECISION;
+  // Decide on CLV where we have it. Bots on markets Pinnacle does not quote
+  // (BTTS above all) have no CLV at all and fall back to the ROI gate, which is
+  // far slower — that is a real cost of betting an unanchored market, and it is
+  // shown rather than hidden.
+  const hasClvGate = pinClvVals.length >= CLV_MIN_N;
+  const enoughN = hasClvGate || settled >= MIN_SETTLED_FOR_DECISION;
   const enoughDays = observationDays >= MIN_DAYS_FOR_DECISION;
   const readyForDecision = enoughN && enoughDays;
+  const gateT = hasClvGate ? clvTStat : tStat;
 
   let status: BotStatus;
   if (mine.length === 0) {
     status = { kind: "waiting" };
   } else if (!readyForDecision) {
     const bottleneck = !enoughN
-      ? `${settled}/${MIN_SETTLED_FOR_DECISION} settled`
+      ? (pinClvVals.length > 0
+          ? `${pinClvVals.length}/${CLV_MIN_N} with CLV`
+          : `${settled}/${MIN_SETTLED_FOR_DECISION} settled (no CLV anchor)`)
       : `${observationDays}/${MIN_DAYS_FOR_DECISION} days observed`;
     // t is shown alongside so it is obvious how far off significance a bot is,
     // rather than only how far off the sample-size threshold.
     status = { kind: "collecting", msg: bottleneck };
-  } else if (tStat != null && tStat >= PROMOTE_T && roi > 0) {
+  } else if (gateT != null && gateT >= PROMOTE_T) {
     status = { kind: "promote", roi };
-  } else if (tStat != null && tStat <= RETIRE_T) {
+  } else if (gateT != null && gateT <= RETIRE_T) {
     status = { kind: "retire", roi };
   } else {
     status = { kind: "watching", roi };
@@ -308,6 +348,7 @@ function summarise(cfg: (typeof SHADOW_BOTS)[number], bot: BotRow, bets: ShadowB
     avgPinClvPct,
     pinClvCount: pinClvVals.length,
     tStat,
+    clvTStat,
     observationDays,
     status,
   };
@@ -1133,7 +1174,7 @@ function BotCard({ s }: { s: Summary }) {
         <span className="ml-auto flex items-center gap-2 text-[10px] text-neutral-500">
           {s.tStat != null && (
             <span
-              title={`t = ${s.tStat.toFixed(2)} on ${s.settled} settled picks. This is the promotion gate: |t| >= 1.65 is a one-sided 5% test. Raw ROI is not used because at these odds a break-even bot clears "ROI >= 3%" 43% of the time.`}
+              title={`ROI t = ${s.tStat.toFixed(2)} on ${s.settled} settled picks — shown as a cross-check, NOT the gate. ROI needs ~222x more bets than CLV for the same precision, so it usually cannot decide. Where the two disagree, believe CLV.`}
             >
               t{" "}
               <span
@@ -1152,7 +1193,7 @@ function BotCard({ s }: { s: Summary }) {
           )}
           {s.pinClvCount > 0 && s.avgPinClvPct != null ? (
             <span
-              title={`Pinnacle CLV across ${s.pinClvCount} settled pick${s.pinClvCount === 1 ? "" : "s"} — odds_at_pick vs the DE-VIGGED Pinnacle close, so 0 means exactly Pinnacle-fair. This is the validator to trust; it needs far fewer picks than ROI to say something. The old any-book "clv" showed all nine bots positive, including the two retired for being negative-EV by construction.`}
+              title={`Pinnacle CLV across ${s.pinClvCount} settled pick${s.pinClvCount === 1 ? "" : "s"} — odds_at_pick vs the DE-VIGGED Pinnacle close, so 0 means Pinnacle-fair. THIS IS THE GATE (t = ${s.clvTStat != null ? s.clvTStat.toFixed(2) : "n/a"}). Per-bet SD is 0.090 here against 1.341 for ROI, so it decides in ~100 picks where ROI needs ~17,000.`}
             >
               pin clv{" "}
               <span
