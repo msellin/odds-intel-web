@@ -26,6 +26,21 @@ export interface UpcomingPick {
   selection: string;
   odds: number | null;
   edge_pct: number | null;
+  /**
+   * Break-even odds: below this the bet is negative-EV and should be skipped.
+   *
+   * A pick is only worth taking at the price it was found at. By the time
+   * someone opens the page the book may have moved, and a pick posted at 2.50
+   * with a 10% edge is worthless at 2.20. Derived rather than stored:
+   *   edge = odds x prob - 1  =>  prob = (1 + edge) / odds
+   *   break-even = 1 / prob   =  odds / (1 + edge)
+   *
+   * This matters more than it looks right now — the Coolbet feed has been stale
+   * for 74h, so every current pick is priced at a book the operator may not be
+   * placing at. Showing the floor lets the reader check their own price instead
+   * of trusting a number that may have moved.
+   */
+  min_odds: number | null;
   bookmaker: string | null;
   posted_at_utc: string;
   result: "pending" | "won" | "lost" | "void";
@@ -127,6 +142,10 @@ export async function fetchUpcomingPicks(
     edge_pct:
       r.edge_percent != null
         ? Number((Number(r.edge_percent) * 100).toFixed(2))
+        : null,
+    min_odds:
+      r.odds_at_pick != null && r.edge_percent != null && Number(r.edge_percent) > -1
+        ? Number((Number(r.odds_at_pick) / (1 + Number(r.edge_percent))).toFixed(2))
         : null,
     bookmaker: r.recommended_bookmaker,
     posted_at_utc: r.created_at,

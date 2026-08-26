@@ -257,6 +257,18 @@ export default async function PicksPage() {
                               <p className="font-mono text-base font-semibold tabular-nums text-neutral-100 sm:text-lg">
                                 {p.odds?.toFixed(2) ?? "—"}
                               </p>
+                              {/* Break-even price. Kept deliberately quiet — it
+                                  only matters at the moment of placing, and a
+                                  loud second number next to the odds would
+                                  compete with the odds themselves. */}
+                              {p.min_odds != null && (
+                                <p
+                                  className="font-mono text-[10px] tabular-nums text-neutral-600"
+                                  title={`Break-even price. This pick is only +EV at ${p.min_odds.toFixed(2)} or better — below that the edge is gone and the bet is negative expected value. Odds move after a pick is posted, so check the price you are actually offered against this before placing.`}
+                                >
+                                  min {p.min_odds.toFixed(2)}
+                                </p>
+                              )}
                             </div>
                             <div>
                               <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
