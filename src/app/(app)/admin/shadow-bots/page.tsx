@@ -558,6 +558,14 @@ export default async function ShadowBotsPage() {
     // Retired 2026-08-24 — kept so historical rows still resolve a threshold.
     bot_no_pin_home_v1: 0.08,
     bot_pin_1x2_draw_tier4_v1: 0.05,
+  // COOLBET-UI-PLACER (2026-08-27): bot_coolbet_value_v1 was MISSING here, so
+  // it fell through to the `?? 0.08` default and every min-odds floor was
+  // computed at an 8pct edge while the bot actually fires at 3pct
+  // (daily_pipeline_v2 `_LINESHOP_TRUE_EDGE_MIN`). Concretely on 2026-08-27
+  // that showed all 11 of its live picks as BELOW floor — "do NOT place" —
+  // when 3 of them cleared the real threshold. A too-high floor is silent:
+  // it looks like caution, not like a bug.
+  bot_coolbet_value_v1: 0.03,
   };
 
   const summaries: Summary[] = SHADOW_BOTS.map((cfg) => {
