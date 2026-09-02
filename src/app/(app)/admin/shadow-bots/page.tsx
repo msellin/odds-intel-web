@@ -424,7 +424,7 @@ export default async function ShadowBotsPage() {
   //     carries ~10 cohort re-recordings, and which picks survived depended on
   //     where the cap happened to fall.
   //
-  // Both pages now read `shadow_bets_deduped` (one row per bot × match ×
+  // Both pages now read `shadow_bets_unique` (one row per bot × match ×
   // market × selection, earliest pick_time) so the card and the per-bot detail
   // view are computed from the same population — the reported symptom was
   // bot_pin_1x2_home_v1 reading +12.7% here and -11.8% there.
@@ -436,7 +436,7 @@ export default async function ShadowBotsPage() {
   const rawBets: ShadowBet[] = [];
   for (let from = 0; ; from += PAGE) {
     const { data: page } = await db
-      .from("shadow_bets_deduped")
+      .from("shadow_bets_unique")
       .select(
         "id, bot_id, match_id, market, selection, odds_at_pick, result, pick_time, clv, clv_pinnacle"
       )
@@ -463,7 +463,7 @@ export default async function ShadowBotsPage() {
         // not yet biting, but it was one busy weekend from doing so, and the
         // JS dedup below then decided which picks the operator sees when
         // placing real money.
-        .from("shadow_bets_deduped")
+        .from("shadow_bets_unique")
         .select(
           `id, bot_id, match_id, market, selection, odds_at_pick, model_probability,
            edge_percent, recommended_bookmaker, pick_time, shadow_cohort,

@@ -149,7 +149,7 @@ export default async function ShadowBotDetailPage({
     // SHADOW-BOTS-DETAIL-TRUNCATION-2026-09-02: reads the deduped VIEW, not
     // the raw table. See the dedup note below for why the old shape was
     // wrong.
-    .from("shadow_bets_deduped")
+    .from("shadow_bets_unique")
     .select(
       `id, match_id, market, selection, odds_at_pick, model_probability,
        edge_percent, recommended_bookmaker, pick_time, result, clv,
@@ -169,7 +169,7 @@ export default async function ShadowBotDetailPage({
   const rawRows = (rows ?? []) as unknown as (ShadowBetRow & { match_id: string })[];
 
   // SHADOW-BOTS-DETAIL-TRUNCATION-2026-09-02. The dedup that used to live
-  // here now lives in the `shadow_bets_deduped` view, and that move is the
+  // here now lives in the `shadow_bets_unique` view, and that move is the
   // whole fix — not a tidy-up.
   //
   // Shadow bots persist one row per (cohort × match × market × selection) and
