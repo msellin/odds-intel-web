@@ -89,6 +89,14 @@ interface CompetitorRow {
   // on. On a public comparison page that is the one thing we cannot do.
   theirStale: boolean;
   theirAsOf: string;     // date the THEIR-side figures were actually computed
+  // FOREBET-REPRICE-2026-09-02. For a source whose published odds we have
+  // shown to be unobtainable, theirRoi is the RECOMPUTED return — their own
+  // picks re-settled at the best closing price across our books. These two
+  // carry what they claim, and over how many of their picks we could check,
+  // so the row states its own limits instead of leaving a reader to find them.
+  claimedRoi?: number;
+  claimedN?: number;
+  repricedOf?: number;   // their total picks, of which theirN were repriceable
 }
 
 const COMP_META: Omit<CompetitorRow, "theirN" | "theirRoi" | "ourN" | "ourRoi" | "ourMatched" | "windowStart" | "windowEnd" | "snapshotAt" | "theirStale" | "theirAsOf">[] = [
@@ -126,7 +134,7 @@ const COMP_FALLBACK: Record<
                  windowStart: "2026-05-04", windowEnd: "2026-09-03", snapshotAt: "2026-09-02" },
   deepbetting: { theirN:  479, theirRoi: -7.65, ourN:  692, ourRoi: 13.82,
                  windowStart: "2026-05-04", windowEnd: "2026-09-03", snapshotAt: "2026-09-02" },
-  forebet:     { theirN: 1909, theirRoi: 12.44, ourN:  692, ourRoi: 13.82,
+  forebet:     { theirN: 1136, theirRoi: -0.18, ourN:  692, ourRoi: 13.82,
                  windowStart: "2026-05-04", windowEnd: "2026-09-03", snapshotAt: "2026-09-02" },
   betaminic:   { theirN: 3498, theirRoi: 10.60, ourN:  692, ourRoi: 13.82,
                  windowStart: "2026-05-04", windowEnd: "2026-09-03", snapshotAt: "2026-09-02" },
@@ -167,6 +175,9 @@ async function loadCompetitors(): Promise<CompetitorRow[]> {
       let windowStart = fb.windowStart;
       let windowEnd = fb.windowEnd;
       let snapshotAt = fb.snapshotAt;
+      let claimedRoi: number | undefined;
+      let claimedN: number | undefined;
+      let repricedOf: number | undefined;
       let theirStale = true;      // until a scrape proves otherwise
       let theirAsOf = fb.snapshotAt;
       try {
@@ -184,7 +195,12 @@ async function loadCompetitors(): Promise<CompetitorRow[]> {
             status?: string;
             snapshot_at_utc?: string;
             window?: { start?: string; end?: string };
-            their_stats?: { n?: number; roi_pct?: number };
+            // n_total_picks / their_stats_claimed_odds are present only for
+            // sources whose published odds we recompute (currently Forebet —
+            // FOREBET-REPRICE-2026-09-02). Optional so every other ledger
+            // JSON keeps parsing unchanged.
+            their_stats?: { n?: number; roi_pct?: number; n_total_picks?: number };
+            their_stats_claimed_odds?: { n?: number; roi_pct?: number };
             our_stats_same_window?: { n?: number; roi_pct?: number };
           };
           // COHORT-CONSISTENCY-FIX-2026-08-03: previously the outer
@@ -211,6 +227,9 @@ async function loadCompetitors(): Promise<CompetitorRow[]> {
             theirRoi = j.their_stats?.roi_pct ?? theirRoi;
             theirStale = false;
             if (j.snapshot_at_utc) theirAsOf = j.snapshot_at_utc.slice(0, 10);
+            claimedRoi = j.their_stats_claimed_odds?.roi_pct;
+            claimedN = j.their_stats_claimed_odds?.n;
+            repricedOf = j.their_stats?.n_total_picks;
           }
           // status !== "ok" leaves theirStale true and theirAsOf pinned to the
           // fallback's own date, so the UI can say when those figures are
@@ -225,6 +244,7 @@ async function loadCompetitors(): Promise<CompetitorRow[]> {
         ourMatched: { roiPct: ourRoi, n: ourN },
         windowStart, windowEnd, snapshotAt,
         theirStale, theirAsOf,
+        claimedRoi, claimedN, repricedOf,
       };
     }),
   );
@@ -515,9 +535,22 @@ export default async function PreviewLanding() {
                           an accusation. */}
                       {c.ledgerKey === "forebet" && (
                         <p className="mt-0.5 text-[10px] leading-tight text-amber-400/80">
-                          audited: 57% of picks quote odds beyond any reachable book ·{" "}
+                          {c.claimedRoi !== undefined ? (
+                            <>
+                              Forebet claims {c.claimedRoi > 0 ? "+" : ""}
+                              {c.claimedRoi.toFixed(2)}% on {c.claimedN?.toLocaleString()} picks.
+                              We re-settled their own picks at the best closing price
+                              across our books
+                              {c.repricedOf
+                                ? ` (${c.theirN.toLocaleString()} of ${c.repricedOf.toLocaleString()} we could match)`
+                                : ""}
+                              .{" "}
+                            </>
+                          ) : (
+                            <>audited: 57% of picks quote odds beyond any reachable book · </>
+                          )}
                           <a
-                            href="https://github.com/msellin/odds-intel-engine/blob/main/ledger/forebet_ou_verify.csv"
+                            href="https://github.com/msellin/odds-intel-engine/blob/main/ledger/comparison_forebet.json"
                             target="_blank"
                             rel="noopener noreferrer"
                             className="underline decoration-dotted underline-offset-2 hover:text-amber-300"
