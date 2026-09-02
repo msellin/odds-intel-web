@@ -97,6 +97,10 @@ const COMP_META: Omit<CompetitorRow, "theirN" | "theirRoi" | "ourN" | "ourRoi" |
   { name: "DeepBetting", url: "https://deepbetting.io",     color: "orange",  ledgerKey: "deepbetting" },
   { name: "Tipstrr",     url: "https://tipstrr.com/football", color: "rose",  ledgerKey: "tipstrr" },
   { name: "Forebet",     url: "https://www.forebet.com",    color: "amber",   ledgerKey: "forebet" },
+  // BETAMINIC-PUBLIC-TABLE-2026-09-02: was excluded because its ROI was
+  // believed to be behind a signup wall. Its ShootingBets results table is
+  // public, so it is now audited like the rest.
+  { name: "Betaminic",   url: "https://www.betaminic.com/shootingbets/results/", color: "sky", ledgerKey: "betaminic" },
 ];
 
 // Last-known good values, refreshed weekly by odds-intel-engine's
@@ -119,6 +123,8 @@ const COMP_FALLBACK: Record<
                  windowStart: "2026-05-04", windowEnd: "2026-07-06", snapshotAt: "2026-07-05" },
   forebet:     { theirN: 1434, theirRoi: 15.33, ourN: 1039, ourRoi: 12.56,
                  windowStart: "2026-05-04", windowEnd: "2026-07-06", snapshotAt: "2026-07-05" },
+  betaminic:   { theirN: 3498, theirRoi: 10.60, ourN:  692, ourRoi: 13.82,
+                 windowStart: "2026-05-04", windowEnd: "2026-09-03", snapshotAt: "2026-09-02" },
 };
 
 const LEDGER_RAW =
@@ -464,18 +470,20 @@ export default async function PreviewLanding() {
                       </p>
                       <p className="font-mono text-[11px] tabular-nums text-neutral-500">
                         {c.theirN.toLocaleString()} bets
-                        {/* Their scrape is failing, so these are older
-                            figures. Say so rather than let the row's fresh
-                            window imply otherwise. */}
-                        {c.theirStale && (
-                          <>
-                            <span className="mx-1.5 text-neutral-700">·</span>
-                            <span className="text-amber-500/80"
-                                  title="Their public stats could not be refreshed; figures are from the date shown.">
-                              as of {fmtShortDate(c.theirAsOf)}
-                            </span>
-                          </>
-                        )}
+                        {/* Always say when the competitor's figures are from,
+                            so a reader can judge staleness without having to
+                            know whether a scrape succeeded. Amber only when the
+                            scrape actually failed — otherwise it is ordinary
+                            provenance, not a warning. */}
+                        <span className="mx-1.5 text-neutral-700">·</span>
+                        <span
+                          className={c.theirStale ? "text-amber-500/80" : "text-neutral-600"}
+                          title={c.theirStale
+                            ? "Their public stats could not be refreshed — these figures are from the date shown."
+                            : "Date their published results were last collected."}
+                        >
+                          {fmtShortDate(c.theirAsOf)}
+                        </span>
                         {isOutlierWindow && (
                           <>
                             <span className="mx-1.5 text-neutral-700">·</span>
