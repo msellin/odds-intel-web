@@ -1,0 +1,36 @@
+name: OddsIntel Web — Competitor claim guard
+
+# COMP-FALLBACK-DRIFT-GUARD (2026-09-02). The landing publishes named
+# competitors' ROI. Those figures come from the engine ledger at request time,
+# with COMP_FALLBACK in page.tsx as the offline copy. The engine's daily audit
+# workflow was supposed to keep that copy fresh by pushing here, but the push
+# is gated on a cross-repo PAT and exits 0 when the PAT is missing — so it
+# never ran, and the fallback published 2026-07-05 figures for two months,
+# including Tipstrr at -5.22% ROI when the ledger had them at +1.49%.
+#
+# This guard does not depend on that PAT. The engine ledger is public, so the
+# check reads it directly over HTTPS. It runs on push (catches a bad edit) and
+# daily (catches the sync silently dying again, which is the failure that
+# actually happened).
+on:
+  push:
+    branches: [main]
+    paths: ['src/app/page.tsx', 'scripts/check_comp_fallback.mjs',
+            '.github/workflows/comp_fallback_guard.yml']
+  schedule:
+    - cron: '0 7 * * *'     # 07:00 UTC — after the engine's 02:00 audit run
+  workflow_dispatch:
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      # No `continue-on-error` here, deliberately. A silently-skipped check is
+      # the exact failure mode this workflow was written to end.
+      - name: Check published competitor figures against the engine ledger
+        run: node scripts/check_comp_fallback.mjs

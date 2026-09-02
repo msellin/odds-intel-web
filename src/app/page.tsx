@@ -107,22 +107,22 @@ const COMP_META: Omit<CompetitorRow, "theirN" | "theirRoi" | "ourN" | "ourRoi" |
 // competitor_audits_weekly.yml (Sunday 02:00 UTC). If the GitHub fetch
 // fails or the JSON shape is unexpected, we fall back to these so the
 // landing never renders empty rows.
-// LAST-REFRESH: 2026-07-06 audit snapshot.
+// LAST-REFRESH: 2026-09-02 audit snapshot.
 const COMP_FALLBACK: Record<
   string,
   { theirN: number; theirRoi: number; ourN: number; ourRoi: number;
     windowStart: string; windowEnd: string; snapshotAt: string }
 > = {
-  winnerodds:  { theirN: 1124, theirRoi:  6.49, ourN:  963, ourRoi: 12.97,
-                 windowStart: "2026-05-04", windowEnd: "2026-06-25", snapshotAt: "2026-07-05" },
-  signalodds:  { theirN: 1157, theirRoi: -0.44, ourN: 1039, ourRoi: 12.56,
-                 windowStart: "2026-05-04", windowEnd: "2026-07-06", snapshotAt: "2026-07-05" },
-  deepbetting: { theirN:  235, theirRoi: -9.15, ourN: 1039, ourRoi: 12.56,
-                 windowStart: "2026-05-04", windowEnd: "2026-07-06", snapshotAt: "2026-07-05" },
-  tipstrr:     { theirN:  209, theirRoi: -5.22, ourN: 1039, ourRoi: 12.56,
-                 windowStart: "2026-05-04", windowEnd: "2026-07-06", snapshotAt: "2026-07-05" },
-  forebet:     { theirN: 1434, theirRoi: 15.33, ourN: 1039, ourRoi: 12.56,
-                 windowStart: "2026-05-04", windowEnd: "2026-07-06", snapshotAt: "2026-07-05" },
+  winnerodds:  { theirN: 1852, theirRoi:  4.50, ourN:  692, ourRoi: 13.82,
+                 windowStart: "2026-05-04", windowEnd: "2026-09-03", snapshotAt: "2026-09-02" },
+  signalodds:  { theirN:  111, theirRoi: -6.44, ourN:  692, ourRoi: 13.82,
+                 windowStart: "2026-05-04", windowEnd: "2026-09-03", snapshotAt: "2026-09-02" },
+  deepbetting: { theirN:  479, theirRoi: -7.65, ourN:  692, ourRoi: 13.82,
+                 windowStart: "2026-05-04", windowEnd: "2026-09-03", snapshotAt: "2026-09-02" },
+  tipstrr:     { theirN:  454, theirRoi:  1.49, ourN:  692, ourRoi: 13.82,
+                 windowStart: "2026-05-04", windowEnd: "2026-09-03", snapshotAt: "2026-09-02" },
+  forebet:     { theirN: 1909, theirRoi: 12.44, ourN:  692, ourRoi: 13.82,
+                 windowStart: "2026-05-04", windowEnd: "2026-09-03", snapshotAt: "2026-09-02" },
   betaminic:   { theirN: 3498, theirRoi: 10.60, ourN:  692, ourRoi: 13.82,
                  windowStart: "2026-05-04", windowEnd: "2026-09-03", snapshotAt: "2026-09-02" },
 };
