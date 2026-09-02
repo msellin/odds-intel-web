@@ -68,15 +68,64 @@ if (claims.length === 0) {
   process.exit(1);
 }
 
+
+// Reading the ledger: API first, raw as fallback.
+//
+// raw.githubusercontent serves with max-age=300 and its cache key IGNORES the
+// query string, so a cache-bust parameter does nothing (verified 2026-09-02) —
+// it will happily serve the previous ledger for five minutes after an engine
+// push. Since the normal workflow is "push engine, then push web", the
+// push-triggered run would fail on numbers that are already correct, and a
+// guard that goes red when nothing is wrong is one you learn to ignore.
+//
+// The contents API reflects a push immediately. It is rate-limited (60/hr
+// unauthenticated, 1000/hr with a token) and this needs 5 calls per run, so
+// the limit is not a real constraint; GITHUB_TOKEN is used when present purely
+// for headroom. raw stays as the fallback for the case where the API is
+// unreachable — there staleness is still better than no check, and the age
+// bound below is what catches a genuinely dead sync anyway.
+const API =
+  "https://api.github.com/repos/msellin/odds-intel-engine/contents/ledger";
+
+async function fetchLedger(key) {
+  const headers = {
+    Accept: "application/vnd.github.raw",
+    "User-Agent": "oddsintel-comp-fallback-guard",
+  };
+  if (process.env.GITHUB_TOKEN) {
+    headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+  }
+  try {
+    const res = await fetch(`${API}/comparison_${key}.json?ref=main`, { headers });
+    if (res.ok) return JSON.parse(await res.text());
+    console.error(`  ${key}: contents API ${res.status}, falling back to raw`);
+  } catch (e) {
+    console.error(`  ${key}: contents API error (${e.message}), falling back to raw`);
+  }
+  try {
+    const res = await fetch(`${LEDGER}/comparison_${key}.json`, { cache: "no-store" });
+    if (res.ok) return await res.json();
+    console.error(`  ${key}: raw fetch ${res.status}`);
+  } catch (e) {
+    console.error(`  ${key}: raw fetch error ${e.message}`);
+  }
+  return null;
+}
+
 const problems = [];
 for (const c of claims) {
-  const url = `${LEDGER}/comparison_${c.key}.json`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    problems.push(`${c.key}: ledger fetch ${res.status} (${url})`);
+  // raw.githubusercontent caches for ~5 minutes. Without a cache-bust this
+  // guard reads the PREVIOUS ledger for several minutes after an engine push,
+  // and since the usual workflow is "push engine, then push web", the
+  // push-triggered run would fail on numbers that are already correct. A
+  // spuriously red guard is worse than no guard: it trains you to ignore it.
+  // The daily 07:00 UTC run is 5h after the engine's 02:00 audit and never
+  // races, but the push run does.
+  const j = await fetchLedger(c.key);
+  if (j === null) {
+    problems.push(`${c.key}: ledger fetch failed (see log above)`);
     continue;
   }
-  const j = await res.json();
   const t = j.their_stats ?? {};
 
   const roiGap = Math.abs((t.roi_pct ?? NaN) - c.theirRoi);

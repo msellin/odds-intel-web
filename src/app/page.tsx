@@ -95,7 +95,14 @@ const COMP_META: Omit<CompetitorRow, "theirN" | "theirRoi" | "ourN" | "ourRoi" |
   { name: "WinnerOdds",  url: "https://winnerodds.com",     color: "emerald", ledgerKey: "winnerodds" },
   { name: "SignalOdds",  url: "https://signalodds.com",     color: "sky",     ledgerKey: "signalodds" },
   { name: "DeepBetting", url: "https://deepbetting.io",     color: "orange",  ledgerKey: "deepbetting" },
-  { name: "Tipstrr",     url: "https://tipstrr.com/football", color: "rose",  ledgerKey: "tipstrr" },
+  // TIPSTRR-DROPPED-2026-09-02: removed, not broken. Tipstrr is a tipster
+  // MARKETPLACE, so any figure we published was a consequence of which
+  // tipsters we happened to list: we pooled 3 of 8 hand-written slugs out of
+  // thousands, all three marked inactive, across all bet types at month grain
+  // (per-bet market detail is genuinely paywalled, so it can never be made
+  // like-for-like with our 1X2 + OU 2.5 cohort). The audit and scraper still
+  // run and the ledger still records it — we just no longer present it as a
+  // competitor benchmark, because it is not one.
   { name: "Forebet",     url: "https://www.forebet.com",    color: "amber",   ledgerKey: "forebet" },
   // BETAMINIC-PUBLIC-TABLE-2026-09-02: was excluded because its ROI was
   // believed to be behind a signup wall. Its ShootingBets results table is
@@ -113,13 +120,11 @@ const COMP_FALLBACK: Record<
   { theirN: number; theirRoi: number; ourN: number; ourRoi: number;
     windowStart: string; windowEnd: string; snapshotAt: string }
 > = {
-  winnerodds:  { theirN: 1852, theirRoi:  4.50, ourN:  692, ourRoi: 13.82,
+  winnerodds:  { theirN:  690, theirRoi:  7.67, ourN:  692, ourRoi: 13.82,
                  windowStart: "2026-05-04", windowEnd: "2026-09-03", snapshotAt: "2026-09-02" },
   signalodds:  { theirN:  111, theirRoi: -6.44, ourN:  692, ourRoi: 13.82,
                  windowStart: "2026-05-04", windowEnd: "2026-09-03", snapshotAt: "2026-09-02" },
   deepbetting: { theirN:  479, theirRoi: -7.65, ourN:  692, ourRoi: 13.82,
-                 windowStart: "2026-05-04", windowEnd: "2026-09-03", snapshotAt: "2026-09-02" },
-  tipstrr:     { theirN:  454, theirRoi:  1.49, ourN:  692, ourRoi: 13.82,
                  windowStart: "2026-05-04", windowEnd: "2026-09-03", snapshotAt: "2026-09-02" },
   forebet:     { theirN: 1909, theirRoi: 12.44, ourN:  692, ourRoi: 13.82,
                  windowStart: "2026-05-04", windowEnd: "2026-09-03", snapshotAt: "2026-09-02" },

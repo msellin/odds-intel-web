@@ -33,4 +33,8 @@ jobs:
       # No `continue-on-error` here, deliberately. A silently-skipped check is
       # the exact failure mode this workflow was written to end.
       - name: Check published competitor figures against the engine ledger
+        # GITHUB_TOKEN only raises the contents-API rate limit (60/hr -> 1000/hr).
+        # The engine repo is public, so the check works without it too.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/check_comp_fallback.mjs
