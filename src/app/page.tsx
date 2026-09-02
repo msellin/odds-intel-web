@@ -82,9 +82,16 @@ interface CompetitorRow {
   windowStart: string;   // e.g. "2026-05-04" — from comparison_*.json .window.start
   windowEnd: string;     // e.g. "2026-07-06"
   snapshotAt: string;    // e.g. "2026-07-05" — date portion of snapshot_at_utc
+  // COMPETITOR-SCRAPERS-DEGRADED 2026-09-02. When a competitor scrape yields
+  // no usable data the row keeps the shipped fallback for THEIR figures but
+  // still adopted the fresh snapshot date and window below — so July numbers
+  // rendered under a September date over a window they were never computed
+  // on. On a public comparison page that is the one thing we cannot do.
+  theirStale: boolean;
+  theirAsOf: string;     // date the THEIR-side figures were actually computed
 }
 
-const COMP_META: Omit<CompetitorRow, "theirN" | "theirRoi" | "ourN" | "ourRoi" | "ourMatched" | "windowStart" | "windowEnd" | "snapshotAt">[] = [
+const COMP_META: Omit<CompetitorRow, "theirN" | "theirRoi" | "ourN" | "ourRoi" | "ourMatched" | "windowStart" | "windowEnd" | "snapshotAt" | "theirStale" | "theirAsOf">[] = [
   { name: "WinnerOdds",  url: "https://winnerodds.com",     color: "emerald", ledgerKey: "winnerodds" },
   { name: "SignalOdds",  url: "https://signalodds.com",     color: "sky",     ledgerKey: "signalodds" },
   { name: "DeepBetting", url: "https://deepbetting.io",     color: "orange",  ledgerKey: "deepbetting" },
@@ -149,6 +156,8 @@ async function loadCompetitors(): Promise<CompetitorRow[]> {
       let windowStart = fb.windowStart;
       let windowEnd = fb.windowEnd;
       let snapshotAt = fb.snapshotAt;
+      let theirStale = true;      // until a scrape proves otherwise
+      let theirAsOf = fb.snapshotAt;
       try {
         const res = await fetch(
           `${LEDGER_RAW}/comparison_${m.ledgerKey}.json`,
@@ -189,7 +198,12 @@ async function loadCompetitors(): Promise<CompetitorRow[]> {
           if (j.status === "ok") {
             theirN = j.their_stats?.n ?? theirN;
             theirRoi = j.their_stats?.roi_pct ?? theirRoi;
+            theirStale = false;
+            if (j.snapshot_at_utc) theirAsOf = j.snapshot_at_utc.slice(0, 10);
           }
+          // status !== "ok" leaves theirStale true and theirAsOf pinned to the
+          // fallback's own date, so the UI can say when those figures are
+          // actually from instead of borrowing today's.
         }
       } catch {
         // network error → keep fallback values
@@ -199,6 +213,7 @@ async function loadCompetitors(): Promise<CompetitorRow[]> {
         theirN, theirRoi, ourN, ourRoi,
         ourMatched: { roiPct: ourRoi, n: ourN },
         windowStart, windowEnd, snapshotAt,
+        theirStale, theirAsOf,
       };
     }),
   );
@@ -449,6 +464,18 @@ export default async function PreviewLanding() {
                       </p>
                       <p className="font-mono text-[11px] tabular-nums text-neutral-500">
                         {c.theirN.toLocaleString()} bets
+                        {/* Their scrape is failing, so these are older
+                            figures. Say so rather than let the row's fresh
+                            window imply otherwise. */}
+                        {c.theirStale && (
+                          <>
+                            <span className="mx-1.5 text-neutral-700">·</span>
+                            <span className="text-amber-500/80"
+                                  title="Their public stats could not be refreshed; figures are from the date shown.">
+                              as of {fmtShortDate(c.theirAsOf)}
+                            </span>
+                          </>
+                        )}
                         {isOutlierWindow && (
                           <>
                             <span className="mx-1.5 text-neutral-700">·</span>
