@@ -412,32 +412,45 @@ export default async function ShadowBotsPage() {
     );
   }
 
-  const { data: betsRaw } = await db
-    .from("shadow_bets")
-    .select(
-      "id, bot_id, match_id, market, selection, odds_at_pick, result, pick_time, clv, clv_pinnacle"
-    )
-    .in(
-      "bot_id",
-      bots.map((b) => b.id)
-    );
-  const rawBets = (betsRaw ?? []) as ShadowBet[];
-
-  // SHADOW-BOTS-STATS-DEDUP-2026-08-22: multi-cohort writes duplicate rows
-  // for the same (bot × match × market × selection) as they persist across
-  // refresh windows. Portfolio ROI / hit rate / picks count should reflect
-  // UNIQUE picks, not the underlying cohort rows. Otherwise a €10 win at
-  // 2.5 that persisted for 5 cohorts counts as €50 stake with €75 pnl —
-  // 150% ROI on a single bet. Dedup here so stats math is honest.
-  const statsDedup = new Map<string, ShadowBet>();
-  for (const r of rawBets) {
-    const key = `${r.bot_id}|${r.match_id}|${r.market}|${r.selection}`;
-    const existing = statsDedup.get(key);
-    if (!existing || r.pick_time < existing.pick_time) {
-      statsDedup.set(key, r);
-    }
+  // SHADOW-BOTS-DETAIL-TRUNCATION-2026-09-02. Two bugs lived here.
+  //
+  // (1) This read the RAW table with no `.limit()`, which is not the same as
+  //     "no limit": PostgREST caps responses at db-max-rows, measured at
+  //     10,000. shadow_bets holds 143,263 rows, so the page was aggregating
+  //     7% of the ledger and calling it the bot's record — silently, because
+  //     a capped response looks exactly like a complete one.
+  //
+  // (2) The dedup ran in JS afterwards, so the cap bit on RAW rows. Each pick
+  //     carries ~10 cohort re-recordings, and which picks survived depended on
+  //     where the cap happened to fall.
+  //
+  // Both pages now read `shadow_bets_deduped` (one row per bot × match ×
+  // market × selection, earliest pick_time) so the card and the per-bot detail
+  // view are computed from the same population — the reported symptom was
+  // bot_pin_1x2_home_v1 reading +12.7% here and -11.8% there.
+  //
+  // Paginated because the deduped set is 13,955 rows and still above the cap.
+  // Ranges are explicit rather than relying on a default that can change
+  // underneath us.
+  const PAGE = 5000;
+  const rawBets: ShadowBet[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data: page } = await db
+      .from("shadow_bets_deduped")
+      .select(
+        "id, bot_id, match_id, market, selection, odds_at_pick, result, pick_time, clv, clv_pinnacle"
+      )
+      .in(
+        "bot_id",
+        bots.map((b) => b.id)
+      )
+      .order("id", { ascending: true })
+      .range(from, from + PAGE - 1);
+    const rows = (page ?? []) as ShadowBet[];
+    rawBets.push(...rows);
+    if (rows.length < PAGE) break;
   }
-  const bets = Array.from(statsDedup.values());
+  const bets = rawBets;
 
   // Upcoming picks — the "single place to look when placing real money"
   // section. All pending picks from ACTIVE bots on matches that haven't
@@ -445,7 +458,12 @@ export default async function ShadowBotsPage() {
   const activeBotIds = bots.filter((b) => !b.retired_at).map((b) => b.id);
   const { data: upcomingRaw } = activeBotIds.length > 0
     ? await db
-        .from("shadow_bets")
+        // Deduped view here too (SHADOW-BOTS-DETAIL-TRUNCATION-2026-09-02).
+        // Pending-future raw rows are 2,154 today so the old 5000 limit was
+        // not yet biting, but it was one busy weekend from doing so, and the
+        // JS dedup below then decided which picks the operator sees when
+        // placing real money.
+        .from("shadow_bets_deduped")
         .select(
           `id, bot_id, match_id, market, selection, odds_at_pick, model_probability,
            edge_percent, recommended_bookmaker, pick_time, shadow_cohort,

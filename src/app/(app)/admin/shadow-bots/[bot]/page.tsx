@@ -146,7 +146,10 @@ export default async function ShadowBotDetailPage({
   }
 
   const { data: rows } = await db
-    .from("shadow_bets")
+    // SHADOW-BOTS-DETAIL-TRUNCATION-2026-09-02: reads the deduped VIEW, not
+    // the raw table. See the dedup note below for why the old shape was
+    // wrong.
+    .from("shadow_bets_deduped")
     .select(
       `id, match_id, market, selection, odds_at_pick, model_probability,
        edge_percent, recommended_bookmaker, pick_time, result, clv,
@@ -159,25 +162,33 @@ export default async function ShadowBotDetailPage({
     )
     .eq("bot_id", botRow.id)
     .order("pick_time", { ascending: false })
-    .limit(500);
+    // One row per pick now, so this is a real pick count rather than a
+    // fraction of one. Largest bot is bot_dc_value at 3,081 unique picks.
+    .limit(5000);
 
   const rawRows = (rows ?? []) as unknown as (ShadowBetRow & { match_id: string })[];
 
-  // SHADOW-BOTS-BOT-LEDGER-DEDUP-2026-08-22: same-cohort persistence writes
-  // one row per (cohort × match × market × selection). For the per-bot
-  // ledger we want ONE row per pick — the earliest sighting is the "real"
-  // record of when we first spotted this edge. Later cohort re-recordings
-  // are just drift-tracking noise here. (Same dedup as the upcoming-picks
-  // index. Odds-drift history is available via raw DB query if needed.)
-  const dedupMap = new Map<string, (typeof rawRows)[number]>();
-  for (const r of rawRows) {
-    const key = `${r.match_id}|${r.market}|${r.selection}`;
-    const existing = dedupMap.get(key);
-    if (!existing || r.pick_time < existing.pick_time) {
-      dedupMap.set(key, r);
-    }
-  }
-  const bets = Array.from(dedupMap.values()).sort((a, b) =>
+  // SHADOW-BOTS-DETAIL-TRUNCATION-2026-09-02. The dedup that used to live
+  // here now lives in the `shadow_bets_deduped` view, and that move is the
+  // whole fix — not a tidy-up.
+  //
+  // Shadow bots persist one row per (cohort × match × market × selection) and
+  // the cohorts fire every 30 minutes, so a single pick accumulates ~10 rows.
+  // Deduplicating in JS AFTER `.limit(500)` meant the limit cut raw rows, and
+  // what survived was whatever fraction of the bot's picks happened to fall in
+  // the newest 500 recordings. Every number on this page — picks, settled, hit
+  // rate, CLV, ROI — was computed from that recency-biased sliver.
+  //
+  // 24 of 41 bots were affected. bot_dc_value showed 48 of its 3,081 picks
+  // (1.6%). bot_pin_1x2_home_v1 showed 61 of 304, which is why this page read
+  // -11.8% ROI while the dashboard card read +12.7% for the same bot: the two
+  // were reading different fractions of the same ledger.
+  //
+  // The view keeps the same rule the JS had — EARLIEST pick_time per
+  // (bot, match, market, selection), the first sighting being the real record
+  // of when the edge was spotted. Sorting stays here because we display
+  // newest-first.
+  const bets = [...rawRows].sort((a, b) =>
     (b.pick_time ?? "").localeCompare(a.pick_time ?? "")
   ) as unknown as ShadowBetRow[];
 
