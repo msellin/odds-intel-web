@@ -128,15 +128,15 @@ const COMP_FALLBACK: Record<
   { theirN: number; theirRoi: number; ourN: number; ourRoi: number;
     windowStart: string; windowEnd: string; snapshotAt: string }
 > = {
-  winnerodds:  { theirN:  690, theirRoi:  7.67, ourN:  692, ourRoi: 13.82,
+  winnerodds:  { theirN:  691, theirRoi:  7.51, ourN:  529, ourRoi: 10.65,
                  windowStart: "2026-05-04", windowEnd: "2026-09-03", snapshotAt: "2026-09-02" },
-  signalodds:  { theirN:  111, theirRoi: -6.44, ourN:  692, ourRoi: 13.82,
+  signalodds:  { theirN:  131, theirRoi: -3.55, ourN:  529, ourRoi: 10.65,
                  windowStart: "2026-05-04", windowEnd: "2026-09-03", snapshotAt: "2026-09-02" },
-  deepbetting: { theirN:  479, theirRoi: -7.65, ourN:  692, ourRoi: 13.82,
+  deepbetting: { theirN:  479, theirRoi: -7.65, ourN:  529, ourRoi: 10.65,
                  windowStart: "2026-05-04", windowEnd: "2026-09-03", snapshotAt: "2026-09-02" },
-  forebet:     { theirN: 1136, theirRoi: -0.18, ourN:  692, ourRoi: 13.82,
+  forebet:     { theirN: 1136, theirRoi: -0.18, ourN:  529, ourRoi: 10.65,
                  windowStart: "2026-05-04", windowEnd: "2026-09-03", snapshotAt: "2026-09-02" },
-  betaminic:   { theirN: 3498, theirRoi: 10.60, ourN:  692, ourRoi: 13.82,
+  betaminic:   { theirN: 3498, theirRoi: 10.60, ourN:  529, ourRoi: 10.65,
                  windowStart: "2026-05-04", windowEnd: "2026-09-03", snapshotAt: "2026-09-02" },
 };
 
