@@ -329,6 +329,25 @@ export default function MethodologyPage() {
           they measure different cohorts.
         </P>
         <P>
+          {/* BTTS-RETIRED-2026-09-03. Left the section above intact rather
+              than rewriting it: it describes the cohort as it was, and it
+              called the BTTS weakness correctly before we measured it. */}
+          <strong>Update, 3 September 2026 — BTTS is retired.</strong> The
+          weakness noted above turned out to be an absence of edge, not a
+          gap to close. Across 427 settled shadow picks, BTTS returned{" "}
+          <strong>−12.76%</strong> priced at odds that were actually live
+          when each bet was raised (t = −2.87). Improving the calibration
+          did not rescue it: BTTS is now our best-calibrated market, and
+          re-scoring every settled pick under the corrected coefficients
+          cut volume to a third while making the survivors <em>worse</em>.
+          Honest probabilities revealed the absence of edge rather than
+          creating one. It also cannot be validated against a sharp line —
+          our odds feed carries no Pinnacle price for BTTS at all. All BTTS
+          bots are retired and the market is no longer priced. Historical
+          BTTS bets stay in the record; deleting them would flatter the
+          numbers above.
+        </P>
+        <P>
           Why the window starts 2026-05-04: that&apos;s the day our
           calibrated bot tier launched. Going further back would mix in
           pre-calibration bets we don&apos;t deploy real money on. The

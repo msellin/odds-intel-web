@@ -392,7 +392,7 @@ export default async function PreviewLanding() {
             />
           </div>
           <p className="border-t border-white/[0.04] bg-neutral-950 px-4 py-2.5 text-center text-[11px] uppercase tracking-widest text-neutral-500">
-            Full pre-match cohort · 1X2 + OU 2.5 + BTTS · actual placed stakes
+            Full pre-match cohort · 1X2 + OU 2.5 · BTTS retired Sep 2026 · actual placed stakes
           </p>
         </section>
 

@@ -245,7 +245,7 @@ export async function GET(req: Request) {
     clv_coverage_pct: total > 0 ? Number(((100 * clvN) / total).toFixed(1)) : 0,
     clv_beat_pct: clvN > 0 ? Number(((100 * clvBeats) / clvN).toFixed(1)) : null,
     scope:
-      "pre-match strategies only (calibrated + beta + active maturity, no retired, no in-play bots), pre-match markets (1x2, OU 2.5, BTTS), settled only. Matches /performance's headline cohort. ROI computed at €10 flat stake per pick — matches WinnerOdds / Tipstrr / SignalOdds / Forebet publication methodology so head-to-head comparison is apples-to-apples.",
+      "pre-match strategies only (calibrated + beta + active maturity, no retired, no in-play bots), pre-match markets (1x2, OU 2.5; BTTS retired 2026-09-03 after 427 settled shadow picks returned -12.76% at prices live at pick time, t=-2.87 — historical BTTS bets remain in the record), settled only. Matches /performance's headline cohort. ROI computed at €10 flat stake per pick — matches WinnerOdds / Tipstrr / SignalOdds / Forebet publication methodology so head-to-head comparison is apples-to-apples.",
     notes:
       "Every row is an independently re-settleable bet. Use match_id (UUID) + kickoff_utc + market + selection + placed_at_utc to verify against ESPN/Flashscore. Track record published unfiltered — losing bets are present. `stake` and `pnl` per row are €10-flat; internal bots stake proportional to divergence (Kelly) but that's admin-only.",
     next_cursor:

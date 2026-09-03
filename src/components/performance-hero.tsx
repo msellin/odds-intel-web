@@ -106,7 +106,7 @@ export function PerformanceHero({
           across {calN.toLocaleString()} verified pre-match picks
         </p>
         <p className="mt-2 text-xs text-neutral-500 sm:text-sm">
-          Calibrated cohort · 1X2 + OU 2.5 + BTTS · since {fmtDate(calSince)}
+          Calibrated cohort · 1X2 + OU 2.5 · BTTS retired Sep 2026 · since {fmtDate(calSince)}
         </p>
       </section>
 
