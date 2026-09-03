@@ -880,7 +880,30 @@ export default async function ShadowBotsPage() {
                   "bot_sweep_btts_yes_v1",
                 ]);
                 let cFlag: CFlag = null;
-                if (botName && MODEL_DRIVEN.has(botName) && gapPp != null && gapPp >= 25) {
+
+                // PINNACLE-BEST-NO-EDGE-2026-09-03. When the SHARPEST book
+                // holds the best price, no soft book is offering value — our
+                // "edge" is then measured against a fair price, so there is
+                // nothing to take. Measured on settled 1X2 picks priced at
+                // odds live at pick time:
+                //
+                //   tier 1  Pinnacle best  n=112  ROI −23.5%  (t=−1.72)
+                //           soft best      n=338  ROI +26.6%
+                //   tier 2  Pinnacle best  n= 47  ROI +11.1%  ← OPPOSITE SIGN
+                //
+                // Scoped to tier 1 and 1X2 deliberately. A blanket
+                // "Pinnacle best ⇒ skip" rule would kill profitable tier-2
+                // picks, which is the mistake BOT-GATE-OU-BTTS was filed to
+                // prevent. Display-only: the bot still fires and the pick is
+                // still recorded, so the rule keeps accruing evidence at
+                // t=−1.72 rather than being locked in on it.
+                if (u.recommended_bookmaker === "Pinnacle" && u.market === "1x2" && tier === 1) {
+                  cFlag = {
+                    level: "red",
+                    reason:
+                      "Pinnacle holds the best price on a tier-1 1X2 pick. When the sharpest book is top of market, no soft book is offering value — this cohort is −23.5% over 112 settled bets against +26.6% when a soft book is best (PINNACLE-BEST-NO-EDGE). Still accruing evidence at t=−1.72, so this is a warning, not a veto.",
+                  };
+                } else if (botName && MODEL_DRIVEN.has(botName) && gapPp != null && gapPp >= 25) {
                   cFlag = {
                     level: "yellow",
                     reason: `Model is ${gapPp.toFixed(0)}pp above the market. The model-driven bots run 6–17pp overconfident and this size of gap clusters on reserve/II teams and cross-tier ties (SWEEP-HOME-BOTS-CALIBRATION, still open). Check who is actually playing before placing.`,
