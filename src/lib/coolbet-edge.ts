@@ -21,7 +21,10 @@ export const COOLBET_AUTO_MIN_EDGE_BY_MARKET: Record<string, number | null> = {
   "1x2":            0.10,
   "o/u":            0.03,
   "asian_handicap": 0.05,
-  "btts":           0.10,
+  // BTTS-RETIRED-2026-09-03: mirrors the engine's _MIN_EDGE_BY_MARKET.
+  // n=427 settled shadow picks returned -12.76% at prices live at pick time
+  // (t=-2.87), and better calibration made the survivors worse.
+  "btts":           null,
   "double_chance":  null,
   "combo":          0.10,
   "draw_no_bet":    0.05,
