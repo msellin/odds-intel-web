@@ -193,6 +193,8 @@ interface ShadowBet {
   market: string;
   selection: string;
   odds_at_pick: number | null;
+  odds_at_pick_live: number | null;
+  clv_pinnacle_live: number | null;
   result: string | null;
   pick_time: string;
   clv: number | null;
@@ -239,6 +241,28 @@ type BotStatus =
   | { kind: "retire"; roi: number }
   | { kind: "watching"; roi: number };
 
+// SHADOW-PAGE-ROI-INFLATED-2026-09-04: price every return at the odds that were
+// actually on offer when the pick was raised.
+//
+// `odds_at_pick` is a high-water mark, not an offer: STALE-BEST-ODDS found the
+// pipeline taking MAX() across a fixture's entire snapshot history, so it records
+// the best price ANY book showed at ANY time. One live example — Ingolstadt v
+// Palermo, recorded at 4.45 while the best price actually available was 3.15,
+// because Marathonbet had drifted 4.45 -> 3.04 across the day.
+//
+// This page is what the operator reads before placing real money by hand, and on
+// the current non-retired pre-kickoff cohort (n=1,651) it was showing +9.94%
+// where the honest figure is +8.19% — overstating every bot by 1.75pp.
+//
+// `odds_at_pick_live` (migration 291) is the same pick priced at the best quote
+// available from an accessible book at or before pick_time. Coverage is 96.2% of
+// shadow rows; the fallback keeps older picks visible rather than dropping them.
+function execOdds(b: { odds_at_pick: number | null; odds_at_pick_live: number | null }): number {
+  const live = b.odds_at_pick_live != null ? Number(b.odds_at_pick_live) : null;
+  if (live != null && live > 1) return live;
+  return Number(b.odds_at_pick ?? 0);
+}
+
 function summarise(cfg: (typeof SHADOW_BOTS)[number], bot: BotRow, bets: ShadowBet[]): Summary {
   const mine = bets.filter((b) => b.bot_id === bot.id);
   const won = mine.filter((b) => b.result === "won").length;
@@ -250,7 +274,7 @@ function summarise(cfg: (typeof SHADOW_BOTS)[number], bot: BotRow, bets: ShadowB
   const pnl =
     mine
       .filter((b) => b.result === "won")
-      .reduce((s, b) => s + (Number(b.odds_at_pick ?? 0) - 1) * STAKE, 0) - lost * STAKE;
+      .reduce((s, b) => s + (execOdds(b) - 1) * STAKE, 0) - lost * STAKE;
   const roi = stake > 0 ? (pnl / stake) * 100 : 0;
   const hitRate = settled > 0 ? (won / settled) * 100 : 0;
   // CLV populated at settlement (settled shadow bets only). Skip rows
@@ -272,7 +296,13 @@ function summarise(cfg: (typeof SHADOW_BOTS)[number], bot: BotRow, bets: ShadowB
   // Null for BTTS: API-Football's Pinnacle feed carries only 8 bet types and
   // Both Teams Score is not one of them, so that bot has no sharp anchor at all.
   const pinClvVals = mine
-    .map((b) => (b.clv_pinnacle != null ? Number(b.clv_pinnacle) : null))
+    .map((b) => {
+      // CLV-GATE-UNVALIDATED-2026-09-04: clv_pinnacle_live prices the same
+      // de-vigged probability at the quote that was on offer. corr with realised
+      // return +0.0991 (t=+10.23) against +0.0825 for the odds_at_pick version.
+      const v = b.clv_pinnacle_live ?? b.clv_pinnacle;
+      return v != null ? Number(v) : null;
+    })
     .filter((v): v is number => v != null);
   const avgPinClvPct = pinClvVals.length > 0
     ? (pinClvVals.reduce((s, v) => s + v, 0) / pinClvVals.length) * 100
@@ -283,7 +313,7 @@ function summarise(cfg: (typeof SHADOW_BOTS)[number], bot: BotRow, bets: ShadowB
   // that and the t-stat is mean / standard error.
   const rets = mine
     .filter((b) => b.result === "won" || b.result === "lost")
-    .map((b) => (b.result === "won" ? Number(b.odds_at_pick ?? 0) - 1 : -1));
+    .map((b) => (b.result === "won" ? execOdds(b) - 1 : -1));
   let tStat: number | null = null;
   if (rets.length > 1) {
     const mean = rets.reduce((a, b) => a + b, 0) / rets.length;
@@ -438,7 +468,7 @@ export default async function ShadowBotsPage() {
     const { data: page } = await db
       .from("shadow_bets_unique")
       .select(
-        "id, bot_id, match_id, market, selection, odds_at_pick, result, pick_time, clv, clv_pinnacle"
+        "id, bot_id, match_id, market, selection, odds_at_pick, odds_at_pick_live, result, pick_time, clv, clv_pinnacle, clv_pinnacle_live"
       )
       .in(
         "bot_id",
@@ -648,9 +678,8 @@ export default async function ShadowBotsPage() {
       return want == null ? st === 0 : st === want;
     });
     if (rows.length === 0) return null;
-    const rets = rows.map((b) =>
-      b.result === "won" ? Number(b.odds_at_pick ?? 0) - 1 : -1
-    );
+    // Same honest pricing as the per-bot summaries above — see execOdds.
+    const rets = rows.map((b) => (b.result === "won" ? execOdds(b) - 1 : -1));
     const mean = rets.reduce((a, c) => a + c, 0) / rets.length;
     const days = new Set(rows.map((b) => b.pick_time.slice(0, 10))).size;
     return { n: rows.length, roi: mean * 100, days };
