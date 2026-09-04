@@ -574,20 +574,43 @@ export default async function ShadowBotsPage() {
   const { data: cbSnapshots } = uniqueMatchIds.length > 0
     ? await db
         .from("odds_snapshots")
-        .select("match_id, market, selection, odds, timestamp")
+        .select("match_id, market, selection, odds, timestamp, bookmaker")
         .in("match_id", uniqueMatchIds)
-        .eq("bookmaker", "Coolbet")
+        // PICKS-UNIBET-COLUMN-2026-09-04: Unibet alongside Coolbet. No scraper
+        // needed — we already receive Unibet through API-Football, which is
+        // where its coverage numbers come from. Coolbet prices only 44% of
+        // outcomes, so a second column is mostly about the fixtures Coolbet
+        // does not cover at all.
+        .in("bookmaker", ["Coolbet", "Unibet"])
         .eq("is_live", false)
         .order("timestamp", { ascending: false })
-        .limit(5000)
+        // PostgREST caps responses at db-max-rows = 10,000 (see
+        // ALL-BETS-CEILING-DEAD). Two books doubles the row count, so this sits
+        // at the ceiling deliberately rather than above it, where the cap would
+        // truncate silently.
+        .limit(10000)
     : { data: [] };
+  // One key builder for both the map and every lookup, so they cannot drift.
+  const oddsKey = (m: string, market: string, selection: string) =>
+    `${m}|${market.toLowerCase()}|${selection.toLowerCase()}`;
   const coolbetCurrent = new Map<string, { odds: number; ts: string }>();
+  const unibetCurrent = new Map<string, { odds: number; ts: string }>();
   for (const row of (cbSnapshots ?? []) as Array<{
-    match_id: string; market: string; selection: string; odds: number | string; timestamp: string;
+    match_id: string; market: string; selection: string; odds: number | string;
+    timestamp: string; bookmaker: string;
   }>) {
-    const key = `${row.match_id}|${row.market}|${row.selection}`;
-    if (!coolbetCurrent.has(key)) {
-      coolbetCurrent.set(key, { odds: Number(row.odds), ts: row.timestamp });
+    // PICKS-ODDS-KEY-CASE-2026-09-04: lowercase both sides of the key.
+    // shadow_bets stores BOTH `1x2` and `1X2` (8,664 vs 11,165 rows), while
+    // odds_snapshots only ever writes `1x2`. A case-sensitive key therefore
+    // matched 0.0% of `1X2` picks — 1,521 in the last week alone — so the
+    // "Now @ CB" column has been silently showing "—" for them since it
+    // shipped. Nothing errored; the price just never resolved.
+    // ANALYSIS_GOTCHAS #3, surfacing in the frontend.
+    const key = oddsKey(row.match_id, row.market, row.selection);
+    // Rows arrive newest-first, so the first hit per key is the latest price.
+    const target = row.bookmaker === "Coolbet" ? coolbetCurrent : unibetCurrent;
+    if (!target.has(key)) {
+      target.set(key, { odds: Number(row.odds), ts: row.timestamp });
     }
   }
   const botNameById = new Map(bots.map((b) => [b.id, b.name]));
@@ -814,7 +837,7 @@ export default async function ShadowBotsPage() {
                 calibration on young bots, not real edge). Now @ CB shows the
                 actual placement price so the operator can compare it against
                 Min odds without a manual site lookup. */}
-            <div className="hidden border-b border-white/[0.04] px-4 py-2 text-[10px] font-mono uppercase tracking-wider text-neutral-500 sm:grid sm:grid-cols-[28px_85px_minmax(0,1fr)_40px_115px_90px_55px_50px_60px_70px_75px_75px] sm:gap-3">
+            <div className="hidden border-b border-white/[0.04] px-4 py-2 text-[10px] font-mono uppercase tracking-wider text-neutral-500 sm:grid sm:grid-cols-[28px_85px_minmax(0,1fr)_40px_115px_90px_55px_50px_60px_70px_75px_75px_75px] sm:gap-3">
               <div className="text-center" title="Tick once you've placed this bet with a book. Persists across sessions.">Bet</div>
               <div>Kickoff</div>
               <div>Match</div>
@@ -826,6 +849,7 @@ export default async function ShadowBotsPage() {
               <div className="text-right" title="Model probability minus market-implied probability (from odds), in percentage points. Larger positive = bigger claimed edge. Interpret per bot — settled data shows different bots calibrate very differently, no universal good/bad threshold.">Gap</div>
               <div>Book</div>
               <div className="text-right" title="Coolbet's latest snapshot price for this exact selection. Arrow shows drift vs signal odds. — means no Coolbet coverage.">Now @ CB</div>
+              <div className="text-right" title="Unibet's latest snapshot price for the same selection, via the API-Football feed. Green = beats Coolbet. Most useful where Coolbet shows — (no coverage): Coolbet prices only 44% of outcomes. NOTE the price is AF-fed and has never been verified against unibet.ee itself — the Bet365 feed was found inflated this way (CLV +10% vs ROI -10%).">Now @ UB</div>
               <div className="text-right">Min odds</div>
             </div>
             <ul>
@@ -868,7 +892,7 @@ export default async function ShadowBotsPage() {
                 //   ▼ = odds moved down (worse price, sharp money confirms)
                 //   → = within 3% (stable)
                 //   — = no Coolbet coverage
-                const cbKey = `${u.match_id}|${u.market}|${u.selection}`;
+                const cbKey = oddsKey(u.match_id, u.market, u.selection);
                 const cb = coolbetCurrent.get(cbKey);
                 let cbArrow = "";
                 let cbArrowTone = "text-neutral-500";
@@ -879,6 +903,14 @@ export default async function ShadowBotsPage() {
                   else { cbArrow = "→"; cbArrowTone = "text-neutral-500"; }
                 }
                 const cbBelowFloor = cb && minOdds != null && cb.odds < minOdds;
+                // PICKS-UNIBET-COLUMN-2026-09-04. Unibet beats our Coolbet price
+                // on ~11% of settled picks and would have added +0.81pp — the
+                // weakest of the mainstream books (Marathonbet +1.58pp, Betano
+                // +1.30pp), so this column is for price discovery, not a signal
+                // to switch venue. Its real value is the fixtures where CB shows
+                // "—": Coolbet prices only 44% of outcomes.
+                const ub = unibetCurrent.get(cbKey);
+                const ubBeatsCb = !!(ub && (!cb || ub.odds > cb.odds + 1e-9));
 
                 // Real-money confidence flag — visual warning for patterns confirmed negative in settled data.
                 // Bots keep firing to collect data; this flag is for operator's manual betting decisions.
@@ -942,7 +974,7 @@ export default async function ShadowBotsPage() {
                 return (
                   <li
                     key={u.id}
-                    className={`px-4 py-2 text-sm sm:grid sm:grid-cols-[28px_85px_minmax(0,1fr)_40px_115px_90px_55px_50px_60px_70px_75px_75px] sm:items-center sm:gap-3 border-l-2 ${
+                    className={`px-4 py-2 text-sm sm:grid sm:grid-cols-[28px_85px_minmax(0,1fr)_40px_115px_90px_55px_50px_60px_70px_75px_75px_75px] sm:items-center sm:gap-3 border-l-2 ${
                       cFlag?.level === "red" ? "border-rose-500/60" :
                       cFlag?.level === "yellow" ? "border-amber-500/50" :
                       "border-transparent"
@@ -1031,6 +1063,21 @@ export default async function ShadowBotsPage() {
                             </span>
                             {cbArrow && <span className={`ml-1 ${cbArrowTone}`}>{cbArrow}</span>}
                           </>
+                      }
+                    </div>
+                    <div
+                      className="text-right font-mono text-sm tabular-nums"
+                      title={
+                        ub == null
+                          ? "No Unibet price for this selection in the feed."
+                          : `Unibet ${ub.odds.toFixed(2)}${cb ? ` vs Coolbet ${cb.odds.toFixed(2)}` : " (Coolbet has no price)"} · snapshot ${new Date(ub.ts).toUTCString()} · AF-fed, unverified against unibet.ee`
+                      }
+                    >
+                      {ub == null
+                        ? <span className="text-neutral-600">—</span>
+                        : <span className={ubBeatsCb ? "text-emerald-400" : "text-neutral-400"}>
+                            {ub.odds.toFixed(2)}
+                          </span>
                       }
                     </div>
                     <div className="text-right font-mono text-sm tabular-nums" title="Check manually at your book — bet only if it meets or beats this price.">
