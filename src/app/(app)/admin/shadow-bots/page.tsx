@@ -19,6 +19,7 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
+import { execOdds as sharedExecOdds } from "@/lib/engine-data";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
 import { PickBetMark } from "@/components/pick-bet-mark";
 import { fetchUserPickMarkStates } from "@/lib/upcoming-picks";
@@ -257,10 +258,14 @@ type BotStatus =
 // `odds_at_pick_live` (migration 291) is the same pick priced at the best quote
 // available from an accessible book at or before pick_time. Coverage is 96.2% of
 // shadow rows; the fallback keeps older picks visible rather than dropping them.
+/**
+ * Executable price for a settled/raised pick. Re-exported wrapper over the
+ * single definition in engine-data so this page cannot drift from the public
+ * surfaces — SHADOW-PAGE-ROI-INFLATED / LANDING-PERF-ROI-BASIS both began as
+ * one copy of this logic being fixed while others were left behind.
+ */
 function execOdds(b: { odds_at_pick: number | null; odds_at_pick_live: number | null }): number {
-  const live = b.odds_at_pick_live != null ? Number(b.odds_at_pick_live) : null;
-  if (live != null && live > 1) return live;
-  return Number(b.odds_at_pick ?? 0);
+  return sharedExecOdds(b.odds_at_pick, b.odds_at_pick_live);
 }
 
 function summarise(cfg: (typeof SHADOW_BOTS)[number], bot: BotRow, bets: ShadowBet[]): Summary {

@@ -7,6 +7,7 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
+import { execOdds as sharedExecOdds } from "@/lib/engine-data";
 import { notFound } from "next/navigation";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
 
@@ -101,10 +102,14 @@ const ALLOWED: Record<string, { title: string; subtitle: string; detail: string 
 // into a bot showed a different (inflated) ROI than the row you clicked. Coverage
 // is 85.5% of settled shadow rows; the fallback keeps older picks visible rather
 // than silently dropping them from the ledger.
+/**
+ * Executable price for a settled/raised pick. Re-exported wrapper over the
+ * single definition in engine-data so this page cannot drift from the public
+ * surfaces — SHADOW-PAGE-ROI-INFLATED / LANDING-PERF-ROI-BASIS both began as
+ * one copy of this logic being fixed while others were left behind.
+ */
 function execOdds(b: { odds_at_pick: number | null; odds_at_pick_live: number | null }): number {
-  const live = b.odds_at_pick_live != null ? Number(b.odds_at_pick_live) : null;
-  if (live != null && live > 1) return live;
-  return Number(b.odds_at_pick ?? 0);
+  return sharedExecOdds(b.odds_at_pick, b.odds_at_pick_live);
 }
 
 interface ShadowBetRow {
