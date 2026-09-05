@@ -87,11 +87,32 @@ const ALLOWED: Record<string, { title: string; subtitle: string; detail: string 
   },
 };
 
+// SHADOW-PAGE-ROI-INFLATED-2026-09-04: price every return at the odds that were
+// actually on offer when the pick was raised — same helper and same reasoning as
+// the shadow-bots index page.
+//
+// `odds_at_pick` is a high-water mark, not an offer. STALE-BEST-ODDS found the
+// pipeline taking MAX() across a fixture's whole snapshot history, so it records
+// the best price ANY book showed at ANY time. `odds_at_pick_live` (migration 291)
+// is the same pick priced at the best quote from an accessible book at or before
+// pick_time.
+//
+// The index page was fixed on 2026-09-04 but this detail page was not, so drilling
+// into a bot showed a different (inflated) ROI than the row you clicked. Coverage
+// is 85.5% of settled shadow rows; the fallback keeps older picks visible rather
+// than silently dropping them from the ledger.
+function execOdds(b: { odds_at_pick: number | null; odds_at_pick_live: number | null }): number {
+  const live = b.odds_at_pick_live != null ? Number(b.odds_at_pick_live) : null;
+  if (live != null && live > 1) return live;
+  return Number(b.odds_at_pick ?? 0);
+}
+
 interface ShadowBetRow {
   id: string;
   market: string;
   selection: string;
   odds_at_pick: number | null;
+  odds_at_pick_live: number | null;
   model_probability: number | null;
   edge_percent: number | null;
   recommended_bookmaker: string | null;
@@ -151,7 +172,7 @@ export default async function ShadowBotDetailPage({
     // wrong.
     .from("shadow_bets_unique")
     .select(
-      `id, match_id, market, selection, odds_at_pick, model_probability,
+      `id, match_id, market, selection, odds_at_pick, odds_at_pick_live, model_probability,
        edge_percent, recommended_bookmaker, pick_time, result, clv,
        matches!inner (
          date,
@@ -199,7 +220,7 @@ export default async function ShadowBotDetailPage({
   const settled = wins.length + losses.length;
 
   const totalStake = settled * STAKE;
-  const wonPnl = wins.reduce((s, b) => s + (Number(b.odds_at_pick ?? 0) - 1) * STAKE, 0);
+  const wonPnl = wins.reduce((s, b) => s + (execOdds(b) - 1) * STAKE, 0);
   const pnl = wonPnl - losses.length * STAKE;
   const roi = totalStake > 0 ? (pnl / totalStake) * 100 : 0;
   const hitRate = settled > 0 ? (wins.length / settled) * 100 : 0;
@@ -274,11 +295,12 @@ export default async function ShadowBotDetailPage({
               : "neutral"}
           />
           <Stat
-            label="ROI"
+            label="ROI (exec price)"
             value={hasROI ? `${roi >= 0 ? "+" : ""}${roi.toFixed(1)}%` : "—"}
             faded={!hasROI}
             tone={roiTone}
             emphasize
+            hint="Priced at odds_at_pick_live — the best quote actually available from an accessible book at or before pick_time. Rows marked * had no live price captured and fall back to odds_at_pick, which is a high-water mark and can overstate the return."
           />
         </div>
 
@@ -331,7 +353,7 @@ export default async function ShadowBotDetailPage({
                 Tier
               </div>
               <div>Pick</div>
-              <div className="text-right">Odds</div>
+              <div className="text-right" title="Executable price at pick time (odds_at_pick_live), falling back to odds_at_pick where no live price was captured — those rows are marked *.">Odds (exec)</div>
               <div className="text-right">Prob</div>
               <div>Book</div>
               <div className="text-right" title="Target minimum odds. Check manually at your book of choice — if the current price is ≥ this number, the pick still meets the bot's edge threshold. If lower, the edge has eroded past the threshold — skip.">
@@ -415,7 +437,15 @@ function BetRow({ bet: b, isFirst, threshold }: { bet: ShadowBetRow; isFirst: bo
         {formatPickLabel(b.market, b.selection)}
       </div>
       <div className="mt-0.5 text-right font-mono text-sm tabular-nums text-neutral-100 sm:mt-0">
-        {b.odds_at_pick != null ? Number(b.odds_at_pick).toFixed(2) : "—"}
+        {execOdds(b) > 0 ? execOdds(b).toFixed(2) : "—"}
+        {b.odds_at_pick_live == null && b.odds_at_pick != null && (
+          <span
+            className="ml-1 text-[10px] text-amber-400/70"
+            title="No live price captured for this pick — showing odds_at_pick, which is a high-water mark and may overstate the return."
+          >
+            *
+          </span>
+        )}
       </div>
       <div className="mt-0.5 text-right font-mono text-xs tabular-nums text-neutral-400 sm:mt-0">
         {modelProb != null ? `${(modelProb * 100).toFixed(0)}%` : "—"}
@@ -503,18 +533,22 @@ function Stat({
   tone = "neutral",
   faded = false,
   emphasize = false,
+  // SHADOW-PAGE-ROI-INFLATED: lets the ROI card say which price basis it used.
+  // A return figure without its basis is what made the old number misleading.
+  hint,
 }: {
   label: string;
   value: string;
   tone?: "good" | "bad" | "neutral";
   faded?: boolean;
   emphasize?: boolean;
+  hint?: string;
 }) {
   const toneClass =
     tone === "good" ? "text-emerald-400" : tone === "bad" ? "text-rose-400" : "text-neutral-100";
   const size = emphasize ? "text-xl sm:text-2xl" : "text-lg";
   return (
-    <div>
+    <div title={hint}>
       <div className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
         {label}
       </div>
