@@ -30,50 +30,31 @@
  * Cache: 60s. Rate limit: 60 req/min/IP.
  */
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit } from "@/lib/rate-limit";
+import {
+  fetchUpcomingPicks,
+  PUBLIC_MATURITY_LABELS,
+} from "@/lib/upcoming-picks";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 60;
 
-const PRE_MATCH_MARKETS = ["1x2", "over_under_25", "o/u", "btts"];
-// PICKS-USER-GATE 2026-08-22 — public endpoint is calibrated-only (matches
-// the Telegram public channel cohort). Signed-in users get the wider set
-// (calibrated+beta+active) via lib/upcoming-picks#SIGNED_IN_MATURITY_LABELS,
-// called directly from the /picks server component. Never expose the wider
-// cohort here — that would leak beta+active picks to unauthenticated
-// scrapers.
-const PUBLIC_MATURITY_LABELS = ["calibrated"];
-
-function adminClient() {
-  const url =
-    process.env.NEXT_PUBLIC_POSTGREST_URL ??
-    process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const key =
-    process.env.POSTGREST_SERVICE_KEY ??
-    process.env.SUPABASE_SECRET_KEY ??
-    process.env.SUPABASE_SERVICE_ROLE_KEY!;
-  return createClient(url, key, { auth: { persistSession: false } });
-}
-
-interface BetRow {
-  id: string;
-  match_id: string;
-  created_at: string;
-  market: string;
-  selection: string;
-  odds_at_pick: number | null;
-  edge_percent: number | null;
-  recommended_bookmaker: string | null;
-  result: string | null;
-  matches: {
-    date: string;
-    leagues: { name: string; country: string } | null;
-    home_team: { name: string } | null;
-    away_team: { name: string } | null;
-  } | null;
-  bots: { name: string; maturity_label: string } | null;
-}
+// DUPLICATED-BUSINESS-RULES-AUDIT-2026-09-05.
+//
+// This route used to carry its own copy of the cohort rule: a second
+// `PRE_MATCH_MARKETS`, a second `PUBLIC_MATURITY_LABELS`, a second
+// `adminClient()`, a second `BetRow`, and a line-for-line duplicate of the
+// query, the dedupe and the row mapping in `lib/upcoming-picks.ts` — which
+// /picks calls for the SAME picks. Two implementations of one feed is how the
+// landing and /performance came to publish +13.10% and +17.39% for identical
+// bets on 2026-09-05.
+//
+// It now calls `fetchUpcomingPicks()`. The published JSON is unchanged:
+// same cohort (calibrated only), same window, same dedupe, same fields. The
+// one field the shared fetcher additionally computes, `min_odds`, is stripped
+// below — publishing a break-even floor on the anon feed is a product
+// decision, not a refactor.
+const HORIZON_HOURS_FORWARD = 36;
 
 export async function GET(req: Request) {
   const ip =
@@ -88,85 +69,47 @@ export async function GET(req: Request) {
     );
   }
 
-  const sb = adminClient();
-  const now = new Date();
-  const horizonHoursForward = 36;
-  // PICKS-TODAY-ONWARDS (2026-07-08): show all picks whose match kicks off
-  // TODAY UTC or later — clearer semantic than "rolling 24h back". Users
-  // browsing at any time of day see the same "today's picks" set from 00:00
-  // UTC forward, so no random pick drops off just because it kicked off
-  // earlier in the day.
-  const start = new Date(Date.UTC(
-    now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0,
-  ));
-  const end = new Date(now.getTime() + horizonHoursForward * 3600 * 1000);
-
-  const { data, error } = await sb
-    .from("simulated_bets")
-    .select(
-      `id, match_id, created_at, market, selection,
-       odds_at_pick, edge_percent, recommended_bookmaker, result,
-       matches!inner (
-         date,
-         leagues ( name, country ),
-         home_team:teams!matches_home_team_id_fkey ( name ),
-         away_team:teams!matches_away_team_id_fkey ( name )
-       ),
-       bots!inner ( name, maturity_label )`
-    )
-    .in("result", ["pending", "won", "lost", "void"])
-    .in("bots.maturity_label", PUBLIC_MATURITY_LABELS)
-    .is("bots.retired_at", null)
-    .not("bots.name", "like", "inplay_%")
-    .in("market", PRE_MATCH_MARKETS)
-    .gte("matches.date", start.toISOString())
-    .lte("matches.date", end.toISOString())
-    .order("matches(date)", { ascending: true })
-    .limit(300);
-
-  if (error) {
+  let picks: Array<Record<string, unknown>>;
+  let start: string;
+  let end: string;
+  try {
+    // Single definition of the picks cohort — see lib/upcoming-picks.ts.
+    const res = await fetchUpcomingPicks(PUBLIC_MATURITY_LABELS);
+    start = res.windowStart;
+    end = res.windowEnd;
+    // `min_odds` is computed by the shared fetcher for /picks; it is not part
+    // of this endpoint's published contract, so drop it rather than silently
+    // widening the public payload.
+    picks = res.picks.map(({ min_odds: _minOdds, ...rest }) => rest);
+  } catch (e) {
     return NextResponse.json(
-      { error: "DB error", detail: error.message },
+      {
+        error: "DB error",
+        // Strip the fetcher's context prefix so this endpoint's 500 body is
+        // unchanged from when it ran its own query.
+        detail: (e instanceof Error ? e.message : String(e)).replace(
+          /^upcoming picks: /,
+          "",
+        ),
+      },
       { status: 500 }
     );
   }
-
-  const rows = (data ?? []) as unknown as BetRow[];
-
-  // Deduplicate: same (match, market, selection) might appear from multiple
-  // production-tier bots. Keep the one with the highest edge.
-  const dedup = new Map<string, BetRow>();
-  for (const r of rows) {
-    const key = `${r.match_id}|${r.market}|${r.selection}`;
-    const existing = dedup.get(key);
-    if (!existing || (r.edge_percent ?? 0) > (existing.edge_percent ?? 0)) {
-      dedup.set(key, r);
-    }
-  }
-
-  const picks = Array.from(dedup.values()).map((r) => ({
-    id: r.id,
-    match_id: r.match_id,
-    kickoff_utc: r.matches?.date ?? null,
-    league: r.matches?.leagues?.name ?? null,
-    country: r.matches?.leagues?.country ?? null,
-    home_team: r.matches?.home_team?.name ?? null,
-    away_team: r.matches?.away_team?.name ?? null,
-    market: r.market,
-    selection: r.selection,
-    odds: r.odds_at_pick,
-    edge_pct: r.edge_percent != null ? Number((Number(r.edge_percent) * 100).toFixed(2)) : null,
-    bookmaker: r.recommended_bookmaker,
-    posted_at_utc: r.created_at,
-    result: r.result ?? "pending",
-  }));
+  const horizonHoursForward = HORIZON_HOURS_FORWARD;
+  // `generated_at_utc` is derived from the window rather than a second
+  // `new Date()`, so the old invariant `window_end_utc === generated_at_utc +
+  // 36h` still holds exactly. Two independent clocks would leave a sub-ms
+  // drift and, on a midnight boundary, a window_start a day ahead.
+  const now = new Date(
+    new Date(end).getTime() - horizonHoursForward * 3600 * 1000,
+  );
 
   return NextResponse.json(
     {
       meta: {
         generated_at_utc: now.toISOString(),
-        window_start_utc: start.toISOString(),
-        window_end_utc: end.toISOString(),
+        window_start_utc: start,
+        window_end_utc: end,
         horizon_hours_forward: horizonHoursForward,
         count: picks.length,
         scope:

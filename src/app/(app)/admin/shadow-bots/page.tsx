@@ -19,12 +19,13 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
-import { execOdds as sharedExecOdds } from "@/lib/engine-data";
+import { execOdds as sharedExecOdds, FLAT_STAKE_EUR } from "@/lib/engine-data";
+import { botEdgeThreshold } from "@/lib/coolbet-edge";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
 import { PickBetMark } from "@/components/pick-bet-mark";
 import { fetchUserPickMarkStates } from "@/lib/upcoming-picks";
 
-const STAKE = 10;
+const STAKE = FLAT_STAKE_EUR;
 
 // SHADOW-PROMOTION-GATE-2026-08-26.
 //
@@ -638,30 +639,9 @@ export default async function ShadowBotsPage() {
     }
   }
   const botNameById = new Map(bots.map((b) => [b.id, b.name]));
-  // BOT_EDGE_THRESHOLDS mirrors the map on the per-bot detail page.
-  // PER-BOT-SWEEP-2026-08-24: the three line-shop bots moved to a DE-VIGGED
-  // 3% floor (daily_pipeline_v2.py `_LINESHOP_TRUE_EDGE_MIN`). Their stored
-  // edge_percent is now true post-vig edge, so it is not comparable to the
-  // old vig-inclusive numbers on pre-2026-08-24 picks.
-  const BOT_EDGE_THRESHOLDS: Record<string, number> = {
-    bot_sweep_1x2_home_v1: 0.10,
-    bot_sweep_1x2_draw_v1: 0.05,
-    bot_sweep_btts_yes_v1: 0.05,
-    bot_sweep_ou25_v1: 0.03,
-    bot_sweep_ou35_v1: 0.03,
-    bot_pin_1x2_home_v1: 0.03,
-    // Retired 2026-08-24 — kept so historical rows still resolve a threshold.
-    bot_no_pin_home_v1: 0.08,
-    bot_pin_1x2_draw_tier4_v1: 0.05,
-  // COOLBET-UI-PLACER (2026-08-27): bot_coolbet_value_v1 was MISSING here, so
-  // it fell through to the `?? 0.08` default and every min-odds floor was
-  // computed at an 8pct edge while the bot actually fires at 3pct
-  // (daily_pipeline_v2 `_LINESHOP_TRUE_EDGE_MIN`). Concretely on 2026-08-27
-  // that showed all 11 of its live picks as BELOW floor — "do NOT place" —
-  // when 3 of them cleared the real threshold. A too-high floor is silent:
-  // it looks like caution, not like a bug.
-  bot_coolbet_value_v1: 0.03,
-  };
+  // DUPLICATED-BUSINESS-RULES-AUDIT-2026-09-05: this map was a copy of the
+  // one on the per-bot detail page. Both are now `botEdgeThreshold()` in
+  // @/lib/coolbet-edge — same values, one definition.
 
   const summaries: Summary[] = SHADOW_BOTS.map((cfg) => {
     const bot = bots.find((b) => b.name === cfg.name);
@@ -893,7 +873,7 @@ export default async function ShadowBotsPage() {
                   : tier === 4 ? "bg-fuchsia-500/15 text-fuchsia-300"
                   : "bg-neutral-500/15 text-neutral-400";
                 const botName = botNameById.get(u.bot_id) ?? "?";
-                const threshold = BOT_EDGE_THRESHOLDS[botName] ?? 0.08;
+                const threshold = botEdgeThreshold(botName);
                 // PICKS-MIN-ODDS-WRONG-FORMULA-2026-09-05. This floor answers
                 // "below what price would this bot no longer have raised the
                 // pick?" — deliberately STRICTER than break-even, because it

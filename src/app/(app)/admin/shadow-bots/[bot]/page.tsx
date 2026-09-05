@@ -7,33 +7,18 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
-import { execOdds as sharedExecOdds } from "@/lib/engine-data";
+import { execOdds as sharedExecOdds, FLAT_STAKE_EUR } from "@/lib/engine-data";
+import { botEdgeThreshold } from "@/lib/coolbet-edge";
 import { notFound } from "next/navigation";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
 
-const STAKE = 10;
+const STAKE = FLAT_STAKE_EUR;
 const MIN_SETTLED_FOR_DECISION = 50;
 const MIN_DAYS_FOR_DECISION = 14;
 
-// Per-bot edge threshold (mirrors the bot's config in daily_pipeline_v2.py).
-// Used to compute "min odds to bet at" per pick: min_odds = (1 + threshold)
-// / model_probability. If Coolbet (or any accessible book) offers ≥ min_odds
-// at placement time, the pick still passes the bot's threshold.
-// PER-BOT-SWEEP-2026-08-24: the three line-shop bots gate on DE-VIGGED edge
-// (daily_pipeline_v2.py `_LINESHOP_TRUE_EDGE_MIN`). Picks written before
-// 2026-08-24 carry vig-inclusive edge and are not comparable.
-const BOT_EDGE_THRESHOLDS: Record<string, number> = {
-  bot_no_pin_shadow_v1: 0.08,
-  bot_no_pin_home_v1: 0.08,
-  bot_sweep_1x2_home_v1: 0.10,
-  bot_sweep_1x2_draw_v1: 0.05,
-  bot_sweep_btts_yes_v1: 0.05,
-  bot_coolbet_value_v1: 0.03,
-  bot_sweep_ou25_v1: 0.03,
-  bot_sweep_ou35_v1: 0.03,
-  bot_pin_1x2_home_v1: 0.03,
-  bot_pin_1x2_draw_tier4_v1: 0.05,
-};
+// DUPLICATED-BUSINESS-RULES-AUDIT-2026-09-05: the per-bot edge map lived here
+// AND inside the render loop of the index page. Both copies are now
+// `botEdgeThreshold()` in @/lib/coolbet-edge — same values, one definition.
 
 const ALLOWED: Record<string, { title: string; subtitle: string; detail: string }> = {
   bot_no_pin_shadow_v1: {
@@ -368,7 +353,7 @@ export default async function ShadowBotDetailPage({
             </div>
             <ul>
               {bets.map((b, i) => (
-                <BetRow key={b.id} bet={b} isFirst={i === 0} threshold={BOT_EDGE_THRESHOLDS[botName] ?? 0.08} />
+                <BetRow key={b.id} bet={b} isFirst={i === 0} threshold={botEdgeThreshold(botName)} />
               ))}
             </ul>
           </div>

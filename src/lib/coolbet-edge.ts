@@ -45,3 +45,47 @@ export function autoMinEdgeFor(market: string | null | undefined): number {
  * stats pre/post this epoch so we can measure the lift in isolation.
  * Bets placed AT OR AFTER this time are "era v2". */
 export const MARKET_THRESHOLDS_V2_EPOCH = "2026-06-06T17:00:00Z";
+
+// ─── Per-bot edge thresholds ────────────────────────────────────────────────
+// DUPLICATED-BUSINESS-RULES-AUDIT-2026-09-05. This map existed as two
+// copy-pasted literals — one inside the render loop of
+// `/admin/shadow-bots/page.tsx` and one at module scope in
+// `/admin/shadow-bots/[bot]/page.tsx`. They happened to agree numerically
+// (the index copy omitted `bot_no_pin_shadow_v1` but its `?? 0.08` fallback
+// produced the same 0.08), which is exactly the latent state that produced
+// the 2026-09-05 four-surface incident: two copies that agree until one is
+// edited.
+//
+// Values are decimal fractions of PROBABILITY-POINT edge — this engine
+// computes `edge = cal_prob - 1/odds` (daily_pipeline_v2.py:3474), NOT a
+// multiplicative EV. Do not feed these into `(1 + threshold) / prob`.
+//
+// PER-BOT-SWEEP-2026-08-24: the three line-shop bots gate on DE-VIGGED edge
+// (`_LINESHOP_TRUE_EDGE_MIN`). Picks written before 2026-08-24 carry
+// vig-inclusive edge and are not comparable.
+//
+// COOLBET-UI-PLACER (2026-08-27): `bot_coolbet_value_v1` must stay present.
+// When it was missing it fell through to the 0.08 default and every min-odds
+// floor was computed at an 8% edge while the bot fires at 3% — on 2026-08-27
+// that marked all 11 of its live picks "below floor" when 3 cleared the real
+// threshold. A too-high floor is silent: it looks like caution, not a bug.
+export const BOT_EDGE_THRESHOLDS: Record<string, number> = {
+  bot_no_pin_shadow_v1: 0.08,
+  // Retired 2026-08-24 — kept so historical rows still resolve a threshold.
+  bot_no_pin_home_v1: 0.08,
+  bot_sweep_1x2_home_v1: 0.10,
+  bot_sweep_1x2_draw_v1: 0.05,
+  bot_sweep_btts_yes_v1: 0.05,
+  bot_coolbet_value_v1: 0.03,
+  bot_sweep_ou25_v1: 0.03,
+  bot_sweep_ou35_v1: 0.03,
+  bot_pin_1x2_home_v1: 0.03,
+  bot_pin_1x2_draw_tier4_v1: 0.05,
+};
+
+/** Edge threshold for a shadow bot. Unknown bots fall back to 0.08, matching
+ *  the `?? 0.08` both admin pages used before this was centralised. */
+export function botEdgeThreshold(botName: string | null | undefined): number {
+  if (!botName) return 0.08;
+  return BOT_EDGE_THRESHOLDS[botName] ?? 0.08;
+}
