@@ -104,6 +104,7 @@ interface ShadowBetRow {
   odds_at_pick: number | null;
   odds_at_pick_live: number | null;
   model_probability: number | null;
+  calibrated_prob: number | null;
   edge_percent: number | null;
   recommended_bookmaker: string | null;
   pick_time: string;
@@ -163,7 +164,7 @@ export default async function ShadowBotDetailPage({
     .from("shadow_bets_unique")
     .select(
       `id, match_id, market, selection, odds_at_pick, odds_at_pick_live, model_probability,
-       edge_percent, recommended_bookmaker, pick_time, result, clv,
+       calibrated_prob, edge_percent, recommended_bookmaker, pick_time, result, clv,
        matches!inner (
          date,
          leagues ( name, country, tier ),
@@ -372,15 +373,34 @@ function BetRow({ bet: b, isFirst, threshold }: { bet: ShadowBetRow; isFirst: bo
     ? ko.toLocaleString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" })
     : "";
 
-  // Min odds to bet: minimum price at which this pick would still fire the bot's
-  // edge threshold. Formula: min_odds = (1 + threshold) / model_probability.
-  // Example: threshold 8%, model_probability 40% → min_odds = 1.08 / 0.40 = 2.70.
-  // If Coolbet (or any book) shows ≥ 2.70 at placement time, the bet is worth
-  // taking. If lower, edge has eroded past the threshold — skip.
-  const modelProb = b.model_probability != null ? Number(b.model_probability) : null;
-  const minBetOdds = modelProb && modelProb > 0
-    ? (1 + threshold) / modelProb
-    : null;
+  // Min odds to bet: the lowest price at which this pick would still fire the
+  // bot's edge threshold.
+  //
+  // MIN-ODDS-DETAIL-PAGE-2026-09-06 — this page kept the pre-fix formula
+  // `(1 + threshold) / model_probability` after the index page was corrected
+  // on 2026-09-05, so the two admin views of the SAME pick disagreed.
+  // Measured over 9,583 shadow picks in the last 45 days: this page's floor
+  // was BELOW the index page's on 9,296 of them (97%), median −3.93%, p10
+  // −9.78%. Against the true break-even it ran +8.00% high. The operator
+  // places real money manually off this screen, so a floor that is too low
+  // green-lights prices the bot's own gate would reject.
+  //
+  // The engine's edge is in probability POINTS — `edge = cal_prob - 1/odds`
+  // (daily_pipeline_v2.py:3474) — not multiplicative EV. Solving the gate
+  // `cal_prob - 1/odds >= threshold` for odds gives `1 / (cal_prob - threshold)`.
+  // Same expression as the index page (page.tsx:901), deliberately.
+  //
+  // Prefers calibrated_prob — the probability the edge was actually computed
+  // from — and falls back to model_probability, which is measured
+  // overconfident and therefore yields a floor that is too low.
+  const modelProb =
+    b.calibrated_prob != null
+      ? Number(b.calibrated_prob)
+      : b.model_probability != null
+        ? Number(b.model_probability)
+        : null;
+  const minBetOdds =
+    modelProb && modelProb > threshold ? 1 / (modelProb - threshold) : null;
 
   const tier = b.matches?.leagues?.tier ?? null;
   const tierTone =

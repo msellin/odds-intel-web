@@ -2197,7 +2197,22 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
     const realMoneyTier = computeRealMoneyTier({
       market: b.market,
       selection: b.selection,
-      edge: pickEdge != null ? pickEdge / 100 : null,  // pickEdge is in %, helper expects decimal
+      // EDGE-UNIT-COLLISION-2026-09-06: this divided by 100 on the comment
+      // "pickEdge is in %", but pickEdge comes straight from
+      // simulated_bets.edge_percent, which despite its NAME is stored as a
+      // DECIMAL FRACTION — measured range 0.02-1.36, median 0.11. Line 2170,
+      // twenty lines up, says so explicitly, and line 2222 passes it undivided.
+      //
+      // So this fed 0.0011 where detectBetFlags expects 0.11, and its two
+      // guards — `high-edge-uncalibrated` (edge > 0.20) and
+      // `edge-implausibly-high` (edge > 0.50) — COULD NEVER FIRE. Those exist
+      // to catch the over-confidence signature that inplay_n and inplay_i both
+      // showed, on a page the operator reads before staking real money.
+      //
+      // The column name is the trap: `edge_percent` holding a fraction is
+      // exactly the kind of thing that survives review because the reader
+      // trusts the name over the data.
+      edge: pickEdge,
       botId: bot?.id || "",
       calibrationByKey,
       botById,
