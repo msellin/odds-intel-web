@@ -30,6 +30,10 @@ interface TrackRecordMeta {
   total_bets: number;
   page_size: number;
   roi_pct: number | null;
+  roi_se_pct?: number | null;
+  roi_ci_low_pct?: number | null;
+  roi_ci_high_pct?: number | null;
+  price_basis?: string;
   pnl_total: number;
   stake_total: number;
   median_clv_pct: number | null;
@@ -254,6 +258,12 @@ async function loadCompetitors(): Promise<CompetitorRow[]> {
 export default async function PreviewLanding() {
   const meta = await getMeta();
   const roi = meta?.roi_pct ?? null;
+  // LANDING-PERF-ROI-BASIS-2026-09-05: the headline is a sample mean with a
+  // wide interval (per-bet unit-return sd ~1.4). Publishing the point estimate
+  // alone reads as precision the record does not have, so the interval is shown
+  // with it.
+  const roiCiLow = meta?.roi_ci_low_pct ?? null;
+  const roiCiHigh = meta?.roi_ci_high_pct ?? null;
   const total = meta?.total_bets ?? 0;
   const clvMedian = meta?.median_clv_pct ?? null;
   const clvPinMedian = meta?.median_clv_pin_pct ?? null;
@@ -315,6 +325,16 @@ export default async function PreviewLanding() {
                   <span className="mt-2 block text-lg font-normal text-neutral-400 sm:text-2xl">
                     across {total.toLocaleString()} verified pre-match picks
                   </span>
+                  {roiCiLow !== null && roiCiHigh !== null && (
+                    <span
+                      className="mt-3 block font-mono text-xs font-normal normal-case tracking-normal text-neutral-500 sm:text-sm"
+                      title="95% confidence interval on the ROI point estimate. Betting returns are high-variance: a few hundred settled bets leave a band this wide, so treat the headline as the middle of a range, not a precise figure. Priced at odds actually available at pick time."
+                    >
+                      95% CI {roiCiLow > 0 ? "+" : ""}{roiCiLow.toFixed(2)}% to{" "}
+                      {roiCiHigh > 0 ? "+" : ""}{roiCiHigh.toFixed(2)}% · priced at odds
+                      available when each pick was posted
+                    </span>
+                  )}
                 </>
               ) : (
                 <span className="text-neutral-300">Track record loading…</span>

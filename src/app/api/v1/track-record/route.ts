@@ -22,6 +22,7 @@
  *     bets: [...] }
  */
 import { NextResponse } from "next/server";
+import { execOdds } from "@/lib/engine-data";
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit } from "@/lib/rate-limit";
 
@@ -50,6 +51,7 @@ interface BetRow {
   market: string;
   selection: string;
   odds_at_pick: number | null;
+  odds_at_pick_live: number | null;
   recommended_bookmaker: string | null;
   stake: number | null;
   pnl: number | null;
@@ -105,7 +107,7 @@ export async function GET(req: Request) {
     .from("simulated_bets")
     .select(
       `id, match_id, created_at, market, selection,
-       odds_at_pick, recommended_bookmaker, stake, pnl, result,
+       odds_at_pick, odds_at_pick_live, recommended_bookmaker, stake, pnl, result,
        closing_odds, clv, clv_pinnacle,
        matches!inner ( date, home_team_id, away_team_id, score_home, score_away,
          leagues ( name, country )
@@ -139,7 +141,7 @@ export async function GET(req: Request) {
   const aggRes = await sb
     .from("simulated_bets")
     .select(
-      "odds_at_pick, result, clv, clv_pinnacle, bots!inner(name, maturity_label)",
+      "odds_at_pick, odds_at_pick_live, result, clv, clv_pinnacle, bots!inner(name, maturity_label)",
       { count: "exact" }
     )
     .in("bots.maturity_label", PUBLIC_MATURITY_LABELS)
@@ -151,6 +153,7 @@ export async function GET(req: Request) {
   let total = 0;
   let stake = 0;
   let pnl = 0;
+  const unitReturns: number[] = [];
   // any-book CLV is the public headline metric (matches the cohort used
   // historically in dashboard_cache.active_avg_clv).
   const clvAnyVals: number[] = [];
@@ -161,14 +164,26 @@ export async function GET(req: Request) {
     total = aggRes.count ?? aggRes.data.length;
     for (const r of aggRes.data as Array<{
       odds_at_pick: number | null;
+      odds_at_pick_live: number | null;
       result: string | null;
       clv: number | null;
       clv_pinnacle: number | null;
     }>) {
-      const odds = Number(r.odds_at_pick ?? 0);
+      // LANDING-PERF-ROI-BASIS-2026-09-05: this is the PUBLIC headline ROI and
+      // the published ledger, so it must be priced at odds that were actually
+      // on offer. `odds_at_pick` is a MAX() high-water mark across the fixture's
+      // whole snapshot history (STALE-BEST-ODDS) — publishing a return derived
+      // from a price nobody could have taken is the same class of error as the
+      // earlier +14.33% -> +10.65% restatement.
+      const odds = execOdds(r.odds_at_pick, r.odds_at_pick_live);
       // Flat €10 stake: win = 10*(odds-1), loss = -10.
       pnl += r.result === "won" ? FLAT_STAKE * (odds - 1) : -FLAT_STAKE;
       stake += FLAT_STAKE;
+      // LANDING-PERF-ROI-BASIS: collect unit returns so the response can publish
+      // a confidence interval. A bare ROI with no interval reads as precision it
+      // does not have — per-bet unit-return sd here is ~1.4, so even n in the
+      // hundreds leaves a several-point band.
+      unitReturns.push(r.result === "won" ? odds - 1 : -1);
       if (r.clv != null) {
         const c = Number(r.clv);
         clvAnyVals.push(c);
@@ -198,7 +213,9 @@ export async function GET(req: Request) {
     // FLAT-ROI-EVERYWHERE (2026-08-21): per-bet stake/pnl in the public
     // response are €10-flat so summing rows reconciles with meta.roi_pct.
     // Kelly numbers from r.stake / r.pnl remain internal (admin dashboards).
-    const oddsN = r.odds_at_pick != null ? Number(r.odds_at_pick) : 0;
+    // LANDING-PERF-ROI-BASIS-2026-09-05: must use the SAME basis as meta.roi_pct
+    // above, or the reconciliation promised by the comment breaks.
+    const oddsN = execOdds(r.odds_at_pick, r.odds_at_pick_live);
     const flatStake = FLAT_STAKE;
     const flatPnl = r.result === "won" ? FLAT_STAKE * (oddsN - 1)
                     : r.result === "lost" ? -FLAT_STAKE
@@ -211,7 +228,10 @@ export async function GET(req: Request) {
       country: r.matches?.leagues?.country ?? null,
       market: r.market,
       selection: r.selection,
-      placed_odds: r.odds_at_pick,
+      // The price the return is computed from (executable at pick time).
+      placed_odds: oddsN > 0 ? Number(oddsN.toFixed(2)) : null,
+      // The raw stored high-water value, kept for transparency/diffing.
+      placed_odds_high_water: r.odds_at_pick,
       bookmaker: r.recommended_bookmaker,
       placed_at_utc: r.created_at,
       closing_odds: r.closing_odds,
@@ -232,11 +252,32 @@ export async function GET(req: Request) {
     };
   });
 
+  // LANDING-PERF-ROI-BASIS-2026-09-05: publish the uncertainty alongside the
+  // point estimate. Standard error of the mean unit return, in ROI percentage
+  // points. Consumers should render roi_pct together with roi_ci_*_pct.
+  let roiSePct: number | null = null;
+  if (unitReturns.length > 1) {
+    const mean = unitReturns.reduce((a, b) => a + b, 0) / unitReturns.length;
+    const variance =
+      unitReturns.reduce((a, b) => a + (b - mean) ** 2, 0) / (unitReturns.length - 1);
+    roiSePct = (100 * Math.sqrt(variance)) / Math.sqrt(unitReturns.length);
+  }
+  const roiPct = stake > 0 ? (100 * pnl) / stake : null;
+
   const meta = {
     since,
     total_bets: total,
     page_size: bets.length,
-    roi_pct: stake > 0 ? Number(((100 * pnl) / stake).toFixed(2)) : null,
+    roi_pct: roiPct != null ? Number(roiPct.toFixed(2)) : null,
+    // Uncertainty on roi_pct. Render these WITH the headline, never the point
+    // estimate alone.
+    roi_se_pct: roiSePct != null ? Number(roiSePct.toFixed(2)) : null,
+    roi_ci_low_pct:
+      roiPct != null && roiSePct != null ? Number((roiPct - 1.96 * roiSePct).toFixed(2)) : null,
+    roi_ci_high_pct:
+      roiPct != null && roiSePct != null ? Number((roiPct + 1.96 * roiSePct).toFixed(2)) : null,
+    // Which price the return is computed from.
+    price_basis: "executable_at_pick_time",
     pnl_total: Number(pnl.toFixed(2)),
     stake_total: Number(stake.toFixed(2)),
     median_clv_pct: medianClvPct,
@@ -245,7 +286,7 @@ export async function GET(req: Request) {
     clv_coverage_pct: total > 0 ? Number(((100 * clvN) / total).toFixed(1)) : 0,
     clv_beat_pct: clvN > 0 ? Number(((100 * clvBeats) / clvN).toFixed(1)) : null,
     scope:
-      "pre-match strategies only (calibrated + beta + active maturity, no retired, no in-play bots), pre-match markets (1x2, OU 2.5; BTTS retired 2026-09-03 after 427 settled shadow picks returned -12.76% at prices live at pick time, t=-2.87 — historical BTTS bets remain in the record), settled only. Matches /performance's headline cohort. ROI computed at €10 flat stake per pick — matches WinnerOdds / Tipstrr / SignalOdds / Forebet publication methodology so head-to-head comparison is apples-to-apples.",
+      "pre-match strategies only (calibrated + beta + active maturity, no retired, no in-play bots), pre-match markets (1x2, OU 2.5; BTTS retired 2026-09-03 after 427 settled shadow picks returned -12.76% at prices live at pick time, t=-2.87 — historical BTTS bets remain in the record), settled only. Matches /performance's headline cohort. **ROI is priced at the odds actually available from an accessible bookmaker at or before pick time (`placed_odds`), not the best price any book showed at any point in the day — the raw stored value is exposed as `placed_odds_high_water` for comparison. Restated 2026-09-05: the previous basis overstated this figure by 4.29pp.** ROI computed at €10 flat stake per pick — matches WinnerOdds / Tipstrr / SignalOdds / Forebet publication methodology so head-to-head comparison is apples-to-apples.",
     notes:
       "Every row is an independently re-settleable bet. Use match_id (UUID) + kickoff_utc + market + selection + placed_at_utc to verify against ESPN/Flashscore. Track record published unfiltered — losing bets are present. `stake` and `pnl` per row are €10-flat; internal bots stake proportional to divergence (Kelly) but that's admin-only.",
     next_cursor:

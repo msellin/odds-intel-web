@@ -202,6 +202,49 @@ function settleComboLeg(
   return "void";
 }
 
+// LANDING-PERF-ROI-BASIS-2026-09-05 ───────────────────────────────────────────
+// `odds_at_pick` is a high-water mark, not an offer. STALE-BEST-ODDS found the
+// pipeline taking MAX() across a fixture's entire snapshot history, so it records
+// the best price ANY book showed at ANY time. `odds_at_pick_live` (migration 291)
+// prices the same pick at the best quote from an accessible book at or before
+// pick_time. Same helper and same reasoning as the admin shadow-bots pages.
+export function execOdds(
+  oddsAtPick: number | string | null,
+  oddsAtPickLive: number | string | null
+): number {
+  const live = oddsAtPickLive != null ? Number(oddsAtPickLive) : null;
+  if (live != null && live > 1) return live;
+  return Number(oddsAtPick ?? 0);
+}
+
+/**
+ * Settled P&L priced at the executable odds.
+ *
+ * Only recomputed for SINGLES. Combos settle across several legs and
+ * `odds_at_pick_live` describes one selection, so a combo keeps its stored
+ * `pnl` — silently repricing a combo off a single leg's price would be worse
+ * than the bug this fixes. Void and pending rows keep stored `pnl` too.
+ */
+export function execPnl(row: {
+  result?: string | null;
+  stake?: number | string | null;
+  pnl?: number | string | null;
+  odds_at_pick?: number | string | null;
+  odds_at_pick_live?: number | string | null;
+  combo_legs?: unknown;
+}): number {
+  const stored = Number(row.pnl || 0);
+  if (row.combo_legs != null) return stored;
+  const stake = Number(row.stake || 0);
+  if (stake <= 0) return stored;
+  if (row.result === "won") {
+    const o = execOdds(row.odds_at_pick ?? null, row.odds_at_pick_live ?? null);
+    return o > 1 ? (o - 1) * stake : stored;
+  }
+  if (row.result === "lost") return -stake;
+  return stored;
+}
+
 export interface LiveBet {
   id: string;
   matchId: string;
@@ -212,6 +255,8 @@ export interface LiveBet {
   market: string;
   selection: string;
   odds: number;
+  /** Executable price at pick time — see execOdds. `odds` stays the raw stored value. */
+  oddsExec: number;
   modelProb: number;
   impliedProb: number;
   edge: number;
@@ -1248,7 +1293,7 @@ const _getTodayBetsUncached = async (cohort: BetCohort = "prematch"): Promise<Li
   let q = supabase
     .from("simulated_bets")
     .select(
-      `id, match_id, market, selection, odds_at_pick, pick_time, stake,
+      `id, match_id, market, selection, odds_at_pick, odds_at_pick_live, pick_time, stake,
        model_probability, calibrated_prob, edge_percent, closing_odds, clv, result, pnl,
        bankroll_after, news_triggered, reasoning, recommended_bookmaker, strategy_profile,
        xg_source,
@@ -1465,7 +1510,7 @@ export async function getAllBets(): Promise<LiveBet[]> {
   const { data, error } = await supabase
     .from("simulated_bets")
     .select(
-      `id, match_id, market, selection, odds_at_pick, pick_time, stake,
+      `id, match_id, market, selection, odds_at_pick, odds_at_pick_live, pick_time, stake,
        model_probability, calibrated_prob, edge_percent, closing_odds, clv, result, pnl,
        bankroll_after, news_triggered, reasoning, strategy_profile,
        combo_legs, combo_size, system_type,
@@ -1572,6 +1617,7 @@ function toBet(
     market: row.market,
     selection: row.selection,
     odds: Number(row.odds_at_pick),
+    oddsExec: execOdds(row.odds_at_pick, row.odds_at_pick_live),
     modelProb: Number(row.calibrated_prob ?? row.model_probability),
     impliedProb: row.odds_at_pick > 0 ? 1 / Number(row.odds_at_pick) : 0,
     edge: Number(row.edge_percent), // DB stores as decimal (0.10 = 10%)
@@ -1579,7 +1625,13 @@ function toBet(
     kickoff: match?.date || "",
     placedAt: row.pick_time,
     result: row.result,
-    pnl: Number(row.pnl || 0),
+    // LANDING-PERF-ROI-BASIS-2026-09-05: price settled P&L at the odds that were
+    // actually on offer, not the stored `pnl` (which settlement derives from
+    // `odds_at_pick`, a MAX() high-water mark across the fixture's whole snapshot
+    // history — see STALE-BEST-ODDS). Every downstream aggregator reads `pnl`,
+    // so correcting it here fixes the landing page, /performance and the bot
+    // dashboard in one place rather than in four.
+    pnl: execPnl(row),
     bankrollAfter: row.bankroll_after != null ? Number(row.bankroll_after) : null,
     closingOdds: row.closing_odds != null ? Number(row.closing_odds) : null,
     clv: row.clv != null ? Number(row.clv) : null,
@@ -1977,7 +2029,10 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
       .not("platt_a", "is", null),
     admin
       .from("simulated_bets")
-      .select("bot_id, result, pnl, clv, stake")
+      // LANDING-PERF-ROI-BASIS-2026-09-05: this aggregate bypasses toBet, so it
+      // needs the executable price selected explicitly or it silently keeps the
+      // old inflated basis while the rest of the app is corrected.
+      .select("bot_id, result, pnl, stake, clv, odds_at_pick, odds_at_pick_live, combo_legs")
       .in("result", ["won", "lost"])
       .gte("created_at", sixtyDaysAgoIso),
   ]);
@@ -1991,14 +2046,18 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
     }
   }
   const botById = new Map<string, BotAgg>();
-  type BotAggRaw = { bot_id: string | null; result: string | null; pnl: number | null; clv: number | null; stake: number | null };
+  type BotAggRaw = {
+    bot_id: string | null; result: string | null; pnl: number | null;
+    clv: number | null; stake: number | null;
+    odds_at_pick: number | null; odds_at_pick_live: number | null; combo_legs: unknown;
+  };
   for (const r of (botAggRes.data ?? []) as BotAggRaw[]) {
     if (!r.bot_id) continue;
     const cur = botById.get(r.bot_id) ?? { botId: r.bot_id, settledBets: 0, clv: 0, roi: 0 };
     cur.settledBets += 1;
     cur.clv = (cur.clv ?? 0) + (r.clv != null ? Number(r.clv) : 0);
     const stake = r.stake != null && Number(r.stake) > 0 ? Number(r.stake) : 1;
-    cur.roi = (cur.roi ?? 0) + (r.pnl != null ? Number(r.pnl) : 0) / stake;
+    cur.roi = (cur.roi ?? 0) + execPnl(r) / stake;
     botById.set(r.bot_id, cur);
   }
   // Finalise: convert running sums to means.
