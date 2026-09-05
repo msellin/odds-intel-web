@@ -3421,7 +3421,7 @@ const _getCalibratedHeadlineStatsUncached =
     const { data, error } = await admin
       .from("simulated_bets")
       .select(
-        "created_at, odds_at_pick, result, clv, clv_pinnacle, bots!inner(name, maturity_label)",
+        "created_at, odds_at_pick, odds_at_pick_live, result, clv, clv_pinnacle, bots!inner(name, maturity_label)",
       )
       .in("bots.maturity_label", PUBLIC_MATURITY_LABELS as unknown as string[])
       .not("bots.name", "like", "inplay_%")
@@ -3450,11 +3450,15 @@ const _getCalibratedHeadlineStatsUncached =
     for (const r of data as Array<{
       created_at: string;
       odds_at_pick: number | string | null;
+      odds_at_pick_live: number | string | null;
       result: string | null;
       clv: number | string | null;
       clv_pinnacle: number | string | null;
     }>) {
-      const odds = Number(r.odds_at_pick ?? 0);
+      // LANDING-PERF-ROI-BASIS-2026-09-05: /performance's headline shares the
+      // track-record API's cohort exactly, so it must share its price basis too
+      // or the two public pages report different ROI for identical bets.
+      const odds = execOdds(r.odds_at_pick, r.odds_at_pick_live);
       // Flat €10 stake — win = 10*(odds - 1), loss = -10.
       const pFlat = r.result === "won"
         ? FLAT_STAKE_EUR * (odds - 1)

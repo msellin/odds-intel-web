@@ -22,16 +22,26 @@
  *     bets: [...] }
  */
 import { NextResponse } from "next/server";
-import { execOdds } from "@/lib/engine-data";
+import {
+  execOdds,
+  CALIBRATED_SINCE,
+  CALIBRATED_PUBLIC_MARKETS,
+  FLAT_STAKE_EUR,
+  PUBLIC_MATURITY_LABELS as SHARED_PUBLIC_MATURITY_LABELS,
+} from "@/lib/engine-data";
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 60;
 
-const DEFAULT_SINCE = "2026-05-04";
-const PRE_MATCH_MARKETS = ["1x2", "over_under_25", "o/u", "btts"];
-const PUBLIC_MATURITY_LABELS = ["calibrated", "beta", "active"];
+// LANDING-PERF-ROI-BASIS-2026-09-05: these were duplicated literals that happened
+// to agree with /performance's cohort. They are now imported from the single
+// definition in engine-data, because a silently-diverging cohort is exactly how
+// two public pages end up publishing different ROI for the same bets.
+const DEFAULT_SINCE = CALIBRATED_SINCE;
+const PRE_MATCH_MARKETS = CALIBRATED_PUBLIC_MARKETS as unknown as string[];
+const PUBLIC_MATURITY_LABELS = SHARED_PUBLIC_MATURITY_LABELS as unknown as string[];
 
 function adminClient() {
   const url =
@@ -137,7 +147,8 @@ export async function GET(req: Request) {
   // be computed at €10 flat stake per pick, matching WinnerOdds / Tipstrr /
   // SignalOdds / Forebet publication methodology. Internal Kelly stakes in
   // simulated_bets.stake are ignored for this public endpoint.
-  const FLAT_STAKE = 10;
+  // Shared with /performance so both publish the same stake basis.
+  const FLAT_STAKE = FLAT_STAKE_EUR;
   const aggRes = await sb
     .from("simulated_bets")
     .select(

@@ -495,7 +495,7 @@ export default async function ShadowBotsPage() {
         // placing real money.
         .from("shadow_bets_unique")
         .select(
-          `id, bot_id, match_id, market, selection, odds_at_pick, model_probability,
+          `id, bot_id, match_id, market, selection, odds_at_pick, model_probability, calibrated_prob,
            edge_percent, recommended_bookmaker, pick_time, shadow_cohort,
            matches!inner (
              date,
@@ -524,6 +524,7 @@ export default async function ShadowBotsPage() {
     selection: string;
     odds_at_pick: number | null;
     model_probability: number | null;
+    calibrated_prob: number | null;
     edge_percent: number | null;
     recommended_bookmaker: string | null;
     pick_time: string;
@@ -870,8 +871,31 @@ export default async function ShadowBotsPage() {
                   : "bg-neutral-500/15 text-neutral-400";
                 const botName = botNameById.get(u.bot_id) ?? "?";
                 const threshold = BOT_EDGE_THRESHOLDS[botName] ?? 0.08;
-                const modelProb = u.model_probability != null ? Number(u.model_probability) : null;
-                const minOdds = modelProb && modelProb > 0 ? (1 + threshold) / modelProb : null;
+                // PICKS-MIN-ODDS-WRONG-FORMULA-2026-09-05. This floor answers
+                // "below what price would this bot no longer have raised the
+                // pick?" — deliberately STRICTER than break-even, because it
+                // gates real money.
+                //
+                // It was `(1 + threshold) / prob`, which treats a
+                // probability-point edge as a multiplicative EV threshold. Our
+                // gate is `edge = cal_prob - 1/odds >= threshold`, so solving
+                // for odds gives `odds >= 1 / (cal_prob - threshold)`.
+                //
+                // The old form was too PERMISSIVE: at cal_prob 0.416 and an 8%
+                // threshold it read 2.60 where the bot's own gate is 2.98, so
+                // the operator could be shown a green light below the price the
+                // bot would itself require.
+                //
+                // Uses calibrated_prob — the probability the edge was computed
+                // from — falling back to model_probability.
+                const modelProb =
+                  u.calibrated_prob != null
+                    ? Number(u.calibrated_prob)
+                    : u.model_probability != null
+                      ? Number(u.model_probability)
+                      : null;
+                const minOdds =
+                  modelProb && modelProb > threshold ? 1 / (modelProb - threshold) : null;
 
                 // Gap = model_prob − market_implied_prob, in percentage points.
                 // Positive = model thinks the outcome is more likely than the

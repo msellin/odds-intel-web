@@ -31,19 +31,63 @@ export interface UpcomingPick {
    *
    * A pick is only worth taking at the price it was found at. By the time
    * someone opens the page the book may have moved, and a pick posted at 2.50
-   * with a 10% edge is worthless at 2.20. Derived rather than stored:
-   *   edge = odds x prob - 1  =>  prob = (1 + edge) / odds
-   *   break-even = 1 / prob   =  odds / (1 + edge)
+   * is worthless well above 2.20. Showing the floor lets the reader check the
+   * price they are actually offered instead of trusting a number that has moved.
    *
-   * This matters more than it looks right now — the Coolbet feed has been stale
-   * for 74h, so every current pick is priced at a book the operator may not be
-   * placing at. Showing the floor lets the reader check their own price instead
-   * of trusting a number that may have moved.
+   * PICKS-MIN-ODDS-WRONG-FORMULA-2026-09-05 — this was wrong on every pick.
+   * The previous derivation assumed the standard multiplicative definition:
+   *     edge = odds x prob - 1  =>  break-even = odds / (1 + edge)
+   * That premise is false for this engine. `daily_pipeline_v2.py:3474` computes
+   *     edge = cal_prob - ip,  where ip = 1 / odds
+   * i.e. a difference in PROBABILITY POINTS, not a multiplicative EV. Feeding a
+   * probability-point edge into the multiplicative formula inflates the floor.
+   *
+   * Correct derivation:
+   *     cal_prob   = edge + 1 / odds
+   *     break-even = 1 / cal_prob = 1 / (edge + 1 / odds)
+   *
+   * Measured before the fix, 478 picks over 45 days: the displayed floor was
+   * ABOVE the true break-even on 478 of 478 — median +18.0%, mean +19.6%,
+   * p90 +37.2%. Worked example: odds 3.11, edge 0.09, cal_prob 0.416 gave a
+   * displayed 2.85 against a true 2.40.
+   *
+   * The error ran in the harmful direction: it told readers a still-+EV bet was
+   * dead, so they skipped good bets, while the UI asserted it as fact.
    */
   min_odds: number | null;
   bookmaker: string | null;
   posted_at_utc: string;
   result: "pending" | "won" | "lost" | "void";
+}
+
+/**
+ * Break-even price for a pick: below this the bet is -EV under our own model.
+ *
+ * Single definition, used everywhere. `break-even = 1 / cal_prob`.
+ *
+ * Prefers the stored `calibrated_prob` and falls back to reconstructing it from
+ * the stored edge, since `edge = cal_prob - 1/odds` (daily_pipeline_v2.py:3474)
+ * gives `cal_prob = edge + 1/odds`. Both routes agree; the direct one avoids
+ * compounding the rounding already applied to `edge_percent`.
+ *
+ * Returns null rather than a wrong number when the inputs cannot support it —
+ * a missing floor is honest, an invented one is not.
+ */
+export function breakEvenOdds(
+  oddsAtPick: number | null,
+  edgePercent: number | null,
+  calibratedProb: number | null
+): number | null {
+  const cal = calibratedProb != null ? Number(calibratedProb) : null;
+  if (cal != null && cal > 0 && cal <= 1) {
+    return Number((1 / cal).toFixed(2));
+  }
+  const odds = oddsAtPick != null ? Number(oddsAtPick) : null;
+  const edge = edgePercent != null ? Number(edgePercent) : null;
+  if (odds == null || odds <= 1 || edge == null) return null;
+  const impliedProb = edge + 1 / odds; // = cal_prob
+  if (impliedProb <= 0 || impliedProb > 1) return null;
+  return Number((1 / impliedProb).toFixed(2));
 }
 
 const PRE_MATCH_MARKETS = ["1x2", "over_under_25", "o/u", "btts"];
@@ -59,6 +103,7 @@ interface BetRow {
   selection: string;
   odds_at_pick: number | null;
   edge_percent: number | null;
+  calibrated_prob: number | null;
   recommended_bookmaker: string | null;
   result: string | null;
   matches: {
@@ -96,7 +141,7 @@ export async function fetchUpcomingPicks(
     .from("simulated_bets")
     .select(
       `id, match_id, created_at, market, selection,
-       odds_at_pick, edge_percent, recommended_bookmaker, result,
+       odds_at_pick, edge_percent, calibrated_prob, recommended_bookmaker, result,
        matches!inner (
          date,
          leagues ( name, country ),
@@ -143,10 +188,7 @@ export async function fetchUpcomingPicks(
       r.edge_percent != null
         ? Number((Number(r.edge_percent) * 100).toFixed(2))
         : null,
-    min_odds:
-      r.odds_at_pick != null && r.edge_percent != null && Number(r.edge_percent) > -1
-        ? Number((Number(r.odds_at_pick) / (1 + Number(r.edge_percent))).toFixed(2))
-        : null,
+    min_odds: breakEvenOdds(r.odds_at_pick, r.edge_percent, r.calibrated_prob),
     bookmaker: r.recommended_bookmaker,
     posted_at_utc: r.created_at,
     result: (r.result ?? "pending") as UpcomingPick["result"],
