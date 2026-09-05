@@ -587,20 +587,32 @@ export default async function ShadowBotsPage() {
         // where its coverage numbers come from. Coolbet prices only 44% of
         // outcomes, so a second column is mostly about the fixtures Coolbet
         // does not cover at all.
-        .in("bookmaker", ["Coolbet", "Unibet"])
+        // SHADOW-UB-COLUMN-STALE-2026-09-05: the direct Kambi feed joins the two
+        // AF-era books. `Unibet` (API-Football) is a median 26.8h stale and
+        // covers 55 upcoming fixtures; `Unibet-Kambi` is 0.7h and 407, and AF's
+        // forward Unibet coverage drops to zero from 2026-09-06. Both are read
+        // and the NEWEST wins per key (rows arrive newest-first), so no explicit
+        // preference logic is needed — recency picks Kambi wherever it exists
+        // and falls back to the AF price where it does not.
+        .in("bookmaker", ["Coolbet", "Unibet", "Unibet-Kambi"])
         .eq("is_live", false)
         .order("timestamp", { ascending: false })
         // PostgREST caps responses at db-max-rows = 10,000 (see
-        // ALL-BETS-CEILING-DEAD). Two books doubles the row count, so this sits
-        // at the ceiling deliberately rather than above it, where the cap would
-        // truncate silently.
+        // ALL-BETS-CEILING-DEAD). Two books already sat AT that ceiling, so a
+        // third would truncate silently — and because the order is newest-first,
+        // the rows dropped would be the OLDEST, i.e. Coolbet's. That would have
+        // made the "Now @ CB" column go blank as a side effect of improving the
+        // UB one. Narrowed to a recent window instead so three books fit: the
+        // column shows a CURRENT price, and anything older than this is stale
+        // enough that it should read "—" rather than mislead.
+        .gte("timestamp", new Date(Date.now() - 12 * 3600 * 1000).toISOString())
         .limit(10000)
     : { data: [] };
   // One key builder for both the map and every lookup, so they cannot drift.
   const oddsKey = (m: string, market: string, selection: string) =>
     `${m}|${market.toLowerCase()}|${selection.toLowerCase()}`;
-  const coolbetCurrent = new Map<string, { odds: number; ts: string }>();
-  const unibetCurrent = new Map<string, { odds: number; ts: string }>();
+  const coolbetCurrent = new Map<string, { odds: number; ts: string; src?: string }>();
+  const unibetCurrent = new Map<string, { odds: number; ts: string; src?: string }>();
   for (const row of (cbSnapshots ?? []) as Array<{
     match_id: string; market: string; selection: string; odds: number | string;
     timestamp: string; bookmaker: string;
@@ -616,7 +628,13 @@ export default async function ShadowBotsPage() {
     // Rows arrive newest-first, so the first hit per key is the latest price.
     const target = row.bookmaker === "Coolbet" ? coolbetCurrent : unibetCurrent;
     if (!target.has(key)) {
-      target.set(key, { odds: Number(row.odds), ts: row.timestamp });
+      // `src` records WHICH Unibet feed supplied the price. The two disagree —
+      // AF is stale, and the direct feed has not itself been verified against
+      // unibet.ee (KAMBI-VS-SITE-VERIFICATION) — so the surface must not present
+      // them as interchangeable.
+      target.set(key, {
+        odds: Number(row.odds), ts: row.timestamp, src: row.bookmaker,
+      });
     }
   }
   const botNameById = new Map(bots.map((b) => [b.id, b.name]));
@@ -855,7 +873,7 @@ export default async function ShadowBotsPage() {
               <div className="text-right" title="Model probability minus market-implied probability (from odds), in percentage points. Larger positive = bigger claimed edge. Interpret per bot — settled data shows different bots calibrate very differently, no universal good/bad threshold.">Gap</div>
               <div>Book</div>
               <div className="text-right" title="Coolbet's latest snapshot price for this exact selection. Arrow shows drift vs signal odds. — means no Coolbet coverage.">Now @ CB</div>
-              <div className="text-right" title="Unibet's latest snapshot price for the same selection, via the API-Football feed. Green = beats Coolbet. Most useful where Coolbet shows — (no coverage): Coolbet prices only 44% of outcomes. NOTE the price is AF-fed and has never been verified against unibet.ee itself — the Bet365 feed was found inflated this way (CLV +10% vs ROI -10%).">Now @ UB</div>
+              <div className="text-right" title="Unibet's latest price for the same selection, newest feed wins. K = direct Kambi feed (unibet.ee's own backend, median 0.7h old, 407 upcoming fixtures). A = API-Football feed (median 26.8h old, 55 fixtures, and its forward coverage went to zero on 2026-09-06). Green = beats Coolbet. Most useful where Coolbet shows — (no coverage): Coolbet prices only 44% of outcomes. NOTE neither feed is fully verified against unibet.ee: a 2-fixture check on 2026-09-05 found the site showing ~1pp BETTER prices than the Kambi API (overround 5.49% vs 6.62%, 6.16% vs 6.98%). That errs on the safe side — we understate Unibet — but it is unresolved (KAMBI-VS-SITE-VERIFICATION).">Now @ UB</div>
               <div className="text-right">Min odds</div>
             </div>
             <ul>
@@ -1099,13 +1117,18 @@ export default async function ShadowBotsPage() {
                       title={
                         ub == null
                           ? "No Unibet price for this selection in the feed."
-                          : `Unibet ${ub.odds.toFixed(2)}${cb ? ` vs Coolbet ${cb.odds.toFixed(2)}` : " (Coolbet has no price)"} · snapshot ${new Date(ub.ts).toUTCString()} · AF-fed, unverified against unibet.ee`
+                          : `Unibet ${ub.odds.toFixed(2)}${cb ? ` vs Coolbet ${cb.odds.toFixed(2)}` : " (Coolbet has no price)"} · snapshot ${new Date(ub.ts).toUTCString()} · source: ${ub.src === "Unibet-Kambi" ? "direct Kambi feed" : "API-Football feed (STALE — AF forward Unibet coverage ended 2026-09-06)"} · neither feed fully verified against unibet.ee`
                       }
                     >
                       {ub == null
                         ? <span className="text-neutral-600">—</span>
                         : <span className={ubBeatsCb ? "text-emerald-400" : "text-neutral-400"}>
                             {ub.odds.toFixed(2)}
+                            {ub.src === "Unibet-Kambi" ? (
+                              <span className="ml-0.5 text-[9px] text-neutral-500" title="direct Kambi feed">K</span>
+                            ) : (
+                              <span className="ml-0.5 text-[9px] text-amber-500/80" title="API-Football feed — stale, forward coverage ended">A</span>
+                            )}
                           </span>
                       }
                     </div>
