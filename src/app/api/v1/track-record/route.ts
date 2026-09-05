@@ -164,6 +164,10 @@ export async function GET(req: Request) {
   let total = 0;
   let stake = 0;
   let pnl = 0;
+  // Settled rows excluded from the ROI aggregate because no accessible book
+  // quoted them at pick time. Published as coverage — see
+  // LANDING-PERF-UNPLACEABLE-FALLBACK below.
+  let unpriceable = 0;
   const unitReturns: number[] = [];
   // any-book CLV is the public headline metric (matches the cohort used
   // historically in dashboard_cache.active_avg_clv).
@@ -186,6 +190,31 @@ export async function GET(req: Request) {
       // whole snapshot history (STALE-BEST-ODDS) — publishing a return derived
       // from a price nobody could have taken is the same class of error as the
       // earlier +14.33% -> +10.65% restatement.
+      //
+      // LANDING-PERF-UNPLACEABLE-FALLBACK-2026-09-06: execOdds falls back to
+      // `odds_at_pick` when there is no live re-quote, and that fallback is
+      // correct for DISPLAYING one bet (it shows the price we recorded) but
+      // wrong for a published AGGREGATE. A row with no `odds_at_pick_live` had
+      // no accessible book quoting that selection at pick time — it was not
+      // merely unpriced, it was NOT PLACEABLE — and falling back prices it at
+      // the stale high-water mark this very comment warns about.
+      //
+      // Measured on the public cohort (settled, since 2026-05-04):
+      //     including the fallback rows   n=756  ROI +12.62%
+      //     live-priced rows only         n=691  ROI +10.70%
+      //     the 65 fallback rows alone    n=65   ROI +33.09%
+      // Those 65 sit at longer mean odds (3.10 vs 2.87) and carry the entire
+      // +1.92pp gap. They are also why the landing page hero and the
+      // competitor-comparison table published two different "our ROI" numbers
+      // for the same window — `scripts/_our_stats.py` already dropped them, on
+      // purpose, and documents why under "COVERAGE IS NOT OPTIONAL".
+      //
+      // So: skip them here and publish the coverage, matching the ledger. The
+      // correction moves the headline DOWN, which is the honest direction.
+      if (r.odds_at_pick_live == null || Number(r.odds_at_pick_live) <= 1) {
+        unpriceable += 1;
+        continue;
+      }
       const odds = execOdds(r.odds_at_pick, r.odds_at_pick_live);
       // Flat €10 stake: win = 10*(odds-1), loss = -10.
       pnl += r.result === "won" ? FLAT_STAKE * (odds - 1) : -FLAT_STAKE;
@@ -289,6 +318,17 @@ export async function GET(req: Request) {
       roiPct != null && roiSePct != null ? Number((roiPct + 1.96 * roiSePct).toFixed(2)) : null,
     // Which price the return is computed from.
     price_basis: "executable_at_pick_time",
+    // LANDING-PERF-UNPLACEABLE-FALLBACK-2026-09-06: settled rows EXCLUDED from
+    // roi_pct because no accessible book quoted them at pick time. They were
+    // not placeable, so pricing them at the stale high-water mark would inflate
+    // the headline — measured at +1.92pp on the public cohort. Published rather
+    // than hidden, because a restated ROI without its coverage invites exactly
+    // the "your data is thin" dismissal (ANALYSIS_GOTCHAS #29). `total_bets`
+    // stays the full settled count; `roi_n` is what roi_pct is computed over.
+    roi_n: unitReturns.length,
+    roi_excluded_unpriceable: unpriceable,
+    roi_coverage_pct:
+      total > 0 ? Number(((100 * unitReturns.length) / total).toFixed(1)) : 0,
     pnl_total: Number(pnl.toFixed(2)),
     stake_total: Number(stake.toFixed(2)),
     median_clv_pct: medianClvPct,
