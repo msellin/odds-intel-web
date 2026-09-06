@@ -175,7 +175,16 @@ async function LoggedInPerformanceSection({
   calibrated,
   extras,
 }: LoggedInSectionProps) {
-  const allBetsRaw = await getAllBets();
+  // PERF-PAGE-COLD-RENDER-2026-09-06: getAllBets() and getPublicCohortBotNames()
+  // were two SERIAL round-trips, and nothing in the second depends on the first.
+  // getAllBets is the heavier of the two — it pulls the bet rows with four
+  // levels of embedded resources (bot, match -> home_team / away_team / league)
+  // through PostgREST — so running them one after the other paid its latency
+  // twice over for no reason. Parallel now.
+  const [allBetsRaw, publicBotNames] = await Promise.all([
+    getAllBets(),
+    getPublicCohortBotNames(),
+  ]);
   const sanitizedBets = sanitizeBets(allBetsRaw, isElite);
 
   // PERF-HISTORY-COHORT-MATCH (2026-08-21): the "+X% n=Y" ROI headline is
@@ -188,7 +197,7 @@ async function LoggedInPerformanceSection({
   // from DB (not from the 30-min-cached botsDB) so newly-retired bots
   // disappear from the ledger immediately — otherwise history lagged hero
   // by up to 30 min after a retirement.
-  const publicBotNames = await getPublicCohortBotNames();
+  // (publicBotNames is fetched above, in parallel with getAllBets.)
   const publicMarkets = new Set<string>(CALIBRATED_PUBLIC_MARKETS as unknown as string[]);
   const sinceIso = `${CALIBRATED_SINCE}T00:00:00Z`;
   const cohortBets = sanitizedBets.filter(
