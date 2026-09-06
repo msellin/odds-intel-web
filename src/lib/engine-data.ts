@@ -3383,7 +3383,25 @@ export const CALIBRATED_SINCE = "2026-05-04";
 // maturities — same cohort the dashboard_cache.active_avg_clv historically
 // used). EXCLUDES retired bots (failed experiments) so the headline isn't
 // dragged by deactivated losers.
-export const PUBLIC_MATURITY_LABELS = ["calibrated", "beta", "active"] as const;
+// DUPLICATED-RULES-REMAINING-2026-09-06: renamed from PUBLIC_MATURITY_LABELS.
+//
+// `upcoming-picks.ts` ALSO exported a `PUBLIC_MATURITY_LABELS` — same
+// identifier, same app, DIFFERENT value: ["calibrated"] there against
+// ["calibrated","beta","active"] here. They are both correct for their own
+// surface, which is exactly what made the collision dangerous: one wrong
+// auto-import either widens the ANONYMOUS picks feed to beta/active bots, or
+// narrows the published track record, and in both directions the code still
+// compiles and looks right.
+//
+// The tell that someone had already tripped on it: track-record/route.ts
+// imported this one under an alias (`as SHARED_PUBLIC_MATURITY_LABELS`) rather
+// than by name.
+//
+// This constant is the HEADLINE / track-record cohort — every production
+// strategy, excluding retired bots so failed experiments do not drag the
+// number. The anonymous picks cohort lives in upcoming-picks.ts and stays
+// narrower on purpose (PICKS-USER-GATE).
+export const HEADLINE_MATURITY_LABELS = ["calibrated", "beta", "active"] as const;
 export const CALIBRATED_PUBLIC_MARKETS = ["1x2", "o/u", "over_under_25", "btts"] as const;
 
 // FLAT-ROI-EVERYWHERE (2026-08-21): all public-facing ROI numbers use €10
@@ -3418,7 +3436,7 @@ export async function getPublicCohortBotNames(): Promise<Set<string>> {
     .from("bots")
     .select("name")
     .is("retired_at", null)
-    .in("maturity_label", PUBLIC_MATURITY_LABELS as unknown as string[])
+    .in("maturity_label", HEADLINE_MATURITY_LABELS as unknown as string[])
     .not("name", "like", "inplay_%");
   if (error || !data) return new Set();
   return new Set((data as Array<{ name: string }>).map((r) => r.name));
@@ -3445,7 +3463,7 @@ const _getCalibratedHeadlineStatsUncached =
       .select(
         "created_at, odds_at_pick, odds_at_pick_live, result, clv, clv_pinnacle, bots!inner(name, maturity_label)",
       )
-      .in("bots.maturity_label", PUBLIC_MATURITY_LABELS as unknown as string[])
+      .in("bots.maturity_label", HEADLINE_MATURITY_LABELS as unknown as string[])
       .not("bots.name", "like", "inplay_%")
       .in("market", CALIBRATED_PUBLIC_MARKETS as unknown as string[])
       .in("result", ["won", "lost"])

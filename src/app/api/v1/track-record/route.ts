@@ -27,7 +27,7 @@ import {
   CALIBRATED_SINCE,
   CALIBRATED_PUBLIC_MARKETS,
   FLAT_STAKE_EUR,
-  PUBLIC_MATURITY_LABELS as SHARED_PUBLIC_MATURITY_LABELS,
+  HEADLINE_MATURITY_LABELS,
 } from "@/lib/engine-data";
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -41,7 +41,11 @@ export const revalidate = 60;
 // two public pages end up publishing different ROI for the same bets.
 const DEFAULT_SINCE = CALIBRATED_SINCE;
 const PRE_MATCH_MARKETS = CALIBRATED_PUBLIC_MARKETS as unknown as string[];
-const PUBLIC_MATURITY_LABELS = SHARED_PUBLIC_MATURITY_LABELS as unknown as string[];
+// DUPLICATED-RULES-REMAINING-2026-09-06: this used to import
+// engine-data's PUBLIC_MATURITY_LABELS under an alias, because
+// upcoming-picks.ts exported the same name with a different value.
+// The constant is now named for what it is, so no alias is needed.
+const PUBLIC_MATURITY_LABELS = HEADLINE_MATURITY_LABELS as unknown as string[];
 
 function adminClient() {
   const url =
