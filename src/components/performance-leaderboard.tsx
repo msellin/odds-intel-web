@@ -349,6 +349,14 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
   // UUID-bug history, and the public "production strategies" cohort the
   // landing claims is pre-match only. In-play data stays in /admin where
   // the operator can audit it.
+  //
+  // PERF-BOT-COUNT-RECONCILE-ADMIN (closed 2026-09-06): the "Tested to date:
+  // N strategies" counts below are therefore INTENTIONALLY LOWER than
+  // /admin/bots, which shows every bot including in-play ones. That is not a
+  // bug and should not be "fixed" to match — the public cohort is pre-match
+  // only by design, because that is what the landing page claims. Any future
+  // audit comparing the two numbers should expect the delta to equal the
+  // in-play bot count exactly.
   const tabFilteredBots = bots.filter((b) => !isLiveBot(b.name));
 
   const activeBots = tabFilteredBots.filter((b) => b.hasEnoughData && (b.roi == null || b.roi >= 0));
