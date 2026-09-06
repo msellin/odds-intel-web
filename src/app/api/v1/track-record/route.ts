@@ -358,8 +358,18 @@ export async function GET(req: Request) {
     // clv_pinnacle.
     scope:
       "pre-match strategies only (calibrated + beta + active maturity, no retired, no in-play bots), pre-match markets (1x2, OU 2.5; BTTS retired 2026-09-03 after 427 settled shadow picks returned -12.76% at prices live at pick time, t=-2.87 — historical BTTS bets remain in the record), settled only. Matches /performance's headline cohort. **ROI is priced at the odds actually available from an accessible bookmaker at or before pick time (`placed_odds`), not the best price any book showed at any point in the day — the raw stored value is exposed as `placed_odds_high_water` for comparison. Restated 2026-09-05: the previous basis overstated this figure by 4.29pp.** ROI computed at €10 flat stake per pick — matches WinnerOdds / Tipstrr / SignalOdds / Forebet publication methodology so head-to-head comparison is apples-to-apples.",
+    // TRACK-RECORD-UNFILTERED-CLAIM (2026-09-06): this used to read "Track
+    // record published unfiltered — losing bets are present." The second half
+    // is true; the first was not. The cohort filters on bots.maturity_label, so
+    // retiring a bot removes its whole settled history from this feed —
+    // measured 2026-09-06 at 993 bets (64% of the record) carrying -3.16% ROI.
+    // Claiming "unfiltered" while applying a survivorship filter is the one
+    // sentence here a reader could call false, so it is gone. The wording now
+    // claims only what is true: no winner-picking within what is published.
+    // Whether to change the COHORT is a separate, deliberate decision
+    // (TRACK-RECORD-SURVIVORSHIP) and the owner has deferred it.
     notes:
-      "Every row is an independently re-settleable bet. Use match_id (UUID) + kickoff_utc + market + selection + placed_at_utc to verify against ESPN/Flashscore. Track record published unfiltered — losing bets are present. `stake` and `pnl` per row are €10-flat; internal bots stake proportional to divergence (Kelly) but that's admin-only.",
+      "Every row is an independently re-settleable bet. Use match_id (UUID) + kickoff_utc + market + selection + placed_at_utc to verify against ESPN/Flashscore. Losing bets are present — this feed is not filtered for winners. `stake` and `pnl` per row are €10-flat; internal bots stake proportional to divergence (Kelly) but that's admin-only.",
     next_cursor:
       bets.length === limit ? bets[bets.length - 1]?.placed_at_utc : null,
   };
