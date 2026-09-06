@@ -20,6 +20,7 @@
  *   - One footer with API link + GitHub
  */
 import Link from "next/link";
+import { CALIBRATED_SINCE } from "@/lib/engine-data";
 import { headers } from "next/headers";
 import { Database, GitCommit, Anchor, Terminal } from "lucide-react";
 import { PremiumWaitlistForm } from "@/components/premium-waitlist-form";
@@ -282,7 +283,12 @@ export default async function PreviewLanding() {
   // show it until it is both positive and shown to predict return.
   const stake = meta?.stake_total ?? 0;
   const pnl = meta?.pnl_total ?? 0;
-  const since = meta?.since ?? "2026-05-04";
+  // DUPLICATED-RULES-REMAINING-2026-09-06: the cohort start is CALIBRATED_SINCE,
+  // not a literal repeated per file. NB the "2026-05-04" values in COMP_FALLBACK
+  // above are deliberately NOT this constant — those are each competitor's own
+  // comparison window, which happens to start the same day and must be free to
+  // diverge.
+  const since = meta?.since ?? CALIBRATED_SINCE;
 
   // COMPETITOR-AUTOREFRESH (2026-06-25): fetch each comparison_*.json
   // from the engine repo's raw GitHub URL with 6h revalidate. When the

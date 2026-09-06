@@ -23,6 +23,9 @@ import type {
   ModelV2Stats,
   CalibratedHeadlineStats,
 } from "@/lib/engine-data";
+// Value import, separate from the `import type` above: CALIBRATED_SINCE is a
+// runtime constant, not a type.
+import { CALIBRATED_SINCE } from "@/lib/engine-data";
 
 interface Props {
   stats: TrackRecordStats;
@@ -74,7 +77,11 @@ export function PerformanceHero({
   const cal30 = calibrated?.last30d;
   const calRoi = cal?.roiPct ?? null;
   const calN = cal?.n ?? 0;
-  const calSince = cal?.sinceDate ?? "2026-05-04";
+  // DUPLICATED-RULES-REMAINING-2026-09-06: was a bare "2026-05-04". The
+  // cohort start is exported as CALIBRATED_SINCE; five copies of the literal
+  // agreed only by coincidence, and the day one moved was the day the public
+  // cohort silently split in two.
+  const calSince = cal?.sinceDate ?? CALIBRATED_SINCE;
   const cal30Roi = cal30?.roiPct ?? null;
   const cal30N = cal30?.n ?? 0;
   // CLV locals removed with the tiles — see CLV-PUBLIC-WITHDRAWN below.
