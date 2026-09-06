@@ -77,9 +77,7 @@ export function PerformanceHero({
   const calSince = cal?.sinceDate ?? "2026-05-04";
   const cal30Roi = cal30?.roiPct ?? null;
   const cal30N = cal30?.n ?? 0;
-  const clvMedian = cal?.medianClvPct ?? null;
-  const clvPinMedian = cal?.medianClvPinPct ?? null;
-  const clvBeat = cal?.clvBeatPct ?? null;
+  // CLV locals removed with the tiles — see CLV-PUBLIC-WITHDRAWN below.
 
   return (
     <div className="space-y-6">
@@ -131,26 +129,36 @@ export function PerformanceHero({
                   : null
             }
           />
-          <Metric
-            label="Median CLV"
-            value={
-              clvMedian != null
-                ? `${clvMedian > 0 ? "+" : ""}${clvMedian.toFixed(2)}%`
-                : "—"
-            }
-            sub={
-              clvPinMedian != null
-                ? `${clvPinMedian >= 0 ? "+" : ""}${clvPinMedian.toFixed(1)}% vs Pinnacle`
-                : "vs closing line"
-            }
-            accent={clvMedian != null && clvMedian > 0 ? "positive" : null}
-          />
-          <Metric
-            label="Beat the close"
-            value={clvBeat != null ? `${clvBeat.toFixed(0)}%` : "—"}
-            sub="of picks"
-            accent={clvBeat != null && clvBeat >= 50 ? "positive" : null}
-          />
+          {/* CLV-PUBLIC-WITHDRAWN (2026-09-06). "Median CLV" and "Beat the
+              close" were removed from the public surface. They were WRONG, not
+              merely unflattering: both read simulated_bets.clv_pinnacle, which
+              settlement.py writes RAW (odds_at_pick / pinnacle_closing - 1) —
+              no de-vig, priced at odds_at_pick, a MAX high-water mark rather
+              than an executable quote. Measured on the public cohort:
+
+                published "% vs Pinnacle"   +9.49% median
+                honest (de-vig, executable) -3.22% median
+                published "Beat the close"  78%
+                honest                       36%
+
+              "Beat the close: 78%" was the worst of it — a concrete, checkable
+              claim wrong by a factor of two, and the first thing a sharp reader
+              would test.
+
+              Withdrawn rather than restated, for two reasons. The corrected
+              figure is negative, and separately we cannot yet show the metric
+              is meaningful on our own data: CLV-EXECUTABLE-PRICE-SUBSET
+              measured CLV predicting realised return at r=+0.0375 (NOT
+              significant) on the bets that carry a real executable price.
+              Publishing a metric we cannot validate is premature in either
+              direction.
+
+              ROI is UNAFFECTED and stays — it is a different number, computed
+              from stake and pnl, and it does not touch clv_pinnacle.
+
+              The engine keeps computing and storing CLV; only the public
+              surface is withdrawn. Restore when the number is both positive and
+              demonstrated to predict return. */}
         </div>
       </section>
 

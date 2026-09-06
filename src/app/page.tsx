@@ -28,6 +28,10 @@ import { Nav } from "@/components/nav";
 interface TrackRecordMeta {
   since: string;
   total_bets: number;
+  /** Count roi_pct is actually computed over — EXCLUDES rows no accessible
+   *  book quoted at pick time. Not the same as total_bets; see
+   *  LANDING-PICK-COUNT-MISMATCH below. */
+  roi_n?: number;
   page_size: number;
   roi_pct: number | null;
   roi_se_pct?: number | null;
@@ -264,10 +268,18 @@ export default async function PreviewLanding() {
   // with it.
   const roiCiLow = meta?.roi_ci_low_pct ?? null;
   const roiCiHigh = meta?.roi_ci_high_pct ?? null;
-  const total = meta?.total_bets ?? 0;
-  const clvMedian = meta?.median_clv_pct ?? null;
-  const clvPinMedian = meta?.median_clv_pin_pct ?? null;
-  const beat = meta?.clv_beat_pct ?? null;
+  // LANDING-PICK-COUNT-MISMATCH (2026-09-06): this was `total_bets`, the FULL
+  // settled count, rendered directly beside `roi_pct` — which the API computes
+  // over `roi_n`, EXCLUDING rows no accessible book quoted at pick time
+  // (LANDING-PERF-UNPLACEABLE-FALLBACK). Measured 2026-09-06: 570 vs 531, so
+  // the headline read "+X% across 570 picks" when 531 produced it — a 39-pick,
+  // 6.8% overstatement of the evidence base. The API is not at fault; it
+  // documents the two as different and publishes both. The landing read the
+  // wrong one. Use the count the number is actually computed from.
+  const total = meta?.roi_n ?? meta?.total_bets ?? 0;
+  // CLV-PUBLIC-WITHDRAWN (2026-09-06) — see performance-hero.tsx for the
+  // measured reason. The engine still computes CLV; the public surface does not
+  // show it until it is both positive and shown to predict return.
   const stake = meta?.stake_total ?? 0;
   const pnl = meta?.pnl_total ?? 0;
   const since = meta?.since ?? "2026-05-04";
@@ -390,26 +402,7 @@ export default async function PreviewLanding() {
               sub={`P&L €${pnl.toFixed(0)} / €${stake.toFixed(0)} staked`}
               accent={roi !== null && roi > 0 ? "positive" : null}
             />
-            <Metric
-              label="Median CLV"
-              value={
-                clvMedian !== null
-                  ? `${clvMedian > 0 ? "+" : ""}${clvMedian.toFixed(2)}%`
-                  : "—"
-              }
-              sub={
-                clvPinMedian !== null
-                  ? `+${clvPinMedian.toFixed(1)}% vs Pinnacle close`
-                  : "vs closing line"
-              }
-              accent={clvMedian !== null && clvMedian > 0 ? "positive" : null}
-            />
-            <Metric
-              label="Beat the close"
-              value={beat !== null ? `${beat.toFixed(0)}%` : "—"}
-              sub="vs closing line"
-              accent={beat !== null && beat >= 50 ? "positive" : null}
-            />
+            {/* CLV-PUBLIC-WITHDRAWN (2026-09-06) — see performance-hero.tsx. */}
           </div>
           <p className="border-t border-white/[0.04] bg-neutral-950 px-4 py-2.5 text-center text-[11px] uppercase tracking-widest text-neutral-500">
             Full pre-match cohort · 1X2 + OU 2.5 · BTTS retired Sep 2026 · actual placed stakes

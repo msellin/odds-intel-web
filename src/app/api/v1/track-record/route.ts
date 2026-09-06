@@ -335,11 +335,27 @@ export async function GET(req: Request) {
       total > 0 ? Number(((100 * unitReturns.length) / total).toFixed(1)) : 0,
     pnl_total: Number(pnl.toFixed(2)),
     stake_total: Number(stake.toFixed(2)),
-    median_clv_pct: medianClvPct,
-    mean_clv_pct: meanClvPct,
-    median_clv_pin_pct: medianClvPinPct,
-    clv_coverage_pct: total > 0 ? Number(((100 * clvN) / total).toFixed(1)) : 0,
-    clv_beat_pct: clvN > 0 ? Number(((100 * clvBeats) / clvN).toFixed(1)) : null,
+    // CLV-PUBLIC-WITHDRAWN (2026-09-06). median_clv_pct, mean_clv_pct,
+    // median_clv_pin_pct, clv_coverage_pct and clv_beat_pct are no longer
+    // emitted. This endpoint is auth-free, so anything it returns is published
+    // whether or not a page renders it.
+    //
+    // They were WRONG, not merely unflattering. All of them derive from
+    // simulated_bets.clv_pinnacle, which settlement.py writes RAW
+    // (odds_at_pick / pinnacle_closing - 1): no de-vig, and priced at
+    // odds_at_pick, a MAX high-water mark rather than an executable quote.
+    // Measured on this cohort: "% vs Pinnacle" published +9.49% against an
+    // honest -3.22%; "beat the close" published 78% against an honest 36%.
+    //
+    // Withdrawn rather than restated because the corrected figure is negative
+    // AND unvalidated — CLV-EXECUTABLE-PRICE-SUBSET measured CLV predicting
+    // realised return at r=+0.0375, not significant, on bets carrying a real
+    // executable price. The engine still computes and stores CLV; this is a
+    // publication decision, reversible in one commit once the number is both
+    // positive and shown to predict return.
+    //
+    // roi_pct is UNAFFECTED: it comes from stake and pnl and never touches
+    // clv_pinnacle.
     scope:
       "pre-match strategies only (calibrated + beta + active maturity, no retired, no in-play bots), pre-match markets (1x2, OU 2.5; BTTS retired 2026-09-03 after 427 settled shadow picks returned -12.76% at prices live at pick time, t=-2.87 — historical BTTS bets remain in the record), settled only. Matches /performance's headline cohort. **ROI is priced at the odds actually available from an accessible bookmaker at or before pick time (`placed_odds`), not the best price any book showed at any point in the day — the raw stored value is exposed as `placed_odds_high_water` for comparison. Restated 2026-09-05: the previous basis overstated this figure by 4.29pp.** ROI computed at €10 flat stake per pick — matches WinnerOdds / Tipstrr / SignalOdds / Forebet publication methodology so head-to-head comparison is apples-to-apples.",
     notes:
