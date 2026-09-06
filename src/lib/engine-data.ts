@@ -3361,6 +3361,13 @@ export interface CalibratedHeadlineStats {
      *  Smaller than any-book median because Pinnacle is the sharpest book
      *  and has the tightest closing line. Shown as a credibility marker. */
     medianClvPinPct: number | null;
+    /** Settled rows EXCLUDED from roiPct because no accessible book quoted
+     *  them at pick time — they were not placeable, and pricing them at the
+     *  stale high-water mark inflated the public headline by +1.92pp
+     *  (LANDING-PERF-UNPLACEABLE-FALLBACK-2026-09-06). */
+    unpriceableExcluded: number;
+    /** Share of settled rows roiPct is actually computed over. */
+    roiCoveragePct: number;
     clvN: number;
     clvBeatPct: number | null;
     sinceDate: string;
@@ -3450,6 +3457,7 @@ const _getCalibratedHeadlineStatsUncached =
         allTime: {
           n: 0, stakeEur: 0, pnlEur: 0, roiPct: null,
           medianClvPct: null, meanClvPct: null, medianClvPinPct: null,
+          unpriceableExcluded: 0, roiCoveragePct: 100,
           clvN: 0, clvBeatPct: null, sinceDate: CALIBRATED_SINCE,
         },
         last30d: { n: 0, roiPct: null },
@@ -3457,6 +3465,9 @@ const _getCalibratedHeadlineStatsUncached =
     }
 
     let n = 0, pnlFlat = 0;
+    // Settled rows excluded from ROI because no accessible book quoted them
+    // at pick time — see LANDING-PERF-UNPLACEABLE-FALLBACK below.
+    let unpriceable = 0;
     let n30 = 0, pnlFlat30 = 0;
     let clvBeats = 0;
     let clvSum = 0;
@@ -3473,6 +3484,26 @@ const _getCalibratedHeadlineStatsUncached =
       // LANDING-PERF-ROI-BASIS-2026-09-05: /performance's headline shares the
       // track-record API's cohort exactly, so it must share its price basis too
       // or the two public pages report different ROI for identical bets.
+      //
+      // LANDING-PERF-UNPLACEABLE-FALLBACK-2026-09-06: and that is exactly what
+      // happened. The track-record API started excluding settled rows with no
+      // `odds_at_pick_live` — bets no accessible book quoted at pick time, i.e.
+      // NOT PLACEABLE — because `execOdds` falls back to `odds_at_pick`, the
+      // stale high-water mark, and pricing 65 unplaceable bets that way lifted
+      // the public headline by +1.92pp (+10.70% -> +12.62%; those 65 alone
+      // return +33.09%). This function was not updated in the same change, so
+      // for a few hours the landing hero and /performance published different
+      // ROI for identical bets — the precise failure the comment above warns
+      // about, re-created by the fix for it.
+      //
+      // Same rule here now. `n` counts only priced rows, so ROI and its stake
+      // stay consistent; the excluded count is returned as coverage rather than
+      // hidden (ANALYSIS_GOTCHAS #29 — a restated figure without its coverage
+      // invites the "your data is thin" dismissal).
+      if (r.odds_at_pick_live == null || Number(r.odds_at_pick_live) <= 1) {
+        unpriceable += 1;
+        continue;
+      }
       const odds = execOdds(r.odds_at_pick, r.odds_at_pick_live);
       // Flat €10 stake — win = 10*(odds - 1), loss = -10.
       const pFlat = r.result === "won"
@@ -3517,6 +3548,12 @@ const _getCalibratedHeadlineStatsUncached =
           ? Number((clvSum / clvVals.length).toFixed(2))
           : null,
         medianClvPinPct: median(clvPinVals),
+        // Coverage for the exclusion above, so the restated figure travels with
+        // the number of bets it is computed over.
+        unpriceableExcluded: unpriceable,
+        roiCoveragePct: n + unpriceable > 0
+          ? Number(((100 * n) / (n + unpriceable)).toFixed(1))
+          : 100,
         clvN: clvVals.length,
         clvBeatPct: clvVals.length
           ? Number(((100 * clvBeats) / clvVals.length).toFixed(1))
