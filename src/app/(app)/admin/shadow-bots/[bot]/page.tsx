@@ -21,6 +21,12 @@ const MIN_DAYS_FOR_DECISION = 14;
 // `botEdgeThreshold()` in @/lib/coolbet-edge — same values, one definition.
 
 const ALLOWED: Record<string, { title: string; subtitle: string; detail: string }> = {
+  bot_corners_paper_shadow_v1: {
+    title: "Corners O/U · line-shop (Betano/Unibet)",
+    subtitle: "Best Betano/Unibet corners price vs de-vigged Pinnacle · edge ≥ 0%",
+    detail:
+      "CORNERS-PAPER-FORWARD. Fires on corners_ou_<line> markets for upcoming fixtures: fair value is de-vigged two-way Pinnacle, and it records the best price among the books we can actually place corners at (Betano, Unibet) when price × devig_p − 1 ≥ 0. EUR 10 nominal, settled from match_stats corners (over/under, .5 lines never push). It is a SHADOW-only forward paper test with no backtest number on purpose — the historical +20.99% did NOT reproduce at executable prices (audit z=+0.33..+3.62, edge Betano/Unibet-only, Epicbet negative, no dose-response, one 9-day pre-collapse window), and a replay is exactly the figure we distrust. Judge it on forward CLV and ROI. Never touches simulated_bets or the public pages.",
+  },
   bot_no_pin_shadow_v1: {
     title: "Matches without Pinnacle (retired 2026-08-21)",
     subtitle: "1X2 any selection · edge \u2265 8%",

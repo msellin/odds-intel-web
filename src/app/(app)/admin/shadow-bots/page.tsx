@@ -117,6 +117,18 @@ const SHADOW_BOTS: Array<{
     backtestRoi: 0,
   },
   {
+    // CORNERS-PAPER-FORWARD-2026-09-07. The historical +20.99% did NOT
+    // reproduce at executable prices, so this is a forward paper test on the
+    // only books we can place corners at. backtestN 0 on purpose — the replay
+    // is exactly the number we distrust; judge it on forward CLV and ROI.
+    name: "bot_corners_paper_shadow_v1",
+    title: "Corners O/U · line-shop (Betano/Unibet)",
+    subtitle:
+      "Best Betano/Unibet corners price vs de-vigged Pinnacle · edge ≥ 0% · settled from match corners · forward paper test",
+    backtestN: 0,
+    backtestRoi: 0,
+  },
+  {
     name: "bot_pin_1x2_home_v1",
     title: "1X2 home · tier 1-2 line-shopping",
     subtitle: "1X2 home · de-vigged edge ≥ 3% · tiers 1-2",
