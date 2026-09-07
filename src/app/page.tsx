@@ -278,6 +278,11 @@ export default async function PreviewLanding() {
   // documents the two as different and publishes both. The landing read the
   // wrong one. Use the count the number is actually computed from.
   const total = meta?.roi_n ?? meta?.total_bets ?? 0;
+  // The FULL settled count, which is not the same as `total` above. `total` is
+  // roi_n — the bets roi_pct is computed over, excluding rows no accessible book
+  // quoted at pick time. Both are published by the API and they mean different
+  // things; the metric strip below must not label one as the other.
+  const settledTotal = meta?.total_bets ?? total;
   // CLV-PUBLIC-WITHDRAWN (2026-09-06) — see performance-hero.tsx for the
   // measured reason. The engine still computes CLV; the public surface does not
   // show it until it is both positive and shown to predict return.
@@ -397,10 +402,21 @@ export default async function PreviewLanding() {
             all pre-match markets, actual placed stakes. */}
         <section className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.08]">
           <div className="grid grid-cols-2 gap-px sm:grid-cols-4">
+            {/* LANDING-PICK-COUNT-MISMATCH (2026-09-07, follow-up): this read
+                `total`, which is now roi_n — so after the headline was fixed to
+                quote the count its ROI is computed over, this tile started
+                claiming 691 "settled bets" when 784 had settled. Correct
+                number, wrong label. It shows the full settled count and says
+                explicitly how many of them the ROI could be priced on, so the
+                two figures on the same screen no longer contradict each other. */}
             <Metric
               label="Settled bets"
-              value={total.toLocaleString()}
-              sub={`since ${fmtDate(since)}`}
+              value={settledTotal.toLocaleString()}
+              sub={
+                settledTotal !== total
+                  ? `${total.toLocaleString()} priced · since ${fmtDate(since)}`
+                  : `since ${fmtDate(since)}`
+              }
             />
             <Metric
               label="ROI"
