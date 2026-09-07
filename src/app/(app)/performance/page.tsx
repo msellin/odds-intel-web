@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "OddsIntel — Live Track Record",
     description:
-      "Every pre-match football pick logged with odds, result, and CLV. Filter by league, market, or bot. Public JSON API + Bitcoin-anchored ledger.",
+      "Every pre-match football pick logged with odds, result, and closing line. Filter by league, market, or bot. Public JSON API + Bitcoin-anchored ledger.",
     url: "https://oddsintel.app/performance",
     siteName: "OddsIntel",
     type: "website",
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "OddsIntel — Live Track Record",
     description:
-      "Every pre-match football pick logged. Full ledger, filters, CLV, ROI. Public JSON + Bitcoin-anchored.",
+      "Every pre-match football pick logged. Full ledger, filters, ROI. Public JSON + Bitcoin-anchored.",
     images: ["https://oddsintel.app/opengraph-image"],
   },
 };
@@ -114,7 +114,18 @@ function sanitizeBets(bets: LiveBet[], isElite: boolean): SanitizedBotBet[] {
     pnl: b.pnl,
     bankrollAfter: isElite ? b.bankrollAfter : null,
     modelProb: b.modelProb,
-    clv: b.clv,
+    // CLV-PUBLIC-WITHDRAWN (2026-09-06, completed 2026-09-07): the headline CLV
+    // tiles were removed from the hero and landing, and the meta + per-row CLV
+    // fields were dropped from the auth-free /api/v1/track-record route — but
+    // this per-row cell survived, ungated, rendering `simulated_bets.clv`
+    // (odds_at_pick / closing − 1: raw, un-de-vigged, priced at a MAX
+    // high-water mark) as a ClvCell to every anonymous visitor. Same
+    // incomplete-withdrawal shape as the endpoint leak that shipped and had to
+    // be caught by reading the live API. Gate it exactly like closingOdds /
+    // edge / stake below: Elite/superadmin still see it, the public surface
+    // does not, until CLV is both positive and shown to predict return
+    // (CLV-EXECUTABLE-PRICE-SUBSET).
+    clv: isElite ? b.clv : null,
     closingOdds: isElite ? b.closingOdds : null,
     edge: isElite ? b.edge : null,
     bot: b.bot,
