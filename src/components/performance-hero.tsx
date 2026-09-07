@@ -117,7 +117,11 @@ export function PerformanceHero({
 
       {/* ── 4-tile metric strip (matches landing exactly) ────────────── */}
       <section className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.08]">
-        <div className="grid grid-cols-2 gap-px sm:grid-cols-4">
+        {/* CLV-PUBLIC-WITHDRAWN (2026-09-07): was 4-up ending in the two CLV
+            tiles; withdrawing them left the row visibly empty. Now 3-up, with
+            the sample size promoted from small print — an ROI without its n is
+            the number people should distrust. */}
+        <div className="grid grid-cols-1 gap-px sm:grid-cols-3">
           <Metric
             label="ROI · all-time"
             value={fmtRoi(calRoi)}
@@ -135,6 +139,11 @@ export function PerformanceHero({
                   ? "negative"
                   : null
             }
+          />
+          <Metric
+            label="Bets logged"
+            value={calN ? calN.toLocaleString() : "—"}
+            sub={`since ${calSince}`}
           />
           {/* CLV-PUBLIC-WITHDRAWN (2026-09-06). "Median CLV" and "Beat the
               close" were removed from the public surface. They were WRONG, not

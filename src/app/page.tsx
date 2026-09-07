@@ -401,7 +401,13 @@ export default async function PreviewLanding() {
             "which cohort is this?" without a separate footnote:
             all pre-match markets, actual placed stakes. */}
         <section className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.08]">
-          <div className="grid grid-cols-2 gap-px sm:grid-cols-4">
+          {/* CLV-PUBLIC-WITHDRAWN (2026-09-07): this was a 4-up grid whose last two
+              cells were the CLV metrics. Withdrawing them left two empty cells
+              that read as a broken layout. Rather than pad it back out with a
+              number we do not trust, it is now a 3-up ending on the confidence
+              interval — which is the honest companion to a point estimate and
+              belongs beside it rather than in small print under the hero. */}
+          <div className="grid grid-cols-1 gap-px sm:grid-cols-3">
             {/* LANDING-PICK-COUNT-MISMATCH (2026-09-07, follow-up): this read
                 `total`, which is now roi_n — so after the headline was fixed to
                 quote the count its ROI is computed over, this tile started
@@ -423,6 +429,15 @@ export default async function PreviewLanding() {
               value={roi !== null ? `${roi > 0 ? "+" : ""}${roi.toFixed(2)}%` : "—"}
               sub={`P&L €${pnl.toFixed(0)} / €${stake.toFixed(0)} staked`}
               accent={roi !== null && roi > 0 ? "positive" : null}
+            />
+            <Metric
+              label="95% confidence"
+              value={
+                roiCiLow !== null && roiCiHigh !== null
+                  ? `${roiCiLow > 0 ? "+" : ""}${roiCiLow.toFixed(1)}% to ${roiCiHigh > 0 ? "+" : ""}${roiCiHigh.toFixed(1)}%`
+                  : "—"
+              }
+              sub="on the ROI above"
             />
             {/* CLV-PUBLIC-WITHDRAWN (2026-09-06) — see performance-hero.tsx. */}
           </div>
