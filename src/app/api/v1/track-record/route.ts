@@ -18,7 +18,7 @@
  *   ?cursor=<iso-ts>      (for paging — created_at < cursor)
  *
  * Returns:
- *   { meta: { count, total, roi_pct, avg_clv_pin_pct, since },
+ *   { meta: { count, total, roi_pct, roi_n, since },
  *     bets: [...] }
  */
 import { NextResponse } from "next/server";
@@ -279,11 +279,18 @@ export async function GET(req: Request) {
       bookmaker: r.recommended_bookmaker,
       placed_at_utc: r.created_at,
       closing_odds: r.closing_odds,
-      clv_any_pct: r.clv != null ? Number((Number(r.clv) * 100).toFixed(2)) : null,
-      clv_pin_pct:
-        r.clv_pinnacle != null
-          ? Number((Number(r.clv_pinnacle) * 100).toFixed(2))
-          : null,
+      // CLV-PUBLIC-WITHDRAWN (completed 2026-09-07). The first pass removed the
+      // five CLV fields from `meta` but LEFT them on every individual bet row,
+      // so the withdrawal was cosmetic: this endpoint is auth-free, and
+      // `clv_pin_pct` derives from simulated_bets.clv_pinnacle — the RAW,
+      // VIGGED column priced at a high-water mark, i.e. precisely the number
+      // that reads +9.49% against an honest -3.22%. Publishing it per row and
+      // not in aggregate still publishes it, and anyone could have averaged the
+      // rows to reconstruct the withdrawn headline.
+      //
+      // Found by reading the live endpoint rather than trusting the build.
+      // `closing_odds` above stays: it is an observed price, not a derived CLV
+      // claim, and a reader re-settling the ledger needs it.
       stake: flatStake,
       pnl: Number(flatPnl.toFixed(2)),
       result: r.result,
