@@ -18,11 +18,10 @@ export const COOLBET_AUTO_MIN_EDGE = 0.05;
 export const COOLBET_AUTO_MIN_REMAINING_EDGE = 0.03;
 
 export const COOLBET_AUTO_MIN_EDGE_BY_MARKET: Record<string, number | null> = {
-  // BOT-CONFIG-GOLDEN-MIDDLE-2026-09-08: kept at 0.10 (a brief raise to 0.15
-  // was overturned by a full-history backtest — 0.15 lost in-sample and was
-  // indistinguishable from 0.13 out-of-sample; 0.10 makes the most absolute
-  // profit). Mirrors coolbet_placer.py — keep in lockstep for the badge.
-  "1x2":            0.10,
+  // BOT-CONFIG-GOLDEN-MIDDLE-2026-09-08: 0.13 — the only 1x2 floor robust in
+  // every walk-forward fold across every basis (edge_floor_backtest.py). 0.15
+  // was overfit, 0.10 not robust. Mirrors coolbet_placer.py — keep in lockstep.
+  "1x2":            0.13,
   "o/u":            0.03,
   "asian_handicap": 0.05,
   // BTTS-RETIRED-2026-09-03: mirrors the engine's _MIN_EDGE_BY_MARKET.
