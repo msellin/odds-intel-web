@@ -84,6 +84,17 @@ const PLACER_BOT_META: Record<string, PlacerBotMeta> = {
     placementDetail:
       "Placer at live price requires: odds ≥ 1.80, calibrated edge ≥ 8% (robust in every walk-forward fold/basis), break-even min-odds, CLV odds-band, 3-min kickoff cutoff, per-match exposure caps, dedup.",
   },
+  bot_coolbet_1x2_model_v1: {
+    book: "Coolbet",
+    market: "1x2",
+    marketKey: "1x2",
+    signal: "calibrated model vs price · home/draw/away",
+    oddsFloor: 2.8,
+    pickRuleDetail:
+      "Generation: fires when the calibrated model's probability beats the price by ≥ 13% (calibrated edge), 1x2 home/draw/away. This is only what gets FOUND — placement gates below decide what stakes money. Replaces the paused line-shop 1x2.",
+    placementDetail:
+      "Placer at live price requires: odds ≥ 2.80, calibrated edge ≥ 13% (the 2D gate that holds out-of-sample at +48% test), break-even min-odds, CLV odds-band, 3-min kickoff cutoff, per-match exposure caps, dedup.",
+  },
 };
 
 // SHADOW-PROMOTION-GATE-2026-08-26.
@@ -199,6 +210,21 @@ const SHADOW_BOTS: Array<{
     title: "Coolbet O/U · model-edge (calibrated)",
     subtitle:
       "Calibrated model O/U picks · edge ≥ 8% · odds ≥ 1.80 · lines 2.5/3.5 · places via Coolbet UI (real money gated behind COOLBET_UI_MODEL_EDGE_OU)",
+    backtestN: 0,
+    backtestRoi: 0,
+  },
+  {
+    // COOLBET-MODEL-1X2-SHADOW-BOT-2026-09-08. Mirrors the calibrated model's
+    // 1x2 picks (edge ≥ 13% on calibrated_prob) into shadow_bets — NO vocabulary
+    // conversion (market stays '1x2', selection stays home/draw/away) — so they
+    // place through the Coolbet UI placer with the validated 2D gate (edge ≥ 13%,
+    // odds ≥ 2.80). Replaces the paused line-shop 1x2, whose raw signal loses
+    // out-of-sample; model-edge 1x2 at edge ≥ 13% & odds ≥ 2.80 HOLDS OOS at +48%
+    // test. Real money OFF by default (coolbet_placer_bots toggle seeded false).
+    name: "bot_coolbet_1x2_model_v1",
+    title: "Coolbet · 1x2 · model-edge",
+    subtitle:
+      "Calibrated model 1x2 picks · edge ≥ 13% · odds ≥ 2.80 · places via Coolbet UI (real money OFF by default, per-bot toggle)",
     backtestN: 0,
     backtestRoi: 0,
   },

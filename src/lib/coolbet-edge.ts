@@ -86,6 +86,10 @@ export const BOT_EDGE_THRESHOLDS: Record<string, number> = {
   // calibrated edge (mirrors _MIN_EDGE_BY_MARKET['o/u'] and the placer's
   // BOT_THRESHOLDS). Keep in lockstep with scripts/place_coolbet_ui.py.
   bot_coolbet_ou_model_v1: 0.08,
+  // COOLBET-MODEL-1X2-SHADOW-BOT-2026-09-08: model-edge 1x2 fires at a 13%
+  // calibrated edge (mirrors _MIN_EDGE_BY_MARKET['1x2'] and the placer's
+  // BOT_THRESHOLDS). Keep in lockstep with scripts/place_coolbet_ui.py.
+  bot_coolbet_1x2_model_v1: 0.13,
   bot_sweep_ou25_v1: 0.03,
   bot_sweep_ou35_v1: 0.03,
   bot_pin_1x2_home_v1: 0.03,

@@ -33,6 +33,12 @@ const ALLOWED: Record<string, { title: string; subtitle: string; detail: string 
     detail:
       "COOLBET-MODEL-OU-SHADOW-BOT. Mirrors the calibrated model's Over/Under picks (simulated_bets market='o/u', edge ≥ 8% on calibrated_prob, calibrated_prob NOT NULL, lines 2.5/3.5 only) into shadow_bets in the line-shop vocabulary (over_under_25/over_under_35, over/under) so they place through the PROVEN Coolbet UI placer with the validated per-market gates (edge ≥ 8%, odds ≥ 1.80). EUR 10 nominal. Settled by the generic goals O/U resolver — no custom settler. Why it exists (unified-flow epic): the strategy backtest found model-edge O/U is +15% (fold-robust) at executable prices where the line-shop bot's O/U is −17% (negative every month, n~1100 — a live money leak). Real-money placement is OFF BY DEFAULT and gated behind env COOLBET_UI_MODEL_EDGE_OU=1 (owner-authorized, fold-robust out-of-sample only). Judge it forward on CLV and ROI. Never touches the public pages.",
   },
+  bot_coolbet_1x2_model_v1: {
+    title: "Coolbet · 1x2 · model-edge",
+    subtitle: "Calibrated model 1x2 picks · edge ≥ 13% · odds ≥ 2.80",
+    detail:
+      "COOLBET-MODEL-1X2-SHADOW-BOT. Mirrors the calibrated model's 1x2 picks (simulated_bets market='1x2', edge ≥ 13% on calibrated_prob, calibrated_prob NOT NULL) into shadow_bets WITHOUT vocabulary conversion (market stays '1x2', selection stays home/draw/away) so they place through the PROVEN Coolbet UI placer with the validated 2D gate (edge ≥ 13%, odds ≥ 2.80). EUR 10 nominal. Settled by the generic 1x2 match-result resolver — no custom settler. Why it exists: it REPLACES the paused line-shop 1x2, whose raw signal loses out-of-sample; model-edge 1x2 at edge ≥ 13% AND odds ≥ 2.80 HOLDS out-of-sample at +48% on the test fold. Real-money placement is OFF BY DEFAULT and gated by the coolbet_placer_bots per-bot toggle (seeded false; superadmin flips it after a dry-run, PLACEABLE_BOTS ∩ enabled). Judge it forward on CLV and ROI. Never touches the public pages.",
+  },
   bot_no_pin_shadow_v1: {
     title: "Matches without Pinnacle (retired 2026-08-21)",
     subtitle: "1X2 any selection · edge \u2265 8%",
