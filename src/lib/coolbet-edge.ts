@@ -22,7 +22,9 @@ export const COOLBET_AUTO_MIN_EDGE_BY_MARKET: Record<string, number | null> = {
   // every walk-forward fold across every basis (edge_floor_backtest.py). 0.15
   // was overfit, 0.10 not robust. Mirrors coolbet_placer.py — keep in lockstep.
   "1x2":            0.13,
-  "o/u":            0.03,
+  // EDGE-FLOORS-OTHER-MARKETS-2026-09-08: 0.03 -> 0.08 (robust in every
+  // walk-forward fold/basis; edge_floor_backtest.py). Mirrors coolbet_placer.py.
+  "o/u":            0.08,
   "asian_handicap": 0.05,
   // BTTS-RETIRED-2026-09-03: mirrors the engine's _MIN_EDGE_BY_MARKET.
   // n=427 settled shadow picks returned -12.76% at prices live at pick time
