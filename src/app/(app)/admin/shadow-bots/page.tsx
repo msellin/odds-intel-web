@@ -23,9 +23,33 @@ import { execOdds as sharedExecOdds, FLAT_STAKE_EUR } from "@/lib/engine-data";
 import { botEdgeThreshold } from "@/lib/coolbet-edge";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
 import { PickBetMark } from "@/components/pick-bet-mark";
+import { CoolbetPlacerToggle } from "@/components/coolbet-placer-toggle";
 import { fetchUserPickMarkStates } from "@/lib/upcoming-picks";
 
 const STAKE = FLAT_STAKE_EUR;
+
+// COOLBET-PLACER-CONTROL-2026-09-08 — display metadata for the real-money UI
+// placer control panel. Market + signal label + a one-line rules/gates summary
+// per placeable bot. The numeric edge floor comes from botEdgeThreshold(); the
+// placer's other gates (odds floor, break-even, kickoff cutoff, exposure caps,
+// dedup) are summarised here so the operator sees what governs placement.
+const PLACER_BOT_META: Record<
+  string,
+  { market: string; signal: string; rules: string }
+> = {
+  bot_coolbet_value_v1: {
+    market: "1x2 line-shop",
+    signal: "Coolbet quote vs de-vigged Pinnacle",
+    rules:
+      "edge ≥ 3% at generation; placer also requires live odds ≥ per-market floor (1x2 2.80), break-even min-odds, 3-min kickoff cutoff, per-match exposure caps, dedup. Line-shop O/U placement disabled (−17% ROI).",
+  },
+  bot_coolbet_ou_model_v1: {
+    market: "O/U 2.5 / 3.5 model-edge",
+    signal: "calibrated model vs price",
+    rules:
+      "edge ≥ 8% on calibrated prob at generation; placer also requires live odds ≥ O/U floor (1.80), break-even min-odds, 3-min kickoff cutoff, per-match exposure caps, dedup.",
+  },
+};
 
 // SHADOW-PROMOTION-GATE-2026-08-26.
 //
@@ -464,6 +488,65 @@ export default async function ShadowBotsPage() {
     .in("name", names);
   const bots = (botsRaw ?? []) as BotRow[];
 
+  // ── COOLBET-PLACER-CONTROL-2026-09-08 ──────────────────────────────────────
+  // Runtime on/off for real-money Coolbet UI placement, per bot. The engine
+  // placer (scripts/place_coolbet_ui.py) reads coolbet_placer_bots each run and
+  // intersects it with its code-level PLACEABLE_BOTS whitelist. This panel just
+  // surfaces the rows + today's found/placed counts and lets a superadmin flip
+  // the toggle; it never touches pick generation.
+  const { data: placerBotsRaw } = await db
+    .from("coolbet_placer_bots")
+    .select("bot_name, ui_place_enabled, note, updated_at")
+    .order("bot_name");
+  const placerBotRows = (placerBotsRaw ?? []) as {
+    bot_name: string;
+    ui_place_enabled: boolean;
+    note: string | null;
+    updated_at: string;
+  }[];
+
+  const _startOfDayUtc = new Date();
+  _startOfDayUtc.setUTCHours(0, 0, 0, 0);
+  const _dayIso = _startOfDayUtc.toISOString();
+  const _botIdByName = new Map(bots.map((b) => [b.name, b.id]));
+
+  // found = shadow picks generated today for the bot; placed = confirmed
+  // real-money placements today (coolbet_placement_attempts outcome='placed').
+  // Per-bot exact head counts so a >1000-row day can't silently undercount.
+  async function _countFoundToday(botName: string): Promise<number | null> {
+    const id = _botIdByName.get(botName);
+    if (!id) return null;
+    const { count } = await db
+      .from("shadow_bets_unique")
+      .select("*", { count: "exact", head: true })
+      .eq("bot_id", id)
+      .gte("created_at", _dayIso);
+    return count ?? 0;
+  }
+  async function _countPlacedToday(botName: string): Promise<number> {
+    const { count } = await db
+      .from("coolbet_placement_attempts")
+      .select("*", { count: "exact", head: true })
+      .eq("bot_name", botName)
+      .eq("outcome", "placed")
+      .gte("attempted_at", _dayIso);
+    return count ?? 0;
+  }
+
+  const placerPanel = await Promise.all(
+    placerBotRows.map(async (r) => ({
+      ...r,
+      foundToday: await _countFoundToday(r.bot_name),
+      placedToday: await _countPlacedToday(r.bot_name),
+      edge: botEdgeThreshold(r.bot_name),
+      meta: PLACER_BOT_META[r.bot_name] ?? {
+        market: "—",
+        signal: "—",
+        rules: "edge floor at generation; placer also requires live odds ≥ floor, break-even min-odds, kickoff cutoff, exposure caps, dedup.",
+      },
+    })),
+  );
+
   if (bots.length === 0) {
     return (
       <div className="mx-auto max-w-6xl px-6 py-12">
@@ -750,6 +833,86 @@ export default async function ShadowBotsPage() {
           {activeSummaries.length} active · {nRetired} retired · {totalsAll.total.toLocaleString()} picks · {totalsAll.settled.toLocaleString()} settled · promote/retire at {MIN_SETTLED_FOR_DECISION} settled &amp; {MIN_DAYS_FOR_DECISION} days
         </p>
       </header>
+
+      {/* COOLBET-PLACER-CONTROL — real-money UI placement, per bot. Placed at
+          the very top: this is the only surface on the page that moves real
+          money, and the toggle changes what the hourly placer stakes. */}
+      <section className="mb-6 rounded-lg border border-rose-500/25 bg-rose-500/[0.03] px-4 py-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-rose-300/90">
+            Coolbet UI Placer — Control
+          </h2>
+          <span className="text-[11px] text-neutral-500">
+            real money · effective allowlist = code whitelist ∩ these toggles ·
+            placer fails closed on DB error
+          </span>
+        </div>
+
+        {placerPanel.length === 0 ? (
+          <p className="mt-2 text-xs text-amber-400">
+            No rows in coolbet_placer_bots — migration 310 hasn&apos;t been applied.
+          </p>
+        ) : (
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[720px] border-collapse text-xs">
+              <thead>
+                <tr className="text-left text-[11px] uppercase tracking-wide text-neutral-500">
+                  <th className="pb-2 pr-3 font-medium">Bot / market</th>
+                  <th className="pb-2 pr-3 font-medium">Edge</th>
+                  <th className="pb-2 pr-3 font-medium">Rules &amp; gates</th>
+                  <th className="pb-2 pr-3 text-right font-medium">Found today</th>
+                  <th className="pb-2 pr-3 text-right font-medium">Placed today</th>
+                  <th className="pb-2 font-medium">Placement</th>
+                </tr>
+              </thead>
+              <tbody className="align-top">
+                {placerPanel.map((row) => (
+                  <tr key={row.bot_name} className="border-t border-neutral-800">
+                    <td className="py-2.5 pr-3">
+                      <div className="font-medium text-neutral-200">{row.meta.market}</div>
+                      <div className="text-[11px] text-neutral-500">{row.meta.signal}</div>
+                      <div className="mt-0.5 font-mono text-[10px] text-neutral-600">
+                        {row.bot_name}
+                      </div>
+                    </td>
+                    <td className="py-2.5 pr-3 tabular-nums text-neutral-300">
+                      {Number.isFinite(row.edge) ? `${(row.edge * 100).toFixed(0)}%` : "—"}
+                    </td>
+                    <td className="py-2.5 pr-3 max-w-[320px] text-[11px] leading-relaxed text-neutral-400">
+                      {row.meta.rules}
+                    </td>
+                    <td className="py-2.5 pr-3 text-right tabular-nums text-neutral-300">
+                      {row.foundToday ?? "—"}
+                    </td>
+                    <td className="py-2.5 pr-3 text-right tabular-nums">
+                      <span
+                        className={
+                          row.placedToday > 0
+                            ? "font-medium text-emerald-400"
+                            : "text-neutral-500"
+                        }
+                      >
+                        {row.placedToday}
+                      </span>
+                    </td>
+                    <td className="py-2.5">
+                      <CoolbetPlacerToggle
+                        botName={row.bot_name}
+                        initialEnabled={row.ui_place_enabled}
+                      />
+                      {row.note && (
+                        <div className="mt-1 max-w-[220px] text-[10px] leading-tight text-neutral-600">
+                          {row.note}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       {/* Discipline check — hand-picked vs left alone. Deliberately placed
           above the portfolio numbers: if the discretionary layer is costing
