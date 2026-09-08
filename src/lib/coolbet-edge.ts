@@ -18,7 +18,12 @@ export const COOLBET_AUTO_MIN_EDGE = 0.05;
 export const COOLBET_AUTO_MIN_REMAINING_EDGE = 0.03;
 
 export const COOLBET_AUTO_MIN_EDGE_BY_MARKET: Record<string, number | null> = {
-  "1x2":            0.10,
+  // BOT-CONFIG-GOLDEN-MIDDLE-2026-09-08: raised 0.10 -> 0.15 to mirror the
+  // engine's _MIN_EDGE_BY_MARKET. The 1x2 10-15% edge band lost -4.04% (n=266)
+  // at executable prices post the 2026-06-06 freeze while the 15%+ band was
+  // +42.10%. Keep in lockstep with coolbet_placer.py or the "we bet / skipped"
+  // badge lies about which 1x2 picks are actually placed.
+  "1x2":            0.15,
   "o/u":            0.03,
   "asian_handicap": 0.05,
   // BTTS-RETIRED-2026-09-03: mirrors the engine's _MIN_EDGE_BY_MARKET.
