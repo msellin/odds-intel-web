@@ -27,6 +27,12 @@ const ALLOWED: Record<string, { title: string; subtitle: string; detail: string 
     detail:
       "CORNERS-PAPER-FORWARD. Fires on corners_ou_<line> markets for upcoming fixtures: fair value is de-vigged two-way Pinnacle, and it records the best price among the books we can actually place corners at (Betano, Unibet) when price × devig_p − 1 ≥ 0. EUR 10 nominal, settled from match_stats corners (over/under, .5 lines never push). It is a SHADOW-only forward paper test with no backtest number on purpose — the historical +20.99% did NOT reproduce at executable prices (audit z=+0.33..+3.62, edge Betano/Unibet-only, Epicbet negative, no dose-response, one 9-day pre-collapse window), and a replay is exactly the figure we distrust. Judge it on forward CLV and ROI. Never touches simulated_bets or the public pages.",
   },
+  bot_coolbet_ou_model_v1: {
+    title: "Coolbet O/U · model-edge (calibrated)",
+    subtitle: "Calibrated model O/U picks · edge ≥ 8% · odds ≥ 1.80 · lines 2.5/3.5",
+    detail:
+      "COOLBET-MODEL-OU-SHADOW-BOT. Mirrors the calibrated model's Over/Under picks (simulated_bets market='o/u', edge ≥ 8% on calibrated_prob, calibrated_prob NOT NULL, lines 2.5/3.5 only) into shadow_bets in the line-shop vocabulary (over_under_25/over_under_35, over/under) so they place through the PROVEN Coolbet UI placer with the validated per-market gates (edge ≥ 8%, odds ≥ 1.80). EUR 10 nominal. Settled by the generic goals O/U resolver — no custom settler. Why it exists (unified-flow epic): the strategy backtest found model-edge O/U is +15% (fold-robust) at executable prices where the line-shop bot's O/U is −17% (negative every month, n~1100 — a live money leak). Real-money placement is OFF BY DEFAULT and gated behind env COOLBET_UI_MODEL_EDGE_OU=1 (owner-authorized, fold-robust out-of-sample only). Judge it forward on CLV and ROI. Never touches the public pages.",
+  },
   bot_no_pin_shadow_v1: {
     title: "Matches without Pinnacle (retired 2026-08-21)",
     subtitle: "1X2 any selection · edge \u2265 8%",

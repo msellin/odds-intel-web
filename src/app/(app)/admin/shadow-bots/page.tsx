@@ -129,6 +129,21 @@ const SHADOW_BOTS: Array<{
     backtestRoi: 0,
   },
   {
+    // COOLBET-MODEL-OU-SHADOW-BOT-2026-09-08. Mirrors the calibrated model's O/U
+    // picks (edge ≥ 8% on calibrated_prob, lines 2.5/3.5) into shadow_bets in
+    // the line-shop vocabulary so they place through the Coolbet UI placer with
+    // the validated per-market gates (edge ≥ 8%, odds ≥ 1.80). Real money OFF by
+    // default (COOLBET_UI_MODEL_EDGE_OU=1 to enable). backtestN 0: judge it
+    // forward — the strategy backtest that motivated it (+15% vs line-shop O/U
+    // −17%) is exactly the figure to prove out on live executable prices.
+    name: "bot_coolbet_ou_model_v1",
+    title: "Coolbet O/U · model-edge (calibrated)",
+    subtitle:
+      "Calibrated model O/U picks · edge ≥ 8% · odds ≥ 1.80 · lines 2.5/3.5 · places via Coolbet UI (real money gated behind COOLBET_UI_MODEL_EDGE_OU)",
+    backtestN: 0,
+    backtestRoi: 0,
+  },
+  {
     name: "bot_pin_1x2_home_v1",
     title: "1X2 home · tier 1-2 line-shopping",
     subtitle: "1X2 home · de-vigged edge ≥ 3% · tiers 1-2",
