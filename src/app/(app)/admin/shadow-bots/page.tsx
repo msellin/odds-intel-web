@@ -230,6 +230,32 @@ const SHADOW_BOTS: Array<{
     backtestRoi: 0,
   },
   {
+    // OU35-MODEL-SHADOW-BOT-2026-09-08 — O/U 3.5 model-edge, PAPER only.
+    name: "bot_ou35_model_v1",
+    title: "Coolbet · O/U 3.5 · model-edge (paper)",
+    subtitle:
+      "Calibrated O/U 3.5 vs Coolbet's own price · edge ≥ 8% · PAPER (not placeable) · +7.8% not-robust, accruing forward",
+    backtestN: 0,
+    backtestRoi: 0,
+  },
+  {
+    // BOOK-AGNOSTIC-EDGE-ENGINE Stage B (paper) — trigger matcher, per market.
+    name: "bot_coolbet_trigger_1x2_v1",
+    title: "Coolbet · 1x2 · trigger engine (paper)",
+    subtitle:
+      "Book-agnostic: fires when Coolbet's 1x2 price lands in the model's window (edge ≥ 13% at Coolbet's OWN odds, ≥ 2.80) · PAPER · OOS backtest −21% (selects longshots — do not promote)",
+    backtestN: 1470,
+    backtestRoi: -21.2,
+  },
+  {
+    name: "bot_coolbet_trigger_ou_v1",
+    title: "Coolbet · O/U 2.5 · trigger engine (paper)",
+    subtitle:
+      "Book-agnostic: fires when Coolbet's O/U 2.5 price lands in the model's window (edge ≥ 8% at Coolbet's OWN odds, ≥ 1.80) · PAPER · OOS backtest +4.3% not-robust",
+    backtestN: 228,
+    backtestRoi: 4.3,
+  },
+  {
     name: "bot_pin_1x2_home_v1",
     title: "1X2 home · tier 1-2 line-shopping",
     subtitle: "1X2 home · de-vigged edge ≥ 3% · tiers 1-2",
