@@ -24,6 +24,7 @@ import { botEdgeThreshold, autoMinEdgeFor } from "@/lib/coolbet-edge";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
 import { PickBetMark } from "@/components/pick-bet-mark";
 import { CoolbetPlacerToggle } from "@/components/coolbet-placer-toggle";
+import { CoolbetDaemonsPause } from "@/components/coolbet-daemons-pause";
 import { fetchUserPickMarkStates } from "@/lib/upcoming-picks";
 
 const STAKE = FLAT_STAKE_EUR;
@@ -566,6 +567,18 @@ export default async function ShadowBotsPage() {
     updated_at: string;
   }[];
 
+  // COOLBET-DAEMONS-PAUSE-2026-09-09: the global "calm Imperva" switch. Reads the
+  // single coolbet_session_state row; the Pause button flips daemons_paused, which
+  // the Mac footprint daemons poll and skip on.
+  const { data: sessionStateRaw } = await db
+    .from("coolbet_session_state")
+    .select("daemons_paused, daemons_paused_reason")
+    .eq("id", 1)
+    .single();
+  const daemonsPaused = !!sessionStateRaw?.daemons_paused;
+  const daemonsPausedReason =
+    (sessionStateRaw?.daemons_paused_reason as string | null) ?? null;
+
   const _startOfDayUtc = new Date();
   _startOfDayUtc.setUTCHours(0, 0, 0, 0);
   const _dayIso = _startOfDayUtc.toISOString();
@@ -928,6 +941,15 @@ export default async function ShadowBotsPage() {
           >
             real money · big numbers, details on hover&nbsp;ⓘ
           </span>
+        </div>
+
+        {/* COOLBET-DAEMONS-PAUSE: global footprint kill switch (Imperva relief),
+            above the per-bot money toggles because it gates the whole flow. */}
+        <div className="mt-3">
+          <CoolbetDaemonsPause
+            initialPaused={daemonsPaused}
+            initialReason={daemonsPausedReason}
+          />
         </div>
 
         {placerPanel.length === 0 ? (
