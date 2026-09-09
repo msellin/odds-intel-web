@@ -572,12 +572,20 @@ export default async function ShadowBotsPage() {
   // the Mac footprint daemons poll and skip on.
   const { data: sessionStateRaw } = await db
     .from("coolbet_session_state")
-    .select("daemons_paused, daemons_paused_reason")
+    .select(
+      "daemons_paused, daemons_paused_reason, mac_daemon_last_tick_at, last_heartbeat_at",
+    )
     .eq("id", 1)
     .single();
   const daemonsPaused = !!sessionStateRaw?.daemons_paused;
   const daemonsPausedReason =
     (sessionStateRaw?.daemons_paused_reason as string | null) ?? null;
+  // liveness: the newest of the two heartbeat stamps tells us whether a daemon
+  // is actually running to honor the flag (the web page can't start/stop them).
+  const _tick = sessionStateRaw?.mac_daemon_last_tick_at as string | null;
+  const _hb = sessionStateRaw?.last_heartbeat_at as string | null;
+  const daemonsLastSeen =
+    [_tick, _hb].filter(Boolean).sort().at(-1) ?? null;
 
   const _startOfDayUtc = new Date();
   _startOfDayUtc.setUTCHours(0, 0, 0, 0);
@@ -949,6 +957,7 @@ export default async function ShadowBotsPage() {
           <CoolbetDaemonsPause
             initialPaused={daemonsPaused}
             initialReason={daemonsPausedReason}
+            lastSeenAt={daemonsLastSeen}
           />
         </div>
 

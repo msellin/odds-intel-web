@@ -51,7 +51,9 @@ export async function GET() {
   }
   const { data, error } = await gate.db
     .from("coolbet_session_state")
-    .select("daemons_paused, daemons_paused_at, daemons_paused_reason")
+    .select(
+      "daemons_paused, daemons_paused_at, daemons_paused_reason, mac_daemon_last_tick_at, last_heartbeat_at",
+    )
     .eq("id", 1)
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -59,6 +61,10 @@ export async function GET() {
     paused: !!data?.daemons_paused,
     paused_at: data?.daemons_paused_at ?? null,
     reason: data?.daemons_paused_reason ?? null,
+    // liveness — so the panel can tell "flag will be honored" from "no daemon
+    // is running to honor it" (the web page cannot start/stop the Mac daemons).
+    last_tick_at: data?.mac_daemon_last_tick_at ?? null,
+    last_heartbeat_at: data?.last_heartbeat_at ?? null,
   });
 }
 

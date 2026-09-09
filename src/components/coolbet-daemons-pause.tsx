@@ -17,17 +17,35 @@ import { useState, useTransition } from "react";
  * change what would place once collection resumes. Both directions apply
  * immediately (neither commits money), and the UI reverts on a failed request.
  */
+// A daemon that hasn't checked in within this long is treated as NOT running,
+// so the panel doesn't imply the pause flag will be honored when no process is
+// alive to read it. The mac-daemon polls every 30 min; 70 min = ~2 missed ticks.
+const STALE_MS = 70 * 60 * 1000;
+
+function sinceLabel(iso: string | null): { text: string; stale: boolean } {
+  if (!iso) return { text: "never seen", stale: true };
+  const ageMs = Date.now() - new Date(iso).getTime();
+  const stale = ageMs > STALE_MS;
+  const mins = Math.round(ageMs / 60000);
+  const text =
+    mins < 90 ? `${mins}m ago` : `${Math.round(mins / 60)}h ago`;
+  return { text, stale };
+}
+
 export function CoolbetDaemonsPause({
   initialPaused,
   initialReason,
+  lastSeenAt,
 }: {
   initialPaused: boolean;
   initialReason: string | null;
+  lastSeenAt: string | null;
 }) {
   const [paused, setPaused] = useState(initialPaused);
   const [reason, setReason] = useState<string | null>(initialReason);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const live = sinceLabel(lastSeenAt);
 
   function commit(next: boolean) {
     setError(null);
@@ -62,24 +80,33 @@ export function CoolbetDaemonsPause({
       <div className="flex items-center gap-2">
         <span
           className={`inline-block h-2.5 w-2.5 rounded-full ${
-            paused ? "bg-amber-400" : "bg-emerald-400"
+            live.stale ? "bg-neutral-500" : paused ? "bg-amber-400" : "bg-emerald-400"
           }`}
           aria-hidden
         />
         <div className="leading-tight">
           <div className="text-xs font-semibold text-neutral-100">
             Coolbet daemons:{" "}
-            <span className={paused ? "text-amber-300" : "text-emerald-300"}>
-              {paused ? "PAUSED" : "running"}
+            {live.stale ? (
+              <span className="text-neutral-400">not running</span>
+            ) : (
+              <span className={paused ? "text-amber-300" : "text-emerald-300"}>
+                {paused ? "PAUSED" : "running"}
+              </span>
+            )}
+            <span className="ml-1 font-normal text-neutral-500">
+              · last tick {live.text}
             </span>
           </div>
           <div
             className="text-[11px] text-neutral-500"
-            title="Sets coolbet_session_state.daemons_paused. The Mac footprint daemons (odds-snapshot, feed-watchdog, mac-daemon tick) poll it and skip all Coolbet HTTP while paused — drops the request footprint that provokes Imperva. Use when the 'STAY COOL' wall appears."
+            title="Sets coolbet_session_state.daemons_paused. The Mac footprint daemons poll it and skip all Coolbet HTTP while paused — drops the Imperva footprint. NOTE: this only idles RUNNING daemons; the web page cannot start/stop the Mac processes (use coolbet_pause_resume.sh on the Mac for that)."
           >
-            {paused
-              ? reason ?? "footprint paused — Imperva relief"
-              : "pause to reduce the Imperva footprint (ⓘ)"}
+            {live.stale
+              ? "no live daemon to honor the flag — start it on the Mac (this button only idles a RUNNING daemon)"
+              : paused
+                ? reason ?? "footprint paused — Imperva relief"
+                : "pause to reduce the Imperva footprint (ⓘ)"}
           </div>
         </div>
       </div>
