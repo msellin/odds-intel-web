@@ -1450,25 +1450,39 @@ export default async function ShadowBotsPage() {
 
         return (
           <>
-            {groups.map((g) => (
-              <section key={g.title} className="mb-7">
-                <h2 className="mb-1 text-xs font-mono uppercase tracking-widest text-neutral-400">
-                  {g.title}
-                </h2>
-                <p className="mb-3 max-w-3xl text-xs leading-relaxed text-neutral-500">
-                  {g.blurb}
-                </p>
-                <div className="grid gap-3 md:grid-cols-2">
-                  {g.items.map((s) => (
-                    <BotCard key={s.name} s={s} placer={placerByBot.get(s.name)} />
-                  ))}
-                </div>
-              </section>
-            ))}
+            {groups.map((g) => {
+              const isMoney = g.title.startsWith("Real-money");
+              return (
+                <section
+                  key={g.title}
+                  className={`mb-5 rounded-2xl border p-4 sm:p-5 ${
+                    isMoney
+                      ? "border-amber-500/30 bg-amber-500/[0.03]"
+                      : "border-white/10 bg-white/[0.015]"
+                  }`}
+                >
+                  <h2
+                    className={`mb-1 text-xs font-mono uppercase tracking-widest ${
+                      isMoney ? "text-amber-300/90" : "text-neutral-300"
+                    }`}
+                  >
+                    {g.title}
+                  </h2>
+                  <p className="mb-3 max-w-3xl text-xs leading-relaxed text-neutral-500">
+                    {g.blurb}
+                  </p>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {g.items.map((s) => (
+                      <BotCard key={s.name} s={s} placer={placerByBot.get(s.name)} />
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
 
             {other.length > 0 && (
-              <section className="mb-7">
-                <h2 className="mb-3 text-xs font-mono uppercase tracking-widest text-neutral-400">
+              <section className="mb-5 rounded-2xl border border-white/10 bg-white/[0.015] p-4 sm:p-5">
+                <h2 className="mb-3 text-xs font-mono uppercase tracking-widest text-neutral-300">
                   Other paper bots · line-shop &amp; research
                 </h2>
                 <div className="grid gap-3 md:grid-cols-2">
