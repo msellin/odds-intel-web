@@ -1542,6 +1542,27 @@ export default async function ShadowBotsPage() {
         </details>
       )}
 
+      {/* Badge legend — model vs sharp is the key distinction (docs/SYSTEM_MAP.md §1). */}
+      <div className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-[11px] text-neutral-400">
+        <span className="flex items-center gap-1.5">
+          <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-wider text-amber-300">real money</span>
+          can stake ·
+          <span className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-neutral-400">paper</span>
+          measured only
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="rounded bg-violet-500/15 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-violet-300">model anchor</span>
+          edge vs our model (≥13%/8%)
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="rounded bg-sky-500/15 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-sky-300">sharp anchor</span>
+          edge vs de-vigged Pinnacle (~3%)
+        </span>
+        <a href="https://claude.ai/code/artifact/9a678e4c-d3bd-4795-9de1-e14754ab429f" target="_blank" rel="noreferrer" className="text-sky-400/80 underline underline-offset-2 hover:text-sky-300">
+          system map ↗
+        </a>
+      </div>
+
       {/* Active bots grouped by family for scannability; retired bots collapsed. */}
       {(() => {
         const active = summaries.filter((s) => !s.retiredAt);
