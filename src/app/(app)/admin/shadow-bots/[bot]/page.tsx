@@ -57,6 +57,18 @@ const ALLOWED: Record<string, { title: string; subtitle: string; detail: string 
     detail:
       "BOOK-AGNOSTIC-EDGE-ENGINE Stage B (2026-09-09). Same mechanism as the 1x2 trigger bot but for O/U 2.5 (edge ≥ 8%, odds ≥ 1.80). Emits a pick when Coolbet's live over_under_25 price lands in the model's trigger window, edge evaluated at Coolbet's OWN price. PAPER ONLY (never in PLACEABLE_BOTS). Held-out OOS backtest: +4.3% (n=228), NOT fold-robust (+15/+2/−5). Milder than the 1x2 trigger but not yet trustworthy — accruing forward. Settled by the generic goals-O/U resolver.",
   },
+  bot_coolbet_trigger_sharp_1x2_v1: {
+    title: "Coolbet · 1x2 · trigger engine · SHARP anchor (paper)",
+    subtitle: "Fires when Coolbet's 1x2 price beats the de-vigged Pinnacle line by ≥ 13% · odds ≥ 2.80 · PAPER",
+    detail:
+      "BOOK-AGNOSTIC-EDGE-ENGINE · SHARP anchor (2026-09-09). The head-to-head twin of bot_coolbet_trigger_1x2_v1: identical window math and identical floors, but the fair value is the Shin-de-vigged Pinnacle price (P_sharp) instead of our model — edge = P_sharp − 1/coolbet_odds. Stage A writes pick_triggers rows with strategy=sharp_1x2, cal_prob = P_sharp; this bot matches Coolbet's price against that window. PAPER ONLY (never in PLACEABLE_BOTS). Expect it to fire RARELY: Coolbet ≈ Pinnacle, so a 13% edge vs the sharp line is nearly impossible (measured max +6.6% on 2026-09-09). The point of running it is exactly that comparison — a small edge vs a sharp line is worth more than a large edge vs the model, so watch whether a lower sharp-specific floor is warranted (owner decision, docs/BETTING_GATE_DECISIONS.md).",
+  },
+  bot_coolbet_trigger_sharp_ou_v1: {
+    title: "Coolbet · O/U 2.5 · trigger engine · SHARP anchor (paper)",
+    subtitle: "Fires when Coolbet's O/U 2.5 price beats the de-vigged Pinnacle line by ≥ 8% · odds ≥ 1.80 · PAPER",
+    detail:
+      "BOOK-AGNOSTIC-EDGE-ENGINE · SHARP anchor (2026-09-09). The head-to-head twin of bot_coolbet_trigger_ou_v1: same window math and floors, but fair value = Shin-de-vigged Pinnacle O/U 2.5 price (P_sharp), edge = P_sharp − 1/coolbet_odds. Stage A writes strategy=sharp_ou25 rows with cal_prob = P_sharp. PAPER ONLY (never in PLACEABLE_BOTS). Fires rarely at the 8% floor (measured max +4.8% vs Pinnacle on 2026-09-09) — the comparison against the model-anchored twin is the point. Settled by the generic goals-O/U resolver.",
+  },
   bot_no_pin_shadow_v1: {
     title: "Matches without Pinnacle (retired 2026-08-21)",
     subtitle: "1X2 any selection · edge \u2265 8%",

@@ -152,6 +152,25 @@ const CLV_MIN_N = 100;
 // backtestN + backtestRoi = historical simulation over 2026-05-04 → today at
 // each bot's exact config. Shown next to live shadow performance so operator
 // can spot signal drift.
+// At-a-glance card badges. Mirrors workers/registry/bot_registry.py — the engine's
+// SYSTEM-MAP-REGISTRY-NOT-DRIFTED test is the source of truth; keep these in sync when
+// a floor/anchor changes. "anchor" = which edge (model = vs our model, floor 13%/8%;
+// sharp = vs de-vigged Pinnacle, floor ~3%). See docs/SYSTEM_MAP.md.
+const BOT_BADGES: Record<
+  string,
+  { money: "real" | "paper"; anchor?: "model" | "sharp"; floor?: string }
+> = {
+  bot_coolbet_1x2_model_v1: { money: "real", anchor: "model", floor: "edge ≥13% · odds ≥2.80" },
+  bot_coolbet_ou_model_v1: { money: "real", anchor: "model", floor: "edge ≥8% · odds ≥1.80" },
+  bot_coolbet_trigger_1x2_v1: { money: "paper", anchor: "model", floor: "edge ≥13% · odds ≥2.80" },
+  bot_coolbet_trigger_ou_v1: { money: "paper", anchor: "model", floor: "edge ≥8% · odds ≥1.80" },
+  bot_coolbet_trigger_sharp_1x2_v1: { money: "paper", anchor: "sharp", floor: "edge ≥3% · odds ≥1.50" },
+  bot_coolbet_trigger_sharp_ou_v1: { money: "paper", anchor: "sharp", floor: "edge ≥3% · odds ≥1.50" },
+  bot_ou35_model_v1: { money: "paper", anchor: "model", floor: "edge ≥8% · odds ≥1.80" },
+  bot_corners_paper_shadow_v1: { money: "paper", anchor: "sharp", floor: "edge ≥0%" },
+  bot_coolbet_value_v1: { money: "paper", anchor: "sharp", floor: "edge ≥3%" },
+};
+
 const SHADOW_BOTS: Array<{
   name: string;
   title: string;
@@ -254,6 +273,25 @@ const SHADOW_BOTS: Array<{
       "Book-agnostic: fires when Coolbet's O/U 2.5 price lands in the model's window (edge ≥ 8% at Coolbet's OWN odds, ≥ 1.80) · PAPER · OOS backtest +4.3% not-robust",
     backtestN: 228,
     backtestRoi: 4.3,
+  },
+  {
+    // BOOK-AGNOSTIC-EDGE-ENGINE — SHARP-anchor twin of the 1x2 trigger. Same
+    // window math, but fair value = Shin-de-vigged Pinnacle price, not the model.
+    name: "bot_coolbet_trigger_sharp_1x2_v1",
+    title: "Coolbet · 1x2 · trigger engine · SHARP anchor (paper)",
+    subtitle:
+      "Fires when Coolbet's 1x2 price beats the de-vigged Pinnacle line by ≥ 13% (odds ≥ 2.80) · PAPER · head-to-head vs the model-anchored twin · fires rarely (Coolbet ≈ Pinnacle)",
+    backtestN: 0,
+    backtestRoi: 0,
+  },
+  {
+    // BOOK-AGNOSTIC-EDGE-ENGINE — SHARP-anchor twin of the O/U 2.5 trigger.
+    name: "bot_coolbet_trigger_sharp_ou_v1",
+    title: "Coolbet · O/U 2.5 · trigger engine · SHARP anchor (paper)",
+    subtitle:
+      "Fires when Coolbet's O/U 2.5 price beats the de-vigged Pinnacle line by ≥ 8% (odds ≥ 1.80) · PAPER · head-to-head vs the model-anchored twin · fires rarely (Coolbet ≈ Pinnacle)",
+    backtestN: 0,
+    backtestRoi: 0,
   },
   {
     name: "bot_pin_1x2_home_v1",
@@ -1504,28 +1542,81 @@ export default async function ShadowBotsPage() {
         </details>
       )}
 
-      {/* Active bots first, retired bots in a separate muted section */}
+      {/* Active bots grouped by family for scannability; retired bots collapsed. */}
       {(() => {
         const active = summaries.filter((s) => !s.retiredAt);
         const retired = summaries.filter((s) => s.retiredAt);
+
+        // Ordered families. Each lists the bots it owns; anything unlisted falls
+        // into "Other paper bots" so a new bot is never silently dropped.
+        const FAMILIES: Array<{ title: string; blurb: string; names: string[] }> = [
+          {
+            title: "Real-money capable · Coolbet UI placer",
+            blurb: "Place at Coolbet's own price through the UI placer, behind the validated per-market gates (real money OFF unless explicitly toggled).",
+            names: ["bot_coolbet_1x2_model_v1", "bot_coolbet_ou_model_v1"],
+          },
+          {
+            title: "Trigger engine · model vs sharp anchor (paper)",
+            blurb: "Book-agnostic windows: a bet fires when Coolbet's own price clears the gate. Two anchors run head-to-head — fair value from our model vs from the de-vigged Pinnacle line. Paper only.",
+            names: [
+              "bot_coolbet_trigger_1x2_v1",
+              "bot_coolbet_trigger_sharp_1x2_v1",
+              "bot_coolbet_trigger_ou_v1",
+              "bot_coolbet_trigger_sharp_ou_v1",
+            ],
+          },
+        ];
+        const claimed = new Set(FAMILIES.flatMap((f) => f.names));
+        const byName = new Map(active.map((s) => [s.name, s]));
+        const groups = FAMILIES.map((f) => ({
+          title: f.title,
+          blurb: f.blurb,
+          items: f.names.map((n) => byName.get(n)).filter(Boolean) as Summary[],
+        })).filter((g) => g.items.length > 0);
+        const other = active.filter((s) => !claimed.has(s.name));
+
         return (
           <>
-            <section className="grid gap-3 md:grid-cols-2">
-              {active.map((s) => (
-                <BotCard key={s.name} s={s} />
-              ))}
-            </section>
-            {retired.length > 0 && (
-              <>
-                <h2 className="mt-8 mb-3 text-xs font-mono uppercase tracking-widest text-neutral-500">
-                  Retired · historical data only
+            {groups.map((g) => (
+              <section key={g.title} className="mb-7">
+                <h2 className="mb-1 text-xs font-mono uppercase tracking-widest text-neutral-400">
+                  {g.title}
                 </h2>
-                <section className="grid gap-3 md:grid-cols-2 opacity-60">
+                <p className="mb-3 max-w-3xl text-xs leading-relaxed text-neutral-500">
+                  {g.blurb}
+                </p>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {g.items.map((s) => (
+                    <BotCard key={s.name} s={s} />
+                  ))}
+                </div>
+              </section>
+            ))}
+
+            {other.length > 0 && (
+              <section className="mb-7">
+                <h2 className="mb-3 text-xs font-mono uppercase tracking-widest text-neutral-400">
+                  Other paper bots · line-shop &amp; research
+                </h2>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {other.map((s) => (
+                    <BotCard key={s.name} s={s} />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {retired.length > 0 && (
+              <details className="mt-8">
+                <summary className="cursor-pointer select-none list-none text-xs font-mono uppercase tracking-widest text-neutral-500 hover:text-neutral-300">
+                  ▸ Retired · historical data only ({retired.length})
+                </summary>
+                <section className="mt-3 grid gap-3 md:grid-cols-2 opacity-60">
                   {retired.map((s) => (
                     <BotCard key={s.name} s={s} />
                   ))}
                 </section>
-              </>
+              </details>
             )}
           </>
         );
@@ -1647,6 +1738,40 @@ function BotCard({ s }: { s: Summary }) {
             )}
           </div>
           <p className="mt-0.5 text-xs text-neutral-500">{s.subtitle}</p>
+          {BOT_BADGES[s.name] && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              {BOT_BADGES[s.name].money === "real" ? (
+                <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-wider text-amber-300">
+                  real money
+                </span>
+              ) : (
+                <span className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-neutral-400">
+                  paper
+                </span>
+              )}
+              {BOT_BADGES[s.name].anchor && (
+                <span
+                  className={`rounded px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+                    BOT_BADGES[s.name].anchor === "sharp"
+                      ? "bg-sky-500/15 text-sky-300"
+                      : "bg-violet-500/15 text-violet-300"
+                  }`}
+                  title={
+                    BOT_BADGES[s.name].anchor === "sharp"
+                      ? "Sharp edge: fair value = de-vigged Pinnacle line (edge ~3%)"
+                      : "Model edge: fair value = our calibrated model (edge 13%/8%)"
+                  }
+                >
+                  {BOT_BADGES[s.name].anchor} anchor
+                </span>
+              )}
+              {BOT_BADGES[s.name].floor && (
+                <span className="rounded bg-white/[0.04] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-neutral-500">
+                  {BOT_BADGES[s.name].floor}
+                </span>
+              )}
+            </div>
+          )}
         </div>
         {hasROI ? (
           <div className="text-right">
