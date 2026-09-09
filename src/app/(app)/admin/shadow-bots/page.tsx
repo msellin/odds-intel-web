@@ -156,19 +156,31 @@ const CLV_MIN_N = 100;
 // SYSTEM-MAP-REGISTRY-NOT-DRIFTED test is the source of truth; keep these in sync when
 // a floor/anchor changes. "anchor" = which edge (model = vs our model, floor 13%/8%;
 // sharp = vs de-vigged Pinnacle, floor ~3%). See docs/SYSTEM_MAP.md.
-const BOT_BADGES: Record<
-  string,
-  { money: "real" | "paper"; anchor?: "model" | "sharp"; floor?: string }
-> = {
-  bot_coolbet_1x2_model_v1: { money: "real", anchor: "model", floor: "edge ≥13% · odds ≥2.80" },
-  bot_coolbet_ou_model_v1: { money: "real", anchor: "model", floor: "edge ≥8% · odds ≥1.80" },
-  bot_coolbet_trigger_1x2_v1: { money: "paper", anchor: "model", floor: "edge ≥13% · odds ≥2.80" },
-  bot_coolbet_trigger_ou_v1: { money: "paper", anchor: "model", floor: "edge ≥8% · odds ≥1.80" },
-  bot_coolbet_trigger_sharp_1x2_v1: { money: "paper", anchor: "sharp", floor: "edge ≥3% · odds ≥1.50" },
-  bot_coolbet_trigger_sharp_ou_v1: { money: "paper", anchor: "sharp", floor: "edge ≥3% · odds ≥1.50" },
-  bot_ou35_model_v1: { money: "paper", anchor: "model", floor: "edge ≥8% · odds ≥1.80" },
-  bot_corners_paper_shadow_v1: { money: "paper", anchor: "sharp", floor: "edge ≥0%" },
-  bot_coolbet_value_v1: { money: "paper", anchor: "sharp", floor: "edge ≥3%" },
+// At-a-glance identity badges. Mirrors workers/registry/bot_registry.py — the
+// engine's SYSTEM-MAP-REGISTRY-NOT-DRIFTED test is the source of truth; keep these
+// in sync when a bot/anchor changes. book/market/money/anchor let you read what a
+// bot does without parsing its name. See docs/SYSTEM_MAP.md.
+type BotBadge = {
+  book?: string;
+  market?: string;
+  money: "real" | "paper";
+  anchor?: "model" | "sharp";
+};
+const BOT_BADGES: Record<string, BotBadge> = {
+  bot_coolbet_1x2_model_v1: { book: "Coolbet", market: "1x2", money: "real", anchor: "model" },
+  bot_coolbet_ou_model_v1: { book: "Coolbet", market: "O/U 2.5", money: "real", anchor: "model" },
+  bot_coolbet_trigger_1x2_v1: { book: "Coolbet", market: "1x2", money: "paper", anchor: "model" },
+  bot_coolbet_trigger_ou_v1: { book: "Coolbet", market: "O/U 2.5", money: "paper", anchor: "model" },
+  bot_coolbet_trigger_sharp_1x2_v1: { book: "Coolbet", market: "1x2", money: "paper", anchor: "sharp" },
+  bot_coolbet_trigger_sharp_ou_v1: { book: "Coolbet", market: "O/U 2.5", money: "paper", anchor: "sharp" },
+  bot_ou35_model_v1: { book: "Coolbet", market: "O/U 3.5", money: "paper", anchor: "model" },
+  bot_corners_paper_shadow_v1: { book: "Betano/Unibet", market: "corners", money: "paper", anchor: "sharp" },
+  bot_coolbet_value_v1: { book: "Coolbet", market: "1x2/OU", money: "paper", anchor: "sharp" },
+  bot_v10_all: { market: "multi", money: "paper", anchor: "model" },
+  bot_1x2_specialist: { market: "1x2", money: "paper" },
+  bot_dnb_specialist: { market: "DNB", money: "paper" },
+  bot_high_roi_global_v2: { market: "1x2", money: "paper" },
+  bot_summer_specialist: { market: "multi", money: "paper" },
 };
 
 const SHADOW_BOTS: Array<{
@@ -1232,7 +1244,7 @@ export default async function ShadowBotsPage() {
           Native <details> for zero-JS collapse. Opens by default so the
           operator sees pending picks immediately on page load. */}
       {upcoming.length > 0 && (
-        <details open className="mb-6 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.03]">
+        <details className="mb-6 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.03]">
           <summary className="cursor-pointer select-none list-none px-4 py-3 hover:bg-emerald-500/[0.05]">
             <div className="flex items-baseline justify-between gap-4">
               <div>
@@ -1243,7 +1255,7 @@ export default async function ShadowBotsPage() {
                   {upcoming.length}
                 </span>
                 <span className="ml-2 text-xs text-neutral-500">
-                  pending · sorted by kickoff · click to collapse
+                  pending · sorted by kickoff · click to expand
                 </span>
               </div>
               <span className="text-[11px] text-neutral-500">
@@ -1736,20 +1748,61 @@ function BotCard({ s }: { s: Summary }) {
     s.status.kind === "promote" ? "good" : s.status.kind === "retire" ? "bad" : "neutral";
 
   const isRetired = !!s.retiredAt;
+  const badges = BOT_BADGES[s.name];
   return (
     <Link
       href={`/admin/shadow-bots/${s.name}`}
-      className={`group flex flex-col justify-between rounded-xl border p-4 transition ${
+      className={`group flex flex-col gap-3 rounded-xl border p-4 transition ${
         isRetired
           ? "border-rose-500/20 bg-rose-500/[0.03] hover:bg-rose-500/[0.06]"
           : "border-white/[0.06] bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.04]"
       }`}
     >
-      {/* Header row: title + primary metric */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h3 className="truncate text-sm font-semibold text-neutral-100">{s.title}</h3>
+          {/* Identity badges FIRST — read book · market · money · anchor at a glance. */}
+          {badges && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {badges.book && (
+                <span className="rounded bg-white/[0.06] px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-neutral-300">
+                  {badges.book}
+                </span>
+              )}
+              {badges.market && (
+                <span className="rounded bg-teal-500/15 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-teal-200">
+                  {badges.market}
+                </span>
+              )}
+              {badges.money === "real" ? (
+                <span className="rounded bg-amber-500/20 px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-amber-300">
+                  real money
+                </span>
+              ) : (
+                <span className="rounded bg-white/[0.06] px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-neutral-400">
+                  paper
+                </span>
+              )}
+              {badges.anchor && (
+                <span
+                  className={`rounded px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${
+                    badges.anchor === "sharp"
+                      ? "bg-sky-500/15 text-sky-300"
+                      : "bg-violet-500/15 text-violet-300"
+                  }`}
+                  title={
+                    badges.anchor === "sharp"
+                      ? "Sharp edge: fair value = de-vigged Pinnacle line (edge ~3%)"
+                      : "Model edge: fair value = our calibrated model (edge 13%/8%)"
+                  }
+                >
+                  {badges.anchor} anchor
+                </span>
+              )}
+            </div>
+          )}
+          {/* Name demoted — the badges carry the identity now. */}
+          <div className={`flex flex-wrap items-center gap-2 ${badges ? "mt-2" : ""}`}>
+            <h3 className="text-sm font-medium leading-snug text-neutral-200">{s.title}</h3>
             {isRetired ? (
               <span className="rounded-full bg-rose-500/20 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-rose-300">
                 Retired
@@ -1758,193 +1811,53 @@ function BotCard({ s }: { s: Summary }) {
               <StatusPill status={s.status} />
             )}
           </div>
-          <p className="mt-0.5 text-xs text-neutral-500">{s.subtitle}</p>
-          {BOT_BADGES[s.name] && (
-            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-              {BOT_BADGES[s.name].money === "real" ? (
-                <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-wider text-amber-300">
-                  real money
-                </span>
-              ) : (
-                <span className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-neutral-400">
-                  paper
-                </span>
-              )}
-              {BOT_BADGES[s.name].anchor && (
-                <span
-                  className={`rounded px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
-                    BOT_BADGES[s.name].anchor === "sharp"
-                      ? "bg-sky-500/15 text-sky-300"
-                      : "bg-violet-500/15 text-violet-300"
-                  }`}
-                  title={
-                    BOT_BADGES[s.name].anchor === "sharp"
-                      ? "Sharp edge: fair value = de-vigged Pinnacle line (edge ~3%)"
-                      : "Model edge: fair value = our calibrated model (edge 13%/8%)"
-                  }
-                >
-                  {BOT_BADGES[s.name].anchor} anchor
-                </span>
-              )}
-              {BOT_BADGES[s.name].floor && (
-                <span className="rounded bg-white/[0.04] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-neutral-500">
-                  {BOT_BADGES[s.name].floor}
-                </span>
-              )}
+        </div>
+        <div className="shrink-0 text-right">
+          {hasROI ? (
+            <>
+              <div
+                className={`font-mono text-2xl font-semibold tabular-nums leading-none ${
+                  roiTone === "good"
+                    ? "text-emerald-400"
+                    : roiTone === "bad"
+                    ? "text-rose-400"
+                    : "text-neutral-100"
+                }`}
+              >
+                {s.roi >= 0 ? "+" : ""}
+                {s.roi.toFixed(1)}%
+              </div>
+              <div className="mt-1.5 text-[11px] tabular-nums text-neutral-500">
+                {s.settled} settled · {s.hitRate.toFixed(0)}% hit
+              </div>
+            </>
+          ) : (
+            <div className="text-[11px] tabular-nums text-neutral-500">
+              <span className="text-neutral-300">{s.total}</span> picks
+              <br />
+              <span className="text-neutral-600">none settled</span>
             </div>
           )}
         </div>
-        {hasROI ? (
-          <div className="text-right">
-            <div
-              className={`font-mono text-xl font-semibold tabular-nums leading-none ${
-                roiTone === "good"
-                  ? "text-emerald-400"
-                  : roiTone === "bad"
-                  ? "text-rose-400"
-                  : "text-neutral-100"
-              }`}
-            >
-              {s.roi >= 0 ? "+" : ""}
-              {s.roi.toFixed(1)}%
-            </div>
-            <div className="mt-1 text-[10px] text-neutral-500">{s.hitRate.toFixed(0)}% hit</div>
-          </div>
-        ) : null}
       </div>
 
-      {/* Progress bar (counts SETTLED, not total) */}
-      <div className="mt-4">
-        <div className="mb-1 flex items-baseline justify-between text-[11px]">
-          <span className="text-neutral-500">
-            <span className="tabular-nums text-neutral-300">{s.settled}</span>/{MIN_SETTLED_FOR_DECISION} settled
-            <span className="mx-1.5 text-neutral-700">·</span>
-            <span className="tabular-nums text-neutral-300">{s.observationDays}</span>/
-            {MIN_DAYS_FOR_DECISION} days
-          </span>
-          <span className="text-neutral-500">
-            {s.status.kind === "waiting"
-              ? "no picks yet"
-              : s.status.kind === "collecting"
-              ? "collecting"
-              : s.status.kind === "promote"
-              ? "ready · promote"
-              : s.status.kind === "retire"
-              ? "ready · retire"
-              : "ready · watch"}
-          </span>
-        </div>
-        <div className="h-1 w-full overflow-hidden rounded-full bg-white/[0.06]">
+      {/* Maturity toward a promote/retire decision. Full numbers (W/L/V, CLV,
+          backtest) live on the detail page, one click away. */}
+      <div className="flex items-center gap-2">
+        <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
           <div
             className={`h-full rounded-full transition-all ${
               s.status.kind === "promote"
                 ? "bg-emerald-400"
                 : s.status.kind === "retire"
                 ? "bg-rose-400"
-                : "bg-neutral-400"
+                : "bg-neutral-500"
             }`}
             style={{ width: `${progressPct}%` }}
           />
         </div>
-      </div>
-
-      {/* Outcome row */}
-      <div className="mt-3 flex items-center gap-3 text-[11px] tabular-nums">
-        <span className="text-neutral-500">
-          <span className="text-neutral-200">{s.total}</span> picks
-        </span>
-        <Dot className="bg-emerald-400" />
-        <span className="text-neutral-400">
-          <span className="text-neutral-200">{s.won}</span>W
-        </span>
-        <Dot className="bg-rose-400" />
-        <span className="text-neutral-400">
-          <span className="text-neutral-200">{s.lost}</span>L
-        </span>
-        <Dot className="bg-neutral-500" />
-        <span className="text-neutral-400">
-          <span className="text-neutral-200">{s.void}</span>V
-        </span>
-        <Dot className="bg-sky-400" />
-        <span className="text-neutral-400">
-          <span className="text-neutral-200">{s.pending}</span>P
-        </span>
-        <span className="ml-auto flex items-center gap-2 text-[10px] text-neutral-500">
-          {s.tStat != null && (
-            <span
-              title={`ROI t = ${s.tStat.toFixed(2)} on ${s.settled} settled picks — shown as a cross-check, NOT the gate. ROI needs ~222x more bets than CLV for the same precision, so it usually cannot decide. Where the two disagree, believe CLV.`}
-            >
-              t{" "}
-              <span
-                className={`tabular-nums font-medium ${
-                  s.tStat >= PROMOTE_T
-                    ? "text-emerald-400/80"
-                    : s.tStat <= RETIRE_T
-                    ? "text-rose-400/80"
-                    : "text-neutral-400"
-                }`}
-              >
-                {s.tStat >= 0 ? "+" : ""}
-                {s.tStat.toFixed(2)}
-              </span>
-            </span>
-          )}
-          {s.pinClvCount > 0 && s.avgPinClvPct != null ? (
-            <span
-              title={`Pinnacle CLV across ${s.pinClvCount} settled pick${s.pinClvCount === 1 ? "" : "s"} — odds_at_pick vs the DE-VIGGED Pinnacle close, so 0 means Pinnacle-fair. THIS IS THE GATE (t = ${s.clvTStat != null ? s.clvTStat.toFixed(2) : "n/a"}). Per-bet SD is 0.090 here against 1.341 for ROI, so it decides in ~100 picks where ROI needs ~17,000.`}
-            >
-              pin clv{" "}
-              <span
-                className={`tabular-nums font-medium ${
-                  s.avgPinClvPct >= 2
-                    ? "text-emerald-400/80"
-                    : s.avgPinClvPct <= -2
-                    ? "text-rose-400/80"
-                    : "text-neutral-400"
-                }`}
-              >
-                {s.avgPinClvPct >= 0 ? "+" : ""}
-                {s.avgPinClvPct.toFixed(1)}%
-              </span>
-            </span>
-          ) : (
-            <span
-              title="No Pinnacle anchor available. API-Football's Pinnacle feed carries only 8 bet types (Match Winner, Asian Handicap, Goals O/U, team totals) and Both Teams Score is not among them — so this bot cannot be validated against a sharp line at all."
-              className="text-amber-500/70"
-            >
-              pin clv n/a
-            </span>
-          )}
-          {/* backtestN === 0 means the config has never been replayed. Rendering
-              "+0.0% n=0" would read as a measured zero rather than an absence,
-              which is a worse lie than showing nothing. */}
-          {s.backtestN === 0 ? (
-            <span
-              title="This config has never been replayed, so there is no historical figure. Judge it on CLV once picks accumulate — and note the per-bot sweep found backtest ROI anti-predictive out of sample anyway."
-              className="text-neutral-600"
-            >
-              no backtest
-            </span>
-          ) : (
-          <span
-            title="Historical backtest — bot's config applied to matches from 2026-05-04 → today (same window as landing/performance). Reference for what to expect once live data accumulates."
-          >
-            past{" "}
-            <span
-              className={`tabular-nums font-medium ${
-                s.backtestRoi >= 3
-                  ? "text-emerald-400/80"
-                  : s.backtestRoi <= -3
-                  ? "text-rose-400/80"
-                  : "text-neutral-400"
-              }`}
-            >
-              {s.backtestRoi >= 0 ? "+" : ""}
-              {s.backtestRoi.toFixed(1)}%
-            </span>
-            <span className="text-neutral-600"> n={s.backtestN}</span>
-          </span>
-          )}
+        <span className="shrink-0 font-mono text-[10px] tabular-nums text-neutral-600">
+          {s.settled}/{MIN_SETTLED_FOR_DECISION}
         </span>
       </div>
     </Link>
@@ -2003,9 +1916,6 @@ function formatPickLabel(market: string, selection: string): string {
 }
 
 
-function Dot({ className }: { className: string }) {
-  return <span className={`inline-block h-1.5 w-1.5 rounded-full ${className}`} />;
-}
 
 function Denied({ text = "Access denied." }: { text?: string }) {
   return (
