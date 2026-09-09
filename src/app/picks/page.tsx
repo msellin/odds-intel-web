@@ -292,16 +292,23 @@ export default async function PicksPage() {
                                       p.min_odds,
                                       p.market,
                                     );
-                                    return trig != null ? (
+                                    // Two anchor points so the edge is validatable:
+                                    // break-even (0% edge, = 1/cal_prob) and the
+                                    // placement price (13%/8% floor). The shown ODDS
+                                    // sit between them — more odds = more edge,
+                                    // monotonically. Seeing both makes it obvious the
+                                    // pick is a real +EV edge, just below the robust bar.
+                                    const be = p.min_odds;
+                                    return (
                                       <p
                                         className="font-mono text-[10px] tabular-nums text-amber-500/80"
-                                        title={`Admin: PLACEMENT-trigger price. The Coolbet bot places this pick only if it is offered at ${trig.toFixed(2)} or better — the odds that clear the ${p.market === "1x2" ? "13%" : "8%"} edge floor (and the ${p.market === "1x2" ? "2.80" : "1.80"} odds floor). docs/BETTING_GATE_DECISIONS.md.`}
+                                        title={`Admin validation. be = break-even (0% edge = 1/cal_prob): below this the bet is −EV. place ≥ = the price that clears the ${p.market === "1x2" ? "13%" : "8%"} real-money floor (what Telegram + the Coolbet placer require). The shown odds sit between them: more odds = more edge. docs/BETTING_GATE_DECISIONS.md.`}
                                       >
-                                        place ≥ {trig.toFixed(2)}
-                                      </p>
-                                    ) : (
-                                      <p className="font-mono text-[10px] tabular-nums text-neutral-700">
-                                        no place (edge unreachable)
+                                        {be != null ? `be ${be.toFixed(2)}` : ""}
+                                        {be != null && trig != null ? " · " : ""}
+                                        {trig != null
+                                          ? `place ≥ ${trig.toFixed(2)}`
+                                          : "no place (edge < floor at any odds)"}
                                       </p>
                                     );
                                   })()
