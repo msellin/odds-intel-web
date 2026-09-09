@@ -23,8 +23,7 @@ import { execOdds as sharedExecOdds, FLAT_STAKE_EUR } from "@/lib/engine-data";
 import { botEdgeThreshold, autoMinEdgeFor } from "@/lib/coolbet-edge";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
 import { PickBetMark } from "@/components/pick-bet-mark";
-import { CoolbetPlacerToggle } from "@/components/coolbet-placer-toggle";
-import { CoolbetDaemonsPause } from "@/components/coolbet-daemons-pause";
+import { CardPlacerToggle } from "@/components/card-placer-toggle";
 import { fetchUserPickMarkStates } from "@/lib/upcoming-picks";
 
 const STAKE = FLAT_STAKE_EUR;
@@ -643,26 +642,6 @@ export default async function ShadowBotsPage() {
     updated_at: string;
   }[];
 
-  // COOLBET-DAEMONS-PAUSE-2026-09-09: the global "calm Imperva" switch. Reads the
-  // single coolbet_session_state row; the Pause button flips daemons_paused, which
-  // the Mac footprint daemons poll and skip on.
-  const { data: sessionStateRaw } = await db
-    .from("coolbet_session_state")
-    .select(
-      "daemons_paused, daemons_paused_reason, mac_daemon_last_tick_at, last_heartbeat_at",
-    )
-    .eq("id", 1)
-    .single();
-  const daemonsPaused = !!sessionStateRaw?.daemons_paused;
-  const daemonsPausedReason =
-    (sessionStateRaw?.daemons_paused_reason as string | null) ?? null;
-  // liveness: the newest of the two heartbeat stamps tells us whether a daemon
-  // is actually running to honor the flag (the web page can't start/stop them).
-  const _tick = sessionStateRaw?.mac_daemon_last_tick_at as string | null;
-  const _hb = sessionStateRaw?.last_heartbeat_at as string | null;
-  const daemonsLastSeen =
-    [_tick, _hb].filter(Boolean).sort().at(-1) ?? null;
-
   const _startOfDayUtc = new Date();
   _startOfDayUtc.setUTCHours(0, 0, 0, 0);
   const _dayIso = _startOfDayUtc.toISOString();
@@ -723,6 +702,9 @@ export default async function ShadowBotsPage() {
       };
     }),
   );
+  // Per-bot real-money placement info, keyed for the cards (the placer control
+  // now lives ON the real-money card, not in a separate top block).
+  const placerByBot = new Map(placerPanel.map((r) => [r.bot_name, r] as const));
 
   if (bots.length === 0) {
     return (
@@ -1010,148 +992,6 @@ export default async function ShadowBotsPage() {
           {activeSummaries.length} active · {nRetired} retired · {totalsAll.total.toLocaleString()} picks · {totalsAll.settled.toLocaleString()} settled · promote/retire at {MIN_SETTLED_FOR_DECISION} settled &amp; {MIN_DAYS_FOR_DECISION} days
         </p>
       </header>
-
-      {/* COOLBET-PLACER-CONTROL — real-money UI placement, per bot. Placed at
-          the very top: this is the only surface on the page that moves real
-          money, and the toggle changes what the hourly placer stakes. */}
-      <section className="mb-6 rounded-lg border border-rose-500/25 bg-rose-500/[0.03] px-4 py-3">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-rose-300/90">
-            Coolbet UI Placer — Control
-          </h2>
-          <span
-            className="text-[11px] text-neutral-500"
-            title="Effective allowlist = engine code whitelist ∩ these toggles. The placer fails closed on any DB error (stakes nothing). Placed counts read real_bets, reconciled against the live Coolbet account."
-          >
-            real money · big numbers, details on hover&nbsp;ⓘ
-          </span>
-        </div>
-
-        {/* COOLBET-DAEMONS-PAUSE: global footprint kill switch (Imperva relief),
-            above the per-bot money toggles because it gates the whole flow. */}
-        <div className="mt-3">
-          <CoolbetDaemonsPause
-            initialPaused={daemonsPaused}
-            initialReason={daemonsPausedReason}
-            lastSeenAt={daemonsLastSeen}
-          />
-        </div>
-
-        {placerPanel.length === 0 ? (
-          <p className="mt-2 text-xs text-amber-400">
-            No rows in coolbet_placer_bots — migration 310 hasn&apos;t been applied.
-          </p>
-        ) : (
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            {placerPanel.map((row) => {
-              const pickEdgePct = Number.isFinite(row.pickEdge)
-                ? `${(row.pickEdge * 100).toFixed(0)}%`
-                : "—";
-              const placeEdgePct = Number.isFinite(row.placeEdge)
-                ? `${(row.placeEdge * 100).toFixed(0)}%`
-                : "—";
-              const oddsFloorStr =
-                row.oddsFloor > 0 ? row.oddsFloor.toFixed(2) : "—";
-              return (
-                <div
-                  key={row.bot_name}
-                  className="rounded-lg border border-neutral-800 bg-neutral-900/50 p-3"
-                >
-                  {/* Market-first header — book shown as a dimension, not the
-                      row identity, so a second book slots in below. */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-base font-semibold text-neutral-100">
-                          {row.meta.market}
-                        </span>
-                        <span className="rounded bg-neutral-800 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-neutral-400">
-                          {row.meta.book}
-                        </span>
-                      </div>
-                      <div
-                        className="mt-0.5 truncate text-[11px] text-neutral-500"
-                        title={row.meta.signal}
-                      >
-                        {row.meta.signal}
-                      </div>
-                    </div>
-                    <span
-                      className="cursor-help text-[11px] text-neutral-600"
-                      title={`${row.bot_name}${row.note ? ` — ${row.note}` : ""}`}
-                    >
-                      ⓘ
-                    </span>
-                  </div>
-
-                  {/* Big-number columns: Found · Placed · Pick rules ·
-                      Placement rules. Descriptive text lives in the title
-                      tooltips so the panel stays near-textless. */}
-                  <div className="mt-3 grid grid-cols-4 gap-2 text-center">
-                    <div title="Shadow picks this bot generated today (UTC).">
-                      <div className="text-[9px] uppercase tracking-wide text-neutral-500">
-                        Found
-                      </div>
-                      <div className="mt-0.5 text-xl font-semibold tabular-nums text-neutral-200">
-                        {row.foundToday ?? "—"}
-                      </div>
-                    </div>
-                    <div title="Real-money bets recorded for this bot today (real_bets, reconciled to the live Coolbet account).">
-                      <div className="text-[9px] uppercase tracking-wide text-neutral-500">
-                        Placed
-                      </div>
-                      <div
-                        className={`mt-0.5 text-xl font-semibold tabular-nums ${
-                          (row.placedToday ?? 0) > 0
-                            ? "text-emerald-400"
-                            : "text-neutral-500"
-                        }`}
-                      >
-                        {row.placedToday ?? "—"}
-                      </div>
-                    </div>
-                    <div title={row.meta.pickRuleDetail}>
-                      <div className="cursor-help text-[9px] uppercase tracking-wide text-neutral-500">
-                        Pick&nbsp;ⓘ
-                      </div>
-                      <div className="mt-0.5 text-xl font-semibold tabular-nums text-sky-300">
-                        {pickEdgePct}
-                      </div>
-                      <div className="text-[9px] text-neutral-600">edge</div>
-                    </div>
-                    <div title={row.meta.placementDetail}>
-                      <div className="cursor-help text-[9px] uppercase tracking-wide text-neutral-500">
-                        Place&nbsp;ⓘ
-                      </div>
-                      <div className="mt-0.5 text-xl font-semibold leading-tight tabular-nums text-amber-300">
-                        {oddsFloorStr}
-                      </div>
-                      <div className="text-[9px] text-neutral-600">
-                        odds · {placeEdgePct} edge
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Book dimension + real-money toggle. Rendered per book so a
-                      second book (e.g. Unibet) becomes another row here with no
-                      layout change. */}
-                  <div className="mt-3 space-y-2 border-t border-neutral-800 pt-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] font-medium text-neutral-400">
-                        {row.meta.book}
-                      </span>
-                      <CoolbetPlacerToggle
-                        botName={row.bot_name}
-                        initialEnabled={row.ui_place_enabled}
-                      />
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
 
       {/* Discipline check — hand-picked vs left alone. Deliberately placed
           above the portfolio numbers: if the discretionary layer is costing
@@ -1620,7 +1460,7 @@ export default async function ShadowBotsPage() {
                 </p>
                 <div className="grid gap-3 md:grid-cols-2">
                   {g.items.map((s) => (
-                    <BotCard key={s.name} s={s} />
+                    <BotCard key={s.name} s={s} placer={placerByBot.get(s.name)} />
                   ))}
                 </div>
               </section>
@@ -1633,7 +1473,7 @@ export default async function ShadowBotsPage() {
                 </h2>
                 <div className="grid gap-3 md:grid-cols-2">
                   {other.map((s) => (
-                    <BotCard key={s.name} s={s} />
+                    <BotCard key={s.name} s={s} placer={placerByBot.get(s.name)} />
                   ))}
                 </div>
               </section>
@@ -1646,7 +1486,7 @@ export default async function ShadowBotsPage() {
                 </summary>
                 <section className="mt-3 grid gap-3 md:grid-cols-2 opacity-60">
                   {retired.map((s) => (
-                    <BotCard key={s.name} s={s} />
+                    <BotCard key={s.name} s={s} placer={placerByBot.get(s.name)} />
                   ))}
                 </section>
               </details>
@@ -1737,7 +1577,13 @@ function PortfolioCard({
 }
 
 
-function BotCard({ s }: { s: Summary }) {
+type PlacerCardInfo = {
+  ui_place_enabled: boolean;
+  foundToday: number | null;
+  placedToday: number | null;
+};
+
+function BotCard({ s, placer }: { s: Summary; placer?: PlacerCardInfo }) {
   // Progress bar keys off SETTLED, not total. High-volume bots that pile
   // pending picks fast can no longer look "ready" until settlement lands.
   const progressPct = Math.min(100, (s.settled / MIN_SETTLED_FOR_DECISION) * 100);
@@ -1860,6 +1706,29 @@ function BotCard({ s }: { s: Summary }) {
           {s.settled}/{MIN_SETTLED_FOR_DECISION}
         </span>
       </div>
+
+      {/* Real-money control, right on the card. Only present for placeable bots
+          (placer != null). The toggle guards its own click so it doesn't navigate. */}
+      {placer && (
+        <div className="flex items-center justify-between gap-2 border-t border-white/[0.06] pt-2.5">
+          <span className="text-[10px] tabular-nums text-neutral-500">
+            found <span className="text-neutral-300">{placer.foundToday ?? 0}</span>
+            {" · "}placed{" "}
+            <span
+              className={
+                (placer.placedToday ?? 0) > 0 ? "text-emerald-400" : "text-neutral-400"
+              }
+            >
+              {placer.placedToday ?? 0}
+            </span>{" "}
+            today
+          </span>
+          <CardPlacerToggle
+            botName={s.name}
+            initialEnabled={placer.ui_place_enabled}
+          />
+        </div>
+      )}
     </Link>
   );
 }
