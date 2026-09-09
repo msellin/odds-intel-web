@@ -147,6 +147,7 @@ function execOdds(b: { odds_at_pick: number | null; odds_at_pick_live: number | 
 
 interface ShadowBetRow {
   id: string;
+  match_id: string;
   market: string;
   selection: string;
   odds_at_pick: number | null;
@@ -296,6 +297,40 @@ export default async function ShadowBotDetailPage({
   const settledProgress = Math.min(100, (settled / MIN_SETTLED_FOR_DECISION) * 100);
   const daysProgress = Math.min(100, (observationDays / MIN_DAYS_FOR_DECISION) * 100);
 
+  // PER-BOT-UNIBET-ODDS-2026-09-09: current Coolbet + Unibet price per PENDING pick,
+  // so each bot's own detail page shows the two books side by side — matching the
+  // shared Upcoming table (same fetch, same key builder, same recency window). Only
+  // pending picks: a settled game has no meaningful "current" price. Newest row wins
+  // per key (rows arrive newest-first), so the direct Kambi feed beats the stale AF
+  // Unibet where both exist. Key is lowercased both sides (shadow_bets stores 1x2 AND
+  // 1X2, odds_snapshots only 1x2 — see PICKS-ODDS-KEY-CASE).
+  const oddsKey = (m: string, market: string, selection: string) =>
+    `${m}|${market.toLowerCase()}|${selection.toLowerCase()}`;
+  const pendingMatchIds = Array.from(new Set(pending.map((b) => b.match_id)));
+  const coolbetNow = new Map<string, { odds: number; ts: string; src?: string }>();
+  const unibetNow = new Map<string, { odds: number; ts: string; src?: string }>();
+  if (pendingMatchIds.length > 0) {
+    const { data: snaps } = await db
+      .from("odds_snapshots")
+      .select("match_id, market, selection, odds, timestamp, bookmaker")
+      .in("match_id", pendingMatchIds)
+      .in("bookmaker", ["Coolbet", "Unibet", "Unibet-Kambi"])
+      .eq("is_live", false)
+      .gte("timestamp", new Date(Date.now() - 12 * 3600 * 1000).toISOString())
+      .order("timestamp", { ascending: false })
+      .limit(10000);
+    for (const row of (snaps ?? []) as Array<{
+      match_id: string; market: string; selection: string; odds: number | string;
+      timestamp: string; bookmaker: string;
+    }>) {
+      const key = oddsKey(row.match_id, row.market, row.selection);
+      const target = row.bookmaker === "Coolbet" ? coolbetNow : unibetNow;
+      if (!target.has(key)) {
+        target.set(key, { odds: Number(row.odds), ts: row.timestamp, src: row.bookmaker });
+      }
+    }
+  }
+
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
       <BackLink />
@@ -385,7 +420,7 @@ export default async function ShadowBotDetailPage({
           </div>
         ) : (
           <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]">
-            <div className="hidden border-b border-white/[0.04] px-4 py-2 text-[10px] font-mono uppercase tracking-wider text-neutral-500 sm:grid sm:grid-cols-[95px_1fr_45px_95px_55px_55px_70px_85px_60px]">
+            <div className="hidden border-b border-white/[0.04] px-4 py-2 text-[10px] font-mono uppercase tracking-wider text-neutral-500 sm:grid sm:grid-cols-[95px_1fr_45px_95px_55px_55px_70px_55px_55px_85px_60px]">
               <div>Kickoff</div>
               <div>Match</div>
               <div className="text-center" title="League tier at time of pick. T1 = Big-5 + top leagues, T4 = amateur / lower tiers.">
@@ -395,15 +430,31 @@ export default async function ShadowBotDetailPage({
               <div className="text-right" title="Executable price at pick time (odds_at_pick_live), falling back to odds_at_pick where no live price was captured — those rows are marked *.">Odds (exec)</div>
               <div className="text-right">Prob</div>
               <div>Book</div>
+              <div className="text-right" title="Coolbet's CURRENT price for this selection (latest snapshot in the last 12h). Compare to Min odds — pending picks only.">
+                Now CB
+              </div>
+              <div className="text-right" title="Unibet's CURRENT price (direct Kambi feed preferred, else the stale API-Football Unibet). Pending picks only.">
+                Now UB
+              </div>
               <div className="text-right" title="Target minimum odds. Check manually at your book of choice — if the current price is ≥ this number, the pick still meets the bot's edge threshold. If lower, the edge has eroded past the threshold — skip.">
                 Min odds ⓘ
               </div>
               <div className="text-right">Result</div>
             </div>
             <ul>
-              {bets.map((b, i) => (
-                <BetRow key={b.id} bet={b} isFirst={i === 0} threshold={botEdgeThreshold(botName)} />
-              ))}
+              {bets.map((b, i) => {
+                const k = oddsKey(b.match_id, b.market, b.selection);
+                return (
+                  <BetRow
+                    key={b.id}
+                    bet={b}
+                    isFirst={i === 0}
+                    threshold={botEdgeThreshold(botName)}
+                    cb={coolbetNow.get(k)}
+                    ub={unibetNow.get(k)}
+                  />
+                );
+              })}
             </ul>
           </div>
         )}
@@ -412,7 +463,19 @@ export default async function ShadowBotDetailPage({
   );
 }
 
-function BetRow({ bet: b, isFirst, threshold }: { bet: ShadowBetRow; isFirst: boolean; threshold: number }) {
+function BetRow({
+  bet: b,
+  isFirst,
+  threshold,
+  cb,
+  ub,
+}: {
+  bet: ShadowBetRow;
+  isFirst: boolean;
+  threshold: number;
+  cb?: { odds: number; ts: string; src?: string };
+  ub?: { odds: number; ts: string; src?: string };
+}) {
   const ko = b.matches?.date ? new Date(b.matches.date) : null;
   const kickoffDate = ko
     ? ko.toLocaleString("en-GB", { day: "2-digit", month: "short", timeZone: "UTC" })
@@ -464,7 +527,7 @@ function BetRow({ bet: b, isFirst, threshold }: { bet: ShadowBetRow; isFirst: bo
 
   return (
     <li
-      className={`px-4 py-3 text-sm sm:grid sm:grid-cols-[95px_1fr_45px_95px_55px_55px_70px_85px_60px] sm:items-center sm:gap-3 sm:py-2 ${
+      className={`px-4 py-3 text-sm sm:grid sm:grid-cols-[95px_1fr_45px_95px_55px_55px_70px_55px_55px_85px_60px] sm:items-center sm:gap-3 sm:py-2 ${
         isFirst ? "" : "border-t border-white/[0.04]"
       }`}
     >
@@ -510,6 +573,36 @@ function BetRow({ bet: b, isFirst, threshold }: { bet: ShadowBetRow; isFirst: bo
       </div>
       <div className="mt-0.5 text-xs text-neutral-300 sm:mt-0">
         {b.recommended_bookmaker ?? "—"}
+      </div>
+      <div
+        className="mt-0.5 text-right font-mono text-sm tabular-nums sm:mt-0"
+        title={
+          cb == null
+            ? "No recent Coolbet price (pending picks only, last 12h)."
+            : `Coolbet ${cb.odds.toFixed(2)} · snapshot ${new Date(cb.ts).toUTCString()}`
+        }
+      >
+        {cb == null ? (
+          <span className="text-neutral-600">—</span>
+        ) : (
+          <span className="text-sky-300">{cb.odds.toFixed(2)}</span>
+        )}
+      </div>
+      <div
+        className="mt-0.5 text-right font-mono text-sm tabular-nums sm:mt-0"
+        title={
+          ub == null
+            ? "No recent Unibet price for this selection."
+            : `Unibet ${ub.odds.toFixed(2)} · ${ub.src === "Unibet-Kambi" ? "direct Kambi feed" : "API-Football feed (STALE)"} · ${new Date(ub.ts).toUTCString()}`
+        }
+      >
+        {ub == null ? (
+          <span className="text-neutral-600">—</span>
+        ) : (
+          <span className={ub.src === "Unibet-Kambi" ? "text-emerald-300" : "text-amber-300/80"}>
+            {ub.odds.toFixed(2)}
+          </span>
+        )}
       </div>
       <div className="mt-0.5 text-right font-mono text-sm tabular-nums sm:mt-0" title="Manually check this at your book of choice (Coolbet, Bet365, whatever). If the current price meets or beats this number, the pick still has real edge. If not, skip.">
         {minBetOdds != null
