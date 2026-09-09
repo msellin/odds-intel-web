@@ -39,6 +39,24 @@ const ALLOWED: Record<string, { title: string; subtitle: string; detail: string 
     detail:
       "COOLBET-MODEL-1X2-SHADOW-BOT. Mirrors the calibrated model's 1x2 picks (simulated_bets market='1x2', edge ≥ 13% on calibrated_prob, calibrated_prob NOT NULL) into shadow_bets WITHOUT vocabulary conversion (market stays '1x2', selection stays home/draw/away) so they place through the PROVEN Coolbet UI placer with the validated 2D gate (edge ≥ 13%, odds ≥ 2.80). EUR 10 nominal. Settled by the generic 1x2 match-result resolver — no custom settler. Why it exists: it REPLACES the paused line-shop 1x2, whose raw signal loses out-of-sample; model-edge 1x2 at edge ≥ 13% AND odds ≥ 2.80 HOLDS out-of-sample at +48% on the test fold. Real-money placement is OFF BY DEFAULT and gated by the coolbet_placer_bots per-bot toggle (seeded false; superadmin flips it after a dry-run, PLACEABLE_BOTS ∩ enabled). Judge it forward on CLV and ROI. Never touches the public pages.",
   },
+  bot_ou35_model_v1: {
+    title: "Coolbet · O/U 3.5 · model-edge (paper)",
+    subtitle: "Calibrated O/U 3.5 vs Coolbet's own price · edge ≥ 8% · PAPER",
+    detail:
+      "OU35-MODEL-SHADOW-BOT (2026-09-08). The one line OU-LINES-EDGE-TEST flagged: O/U 3.5 mirrors the live 2.5 (+7.8% Coolbet-executable calibrated model-edge, NOT yet fold-robust). Fits its own isotonic 3.5 calibration and evaluates edge at Coolbet's OWN 3.5 price (single-book, §55 — never best-of-books). PAPER ONLY — not in PLACEABLE_BOTS, no placer toggle, can never stake money. A PICKS/OWN promotion candidate once fold-robust (owner-gated). Judge it forward on ROI.",
+  },
+  bot_coolbet_trigger_1x2_v1: {
+    title: "Coolbet · 1x2 · trigger engine (paper)",
+    subtitle: "Fires when Coolbet's 1x2 price lands in the model's window · edge ≥ 13% at Coolbet's OWN odds · PAPER",
+    detail:
+      "BOOK-AGNOSTIC-EDGE-ENGINE Stage B (2026-09-09). The book-agnostic selection: the model publishes a per-fixture trigger window (pick_triggers), and this bot emits a pick whenever Coolbet's live 1x2 price lands in [min_odds, max_odds] — edge evaluated at Coolbet's OWN odds, not the /picks reference odds. PAPER ONLY (never in PLACEABLE_BOTS). ⚠️ Held-out OOS backtest: −21.2% (n=1470). The 2.80 odds floor at Coolbet's higher odds can only fire on LONGSHOTS (avg 5.87), where the model is over-confident (says 35%, wins 14%) — adverse selection, since our model's AUC is below the market's. DO NOT PROMOTE. It's a research instrument to search for a gate that validates, not a bet. Contrast bot_v10_all (moderate picks, +11-13%, honestly calibrated).",
+  },
+  bot_coolbet_trigger_ou_v1: {
+    title: "Coolbet · O/U 2.5 · trigger engine (paper)",
+    subtitle: "Fires when Coolbet's O/U 2.5 price lands in the model's window · edge ≥ 8% at Coolbet's OWN odds · PAPER",
+    detail:
+      "BOOK-AGNOSTIC-EDGE-ENGINE Stage B (2026-09-09). Same mechanism as the 1x2 trigger bot but for O/U 2.5 (edge ≥ 8%, odds ≥ 1.80). Emits a pick when Coolbet's live over_under_25 price lands in the model's trigger window, edge evaluated at Coolbet's OWN price. PAPER ONLY (never in PLACEABLE_BOTS). Held-out OOS backtest: +4.3% (n=228), NOT fold-robust (+15/+2/−5). Milder than the 1x2 trigger but not yet trustworthy — accruing forward. Settled by the generic goals-O/U resolver.",
+  },
   bot_no_pin_shadow_v1: {
     title: "Matches without Pinnacle (retired 2026-08-21)",
     subtitle: "1X2 any selection · edge \u2265 8%",
