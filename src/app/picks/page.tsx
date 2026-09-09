@@ -18,9 +18,13 @@
  */
 import Link from "next/link";
 import { Nav } from "@/components/nav";
-import { createSupabaseServer } from "@/lib/supabase-server";
+import {
+  createSupabaseServer,
+  createServerServiceClient,
+} from "@/lib/supabase-server";
 import {
   fetchUpcomingPicks,
+  placementTriggerOdds,
   PUBLIC_MATURITY_LABELS,
   SIGNED_IN_MATURITY_LABELS,
   type UpcomingPick,
@@ -116,6 +120,25 @@ export default async function PicksPage() {
     data: { user },
   } = await auth.auth.getUser();
   const isSignedIn = !!user;
+
+  // Admin-only: show the PLACEMENT-trigger odds (the price a pick must reach to
+  // clear the Coolbet edge floor, 13% 1x2 / 8% O/U) instead of the public
+  // break-even, so the operator can eyeball whether the real-money bot should
+  // fire on a given game. docs/BETTING_GATE_DECISIONS.md.
+  let isSuperadmin = false;
+  if (user) {
+    try {
+      const db = createServerServiceClient();
+      const { data: profile } = await db
+        .from("profiles")
+        .select("is_superadmin")
+        .eq("id", user.id)
+        .single();
+      isSuperadmin = !!profile?.is_superadmin;
+    } catch {
+      isSuperadmin = false;
+    }
+  }
 
   const maturityLabels = isSignedIn
     ? SIGNED_IN_MATURITY_LABELS
@@ -260,15 +283,36 @@ export default async function PicksPage() {
                               {/* Break-even price. Kept deliberately quiet — it
                                   only matters at the moment of placing, and a
                                   loud second number next to the odds would
-                                  compete with the odds themselves. */}
-                              {p.min_odds != null && (
-                                <p
-                                  className="font-mono text-[10px] tabular-nums text-neutral-600"
-                                  title={`Break-even price. This pick is only +EV at ${p.min_odds.toFixed(2)} or better — below that the edge is gone and the bet is negative expected value. Odds move after a pick is posted, so check the price you are actually offered against this before placing.`}
-                                >
-                                  min {p.min_odds.toFixed(2)}
-                                </p>
-                              )}
+                                  compete with the odds themselves. ADMIN sees the
+                                  PLACEMENT-trigger price instead (what the Coolbet
+                                  bot needs to fire), for spot-checking. */}
+                              {isSuperadmin
+                                ? (() => {
+                                    const trig = placementTriggerOdds(
+                                      p.min_odds,
+                                      p.market,
+                                    );
+                                    return trig != null ? (
+                                      <p
+                                        className="font-mono text-[10px] tabular-nums text-amber-500/80"
+                                        title={`Admin: PLACEMENT-trigger price. The Coolbet bot places this pick only if it is offered at ${trig.toFixed(2)} or better — the odds that clear the ${p.market === "1x2" ? "13%" : "8%"} edge floor (and the ${p.market === "1x2" ? "2.80" : "1.80"} odds floor). docs/BETTING_GATE_DECISIONS.md.`}
+                                      >
+                                        place ≥ {trig.toFixed(2)}
+                                      </p>
+                                    ) : (
+                                      <p className="font-mono text-[10px] tabular-nums text-neutral-700">
+                                        no place (edge unreachable)
+                                      </p>
+                                    );
+                                  })()
+                                : p.min_odds != null && (
+                                    <p
+                                      className="font-mono text-[10px] tabular-nums text-neutral-600"
+                                      title={`Break-even price. This pick is only +EV at ${p.min_odds.toFixed(2)} or better — below that the edge is gone and the bet is negative expected value. Odds move after a pick is posted, so check the price you are actually offered against this before placing.`}
+                                    >
+                                      min {p.min_odds.toFixed(2)}
+                                    </p>
+                                  )}
                             </div>
                             <div>
                               <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">

@@ -90,6 +90,34 @@ export function breakEvenOdds(
   return Number((1 / impliedProb).toFixed(2));
 }
 
+/**
+ * Admin-only: the odds a pick must be offered at to clear the Coolbet PLACEMENT
+ * edge floor (13% for 1x2, 8% for O/U) — i.e. what the real-money bot needs to
+ * see before it places. Derived from the public break-even min_odds (= 1/cal_prob):
+ *   place_min = max( 1/(cal_prob − edge_floor), odds_floor )
+ * Floors mirror coolbet_placer._MIN_EDGE_BY_MARKET / _MIN_ODDS_BY_MARKET
+ * (docs/BETTING_GATE_DECISIONS.md). Returns null if the pick can't reach the edge
+ * at any odds (cal_prob ≤ floor) or the market isn't placed.
+ */
+export function placementTriggerOdds(
+  breakEvenMinOdds: number | null,
+  market: string,
+): number | null {
+  if (breakEvenMinOdds == null || breakEvenMinOdds <= 1) return null;
+  const cal = 1 / breakEvenMinOdds;
+  const m =
+    market === "o/u" || market === "over_under_25"
+      ? "ou"
+      : market === "1x2"
+        ? "1x2"
+        : null;
+  if (!m) return null;
+  const edgeFloor = m === "1x2" ? 0.13 : 0.08;
+  const oddsFloor = m === "1x2" ? 2.8 : 1.8;
+  if (cal <= edgeFloor) return null;
+  return Math.max(1 / (cal - edgeFloor), oddsFloor);
+}
+
 const PRE_MATCH_MARKETS = ["1x2", "over_under_25", "o/u", "btts"];
 
 export const PUBLIC_MATURITY_LABELS = ["calibrated"];
