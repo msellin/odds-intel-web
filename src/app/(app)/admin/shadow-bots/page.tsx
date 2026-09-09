@@ -1453,24 +1453,16 @@ export default async function ShadowBotsPage() {
             {groups.map((g) => {
               const isMoney = g.title.startsWith("Real-money");
               return (
-                <section
-                  key={g.title}
-                  className={`mb-5 rounded-2xl border p-4 sm:p-5 ${
-                    isMoney
-                      ? "border-amber-500/30 bg-amber-500/[0.03]"
-                      : "border-white/10 bg-white/[0.015]"
-                  }`}
-                >
-                  <h2
-                    className={`mb-1 text-xs font-mono uppercase tracking-widest ${
-                      isMoney ? "text-amber-300/90" : "text-neutral-300"
-                    }`}
-                  >
-                    {g.title}
-                  </h2>
-                  <p className="mb-3 max-w-3xl text-xs leading-relaxed text-neutral-500">
-                    {g.blurb}
-                  </p>
+                <section key={g.title} className="mb-6">
+                  <div className="mb-2 flex items-baseline gap-2">
+                    <h2
+                      className={`text-xs font-mono uppercase tracking-widest ${
+                        isMoney ? "text-amber-300/90" : "text-neutral-300"
+                      }`}
+                    >
+                      {g.title}
+                    </h2>
+                  </div>
                   <div className="grid gap-3 md:grid-cols-2">
                     {g.items.map((s) => (
                       <BotCard key={s.name} s={s} placer={placerByBot.get(s.name)} />
@@ -1481,8 +1473,8 @@ export default async function ShadowBotsPage() {
             })}
 
             {other.length > 0 && (
-              <section className="mb-5 rounded-2xl border border-white/10 bg-white/[0.015] p-4 sm:p-5">
-                <h2 className="mb-3 text-xs font-mono uppercase tracking-widest text-neutral-300">
+              <section className="mb-6">
+                <h2 className="mb-2 text-xs font-mono uppercase tracking-widest text-neutral-300">
                   Other paper bots · line-shop &amp; research
                 </h2>
                 <div className="grid gap-3 md:grid-cols-2">
@@ -1612,10 +1604,10 @@ function BotCard({ s, placer }: { s: Summary; placer?: PlacerCardInfo }) {
   return (
     <Link
       href={`/admin/shadow-bots/${s.name}`}
-      className={`group flex flex-col gap-3 rounded-xl border p-4 transition ${
+      className={`group flex flex-col gap-3 rounded-xl border p-4 shadow-sm transition ${
         isRetired
-          ? "border-rose-500/20 bg-rose-500/[0.03] hover:bg-rose-500/[0.06]"
-          : "border-white/[0.06] bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.04]"
+          ? "border-rose-500/25 bg-rose-500/[0.04] hover:bg-rose-500/[0.07]"
+          : "border-white/[0.12] bg-white/[0.035] hover:border-white/30 hover:bg-white/[0.055]"
       }`}
     >
       <div className="flex items-start justify-between gap-3">
@@ -1624,27 +1616,27 @@ function BotCard({ s, placer }: { s: Summary; placer?: PlacerCardInfo }) {
           {badges && (
             <div className="flex flex-wrap items-center gap-1.5">
               {badges.book && (
-                <span className="rounded bg-white/[0.06] px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-neutral-300">
+                <span className="rounded bg-white/[0.06] px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-neutral-300">
                   {badges.book}
                 </span>
               )}
               {badges.market && (
-                <span className="rounded bg-teal-500/15 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-teal-200">
+                <span className="rounded bg-teal-500/15 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-teal-200">
                   {badges.market}
                 </span>
               )}
               {badges.money === "real" ? (
-                <span className="rounded bg-amber-500/20 px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-amber-300">
+                <span className="rounded bg-amber-500/20 px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-wider text-amber-300">
                   real money
                 </span>
               ) : (
-                <span className="rounded bg-white/[0.06] px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-neutral-400">
+                <span className="rounded bg-white/[0.06] px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-neutral-400">
                   paper
                 </span>
               )}
               {badges.anchor && (
                 <span
-                  className={`rounded px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${
+                  className={`rounded px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${
                     badges.anchor === "sharp"
                       ? "bg-sky-500/15 text-sky-300"
                       : "bg-violet-500/15 text-violet-300"
@@ -1662,7 +1654,7 @@ function BotCard({ s, placer }: { s: Summary; placer?: PlacerCardInfo }) {
           )}
           {/* Name demoted — the badges carry the identity now. */}
           <div className={`flex flex-wrap items-center gap-2 ${badges ? "mt-2" : ""}`}>
-            <h3 className="text-sm font-medium leading-snug text-neutral-200">{s.title}</h3>
+            <h3 className="text-base font-semibold leading-snug text-neutral-100">{s.title}</h3>
             {isRetired ? (
               <span className="rounded-full bg-rose-500/20 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-rose-300">
                 Retired
@@ -1725,7 +1717,7 @@ function BotCard({ s, placer }: { s: Summary; placer?: PlacerCardInfo }) {
           (placer != null). The toggle guards its own click so it doesn't navigate. */}
       {placer && (
         <div className="flex items-center justify-between gap-2 border-t border-white/[0.06] pt-2.5">
-          <span className="text-[10px] tabular-nums text-neutral-500">
+          <span className="text-[11px] tabular-nums text-neutral-500">
             found <span className="text-neutral-300">{placer.foundToday ?? 0}</span>
             {" · "}placed{" "}
             <span
