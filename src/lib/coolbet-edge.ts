@@ -18,16 +18,18 @@ export const COOLBET_AUTO_MIN_EDGE = 0.05;
 export const COOLBET_AUTO_MIN_REMAINING_EDGE = 0.03;
 
 export const COOLBET_AUTO_MIN_EDGE_BY_MARKET: Record<string, number | null> = {
-  // FAVLONG-CUTS-2026-09-09: 0.10 (was 0.13). The pooled "13% is the only robust
-  // 1x2 floor" was an artifact of pooling home-FAVOURITES (a fold-robust LOSER at
-  // every floor) with home-UNDERDOGS. Split by selection type, home-underdogs are the
-  // one fold-robust engine and win at 10% on odds≥2.80 (~50% more volume than 13%);
-  // favs/aways/draws are excluded. So the real-money 1x2 bot places home-underdogs @10%
-  // — this mirrors its per-bot BOT_THRESHOLDS, not the pooled _MIN_EDGE_BY_MARKET
-  // (which stays 13% for the paper daemon + trigger windows). This constant was the
-  // one FAVLONG-CUTS line that never shipped (doc said 0.13→0.10; code stayed 0.13).
-  // See docs/BETTING_GATE_DECISIONS.md "1x2 by SELECTION TYPE".
-  "1x2":            0.1,
+  // PER-MARKET-EDGE-MIRROR-FIX-2026-09-10: 0.13 (reverting an erroneous 0.10).
+  // THIS map is the POOLED, selection-agnostic mirror of the engine's
+  // _MIN_EDGE_BY_MARKET['1x2'] = 0.13 (via autoMinEdgeFor(market) — keyed by
+  // market only). FAVLONG-CUTS lowered the REAL-MONEY 1x2 floor to 10% for
+  // home-underdogs, but that floor is selection-aware and lives in the per-bot
+  // map BOT_EDGE_THRESHOLDS['bot_coolbet_1x2_model_v1'] = 0.10 below — NOT here.
+  // Commit 2d86b9c moved the wrong constant (dropped this pooled mirror to 0.10),
+  // which made the auto-place badge greenlight 1x2 bets of any selection at 10%,
+  // over-reporting vs what the engine's pooled 13% gate actually signals. The
+  // owner-approved decision (docs/BETTING_GATE_DECISIONS.md "1x2 by SELECTION
+  // TYPE") is explicit: "the pooled _MIN_EDGE_BY_MARKET['1x2'] stays 13%".
+  "1x2":            0.13,
   // EDGE-FLOORS-OTHER-MARKETS-2026-09-08: 0.03 -> 0.08 (robust in every
   // walk-forward fold/basis; edge_floor_backtest.py). Mirrors coolbet_placer.py.
   "o/u":            0.08,
