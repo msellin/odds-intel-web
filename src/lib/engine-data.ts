@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { unstable_cache } from "next/cache";
 import { createSupabasePublic } from "./supabase-public";
 import { autoMinEdgeFor } from "./coolbet-edge";
+import { normalizeMarket } from "./market-vocab";
 import {
   computeRealMoneyTier,
   type RealMoneyTier,
@@ -1754,33 +1755,17 @@ export {
   MARKET_THRESHOLDS_V2_EPOCH,
 } from "./coolbet-edge";
 
-/** Map paper-bet (market, selection) to odds_snapshots (market, selection). */
+/** Map paper-bet (market, selection) to odds_snapshots (market, selection).
+ * Routes through the ONE canonical vocabulary (market-vocab), so it accepts BOTH
+ * the legacy paper spelling ('o/u'+'over 2.5', '1X2') and the canonical form
+ * ('over_under_25'+'over', '1x2') during/after the MARKET-VOCAB-CANONICAL migration.
+ * Family set preserved (1x2/btts/o/u/double_chance/draw_no_bet map to odds_snapshots;
+ * combo/AH/corners return null exactly as before). */
 function _mapPaperToSnapshotKey(market: string, selection: string): { market: string; selection: string } | null {
-  const m = (market || "").toLowerCase();
-  const s = (selection || "").toLowerCase().trim();
-  if (m === "1x2") {
-    if (["home", "draw", "away"].includes(s)) return { market: "1x2", selection: s };
-  }
-  if (m === "btts") {
-    if (s === "yes" || s === "no") return { market: "btts", selection: s };
-  }
-  if (m === "o/u") {
-    for (const line of ["0.5", "1.5", "2.5", "3.5", "4.5"]) {
-      if (s.startsWith(`over ${line}`)) {
-        return { market: `over_under_${line.replace(".", "")}`, selection: "over" };
-      }
-      if (s.startsWith(`under ${line}`)) {
-        return { market: `over_under_${line.replace(".", "")}`, selection: "under" };
-      }
-    }
-  }
-  if (m === "double_chance") {
-    // selections stored as "1x", "x2", "12" in odds_snapshots (lowercase)
-    const dc = s.replace(/\s+/g, "");  // "1X" → "1x", "X2" → "x2", "12" → "12"
-    if (["1x", "x2", "12"].includes(dc)) return { market: "double_chance", selection: dc };
-  }
-  if (m === "draw_no_bet") {
-    if (s === "home" || s === "away") return { market: "draw_no_bet", selection: s };
+  const c = normalizeMarket(market, selection);
+  if (!c || !c.market) return null;
+  if (["1x2", "btts", "o/u", "double_chance", "draw_no_bet"].includes(c.family)) {
+    return { market: c.market, selection: c.selection };
   }
   return null;
 }
@@ -1907,7 +1892,10 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
     .from("real_bets")
     .select("simulated_bet_id, match_id, bookmaker")
     .in("match_id", matchIds)
-    .gte("placed_at", todayUtc.toISOString());
+    .gte("placed_at", todayUtc.toISOString())
+    // Stage 2 (COOLBET-PICK-TABLE-AUDIT): a paper row (placed_real=false) must not
+    // mark a pick as already-placed. Keep real (true) + legacy (null); drop paper.
+    .not("placed_real", "is", false);
   type PlacedRow = { simulated_bet_id: string | null; match_id: string | null; bookmaker: string | null };
   const placedSimBetIds = new Set(
     ((placedToday ?? []) as PlacedRow[])
@@ -2306,6 +2294,10 @@ export async function getRealBets(): Promise<RealBet[]> {
          away_team:away_team_id(name),
          league:league_id(name, country))`
     )
+    // Stage 2 (COOLBET-PICK-TABLE-AUDIT): the /admin/real-bets dashboard shows REAL
+    // money only. Exclude paper rows (placed_real=false, the paper daemon); keep real
+    // (true) + legacy (null, unverified).
+    .not("placed_real", "is", false)
     .order("placed_at", { ascending: false })
     .range(0, 999);
   if (!data) return [];

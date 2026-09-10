@@ -39,7 +39,8 @@ export const metadata = {
 };
 
 function formatMarket(market: string, selection: string): string {
-  const norm = market === "o/u" || market === "over_under_25" ? "ou25" : market;
+  const mm = (market || "").toLowerCase();
+  const norm = mm === "o/u" || mm === "over_under_25" ? "ou25" : mm;
   if (norm === "1x2") {
     if (selection === "home") return "Home win";
     if (selection === "away") return "Away win";

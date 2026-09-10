@@ -3,6 +3,7 @@
 import { Fragment, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { autoMinEdgeFor } from "@/lib/coolbet-edge";
+import { normalizeMarket } from "@/lib/market-vocab";
 import type { PlaceableBet } from "@/lib/engine-data";
 import { RealMoneyTierBadge } from "@/components/real-money-tier-badge";
 
@@ -97,21 +98,21 @@ function fmtAHSelection(selection: string): string {
 }
 
 function fmtSelShort(market: string, selection: string): string {
-  const s = selection.toLowerCase().trim();
-  const mkt = market.toUpperCase().trim();
-  if (mkt === "1X2" || mkt === "MATCH_WINNER") {
-    if (s === "home") return "1X2 H";
-    if (s === "away") return "1X2 A";
-    if (s === "draw") return "1X2 D";
+  // Route through the ONE canonical vocabulary so both legacy ('1X2','O/U'+'over 2.5')
+  // and canonical ('1x2','over_under_25'+'over') spellings render the same short label,
+  // taking the O/U line from the market when the selection no longer carries it.
+  const c = normalizeMarket(market, selection);
+  if (c) {
+    if (c.family === "1x2")
+      return c.selection === "home" ? "1X2 H" : c.selection === "away" ? "1X2 A" : "1X2 D";
+    if (c.family === "btts") return c.selection === "yes" ? "BTTS Y" : "BTTS N";
+    if (c.family === "asian_handicap") {
+      const side = c.selection === "home" ? "H" : "A";
+      return c.line != null ? `AH ${side} ${c.line > 0 ? "+" : ""}${c.line}` : `AH ${side}`;
+    }
+    if (c.family === "o/u" || c.family.endsWith("_ou"))
+      return `${c.selection === "over" ? "O" : "U"}${c.line ?? ""}`;
   }
-  if (mkt === "BTTS") return s === "yes" ? "BTTS Y" : "BTTS N";
-  const ah = selection.match(/^(home|away)\s+([+-]?\d+(?:\.\d+)?)$/i);
-  if (ah) {
-    const side = ah[1].toLowerCase() === "home" ? "H" : "A";
-    return `AH ${side} ${ah[2]}`;
-  }
-  const ou = selection.match(/^(over|under)\s+([\d.]+)$/i);
-  if (ou) return `${ou[1].toLowerCase() === "over" ? "O" : "U"}${ou[2]}`;
   return `${market} ${selection}`;
 }
 

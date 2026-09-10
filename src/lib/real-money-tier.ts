@@ -15,6 +15,7 @@
  * /admin/place. The tier is purely informational so the operator can decide
  * which bets to back with real money.
  */
+import { normalizeMarket } from "./market-vocab";
 
 export type ModelTierKind =
   | "mature"        // ECE ≤ 5%, n ≥ 500, fit ≥ 14d old
@@ -78,13 +79,12 @@ export function calibrationKey(market: string, selection: string): string | null
   if (m === "double_chance") return `double_chance_${s.replace(/\s+/g, "")}`;  // double_chance_1x / x2 / 12
   if (m === "draw_no_bet") return `dnb_${s}`;
   if (m === "asian_handicap") return `asian_handicap_${s}`; // 'asian_handicap_away -0.5'
-  if (m === "o/u") {
-    // selection looks like "over 2.5" / "under 2.5"
-    const parts = s.split(/\s+/);
-    if (parts.length < 2) return null;
-    const side = parts[0];
-    const line = parts[1].replace(".", "_");                // "2.5" → "2_5"
-    return `over_under_${line}_${side}`;                    // matches future fit_platt output
+  // Over/Under: accept BOTH legacy 'o/u'+'over 2.5' AND canonical 'over_under_25'+'over'
+  // (MARKET-VOCAB-CANONICAL). Output format unchanged: over_under_<line>_<side>.
+  if (m === "o/u" || /^over_under_\d/.test(m)) {
+    const c = normalizeMarket(market, selection);
+    if (!c || c.family !== "o/u" || c.line == null) return null;
+    return `over_under_${String(c.line).replace(".", "_")}_${c.selection}`;
   }
   return null;
 }
