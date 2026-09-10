@@ -91,9 +91,9 @@ const PLACER_BOT_META: Record<string, PlacerBotMeta> = {
     signal: "calibrated model vs price · home/draw/away",
     oddsFloor: 2.8,
     pickRuleDetail:
-      "Generation: fires when the calibrated model's probability beats the price by ≥ 13% (calibrated edge), 1x2 home/draw/away. This is only what gets FOUND — placement gates below decide what stakes money. Replaces the paused line-shop 1x2.",
+      "Generation: mirrors the calibrated model's 1x2 HOME-UNDERDOG picks (edge ≥ 10% on calibrated_prob, odds ≥ 2.80) — FAVLONG-CUTS-2026-09-09: home-favs/aways/draws are excluded (home-favs are a fold-robust loser; the fold-robust edge is home-underdogs, which win at 10%). This is only what gets FOUND — placement gates below decide what stakes money. Replaces the paused line-shop 1x2.",
     placementDetail:
-      "Placer at live price requires: odds ≥ 2.80, calibrated edge ≥ 13% (the 2D gate that holds out-of-sample at +48% test), break-even min-odds, CLV odds-band, 3-min kickoff cutoff, per-match exposure caps, dedup.",
+      "Placer at live price requires: selection = home, odds ≥ 2.80, calibrated edge ≥ 10% (FAVLONG-CUTS: home-underdogs are the one fold-robust 1x2 engine — cohort +21% at 10%), break-even min-odds, CLV odds-band, 3-min kickoff cutoff, per-match exposure caps, dedup.",
   },
 };
 
@@ -255,7 +255,7 @@ const SHADOW_BOTS: Array<{
     name: "bot_coolbet_1x2_model_v1",
     title: "Coolbet · 1x2 · model-edge",
     subtitle:
-      "Calibrated model 1x2 picks · edge ≥ 13% · odds ≥ 2.80 · places via Coolbet UI (real money OFF by default, per-bot toggle)",
+      "Calibrated model 1x2 HOME-UNDERDOG picks · edge ≥ 10% · odds ≥ 2.80 · places via Coolbet UI (real money OFF by default, per-bot toggle)",
     backtestN: 0,
     backtestRoi: 0,
   },
