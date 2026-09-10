@@ -563,10 +563,20 @@ function BetRow({
         <span className="ml-1 text-neutral-500">{kickoffTime}</span>
       </div>
       <div className="mt-0.5 min-w-0 sm:mt-0">
-        <div className="truncate text-sm text-neutral-100">
-          {b.matches?.home_team?.name ?? "Home"}{" "}
-          <span className="text-neutral-500">vs</span>{" "}
-          {b.matches?.away_team?.name ?? "Away"}
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate text-sm text-neutral-100">
+            {b.matches?.home_team?.name ?? "Home"}{" "}
+            <span className="text-neutral-500">vs</span>{" "}
+            {b.matches?.away_team?.name ?? "Away"}
+          </span>
+          {placedReal && (
+            <span
+              title={`Real money staked via the Coolbet UI placer${placedOdds ? ` @ ${placedOdds.toFixed(2)}` : ""}`}
+              className="shrink-0 rounded-full bg-emerald-500/15 px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase leading-none tracking-wider text-emerald-300 ring-1 ring-emerald-500/30"
+            >
+              € real{placedOdds ? ` ${placedOdds.toFixed(2)}` : ""}
+            </span>
+          )}
         </div>
         <div className="truncate text-[11px] text-neutral-500">
           {b.matches?.leagues?.country ? `${b.matches.leagues.country} · ` : ""}
@@ -636,15 +646,7 @@ function BetRow({
           ? <span className="text-amber-300">≥{minBetOdds.toFixed(2)}</span>
           : <span className="text-neutral-600">—</span>}
       </div>
-      <div className="mt-1 flex items-center justify-end gap-1 sm:mt-0">
-        {placedReal && (
-          <span
-            title={`Real money staked via the Coolbet UI placer${placedOdds ? ` @ ${placedOdds.toFixed(2)}` : ""}`}
-            className="inline-block rounded-full bg-emerald-500/15 px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-wider text-emerald-300 ring-1 ring-emerald-500/30"
-          >
-            € real{placedOdds ? ` ${placedOdds.toFixed(2)}` : ""}
-          </span>
-        )}
+      <div className="mt-1 flex items-center justify-end sm:mt-0">
         <ResultBadge result={b.result} />
       </div>
     </li>
