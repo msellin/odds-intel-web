@@ -123,7 +123,8 @@ export default async function PicksPage() {
   const isSignedIn = !!user;
 
   // Admin-only: show the PLACEMENT-trigger odds (the price a pick must reach to
-  // clear the Coolbet edge floor, 13% 1x2 / 8% O/U) instead of the public
+  // clear the Coolbet edge floor: 1x2 = 10% home-underdogs only (FAVLONG-CUTS;
+  // draw/away/home-fav not placed → no trigger shown), O/U = 8%) instead of the public
   // break-even, so the operator can eyeball whether the real-money bot should
   // fire on a given game. docs/BETTING_GATE_DECISIONS.md.
   let isSuperadmin = false;
@@ -292,10 +293,11 @@ export default async function PicksPage() {
                                     const trig = placementTriggerOdds(
                                       p.min_odds,
                                       p.market,
+                                      p.selection,
                                     );
                                     // Two anchor points so the edge is validatable:
                                     // break-even (0% edge, = 1/cal_prob) and the
-                                    // placement price (13%/8% floor). The shown ODDS
+                                    // placement price (10% home-dog / 8% floor). The shown ODDS
                                     // sit between them — more odds = more edge,
                                     // monotonically. Seeing both makes it obvious the
                                     // pick is a real +EV edge, just below the robust bar.
@@ -303,7 +305,7 @@ export default async function PicksPage() {
                                     return (
                                       <p
                                         className="font-mono text-[10px] tabular-nums text-amber-500/80"
-                                        title={`Admin validation. be = break-even (0% edge = 1/cal_prob): below this the bet is −EV. place ≥ = the price that clears the ${p.market === "1x2" ? "13%" : "8%"} real-money floor (what Telegram + the Coolbet placer require). The shown odds sit between them: more odds = more edge. docs/BETTING_GATE_DECISIONS.md.`}
+                                        title={`Admin validation. be = break-even (0% edge = 1/cal_prob): below this the bet is −EV. place ≥ = the price that clears the ${p.market === "1x2" ? "10% (home-underdogs only)" : "8%"} real-money floor (what Telegram + the Coolbet placer require). The shown odds sit between them: more odds = more edge. docs/BETTING_GATE_DECISIONS.md.`}
                                       >
                                         {be != null ? `be ${be.toFixed(2)}` : ""}
                                         {be != null && trig != null ? " · " : ""}

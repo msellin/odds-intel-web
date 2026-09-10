@@ -18,10 +18,16 @@ export const COOLBET_AUTO_MIN_EDGE = 0.05;
 export const COOLBET_AUTO_MIN_REMAINING_EDGE = 0.03;
 
 export const COOLBET_AUTO_MIN_EDGE_BY_MARKET: Record<string, number | null> = {
-  // BOT-CONFIG-GOLDEN-MIDDLE-2026-09-08: 0.13 — the only 1x2 floor robust in
-  // every walk-forward fold across every basis (edge_floor_backtest.py). 0.15
-  // was overfit, 0.10 not robust. Mirrors coolbet_placer.py — keep in lockstep.
-  "1x2":            0.13,
+  // FAVLONG-CUTS-2026-09-09: 0.10 (was 0.13). The pooled "13% is the only robust
+  // 1x2 floor" was an artifact of pooling home-FAVOURITES (a fold-robust LOSER at
+  // every floor) with home-UNDERDOGS. Split by selection type, home-underdogs are the
+  // one fold-robust engine and win at 10% on odds≥2.80 (~50% more volume than 13%);
+  // favs/aways/draws are excluded. So the real-money 1x2 bot places home-underdogs @10%
+  // — this mirrors its per-bot BOT_THRESHOLDS, not the pooled _MIN_EDGE_BY_MARKET
+  // (which stays 13% for the paper daemon + trigger windows). This constant was the
+  // one FAVLONG-CUTS line that never shipped (doc said 0.13→0.10; code stayed 0.13).
+  // See docs/BETTING_GATE_DECISIONS.md "1x2 by SELECTION TYPE".
+  "1x2":            0.1,
   // EDGE-FLOORS-OTHER-MARKETS-2026-09-08: 0.03 -> 0.08 (robust in every
   // walk-forward fold/basis; edge_floor_backtest.py). Mirrors coolbet_placer.py.
   "o/u":            0.08,
@@ -86,10 +92,11 @@ export const BOT_EDGE_THRESHOLDS: Record<string, number> = {
   // calibrated edge (mirrors _MIN_EDGE_BY_MARKET['o/u'] and the placer's
   // BOT_THRESHOLDS). Keep in lockstep with scripts/place_coolbet_ui.py.
   bot_coolbet_ou_model_v1: 0.08,
-  // COOLBET-MODEL-1X2-SHADOW-BOT-2026-09-08: model-edge 1x2 fires at a 13%
-  // calibrated edge (mirrors _MIN_EDGE_BY_MARKET['1x2'] and the placer's
+  // FAVLONG-CUTS-2026-09-09: the real-money model-edge 1x2 bot now bets HOME-UNDERDOGS
+  // only at a 10% calibrated edge (odds>=2.80). See BETTING_GATE_DECISIONS "1x2 by type".
+  // (was 13%; mirrors the placer's per-bot threshold BOT_THRESHOLDS['bot_coolbet_1x2_model_v1'])
   // BOT_THRESHOLDS). Keep in lockstep with scripts/place_coolbet_ui.py.
-  bot_coolbet_1x2_model_v1: 0.13,
+  bot_coolbet_1x2_model_v1: 0.10,
   bot_sweep_ou25_v1: 0.03,
   bot_sweep_ou35_v1: 0.03,
   bot_pin_1x2_home_v1: 0.03,

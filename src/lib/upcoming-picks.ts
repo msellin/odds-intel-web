@@ -92,16 +92,19 @@ export function breakEvenOdds(
 
 /**
  * Admin-only: the odds a pick must be offered at to clear the Coolbet PLACEMENT
- * edge floor (13% for 1x2, 8% for O/U) — i.e. what the real-money bot needs to
- * see before it places. Derived from the public break-even min_odds (= 1/cal_prob):
+ * edge floor — i.e. what the real-money bot ACTUALLY needs to see before it places.
+ * Derived from the public break-even min_odds (= 1/cal_prob):
  *   place_min = max( 1/(cal_prob − edge_floor), odds_floor )
- * Floors mirror coolbet_placer._MIN_EDGE_BY_MARKET / _MIN_ODDS_BY_MARKET
- * (docs/BETTING_GATE_DECISIONS.md). Returns null if the pick can't reach the edge
- * at any odds (cal_prob ≤ floor) or the market isn't placed.
+ * FAVLONG-CUTS-2026-09-09: the real-money 1x2 bot (bot_coolbet_1x2_model_v1) places
+ * HOME-UNDERDOGS ONLY, at a 10% edge / odds≥2.80 — home-favs, aways and draws are
+ * NOT placed. So for 1x2 the trigger is 10% for a HOME selection and null (not
+ * placed) for draw/away. O/U is 8% / odds≥1.80. Returns null if the pick can't
+ * reach the edge at any odds, or the (market, selection) isn't placed at all.
  */
 export function placementTriggerOdds(
   breakEvenMinOdds: number | null,
   market: string,
+  selection?: string | null,
 ): number | null {
   if (breakEvenMinOdds == null || breakEvenMinOdds <= 1) return null;
   const cal = 1 / breakEvenMinOdds;
@@ -112,8 +115,17 @@ export function placementTriggerOdds(
         ? "1x2"
         : null;
   if (!m) return null;
-  const edgeFloor = m === "1x2" ? 0.13 : 0.08;
-  const oddsFloor = m === "1x2" ? 2.8 : 1.8;
+  let edgeFloor: number;
+  let oddsFloor: number;
+  if (m === "1x2") {
+    // real money = home-underdogs only @10%; draw/away/home-fav not placed
+    if ((selection ?? "").toLowerCase() !== "home") return null;
+    edgeFloor = 0.1;
+    oddsFloor = 2.8;
+  } else {
+    edgeFloor = 0.08;
+    oddsFloor = 1.8;
+  }
   if (cal <= edgeFloor) return null;
   return Math.max(1 / (cal - edgeFloor), oddsFloor);
 }
