@@ -331,6 +331,27 @@ export default async function ShadowBotDetailPage({
     }
   }
 
+  // REAL-MONEY-PLACED badge: which of this bot's picks were actually STAKED via the UI
+  // placer. real_bets.placed_real IS NOT FALSE (TRUE = money moved; NULL = legacy reconciled
+  // real bet) — excludes the paper daemon's execute=False rows (placed_real=FALSE). Keyed
+  // by (match, market, selection) so the badge shows on the exact pick that was placed.
+  const placedKeys = new Set<string>();
+  const placedOdds = new Map<string, number>();
+  {
+    const { data: rb } = await db
+      .from("real_bets")
+      .select("match_id, market, selection, actual_odds, placed_real")
+      .eq("bot_id", botRow.id)
+      .not("placed_real", "is", false);
+    for (const r of (rb ?? []) as Array<{
+      match_id: string; market: string; selection: string; actual_odds: number | string | null;
+    }>) {
+      const key = oddsKey(r.match_id, r.market, r.selection);
+      placedKeys.add(key);
+      if (r.actual_odds != null) placedOdds.set(key, Number(r.actual_odds));
+    }
+  }
+
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
       <BackLink />
@@ -452,6 +473,8 @@ export default async function ShadowBotDetailPage({
                     threshold={botEdgeThreshold(botName)}
                     cb={coolbetNow.get(k)}
                     ub={unibetNow.get(k)}
+                    placedReal={placedKeys.has(k)}
+                    placedOdds={placedOdds.get(k)}
                   />
                 );
               })}
@@ -469,12 +492,16 @@ function BetRow({
   threshold,
   cb,
   ub,
+  placedReal,
+  placedOdds,
 }: {
   bet: ShadowBetRow;
   isFirst: boolean;
   threshold: number;
   cb?: { odds: number; ts: string; src?: string };
   ub?: { odds: number; ts: string; src?: string };
+  placedReal?: boolean;
+  placedOdds?: number;
 }) {
   const ko = b.matches?.date ? new Date(b.matches.date) : null;
   const kickoffDate = ko
@@ -609,7 +636,15 @@ function BetRow({
           ? <span className="text-amber-300">≥{minBetOdds.toFixed(2)}</span>
           : <span className="text-neutral-600">—</span>}
       </div>
-      <div className="mt-1 text-right sm:mt-0">
+      <div className="mt-1 flex items-center justify-end gap-1 sm:mt-0">
+        {placedReal && (
+          <span
+            title={`Real money staked via the Coolbet UI placer${placedOdds ? ` @ ${placedOdds.toFixed(2)}` : ""}`}
+            className="inline-block rounded-full bg-emerald-500/15 px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-wider text-emerald-300 ring-1 ring-emerald-500/30"
+          >
+            € real{placedOdds ? ` ${placedOdds.toFixed(2)}` : ""}
+          </span>
+        )}
         <ResultBadge result={b.result} />
       </div>
     </li>
