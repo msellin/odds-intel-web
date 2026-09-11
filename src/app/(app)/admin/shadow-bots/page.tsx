@@ -182,6 +182,13 @@ const BOT_BADGES: Record<string, BotBadge> = {
   bot_unibet_trigger_sharp_ou_v1: { book: "Unibet", market: "O/U 2.5", money: "paper", anchor: "sharp" },
   bot_ou35_model_v1: { book: "Coolbet", market: "O/U 3.5", money: "paper", anchor: "model" },
   bot_corners_paper_shadow_v1: { book: "Betano/Unibet", market: "corners", money: "paper", anchor: "sharp" },
+  // PAPER-BOTS-INVISIBLE-2026-09-11: these two have been writing picks since
+  // 2026-09-10 and appeared on NO screen — same hardcoded-allowlist miss that
+  // hid the four Unibet trigger bots above. Found when the owner asked where to
+  // look at them. USE-COLLECTED-MARKETS bots: markets we already ingest but
+  // never modelled, priced at books we can reach.
+  bot_team_total_paper_shadow_v1: { book: "Epicbet/Betano/Unibet", market: "team totals", money: "paper", anchor: "sharp" },
+  bot_1h_1x2_paper_shadow_v1: { book: "Epicbet/Betano/Unibet", market: "1H 1x2", money: "paper", anchor: "sharp" },
   bot_coolbet_value_v1: { book: "Coolbet", market: "1x2/OU", money: "paper", anchor: "sharp" },
   bot_v10_all: { market: "multi", money: "paper", anchor: "model" },
   bot_1x2_specialist: { market: "1x2", money: "paper" },
@@ -222,6 +229,29 @@ const SHADOW_BOTS: Array<{
     title: "Coolbet value · price you can actually take",
     subtitle:
       "Bets COOLBET's own quote vs de-vigged Pinnacle · edge ≥ 3% · tiers 1-2 · no backtest yet",
+    backtestN: 0,
+    backtestRoi: 0,
+  },
+  {
+    // USE-COLLECTED-MARKETS. A market we already collect but never modelled,
+    // settled from the final score so there is no coverage gap. Epicbet is the
+    // only one of our reachable books that prices team totals at all — see
+    // EPICBET-AS-A-VENUE. backtestN 0: never replayed, judge it forward.
+    name: "bot_team_total_paper_shadow_v1",
+    title: "Team totals · line-shop (Epicbet/Betano/Unibet)",
+    subtitle:
+      "Best Epicbet/Betano/Unibet full-match team-total price vs de-vigged Pinnacle · edge ≥ 0% · settled from the final score · forward paper test",
+    backtestN: 0,
+    backtestRoi: 0,
+  },
+  {
+    // USE-COLLECTED-MARKETS. A 3-way market we collect but never modelled,
+    // settled from the HT score. Like team totals, Epicbet is the book that
+    // actually quotes it. backtestN 0: never replayed, judge it forward.
+    name: "bot_1h_1x2_paper_shadow_v1",
+    title: "First-half 1X2 · line-shop (Epicbet/Betano/Unibet)",
+    subtitle:
+      "Best Epicbet/Betano/Unibet 1H 1X2 price vs Shin-de-vigged Pinnacle 1H triple · edge ≥ 0% · settled from the HT score · forward paper test",
     backtestN: 0,
     backtestRoi: 0,
   },

@@ -21,6 +21,47 @@ const MIN_DAYS_FOR_DECISION = 14;
 // `botEdgeThreshold()` in @/lib/coolbet-edge — same values, one definition.
 
 const ALLOWED: Record<string, { title: string; subtitle: string; detail: string }> = {
+  // UNIBET-TRIGGER-DETAIL-404-2026-09-11: these four were added to the index's
+  // SHADOW_BOTS list yesterday (TRIGGER-BOTS-VISIBLE-AND-WIDER) but NOT to this
+  // map, so every one of their rows linked to a notFound(). Two lists, one bot —
+  // exactly the 2026-08-24 bot_coolbet_value_v1 failure, repeated. Smoke
+  // EVERY-REGISTRY-BOT-IS-VISIBLE now pins both lists to the registry.
+  bot_unibet_trigger_1x2_v1: {
+    title: "Unibet · 1x2 · trigger engine (paper)",
+    subtitle: "Fires when Unibet's site 1x2 price lands in the model's window · edge ≥ 13% at Unibet's OWN odds · PAPER",
+    detail:
+      "BOOK-AGNOSTIC-EDGE-ENGINE Stage 3b (2026-09-09). The Unibet twin of bot_coolbet_trigger_1x2_v1: the model publishes a per-fixture trigger window (pick_triggers) and this bot emits a pick whenever the Unibet-Site price lands in [min_odds, max_odds], edge evaluated at Unibet's OWN odds. PAPER ONLY (never in PLACEABLE_BOTS). Reads the broad Unibet-Site sweep — the PLACEABLE feed (workers/automation/unibet_odds_feed.py), not the Kambi API, which unibet.ee left on 2026-09-06. Carries the same adverse-selection warning as its Coolbet twin: a 2.80 odds floor at a soft book's higher prices can only fire on longshots, where our model is measurably over-confident. Judge it forward on CLV.",
+  },
+  bot_unibet_trigger_sharp_1x2_v1: {
+    title: "Unibet · 1x2 · trigger engine · SHARP anchor (paper)",
+    subtitle: "Fair value = Shin-de-vigged Pinnacle · sharp edge ≥ 3% · no odds floor · PAPER",
+    detail:
+      "BOOK-AGNOSTIC-EDGE-ENGINE · SHARP anchor. Head-to-head twin of bot_unibet_trigger_1x2_v1: same window math, but fair value = Shin-de-vigged Pinnacle price (P_sharp), NOT our model — edge = P_sharp − 1/unibet_odds. RULES: sharp edge ≥ 3%, NO odds floor (experimental, observing the full sharp-edge distribution across all odds bands so a data-driven floor can be set later). This is where the DRAW edge should surface: §57 found draws are a sharp edge our model structurally cannot bet, and a soft book's draw price vs de-vigged Pinnacle is exactly that trade. PAPER ONLY. The head-to-head against the model-anchored twin is the point.",
+  },
+  bot_unibet_trigger_ou_v1: {
+    title: "Unibet · O/U 2.5 · trigger engine (paper)",
+    subtitle: "Fires when Unibet's site O/U 2.5 price lands in the model's window · edge ≥ 8% at Unibet's OWN odds · PAPER",
+    detail:
+      "BOOK-AGNOSTIC-EDGE-ENGINE Stage 3b (2026-09-09). Same mechanism as the Unibet 1x2 trigger but for O/U 2.5 (edge ≥ 8%, odds ≥ 1.80), evaluated at Unibet-Site's own price. PAPER ONLY (never in PLACEABLE_BOTS). Settled by the generic goals-O/U resolver. Context from BOOK-PRICE-DIMENSIONS (2026-09-11): on O/U 2.5 Unibet is the WEAKEST of our three books — best price on 36% of series against Epicbet's 52% — so expect this twin to fire on fewer genuinely good prices than the Coolbet and Epicbet numbers would suggest.",
+  },
+  bot_unibet_trigger_sharp_ou_v1: {
+    title: "Unibet · O/U 2.5 · trigger engine · SHARP anchor (paper)",
+    subtitle: "Fair value = Shin-de-vigged Pinnacle O/U 2.5 · sharp edge ≥ 3% · no odds floor · PAPER",
+    detail:
+      "BOOK-AGNOSTIC-EDGE-ENGINE · SHARP anchor. Head-to-head twin of bot_unibet_trigger_ou_v1: fair value = Shin-de-vigged Pinnacle O/U 2.5 price, edge = P_sharp − 1/unibet_odds, sharp edge ≥ 3%, no odds floor (experimental, observing all bands to set a data-driven floor once picks settle). PAPER ONLY. Settled by the generic goals-O/U resolver. The comparison against the model-anchored twin is the point.",
+  },
+  bot_team_total_paper_shadow_v1: {
+    title: "Team totals · line-shop (Epicbet/Betano/Unibet)",
+    subtitle: "Best reachable team-total price vs de-vigged Pinnacle · edge ≥ 0% · PAPER",
+    detail:
+      "USE-COLLECTED-MARKETS. Fires on team_total_{home,away}_<line> markets for upcoming fixtures: fair value is the de-vigged two-way Pinnacle team-total line, and it records the best price among the books we can reach (Epicbet, Betano, Unibet) when the edge clears 0%. EUR 10 nominal, settled from the FINAL SCORE — so unlike corners there is no stats-coverage gap and nothing can go unsettled. A market we have collected all along and never modelled. PAPER ONLY (never in PLACEABLE_BOTS). No backtest number: this config has never been replayed, so judge it on forward CLV and ROI. Note the venue reality (EPICBET-AS-A-VENUE, 2026-09-11): Epicbet is the ONLY one of our books that quotes team totals at all — Coolbet priced zero team-total rows in 24h — so a positive result here is an argument for opening an Epicbet placement path, which does not exist today.",
+  },
+  bot_1h_1x2_paper_shadow_v1: {
+    title: "First-half 1X2 · line-shop (Epicbet/Betano/Unibet)",
+    subtitle: "Best reachable 1H 1X2 price vs Shin-de-vigged Pinnacle · edge ≥ 0% · PAPER",
+    detail:
+      "USE-COLLECTED-MARKETS. Fires on the 1x2_1h market for upcoming fixtures: fair value is the Shin-de-vigged Pinnacle first-half triple, and it records the best price among the books we can reach (Epicbet, Betano, Unibet) when the edge clears 0%. EUR 10 nominal, settled from the HALF-TIME score, so there is no coverage gap. A 3-way market we collect and never modelled. PAPER ONLY (never in PLACEABLE_BOTS). No backtest number — judge it forward. Same venue caveat as the team-totals bot: Coolbet quoted zero 1H 1x2 rows in 24h and Epicbet quoted 291 fixtures' worth, so this bot is effectively measuring an Epicbet market (EPICBET-AS-A-VENUE).",
+  },
   bot_corners_paper_shadow_v1: {
     title: "Corners O/U · line-shop (Betano/Unibet)",
     subtitle: "Best Betano/Unibet corners price vs de-vigged Pinnacle · edge ≥ 0%",
