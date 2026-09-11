@@ -971,46 +971,78 @@ export default async function ShadowBotsPage() {
   // the current placement price + drift vs signal price. Solves the stale-odds
   // trap (Gimnástica case: signal odds 2.75, current Coolbet 3.15 hours later).
   const uniqueMatchIds = Array.from(new Set(upcoming.map((u) => u.match_id)));
-  const { data: cbSnapshots } = uniqueMatchIds.length > 0
-    ? await db
-        .from("odds_snapshots")
-        .select("match_id, market, selection, odds, timestamp, bookmaker")
-        .in("match_id", uniqueMatchIds)
-        // PICKS-UNIBET-COLUMN-2026-09-04: Unibet alongside Coolbet. No scraper
-        // needed — we already receive Unibet through API-Football, which is
-        // where its coverage numbers come from. Coolbet prices only 44% of
-        // outcomes, so a second column is mostly about the fixtures Coolbet
-        // does not cover at all.
-        // UB-COLUMN-NOT-PLACEABLE-2026-09-11: was `["Unibet", "Unibet-Kambi"]`,
-        // newest-wins. That was right on 2026-09-05 and wrong from 2026-09-06,
-        // when unibet.ee LEFT the Kambi API (KAMBI-FEED-DIVERGENCE) and Kambi
-        // was dropped from ACCESSIBLE_BOOKMAKERS. Measured 2026-09-11 on 1,390
-        // paired 1x2 + O/U 2.5 quotes: Kambi disagrees with the site on 91.0 pct
-        // and reads HIGHER on 29.0 pct — a column quoting the operator a price
-        // that does not exist at the venue they place at. `Unibet-Site` is the
-        // placeable feed. Fewer fixtures (380 upcoming vs Kambi's 573), which is
-        // the right trade: a blank cell costs a missed bet, a phantom price
-        // costs a placed one. Still two books, so the 10k ceiling below is
-        // unchanged.
-        .in("bookmaker", ["Coolbet", "Unibet-Site"])
-        .eq("is_live", false)
-        .order("timestamp", { ascending: false })
-        // PostgREST caps responses at db-max-rows = 10,000 (see
-        // ALL-BETS-CEILING-DEAD). Two books already sat AT that ceiling, so a
-        // third would truncate silently — and because the order is newest-first,
-        // the rows dropped would be the OLDEST, i.e. Coolbet's. That would have
-        // made the "Now @ CB" column go blank as a side effect of improving the
-        // UB one. Narrowed to a recent window instead so three books fit: the
-        // column shows a CURRENT price, and anything older than this is stale
-        // enough that it should read "—" rather than mislead.
-        .gte("timestamp", new Date(Date.now() - 12 * 3600 * 1000).toISOString())
-        .limit(10000)
-    : { data: [] };
+  // SHADOW-INDEX-EPICBET-COLUMN-2026-09-11: the markets actually rendered below.
+  // This is the row-ceiling guard, and it is load-bearing rather than an
+  // optimisation — see the comment on the fetch.
+  const pendingMarkets = Array.from(
+    new Set(upcoming.map((u) => u.market.toLowerCase()))
+  );
+  // THE BOOKS, each fetched SEPARATELY. See below for why that is not a style
+  // choice. `Unibet-Site` only — never `Unibet` or `Unibet-Kambi` (UB-COLUMN-
+  // NOT-PLACEABLE, enforced by smoke UB-COLUMN-NOT-PLACEABLE): unibet.ee left
+  // the Kambi API on 2026-09-06, and Kambi disagrees with the site on 91.0 pct
+  // of quotes, reading HIGHER on 29.0 pct — a phantom price at the venue the
+  // operator actually places at.
+  const SNAPSHOT_BOOKS = ["Coolbet", "Unibet-Site", "Epicbet"] as const;
+  const SNAPSHOT_ROW_CAP = 10000;
+  const snapshotSince = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+
+  // ── WHY ONE QUERY PER BOOK, AND WHY THE MARKET FILTER ────────────────────
+  // PostgREST caps responses at db-max-rows = 10,000 (ALL-BETS-CEILING-DEAD)
+  // and this query orders NEWEST-FIRST, so a response over the cap silently
+  // drops the OLDEST rows. Two failure modes follow, and both are silent:
+  //
+  //   1. SHARED CEILING. Adding Epicbet to a single `.in("bookmaker", [...])`
+  //      would have blanked the Coolbet column as a side effect, because
+  //      Epicbet quotes 110+ markets per fixture and dwarfs the other two.
+  //      Measured 2026-09-11 on this page's own filters (pending picks'
+  //      fixtures, non-live, 12h): Epicbet 31,160 · Coolbet 5,229 ·
+  //      Unibet-Site 385 = 36,774 rows, 3.7x the cap. The same trap already
+  //      bit the detail page. Per-book queries give each book its OWN budget,
+  //      so one book overflowing can no longer erase another.
+  //   2. PER-BOOK CEILING. Epicbet alone can still approach 10,000, so the
+  //      fetch is also constrained to the markets this table renders. Same
+  //      measurement with the market filter: Epicbet 7,493 · Coolbet 1,003 ·
+  //      Unibet-Site 385. Every column we do not draw is a row we must not
+  //      fetch.
+  //
+  // If a book DOES hit its cap the result is reported rather than rendered as
+  // a partially-blank column — a truncated price table looks exactly like a
+  // book with no coverage, which is how the first version of this shipped.
+  const snapshotFetches = uniqueMatchIds.length > 0 && pendingMarkets.length > 0
+    ? await Promise.all(
+        SNAPSHOT_BOOKS.map(async (book) => {
+          const { data } = await db
+            .from("odds_snapshots")
+            .select("match_id, market, selection, odds, timestamp, bookmaker")
+            .in("match_id", uniqueMatchIds)
+            .in("market", pendingMarkets)
+            .eq("bookmaker", book)
+            .eq("is_live", false)
+            .order("timestamp", { ascending: false })
+            // A price older than this should read "—" rather than mislead: a
+            // dead series stays "newest" forever (ANALYSIS_GOTCHAS 34), which
+            // is how a 19h-old Unibet quote looked like the best price on the
+            // detail page.
+            .gte("timestamp", snapshotSince)
+            .limit(SNAPSHOT_ROW_CAP);
+          return { book, rows: data ?? [] };
+        })
+      )
+    : [];
+  const truncatedBooks = snapshotFetches
+    .filter((f) => f.rows.length >= SNAPSHOT_ROW_CAP)
+    .map((f) => f.book);
+  const cbSnapshots = snapshotFetches.flatMap((f) => f.rows);
   // One key builder for both the map and every lookup, so they cannot drift.
   const oddsKey = (m: string, market: string, selection: string) =>
     `${m}|${market.toLowerCase()}|${selection.toLowerCase()}`;
   const coolbetCurrent = new Map<string, { odds: number; ts: string; src?: string }>();
   const unibetCurrent = new Map<string, { odds: number; ts: string; src?: string }>();
+  const epicbetCurrent = new Map<string, { odds: number; ts: string; src?: string }>();
+  const bookMaps: Record<string, Map<string, { odds: number; ts: string; src?: string }>> = {
+    Coolbet: coolbetCurrent, "Unibet-Site": unibetCurrent, Epicbet: epicbetCurrent,
+  };
   for (const row of (cbSnapshots ?? []) as Array<{
     match_id: string; market: string; selection: string; odds: number | string;
     timestamp: string; bookmaker: string;
@@ -1023,9 +1055,12 @@ export default async function ShadowBotsPage() {
     // shipped. Nothing errored; the price just never resolved.
     // ANALYSIS_GOTCHAS #3, surfacing in the frontend.
     const key = oddsKey(row.match_id, row.market, row.selection);
-    // Rows arrive newest-first, so the first hit per key is the latest price.
-    const target = row.bookmaker === "Coolbet" ? coolbetCurrent : unibetCurrent;
-    if (!target.has(key)) {
+    // Rows arrive newest-first WITHIN each book's own fetch, so the first hit
+    // per key is that book's latest price. Keyed by book name rather than a
+    // Coolbet/else ternary — the ternary silently filed any third book under
+    // Unibet, which is a bug that only appears the day a book is added.
+    const target = bookMaps[row.bookmaker];
+    if (target && !target.has(key)) {
       // `src` records WHICH Unibet feed supplied the price. The two disagree —
       // AF is stale, and the direct feed has not itself been verified against
       // unibet.ee (KAMBI-VS-SITE-VERIFICATION) — so the surface must not present
@@ -1238,7 +1273,21 @@ export default async function ShadowBotsPage() {
                 calibration on young bots, not real edge). Now @ CB shows the
                 actual placement price so the operator can compare it against
                 Min odds without a manual site lookup. */}
-            <div className="hidden border-b border-white/[0.04] px-4 py-2 text-[10px] font-mono uppercase tracking-wider text-neutral-500 sm:grid sm:grid-cols-[28px_85px_minmax(0,1fr)_40px_115px_90px_55px_50px_60px_70px_75px_75px_75px] sm:gap-3">
+            {truncatedBooks.length > 0 && (
+              // A truncated price column looks EXACTLY like a book with no
+              // coverage — silent, and the operator places real money off this
+              // table. So say it out loud rather than render a half-blank
+              // column (SHADOW-INDEX-EPICBET-COLUMN, the row-ceiling guard).
+              <div className="border-b border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs text-amber-300">
+                ⚠️ Price column truncated at the 10,000-row API ceiling for:{" "}
+                <span className="font-mono">{truncatedBooks.join(", ")}</span>. Some
+                cells below will read “—” even though a price exists. Narrow the
+                window or the market filter in{" "}
+                <span className="font-mono">shadow-bots/page.tsx</span> before
+                trusting this column.
+              </div>
+            )}
+            <div className="hidden border-b border-white/[0.04] px-4 py-2 text-[10px] font-mono uppercase tracking-wider text-neutral-500 sm:grid sm:grid-cols-[28px_85px_minmax(0,1fr)_40px_115px_90px_55px_50px_60px_70px_75px_75px_75px_75px] sm:gap-3">
               <div className="text-center" title="Tick once you've placed this bet with a book. Persists across sessions.">Bet</div>
               <div>Kickoff</div>
               <div>Match</div>
@@ -1251,6 +1300,7 @@ export default async function ShadowBotsPage() {
               <div>Book</div>
               <div className="text-right" title="Coolbet's latest snapshot price for this exact selection. Arrow shows drift vs signal odds. — means no Coolbet coverage.">Now @ CB</div>
               <div className="text-right" title="Unibet's latest price for the same selection, newest feed wins. K = direct Kambi feed (unibet.ee's own backend, median 0.7h old, 407 upcoming fixtures). A = API-Football feed (median 26.8h old, 55 fixtures, and its forward coverage went to zero on 2026-09-06). Green = beats Coolbet. Most useful where Coolbet shows — (no coverage): Coolbet prices only 44% of outcomes. NOTE neither feed is fully verified against unibet.ee: a 2-fixture check on 2026-09-05 found the site showing ~1pp BETTER prices than the Kambi API (overround 5.49% vs 6.62%, 6.16% vs 6.98%). That errs on the safe side — we understate Unibet — but it is unresolved (KAMBI-VS-SITE-VERIFICATION).">Now @ UB</div>
+              <div className="text-right" title="Epicbet's latest price for the same selection. Epicbet is the best-priced of our three books on Asian handicap (+0.83 pct, t=12.3), O/U 2.5 (65 pct of 1,429 series on the O/U mirror's own gate, t=+8.5), O/U 1.5, O/U 3.5 and corners, and it quotes 672 upcoming fixtures to Coolbet's 534 — but there is NO Epicbet placement path today, so this column is price discovery and an argument for building one, not a venue you can place at.">Now @ EB</div>
               <div className="text-right">Min odds</div>
             </div>
             <ul>
@@ -1334,7 +1384,41 @@ export default async function ShadowBotsPage() {
                 // to switch venue. Its real value is the fixtures where CB shows
                 // "—": Coolbet prices only 44% of outcomes.
                 const ub = unibetCurrent.get(cbKey);
-                const ubBeatsCb = !!(ub && (!cb || ub.odds > cb.odds + 1e-9));
+                // SHADOW-INDEX-EPICBET-COLUMN-2026-09-11. Epicbet is NOT a
+                // venue we can place at — there is no Epicbet placement path.
+                // It is here because it wins the price on the markets our O/U
+                // bot bets: best price on 65 pct of 1,429 series on that bot's
+                // own gate (t=+8.5), and best overall on AH, O/U 1.5/2.5/3.5
+                // and corners, while Coolbet wins 1x2, DC and BTTS
+                // (BOOK-PRICE-DIMENSIONS, n=17,891 paired series, 7 days).
+                // So the column is evidence for building that path, not a
+                // price to go and take.
+                const eb = epicbetCurrent.get(cbKey);
+                // Highlight whichever book holds the best price, rather than
+                // "beats Coolbet" — with three books, comparing each to one
+                // baseline says nothing about the other two.
+                const bestOdds = Math.max(
+                  cb?.odds ?? 0, ub?.odds ?? 0, eb?.odds ?? 0
+                );
+                const ubBeatsCb = !!(ub && ub.odds >= bestOdds - 1e-9 && bestOdds > 0);
+                const ebBest = !!(eb && eb.odds >= bestOdds - 1e-9 && bestOdds > 0);
+                // A stale quote is worse than no quote: a dead series stays
+                // "newest" forever (ANALYSIS_GOTCHAS 34), and a 19h-old Unibet
+                // price looked like the best book on 2026-09-11 when it was
+                // not. Dim any quote more than 6h behind the freshest peer on
+                // THIS fixture, so "best price" cannot be won by staleness.
+                const freshestTs = Math.max(
+                  cb ? Date.parse(cb.ts) : 0,
+                  ub ? Date.parse(ub.ts) : 0,
+                  eb ? Date.parse(eb.ts) : 0
+                );
+                const isStale = (q?: { ts: string }) =>
+                  !!q && freshestTs > 0 &&
+                  freshestTs - Date.parse(q.ts) > 6 * 3600 * 1000;
+                const hoursBehind = (q?: { ts: string }) =>
+                  q && freshestTs > 0
+                    ? (freshestTs - Date.parse(q.ts)) / 3600000
+                    : 0;
 
                 // Real-money confidence flag — visual warning for patterns confirmed negative in settled data.
                 // Bots keep firing to collect data; this flag is for operator's manual betting decisions.
@@ -1398,7 +1482,7 @@ export default async function ShadowBotsPage() {
                 return (
                   <li
                     key={u.id}
-                    className={`px-4 py-2 text-sm sm:grid sm:grid-cols-[28px_85px_minmax(0,1fr)_40px_115px_90px_55px_50px_60px_70px_75px_75px_75px] sm:items-center sm:gap-3 border-l-2 ${
+                    className={`px-4 py-2 text-sm sm:grid sm:grid-cols-[28px_85px_minmax(0,1fr)_40px_115px_90px_55px_50px_60px_70px_75px_75px_75px_75px] sm:items-center sm:gap-3 border-l-2 ${
                       cFlag?.level === "red" ? "border-rose-500/60" :
                       cFlag?.level === "yellow" ? "border-amber-500/50" :
                       "border-transparent"
@@ -1482,7 +1566,11 @@ export default async function ShadowBotsPage() {
                       {cb == null
                         ? <span className="text-neutral-600">—</span>
                         : <>
-                            <span className={cbBelowFloor ? "text-rose-400" : "text-sky-300"}>
+                            <span className={
+                              isStale(cb)
+                                ? "text-neutral-600 line-through decoration-1"
+                                : cbBelowFloor ? "text-rose-400" : "text-sky-300"
+                            }>
                               {cb.odds.toFixed(2)}
                             </span>
                             {cbArrow && <span className={`ml-1 ${cbArrowTone}`}>{cbArrow}</span>}
@@ -1499,8 +1587,31 @@ export default async function ShadowBotsPage() {
                     >
                       {ub == null
                         ? <span className="text-neutral-600">—</span>
-                        : <span className={ubBeatsCb ? "text-emerald-400" : "text-neutral-400"}>
+                        : <span className={
+                            isStale(ub)
+                              ? "text-neutral-600 line-through decoration-1"
+                              : ubBeatsCb ? "text-emerald-400" : "text-neutral-400"
+                          }>
                             {ub.odds.toFixed(2)}
+                          </span>
+                      }
+                    </div>
+                    <div
+                      className="text-right font-mono text-sm tabular-nums"
+                      title={
+                        eb == null
+                          ? "No Epicbet price for this selection in the last 12h."
+                          : `Epicbet ${eb.odds.toFixed(2)} · snapshot ${new Date(eb.ts).toUTCString()}${isStale(eb) ? ` · STALE: ${hoursBehind(eb).toFixed(1)}h behind the freshest quote on this fixture, so ignore it` : ""} · NOTE there is no Epicbet placement path — this is price discovery, not a venue you can place at`
+                      }
+                    >
+                      {eb == null
+                        ? <span className="text-neutral-600">—</span>
+                        : <span className={
+                            isStale(eb)
+                              ? "text-neutral-600 line-through decoration-1"
+                              : ebBest ? "text-emerald-400" : "text-neutral-400"
+                          }>
+                            {eb.odds.toFixed(2)}
                           </span>
                       }
                     </div>
