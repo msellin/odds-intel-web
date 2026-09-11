@@ -180,6 +180,13 @@ const BOT_BADGES: Record<string, BotBadge> = {
   bot_unibet_trigger_ou_v1: { book: "Unibet", market: "O/U 2.5", money: "paper", anchor: "model" },
   bot_unibet_trigger_sharp_1x2_v1: { book: "Unibet", market: "1x2", money: "paper", anchor: "sharp" },
   bot_unibet_trigger_sharp_ou_v1: { book: "Unibet", market: "O/U 2.5", money: "paper", anchor: "sharp" },
+  // MERGE-TRIGGER-BOTS (2026-09-11): the book-agnostic replacements for the
+  // eight above. `book: "Coolbet+Unibet"` is the point — the book is a venue,
+  // not a strategy, and each pick records which one actually won the price.
+  bot_trigger_1x2_model_v1: { book: "Coolbet+Unibet", market: "1x2", money: "paper", anchor: "model" },
+  bot_trigger_1x2_sharp_v1: { book: "Coolbet+Unibet", market: "1x2", money: "paper", anchor: "sharp" },
+  bot_trigger_ou_model_v1: { book: "Coolbet+Unibet", market: "O/U 2.5", money: "paper", anchor: "model" },
+  bot_trigger_ou_sharp_v1: { book: "Coolbet+Unibet", market: "O/U 2.5", money: "paper", anchor: "sharp" },
   bot_ou35_model_v1: { book: "Coolbet", market: "O/U 3.5", money: "paper", anchor: "model" },
   bot_corners_paper_shadow_v1: { book: "Betano/Unibet", market: "corners", money: "paper", anchor: "sharp" },
   // PAPER-BOTS-INVISIBLE-2026-09-11: these two have been writing picks since
@@ -383,6 +390,41 @@ const SHADOW_BOTS: Array<{
     title: "Unibet · O/U 2.5 · trigger engine · SHARP anchor (paper)",
     subtitle:
       "Fires when Unibet's O/U 2.5 price beats the de-vigged Pinnacle line (odds ≥ 1.80) · PAPER · n=6, far too young to read",
+    backtestN: 0,
+    backtestRoi: 0,
+  },
+  // MERGE-TRIGGER-BOTS (2026-09-11) — four configs replacing the eight above.
+  // The eight run alongside them until the calibrator verdict lands, so both
+  // generations are listed on purpose; these four are the ones to watch.
+  {
+    name: "bot_trigger_1x2_model_v1",
+    title: "1x2 · trigger engine · MODEL anchor (paper, all books)",
+    subtitle:
+      "Fires when ANY book we place at prices a modelled fixture into the window (edge ≥ 13%, odds ≥ 2.80) · PAPER · replaces the Coolbet + Unibet 1x2 model twins; the winning book is recorded per pick",
+    backtestN: 0,
+    backtestRoi: 0,
+  },
+  {
+    name: "bot_trigger_1x2_sharp_v1",
+    title: "1x2 · trigger engine · SHARP anchor (paper, all books)",
+    subtitle:
+      "Fires when any placeable book beats the de-vigged Pinnacle line by ≥ 3% (no odds floor) · PAPER · the 3% is a SHARP floor and is not comparable to a model floor — a 13% overlay on Pinnacle is nearly unobservable",
+    backtestN: 0,
+    backtestRoi: 0,
+  },
+  {
+    name: "bot_trigger_ou_model_v1",
+    title: "O/U 2.5 · trigger engine · MODEL anchor (paper, all books)",
+    subtitle:
+      "Fires when ANY book we place at prices a modelled fixture into the window (edge ≥ 8%, odds ≥ 1.80) · PAPER · replaces the Coolbet + Unibet O/U model twins",
+    backtestN: 0,
+    backtestRoi: 0,
+  },
+  {
+    name: "bot_trigger_ou_sharp_v1",
+    title: "O/U 2.5 · trigger engine · SHARP anchor (paper, all books)",
+    subtitle:
+      "Fires when any placeable book beats the de-vigged Pinnacle O/U 2.5 line by ≥ 3% (no odds floor) · PAPER",
     backtestN: 0,
     backtestRoi: 0,
   },

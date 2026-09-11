@@ -50,6 +50,35 @@ const ALLOWED: Record<string, { title: string; subtitle: string; detail: string 
     detail:
       "BOOK-AGNOSTIC-EDGE-ENGINE · SHARP anchor. Head-to-head twin of bot_unibet_trigger_ou_v1: fair value = Shin-de-vigged Pinnacle O/U 2.5 price, edge = P_sharp − 1/unibet_odds, sharp edge ≥ 3%, no odds floor (experimental, observing all bands to set a data-driven floor once picks settle). PAPER ONLY. Settled by the generic goals-O/U resolver. The comparison against the model-anchored twin is the point.",
   },
+  // MERGE-TRIGGER-BOTS (2026-09-11) — four book-agnostic configs replacing the
+  // eight per-book trigger bots above. EVERY-REGISTRY-BOT-IS-VISIBLE exists
+  // because this map and SHADOW_BOTS on the index are TWO hardcoded lists for
+  // one bot, and a bot missing from this one renders a notFound() from a row
+  // that looks fine.
+  bot_trigger_1x2_model_v1: {
+    title: "1x2 · trigger engine · MODEL anchor (paper, all books)",
+    subtitle: "Fires when ANY book we place at prices a modelled fixture into the window · edge ≥ 13% at that book's OWN odds · odds ≥ 2.80 · PAPER",
+    detail:
+      "MERGE-TRIGGER-BOTS (2026-09-11). Replaces bot_coolbet_trigger_1x2_v1 and bot_unibet_trigger_1x2_v1, which were the same strategy at two venues. The BOOK is not a strategy: the generator compares across every book the bot may use, emits at the best clearing price, and records the winner in recommended_bookmaker — so book is a column to group by, not a bot identity. The old split would have become twelve bots the moment Epicbet joined. The eight per-book triggers still run alongside these four until the pooled-vs-per-selection calibrator verdict lands (retiring them now would make that comparison span a bot change AND a calibrator change). PAPER ONLY — never in PLACEABLE_BOTS.",
+  },
+  bot_trigger_1x2_sharp_v1: {
+    title: "1x2 · trigger engine · SHARP anchor (paper, all books)",
+    subtitle: "Fair value = Shin-de-vigged Pinnacle 1x2 · sharp edge ≥ 3% · no odds floor · PAPER",
+    detail:
+      "MERGE-TRIGGER-BOTS (2026-09-11), sharp twin of bot_trigger_1x2_model_v1. Fair value is the Shin-de-vigged Pinnacle 1x2 line and the edge is P_sharp − 1/price at whichever placeable book prices it best. The 3% floor is set EXPLICITLY rather than inherited from the registry, and that is the one place a hand-written floor is correct: a sharp edge is measured against a near-true line, so 3% is a real overlay where a 3% MODEL edge is noise — inheriting the 13% model floor would demand a 13% overlay on Pinnacle, which is nearly unobservable (max seen +6.6%), and the bot would silently never fire. A partial Pinnacle line is SKIPPED rather than de-vigged from two of three prices. PAPER ONLY. This is also where the DRAW edge the model cannot see should surface (ANALYSIS_GOTCHAS §57).",
+  },
+  bot_trigger_ou_model_v1: {
+    title: "O/U 2.5 · trigger engine · MODEL anchor (paper, all books)",
+    subtitle: "Fires when ANY book we place at prices a modelled fixture into the window · edge ≥ 8% · odds ≥ 1.80 · PAPER",
+    detail:
+      "MERGE-TRIGGER-BOTS (2026-09-11). Replaces bot_coolbet_trigger_ou_v1 and bot_unibet_trigger_ou_v1. Same reasoning as the 1x2 merge: the venue is recorded per pick instead of being baked into a bot name. Settled by the generic goals-O/U resolver. PAPER ONLY. Venue context from BOOK-PRICE-DIMENSIONS (2026-09-11): on the O/U 2.5 gate Epicbet holds the best price on 65% of 1,429 series (t=+8.5) and Unibet is the weakest at 36% — which is an argument for an Epicbet placement path, not for a separate bot.",
+  },
+  bot_trigger_ou_sharp_v1: {
+    title: "O/U 2.5 · trigger engine · SHARP anchor (paper, all books)",
+    subtitle: "Fair value = Shin-de-vigged Pinnacle O/U 2.5 · sharp edge ≥ 3% · no odds floor · PAPER",
+    detail:
+      "MERGE-TRIGGER-BOTS (2026-09-11), sharp twin of bot_trigger_ou_model_v1. Fair value is the Shin-de-vigged Pinnacle O/U 2.5 pair; the 3% floor is explicit for the same reason as the 1x2 sharp bot — a sharp floor and a model floor are never comparable. An incomplete Pinnacle pair is skipped. Settled by the generic goals-O/U resolver. PAPER ONLY.",
+  },
   bot_team_total_paper_shadow_v1: {
     title: "Team totals · line-shop (Epicbet/Betano/Unibet)",
     subtitle: "Best reachable team-total price vs de-vigged Pinnacle · edge ≥ 0% · PAPER",
@@ -359,6 +388,21 @@ export default async function ShadowBotDetailPage({
   const oddsKey = (m: string, market: string, selection: string) =>
     `${m}|${market.toLowerCase()}|${selection.toLowerCase()}`;
   const pendingMatchIds = Array.from(new Set(pending.map((b) => b.match_id)));
+  // OU-COLUMN-CEILING-2026-09-11: constrain the fetch to the markets this bot
+  // actually picks. Without it, adding Epicbet as a third book silently broke the
+  // OTHER two columns.
+  //
+  // PostgREST caps responses at db-max-rows = 10,000 (ALL-BETS-CEILING-DEAD) and
+  // this query orders newest-first, so an over-cap response drops the OLDEST rows
+  // — i.e. Coolbet's and Unibet's, whose sweeps are far smaller than Epicbet's.
+  // Epicbet quotes 110+ markets per fixture against Coolbet's ~119 but at ~7x the
+  // row volume, so on 24 pending fixtures the three-book fetch returned 33,988
+  // rows for bot_1h_1x2_paper_shadow_v1 — 3.4x the cap. Eight bots were over it.
+  // A bot picks 1-8 distinct markets, so filtering to them takes that same query
+  // to 987 rows (worst case across all bots: 2,482). Measured, both numbers.
+  const pendingMarkets = Array.from(
+    new Set(pending.map((b) => (b.market ?? "").toLowerCase()).filter(Boolean))
+  );
   const coolbetNow = new Map<string, { odds: number; ts: string; src?: string }>();
   const unibetNow = new Map<string, { odds: number; ts: string; src?: string }>();
   // PER-BOT-EPICBET-ODDS-2026-09-11: third book column. Epicbet is an accessible
@@ -367,11 +411,12 @@ export default async function ShadowBotDetailPage({
   // operator can price-shop a pending pick across all three venues on one screen
   // instead of opening the site. Read-only display — it gates nothing.
   const epicbetNow = new Map<string, { odds: number; ts: string; src?: string }>();
-  if (pendingMatchIds.length > 0) {
+  if (pendingMatchIds.length > 0 && pendingMarkets.length > 0) {
     const { data: snaps } = await db
       .from("odds_snapshots")
       .select("match_id, market, selection, odds, timestamp, bookmaker")
       .in("match_id", pendingMatchIds)
+      .in("market", pendingMarkets)
       .in("bookmaker", ["Coolbet", "Unibet-Site", "Epicbet"])
       .eq("is_live", false)
       .gte("timestamp", new Date(Date.now() - 12 * 3600 * 1000).toISOString())
