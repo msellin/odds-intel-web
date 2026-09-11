@@ -13,6 +13,11 @@
  * highest-edge row, matching the historic /api/v1/upcoming shape.
  */
 import { createClient } from "@supabase/supabase-js";
+import {
+  ENGINE_MIN_EDGE_BY_MARKET,
+  ENGINE_MIN_ODDS_BY_MARKET,
+  ENGINE_MODEL_1X2_HOME_FLOOR,
+} from "./generated/engine-floors";
 
 export interface UpcomingPick {
   id: string;
@@ -117,14 +122,42 @@ export function placementTriggerOdds(
   if (!m) return null;
   let edgeFloor: number;
   let oddsFloor: number;
+  // FLOORS-ONE-SOURCE-CROSS-LANGUAGE (2026-09-11): the NUMBERS now come from
+  // the engine via a generated file. They used to be hardcoded here (0.1/2.8,
+  // 0.08/1.8) with no import path to Python, so a floor change in the engine
+  // never reached this published "place >= X.XX" hint — the one readers act on.
+  // Regenerate with `python3 scripts/gen_frontend_floors.py`; the smoke test
+  // FLOORS-ONE-SOURCE-CROSS-LANGUAGE fails CI if this file drifts.
   if (m === "1x2") {
-    // real money = home-underdogs only @10%; draw/away/home-fav not placed
+    // FAVLONG-CUTS: real money = home UNDERDOGS only. Home-favs and aways are
+    // not fold-robust at the underdog floor, so they are not placed at all and
+    // get no trigger price.
     if ((selection ?? "").toLowerCase() !== "home") return null;
-    edgeFloor = 0.1;
-    oddsFloor = 2.8;
+    oddsFloor = ENGINE_MIN_ODDS_BY_MARKET["1x2"];
+    // The home-underdog floor ALWAYS applies to the published trigger, and the
+    // pooled 1x2 floor never does. Python keys the exception off the OFFERED
+    // odds (>= the 1x2 odds floor), and every price this function can return is
+    // clamped to that floor below — so by construction the pick is an underdog
+    // at any price we would publish. The pooled floor would only bind BELOW the
+    // odds floor, which is unplaceable anyway.
+    //
+    // A first version of this branch fell back to the pooled 13% whenever the
+    // 10% trigger came out under 2.80, and published 3.03 where the engine
+    // actually clears at 2.80 — too STRICT, on 6 of the ~100 calibrated
+    // probabilities swept (cal 0.46-0.48). Verified against the real
+    // clears_edge_floor() across cal 0.11-0.60: 0 mismatches.
+    edgeFloor = ENGINE_MODEL_1X2_HOME_FLOOR;
   } else {
-    edgeFloor = 0.08;
-    oddsFloor = 1.8;
+    // `null` in the engine map means the market is RETIRED (btts and
+    // double_chance are null there, and _min_edge_for returns infinity for
+    // them so nothing clears). A `?? 0.08` fallback would silently resurrect a
+    // retired market's floor and publish a trigger price for something we no
+    // longer bet — the exact "silent wrong floor" shape this whole change is
+    // removing. Mirror the engine instead: no floor, no trigger.
+    const ouFloor = ENGINE_MIN_EDGE_BY_MARKET["o/u"];
+    if (ouFloor == null) return null;
+    edgeFloor = ouFloor;
+    oddsFloor = ENGINE_MIN_ODDS_BY_MARKET["o/u"];
   }
   if (cal <= edgeFloor) return null;
   return Math.max(1 / (cal - edgeFloor), oddsFloor);
