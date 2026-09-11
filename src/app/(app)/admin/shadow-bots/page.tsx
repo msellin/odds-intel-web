@@ -172,6 +172,14 @@ const BOT_BADGES: Record<string, BotBadge> = {
   bot_coolbet_trigger_ou_v1: { book: "Coolbet", market: "O/U 2.5", money: "paper", anchor: "model" },
   bot_coolbet_trigger_sharp_1x2_v1: { book: "Coolbet", market: "1x2", money: "paper", anchor: "sharp" },
   bot_coolbet_trigger_sharp_ou_v1: { book: "Coolbet", market: "O/U 2.5", money: "paper", anchor: "sharp" },
+  // UNIBET-TRIGGERS-INVISIBLE (2026-09-11): all four Unibet trigger bots have
+  // been writing since 2026-09-09 (96/69/31/11 rows) and were absent from this
+  // page purely because SHADOW_BOTS below is a HARDCODED allowlist. They were
+  // never broken — just unlisted, so nobody could see them.
+  bot_unibet_trigger_1x2_v1: { book: "Unibet", market: "1x2", money: "paper", anchor: "model" },
+  bot_unibet_trigger_ou_v1: { book: "Unibet", market: "O/U 2.5", money: "paper", anchor: "model" },
+  bot_unibet_trigger_sharp_1x2_v1: { book: "Unibet", market: "1x2", money: "paper", anchor: "sharp" },
+  bot_unibet_trigger_sharp_ou_v1: { book: "Unibet", market: "O/U 2.5", money: "paper", anchor: "sharp" },
   bot_ou35_model_v1: { book: "Coolbet", market: "O/U 3.5", money: "paper", anchor: "model" },
   bot_corners_paper_shadow_v1: { book: "Betano/Unibet", market: "corners", money: "paper", anchor: "sharp" },
   bot_coolbet_value_v1: { book: "Coolbet", market: "1x2/OU", money: "paper", anchor: "sharp" },
@@ -301,6 +309,50 @@ const SHADOW_BOTS: Array<{
     title: "Coolbet · O/U 2.5 · trigger engine · SHARP anchor (paper)",
     subtitle:
       "Fires when Coolbet's O/U 2.5 price beats the de-vigged Pinnacle line by ≥ 8% (odds ≥ 1.80) · PAPER · head-to-head vs the model-anchored twin · fires rarely (Coolbet ≈ Pinnacle)",
+    backtestN: 0,
+    backtestRoi: 0,
+  },
+  {
+    // UNIBET-TRIGGERS-INVISIBLE (2026-09-11). Same window math as the Coolbet
+    // twins, fired by Unibet-Site's sweep instead. Listed here because the page
+    // is a hardcoded allowlist and these were simply missing — the bots have
+    // been writing since 2026-09-09.
+    //
+    // Read the two books side by side: on the same 3 days the Coolbet 1x2
+    // trigger reads -21.8% (n=98) and the Unibet one +9.4% (n=50). BOTH have
+    // NEGATIVE CLV (-11.4% and -8.1%), which is the number that matters — a
+    // positive ROI on 50 bets with negative CLV is variance, not edge. Neither
+    // is promotable, and no edge/odds floor rescues them: a floor picks WHICH
+    // bets you take, it cannot fix systematically taking the wrong side of a
+    // move. See PRIORITY_QUEUE TRIGGER-BOTS-NEGATIVE-CLV.
+    name: "bot_unibet_trigger_1x2_v1",
+    title: "Unibet · 1x2 · trigger engine (paper)",
+    subtitle:
+      "Book-agnostic: fires when Unibet's 1x2 price lands in the model's window (edge ≥ 13% at Unibet's OWN odds, ≥ 2.80) · PAPER · live CLV −8.1% — do not promote",
+    backtestN: 0,
+    backtestRoi: 0,
+  },
+  {
+    name: "bot_unibet_trigger_ou_v1",
+    title: "Unibet · O/U 2.5 · trigger engine (paper)",
+    subtitle:
+      "Book-agnostic: fires when Unibet's O/U 2.5 price lands in the model's window (edge ≥ 8% at Unibet's OWN odds, ≥ 1.80) · PAPER · live CLV −9.1% — do not promote",
+    backtestN: 0,
+    backtestRoi: 0,
+  },
+  {
+    name: "bot_unibet_trigger_sharp_1x2_v1",
+    title: "Unibet · 1x2 · trigger engine · SHARP anchor (paper)",
+    subtitle:
+      "Fires when Unibet's 1x2 price beats the de-vigged Pinnacle line (odds ≥ 2.80) · PAPER · the sharp twins are the only triggers with POSITIVE CLV (+9.7%) but n=13 — let them accrue",
+    backtestN: 0,
+    backtestRoi: 0,
+  },
+  {
+    name: "bot_unibet_trigger_sharp_ou_v1",
+    title: "Unibet · O/U 2.5 · trigger engine · SHARP anchor (paper)",
+    subtitle:
+      "Fires when Unibet's O/U 2.5 price beats the de-vigged Pinnacle line (odds ≥ 1.80) · PAPER · n=6, far too young to read",
     backtestN: 0,
     backtestRoi: 0,
   },
