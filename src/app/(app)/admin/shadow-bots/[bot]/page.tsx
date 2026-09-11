@@ -309,12 +309,18 @@ export default async function ShadowBotDetailPage({
   const pendingMatchIds = Array.from(new Set(pending.map((b) => b.match_id)));
   const coolbetNow = new Map<string, { odds: number; ts: string; src?: string }>();
   const unibetNow = new Map<string, { odds: number; ts: string; src?: string }>();
+  // PER-BOT-EPICBET-ODDS-2026-09-11: third book column. Epicbet is an accessible
+  // Estonian book we already ingest every 30 min (job_epicbet_odds_snapshot, :02/:32)
+  // into odds_snapshots with the same market/selection vocabulary as Coolbet, so the
+  // operator can price-shop a pending pick across all three venues on one screen
+  // instead of opening the site. Read-only display — it gates nothing.
+  const epicbetNow = new Map<string, { odds: number; ts: string; src?: string }>();
   if (pendingMatchIds.length > 0) {
     const { data: snaps } = await db
       .from("odds_snapshots")
       .select("match_id, market, selection, odds, timestamp, bookmaker")
       .in("match_id", pendingMatchIds)
-      .in("bookmaker", ["Coolbet", "Unibet", "Unibet-Kambi"])
+      .in("bookmaker", ["Coolbet", "Unibet", "Unibet-Kambi", "Epicbet"])
       .eq("is_live", false)
       .gte("timestamp", new Date(Date.now() - 12 * 3600 * 1000).toISOString())
       .order("timestamp", { ascending: false })
@@ -324,7 +330,12 @@ export default async function ShadowBotDetailPage({
       timestamp: string; bookmaker: string;
     }>) {
       const key = oddsKey(row.match_id, row.market, row.selection);
-      const target = row.bookmaker === "Coolbet" ? coolbetNow : unibetNow;
+      const target =
+        row.bookmaker === "Coolbet"
+          ? coolbetNow
+          : row.bookmaker === "Epicbet"
+            ? epicbetNow
+            : unibetNow;
       if (!target.has(key)) {
         target.set(key, { odds: Number(row.odds), ts: row.timestamp, src: row.bookmaker });
       }
@@ -337,18 +348,23 @@ export default async function ShadowBotDetailPage({
   // by (match, market, selection) so the badge shows on the exact pick that was placed.
   const placedKeys = new Set<string>();
   const placedOdds = new Map<string, number>();
+  // BET-MADE-COLUMN-2026-09-11: the venue is part of the placement, not decoration —
+  // real_bets.bookmaker is what the "Bet made" column renders under the price.
+  const placedBook = new Map<string, string>();
   {
     const { data: rb } = await db
       .from("real_bets")
-      .select("match_id, market, selection, actual_odds, placed_real")
+      .select("match_id, market, selection, actual_odds, bookmaker, placed_real")
       .eq("bot_id", botRow.id)
       .not("placed_real", "is", false);
     for (const r of (rb ?? []) as Array<{
       match_id: string; market: string; selection: string; actual_odds: number | string | null;
+      bookmaker: string | null;
     }>) {
       const key = oddsKey(r.match_id, r.market, r.selection);
       placedKeys.add(key);
       if (r.actual_odds != null) placedOdds.set(key, Number(r.actual_odds));
+      if (r.bookmaker) placedBook.set(key, r.bookmaker);
     }
   }
 
@@ -441,7 +457,11 @@ export default async function ShadowBotDetailPage({
           </div>
         ) : (
           <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]">
-            <div className="hidden border-b border-white/[0.04] px-4 py-2 text-[10px] font-mono uppercase tracking-wider text-neutral-500 sm:grid sm:grid-cols-[95px_1fr_45px_95px_55px_55px_70px_55px_55px_85px_60px]">
+            {/* HEADER-ALIGN-2026-09-11: this header grid was missing the row's `sm:gap-3`,
+                so its 1fr Match column absorbed the 11 missing gaps (~132px) and every
+                label after it sat right of the data it named. Same template, same gap,
+                as the <li> below — keep them in lockstep. */}
+            <div className="hidden border-b border-white/[0.04] px-4 py-2 text-[10px] font-mono uppercase tracking-wider text-neutral-500 sm:grid sm:grid-cols-[95px_minmax(0,1fr)_42px_92px_55px_46px_78px_52px_52px_52px_74px_58px] sm:gap-3">
               <div>Kickoff</div>
               <div>Match</div>
               <div className="text-center" title="League tier at time of pick. T1 = Big-5 + top leagues, T4 = amateur / lower tiers.">
@@ -449,13 +469,18 @@ export default async function ShadowBotDetailPage({
               </div>
               <div>Pick</div>
               <div className="text-right" title="Executable price at pick time (odds_at_pick_live), falling back to odds_at_pick where no live price was captured — those rows are marked *.">Odds (exec)</div>
-              <div className="text-right">Prob</div>
-              <div>Book</div>
+              <div className="text-right" title="The model probability the edge was computed from (calibrated_prob where available, else model_probability).">Prob</div>
+              <div title="Real money actually staked: the price we got and the venue we got it at (real_bets). Where no real bet was placed, the dimmed name is the book the bot QUOTED (recommended_bookmaker) — a reference price, not a placement.">
+                Bet made
+              </div>
               <div className="text-right" title="Coolbet's CURRENT price for this selection (latest snapshot in the last 12h). Compare to Min odds — pending picks only.">
                 Now CB
               </div>
               <div className="text-right" title="Unibet's CURRENT price (direct Kambi feed preferred, else the stale API-Football Unibet). Pending picks only.">
                 Now UB
+              </div>
+              <div className="text-right" title="Epicbet's CURRENT price (30-min ingest at :02/:32 UTC). Pending picks only.">
+                Now EB
               </div>
               <div className="text-right" title="Target minimum odds. Check manually at your book of choice — if the current price is ≥ this number, the pick still meets the bot's edge threshold. If lower, the edge has eroded past the threshold — skip.">
                 Min odds ⓘ
@@ -473,8 +498,10 @@ export default async function ShadowBotDetailPage({
                     threshold={botEdgeThreshold(botName)}
                     cb={coolbetNow.get(k)}
                     ub={unibetNow.get(k)}
+                    eb={epicbetNow.get(k)}
                     placedReal={placedKeys.has(k)}
                     placedOdds={placedOdds.get(k)}
+                    placedBook={placedBook.get(k)}
                   />
                 );
               })}
@@ -492,16 +519,20 @@ function BetRow({
   threshold,
   cb,
   ub,
+  eb,
   placedReal,
   placedOdds,
+  placedBook,
 }: {
   bet: ShadowBetRow;
   isFirst: boolean;
   threshold: number;
   cb?: { odds: number; ts: string; src?: string };
   ub?: { odds: number; ts: string; src?: string };
+  eb?: { odds: number; ts: string; src?: string };
   placedReal?: boolean;
   placedOdds?: number;
+  placedBook?: string;
 }) {
   const ko = b.matches?.date ? new Date(b.matches.date) : null;
   const kickoffDate = ko
@@ -554,7 +585,7 @@ function BetRow({
 
   return (
     <li
-      className={`px-4 py-3 text-sm sm:grid sm:grid-cols-[95px_1fr_45px_95px_55px_55px_70px_55px_55px_85px_60px] sm:items-center sm:gap-3 sm:py-2 ${
+      className={`px-4 py-3 text-sm sm:grid sm:grid-cols-[95px_minmax(0,1fr)_42px_92px_55px_46px_78px_52px_52px_52px_74px_58px] sm:items-center sm:gap-3 sm:py-2 ${
         isFirst ? "" : "border-t border-white/[0.04]"
       }`}
     >
@@ -563,20 +594,17 @@ function BetRow({
         <span className="ml-1 text-neutral-500">{kickoffTime}</span>
       </div>
       <div className="mt-0.5 min-w-0 sm:mt-0">
+        {/* BET-MADE-COLUMN-2026-09-11: the "€ real 3.25" badge used to sit here, eating
+            the width the team names need on a 12-column grid. It now lives in the
+            "Bet made" column together with the venue — one place that answers "did we
+            stake this, at what price, where?" instead of two halves of that answer in
+            two different columns. */}
         <div className="flex min-w-0 items-center gap-1.5">
           <span className="truncate text-sm text-neutral-100">
             {b.matches?.home_team?.name ?? "Home"}{" "}
             <span className="text-neutral-500">vs</span>{" "}
             {b.matches?.away_team?.name ?? "Away"}
           </span>
-          {placedReal && (
-            <span
-              title={`Real money staked via the Coolbet UI placer${placedOdds ? ` @ ${placedOdds.toFixed(2)}` : ""}`}
-              className="shrink-0 rounded-full bg-emerald-500/15 px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase leading-none tracking-wider text-emerald-300 ring-1 ring-emerald-500/30"
-            >
-              € real{placedOdds ? ` ${placedOdds.toFixed(2)}` : ""}
-            </span>
-          )}
         </div>
         <div className="truncate text-[11px] text-neutral-500">
           {b.matches?.leagues?.country ? `${b.matches.leagues.country} · ` : ""}
@@ -608,9 +636,28 @@ function BetRow({
       <div className="mt-0.5 text-right font-mono text-xs tabular-nums text-neutral-400 sm:mt-0">
         {modelProb != null ? `${(modelProb * 100).toFixed(0)}%` : "—"}
       </div>
-      <div className="mt-0.5 text-xs text-neutral-300 sm:mt-0">
-        {b.recommended_bookmaker ?? "—"}
-      </div>
+      {placedReal ? (
+        <div
+          className="mt-0.5 leading-tight sm:mt-0"
+          title={`Real money staked via the Coolbet UI placer${
+            placedOdds ? ` @ ${placedOdds.toFixed(2)}` : ""
+          }${placedBook ? ` at ${placedBook}` : ""}`}
+        >
+          <div className="font-mono text-xs font-semibold tabular-nums text-emerald-300">
+            € {placedOdds ? placedOdds.toFixed(2) : "real"}
+          </div>
+          <div className="truncate text-[10px] text-emerald-400/70">
+            {placedBook ?? b.recommended_bookmaker ?? "—"}
+          </div>
+        </div>
+      ) : (
+        <div
+          className="mt-0.5 truncate text-xs text-neutral-500 sm:mt-0"
+          title="No real bet placed on this pick — this is the book the bot quoted (recommended_bookmaker), a reference price only."
+        >
+          {b.recommended_bookmaker ?? "—"}
+        </div>
+      )}
       <div
         className="mt-0.5 text-right font-mono text-sm tabular-nums sm:mt-0"
         title={
@@ -639,6 +686,20 @@ function BetRow({
           <span className={ub.src === "Unibet-Kambi" ? "text-emerald-300" : "text-amber-300/80"}>
             {ub.odds.toFixed(2)}
           </span>
+        )}
+      </div>
+      <div
+        className="mt-0.5 text-right font-mono text-sm tabular-nums sm:mt-0"
+        title={
+          eb == null
+            ? "No recent Epicbet price for this selection (pending picks only, last 12h)."
+            : `Epicbet ${eb.odds.toFixed(2)} · snapshot ${new Date(eb.ts).toUTCString()}`
+        }
+      >
+        {eb == null ? (
+          <span className="text-neutral-600">—</span>
+        ) : (
+          <span className="text-violet-300">{eb.odds.toFixed(2)}</span>
         )}
       </div>
       <div className="mt-0.5 text-right font-mono text-sm tabular-nums sm:mt-0" title="Manually check this at your book of choice (Coolbet, Bet365, whatever). If the current price meets or beats this number, the pick still has real edge. If not, skip.">
