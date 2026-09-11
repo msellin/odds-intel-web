@@ -84,7 +84,8 @@ export function RealBetsLog({ bets }: { bets: RealBet[] }) {
             <th className="text-right p-2">Odds</th>
             <th className="text-right p-2 hidden sm:table-cell">Slip</th>
             <th className="text-right p-2 hidden md:table-cell" title="Edge implied by the odds we took × bot model probability − 1">Edge</th>
-            <th className="text-right p-2 hidden md:table-cell" title="Closing-line value: (actual_odds / closing_odds) − 1. Set at settlement.">CLV</th>
+            <th className="text-right p-2 hidden md:table-cell" title="Closing-line value at the book we bet at: (actual_odds / that book's last pre-kickoff price) − 1. Blank when the book has no price within 60 min of kickoff. Negative = the price drifted OUT after we bet. Hover a cell for the close and its age. (Before 2026-09-11 this was vs an arbitrary API-Football book.)">CLV</th>
+            <th className="text-right p-2 hidden md:table-cell" title="De-vigged Pinnacle CLV: actual_odds × Pinnacle's fair closing probability − 1. Positive = we beat the sharp close. Same scale as the shadow bots.">Pin CLV</th>
             <th className="text-right p-2">Stake</th>
             <th className="text-left p-2">Result</th>
             <th className="text-right p-2">PnL</th>
@@ -93,7 +94,7 @@ export function RealBetsLog({ bets }: { bets: RealBet[] }) {
         <tbody>
           {visible.length === 0 && (
             <tr>
-              <td colSpan={12} className="p-4 text-center text-muted-foreground">
+              <td colSpan={13} className="p-4 text-center text-muted-foreground">
                 {anyFilter ? "No bets match these filters." : "No real bets logged yet."}
               </td>
             </tr>
@@ -148,8 +149,24 @@ export function RealBetsLog({ bets }: { bets: RealBet[] }) {
                       ? "text-red-400"
                       : ""
                 }`}
+                title={
+                  b.clv != null && b.closingBookmaker
+                    ? `vs ${b.closingBookmaker} close, taken ${b.closingMinutesBeforeKo ?? "?"} min before kickoff`
+                    : "No price at this book within 60 min of kickoff"
+                }
               >
                 {b.clv != null ? `${(b.clv * 100).toFixed(2)}%` : "—"}
+              </td>
+              <td
+                className={`p-2 text-right font-mono hidden md:table-cell ${
+                  b.clvPinnacle != null && b.clvPinnacle > 0
+                    ? "text-emerald-400"
+                    : b.clvPinnacle != null && b.clvPinnacle < 0
+                      ? "text-red-400"
+                      : ""
+                }`}
+              >
+                {b.clvPinnacle != null ? `${(b.clvPinnacle * 100).toFixed(2)}%` : "—"}
               </td>
               <td className="p-2 text-right">€{b.stake.toFixed(2)}</td>
               <td className="p-2">

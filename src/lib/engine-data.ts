@@ -2266,8 +2266,15 @@ export interface RealBet {
   slippagePct: number | null;
   /** REAL-BETS-CLV-EDGE: edge implied by actual_odds × model_probability − 1, decimal (0.05 = +5%). */
   edgePctTaken: number | null;
-  /** REAL-BETS-CLV-EDGE: (actual_odds / closing_odds) − 1, decimal. Set at settlement. */
+  /** DIRECT-BOOK-CLV (2026-09-11): (actual_odds / close AT THE BET'S OWN BOOK) − 1,
+   *  decimal; null when that book has no close within 60 min of kickoff. Was vs an
+   *  arbitrary API-Football book before 2026-09-11. */
   clv: number | null;
+  /** De-vigged Pinnacle CLV: actual_odds × P(Pinnacle close) − 1. Same scale as shadow bets. */
+  clvPinnacle: number | null;
+  /** Feed that supplied the own-book close, and how many minutes before kickoff it was taken. */
+  closingBookmaker: string | null;
+  closingMinutesBeforeKo: number | null;
   stake: number;
   placedAt: string;
   result: string;
@@ -2285,7 +2292,7 @@ export async function getRealBets(): Promise<RealBet[]> {
     .from("real_bets")
     .select(
       `id, match_id, market, selection, bookmaker, captured_odds, actual_odds,
-       slippage_pct, edge_pct_taken, clv,
+       slippage_pct, edge_pct_taken, clv, clv_pinnacle, closing_bookmaker, closing_minutes_before_ko,
        stake, placed_at, result, pnl, resolved_at, notes,
        bot:bot_id(name),
        paper:simulated_bet_id(stake, pnl, result),
@@ -2324,6 +2331,9 @@ export async function getRealBets(): Promise<RealBet[]> {
       slippagePct: r.slippage_pct != null ? Number(r.slippage_pct) : null,
       edgePctTaken: r.edge_pct_taken != null ? Number(r.edge_pct_taken) : null,
       clv: r.clv != null ? Number(r.clv) : null,
+      clvPinnacle: r.clv_pinnacle != null ? Number(r.clv_pinnacle) : null,
+      closingBookmaker: r.closing_bookmaker ?? null,
+      closingMinutesBeforeKo: r.closing_minutes_before_ko != null ? Number(r.closing_minutes_before_ko) : null,
       stake: Number(r.stake),
       placedAt: r.placed_at,
       result: r.result,
