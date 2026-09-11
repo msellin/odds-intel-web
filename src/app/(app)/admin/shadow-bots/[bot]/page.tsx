@@ -299,7 +299,18 @@ export default async function ShadowBotDetailPage({
 
   // PER-BOT-UNIBET-ODDS-2026-09-09: current Coolbet + Unibet price per PENDING pick,
   // so each bot's own detail page shows the two books side by side — matching the
-  // shared Upcoming table (same fetch, same key builder, same recency window). Only
+  // shared Upcoming table (same fetch, same key builder, same recency window).
+  //
+  // UB-COLUMN-NOT-PLACEABLE-2026-09-11: this read `["Unibet", "Unibet-Kambi"]` and
+  // took whichever was newest — correct when it was written on 2026-09-05, wrong from
+  // 2026-09-06, when unibet.ee LEFT the Kambi API (KAMBI-FEED-DIVERGENCE) and Kambi was
+  // dropped from ACCESSIBLE_BOOKMAKERS. Measured today on 1,390 paired 1x2 + O/U 2.5
+  // quotes: Kambi disagrees with the site on 91.0 pct of them and reads HIGHER on 29.0
+  // pct — so the column was quoting the operator, who places by hand off this screen, a
+  // price that does not exist at the venue. `Unibet-Site` is the placeable feed
+  // (workers/automation/unibet_odds_feed.py). It covers less — 380 upcoming fixtures vs
+  // Kambi's 573 — and that is the correct trade: a blank cell costs a missed bet, a
+  // phantom price costs a placed one. Only
   // pending picks: a settled game has no meaningful "current" price. Newest row wins
   // per key (rows arrive newest-first), so the direct Kambi feed beats the stale AF
   // Unibet where both exist. Key is lowercased both sides (shadow_bets stores 1x2 AND
@@ -320,7 +331,7 @@ export default async function ShadowBotDetailPage({
       .from("odds_snapshots")
       .select("match_id, market, selection, odds, timestamp, bookmaker")
       .in("match_id", pendingMatchIds)
-      .in("bookmaker", ["Coolbet", "Unibet", "Unibet-Kambi", "Epicbet"])
+      .in("bookmaker", ["Coolbet", "Unibet-Site", "Epicbet"])
       .eq("is_live", false)
       .gte("timestamp", new Date(Date.now() - 12 * 3600 * 1000).toISOString())
       .order("timestamp", { ascending: false })
@@ -476,7 +487,7 @@ export default async function ShadowBotDetailPage({
               <div className="text-right" title="Coolbet's CURRENT price for this selection (latest snapshot in the last 12h). Compare to Min odds — pending picks only.">
                 Now CB
               </div>
-              <div className="text-right" title="Unibet's CURRENT price (direct Kambi feed preferred, else the stale API-Football Unibet). Pending picks only.">
+              <div className="text-right" title="Unibet's CURRENT price, from the PLACEABLE unibet.ee site feed. The Kambi API price is deliberately not shown — unibet.ee left that feed on 2026-09-06 and it disagrees with the site on 91 pct of quotes. Pending picks only.">
                 Now UB
               </div>
               <div className="text-right" title="Epicbet's CURRENT price (30-min ingest at :02/:32 UTC). Pending picks only.">
@@ -676,16 +687,14 @@ function BetRow({
         className="mt-0.5 text-right font-mono text-sm tabular-nums sm:mt-0"
         title={
           ub == null
-            ? "No recent Unibet price for this selection."
-            : `Unibet ${ub.odds.toFixed(2)} · ${ub.src === "Unibet-Kambi" ? "direct Kambi feed" : "API-Football feed (STALE)"} · ${new Date(ub.ts).toUTCString()}`
+            ? "No recent Unibet price for this selection — Unibet-Site quotes ~380 of the upcoming fixtures, so a blank here means we cannot place it at Unibet."
+            : `Unibet ${ub.odds.toFixed(2)} · unibet.ee site feed (the placeable one) · ${new Date(ub.ts).toUTCString()}`
         }
       >
         {ub == null ? (
           <span className="text-neutral-600">—</span>
         ) : (
-          <span className={ub.src === "Unibet-Kambi" ? "text-emerald-300" : "text-amber-300/80"}>
-            {ub.odds.toFixed(2)}
-          </span>
+          <span className="text-emerald-300">{ub.odds.toFixed(2)}</span>
         )}
       </div>
       <div

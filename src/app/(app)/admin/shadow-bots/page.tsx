@@ -909,14 +909,18 @@ export default async function ShadowBotsPage() {
         // where its coverage numbers come from. Coolbet prices only 44% of
         // outcomes, so a second column is mostly about the fixtures Coolbet
         // does not cover at all.
-        // SHADOW-UB-COLUMN-STALE-2026-09-05: the direct Kambi feed joins the two
-        // AF-era books. `Unibet` (API-Football) is a median 26.8h stale and
-        // covers 55 upcoming fixtures; `Unibet-Kambi` is 0.7h and 407, and AF's
-        // forward Unibet coverage drops to zero from 2026-09-06. Both are read
-        // and the NEWEST wins per key (rows arrive newest-first), so no explicit
-        // preference logic is needed — recency picks Kambi wherever it exists
-        // and falls back to the AF price where it does not.
-        .in("bookmaker", ["Coolbet", "Unibet", "Unibet-Kambi"])
+        // UB-COLUMN-NOT-PLACEABLE-2026-09-11: was `["Unibet", "Unibet-Kambi"]`,
+        // newest-wins. That was right on 2026-09-05 and wrong from 2026-09-06,
+        // when unibet.ee LEFT the Kambi API (KAMBI-FEED-DIVERGENCE) and Kambi
+        // was dropped from ACCESSIBLE_BOOKMAKERS. Measured 2026-09-11 on 1,390
+        // paired 1x2 + O/U 2.5 quotes: Kambi disagrees with the site on 91.0 pct
+        // and reads HIGHER on 29.0 pct — a column quoting the operator a price
+        // that does not exist at the venue they place at. `Unibet-Site` is the
+        // placeable feed. Fewer fixtures (380 upcoming vs Kambi's 573), which is
+        // the right trade: a blank cell costs a missed bet, a phantom price
+        // costs a placed one. Still two books, so the 10k ceiling below is
+        // unchanged.
+        .in("bookmaker", ["Coolbet", "Unibet-Site"])
         .eq("is_live", false)
         .order("timestamp", { ascending: false })
         // PostgREST caps responses at db-max-rows = 10,000 (see
@@ -1417,19 +1421,14 @@ export default async function ShadowBotsPage() {
                       className="text-right font-mono text-sm tabular-nums"
                       title={
                         ub == null
-                          ? "No Unibet price for this selection in the feed."
-                          : `Unibet ${ub.odds.toFixed(2)}${cb ? ` vs Coolbet ${cb.odds.toFixed(2)}` : " (Coolbet has no price)"} · snapshot ${new Date(ub.ts).toUTCString()} · source: ${ub.src === "Unibet-Kambi" ? "direct Kambi feed" : "API-Football feed (STALE — AF forward Unibet coverage ended 2026-09-06)"} · neither feed fully verified against unibet.ee`
+                          ? "No Unibet price for this selection — Unibet-Site covers ~380 upcoming fixtures, so a blank means we cannot place it there."
+                          : `Unibet ${ub.odds.toFixed(2)}${cb ? ` vs Coolbet ${cb.odds.toFixed(2)}` : " (Coolbet has no price)"} · snapshot ${new Date(ub.ts).toUTCString()} · source: unibet.ee site feed — the PLACEABLE one (the Kambi API price is deliberately not shown; unibet.ee left that feed 2026-09-06 and it disagrees with the site on 91 pct of quotes)`
                       }
                     >
                       {ub == null
                         ? <span className="text-neutral-600">—</span>
                         : <span className={ubBeatsCb ? "text-emerald-400" : "text-neutral-400"}>
                             {ub.odds.toFixed(2)}
-                            {ub.src === "Unibet-Kambi" ? (
-                              <span className="ml-0.5 text-[9px] text-neutral-500" title="direct Kambi feed">K</span>
-                            ) : (
-                              <span className="ml-0.5 text-[9px] text-amber-500/80" title="API-Football feed — stale, forward coverage ended">A</span>
-                            )}
                           </span>
                       }
                     </div>
