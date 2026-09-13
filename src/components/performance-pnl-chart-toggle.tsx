@@ -32,6 +32,30 @@ const PERIOD_LABEL: Record<Period, string> = {
   "90d": "90d",
 };
 
+/**
+ * Dated engine events worth marking on the curve, so a reader can tell a change
+ * WE made apart from variance.
+ *
+ * Previously two markers were hardcoded as `x="May 6"` / `x="May 24"` behind a
+ * `period === "90d"` check. Recharts matches a categorical `x` against a value
+ * present in the data, so once those dates fell out of the 90-day window the
+ * lines silently stopped rendering — the check guarded the wrong thing. Driving
+ * this from ISO dates and filtering on "is this day actually in the window"
+ * makes a marker appear in every period it belongs to and disappear honestly
+ * when it does not.
+ */
+const EVENTS: { iso: string; label: string; color: string }[] = [
+  { iso: "2026-05-06", label: "Pipeline v2", color: "#f59e0b" },
+  { iso: "2026-05-24", label: "Model v2", color: "#a855f7" },
+  // OU-CALIBRATOR-DOMAIN-MISMATCH. The O/U calibration curve shipped on 09-03
+  // was fitted on one probability and applied to another, which inflated every
+  // long-priced O/U selection and turned the 8% edge floor into a longshot
+  // filter. Removed 09-13. Both ends are marked because the drawdown between
+  // them is ours, not the market's, and a reader deserves to see which is which.
+  { iso: "2026-09-03", label: "Calibration bug", color: "#ef4444" },
+  { iso: "2026-09-13", label: "Bug fixed", color: "#22c55e" },
+];
+
 function fmtEur(v: number): string {
   const sign = v >= 0 ? "+" : "−";
   const abs = Math.abs(v);
@@ -110,6 +134,14 @@ export function PerformancePnlChartToggle({ curve30d, curve90d }: Props) {
     cum: p.cum,
   }));
 
+  // A marker is only drawn on a day the curve actually has, because Recharts
+  // matches a categorical x against the data and a miss renders nothing at all.
+  const inWindow = new Set(activeCurve.map((p) => p.d));
+  const visibleEvents = EVENTS.filter((e) => inWindow.has(e.iso));
+  const showsBugWindow =
+    visibleEvents.some((e) => e.iso === "2026-09-03") &&
+    visibleEvents.some((e) => e.iso === "2026-09-13");
+
   const strokeColor = positive ? "#22c55e" : "#ef4444";
 
   return (
@@ -183,22 +215,15 @@ export function PerformancePnlChartToggle({ curve30d, curve90d }: Props) {
               />
               <Tooltip content={<CustomTooltip />} cursor={{ stroke: "rgba(255,255,255,0.15)", strokeDasharray: "3 3" }} />
               <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)" strokeDasharray="4 4" />
-              {period === "90d" && (
-                <>
-                  <ReferenceLine
-                    x="May 6"
-                    stroke="#f59e0b"
-                    strokeDasharray="3 3"
-                    label={{ value: "Pipeline v2", position: "insideTopRight", fontSize: 9, fill: "#f59e0b" }}
-                  />
-                  <ReferenceLine
-                    x="May 24"
-                    stroke="#a855f7"
-                    strokeDasharray="3 3"
-                    label={{ value: "Model v2", position: "insideTopRight", fontSize: 9, fill: "#a855f7" }}
-                  />
-                </>
-              )}
+              {visibleEvents.map((e) => (
+                <ReferenceLine
+                  key={e.iso}
+                  x={shortDate(e.iso)}
+                  stroke={e.color}
+                  strokeDasharray="3 3"
+                  label={{ value: e.label, position: "insideTopRight", fontSize: 9, fill: e.color }}
+                />
+              ))}
               <Area
                 type="monotone"
                 dataKey="cum"
@@ -212,6 +237,29 @@ export function PerformancePnlChartToggle({ curve30d, curve90d }: Props) {
           </ResponsiveContainer>
         )}
       </div>
+
+      {/* What the two September markers mean, stated plainly.
+          The x-axis is the day a pick was MADE (settlement.py groups the curve by
+          DATE(pick_time)), so the two markers bracket exactly the picks generated
+          under the bug — which is the honest way to show it. Two caveats belong
+          here rather than in a footnote: both marker days are MIXED, because the
+          bug shipped mid-morning on the 3rd and was removed in the evening of the
+          13th; and the right-hand edge keeps filling in as newer bets settle, so
+          the last few days always read low until they catch up. */}
+      {hasData && showsBugWindow && (
+        <p className="mt-3 text-[11px] leading-relaxed text-neutral-500">
+          <span className="text-red-400">Sep 3</span> — a calibration bug began
+          inflating our own edge estimate on over/under picks, so the engine
+          published far more of them, at longer prices, than it should have.
+          Everything between the markers is a pick made under that bug, and the
+          drawdown there is ours, not variance.{" "}
+          <span className="text-emerald-400">Sep 13</span> — found and removed.
+          Both marker days are mixed (the bug shipped 10:49 UTC on the 3rd and was
+          removed 21:00 UTC on the 13th), and because a day only counts a bet once
+          it has settled, the newest days on the right keep filling in for a while
+          — so read the recovery once that edge has caught up, not on day one.
+        </p>
+      )}
 
       {/* Footer stat strip */}
       {hasData && (
