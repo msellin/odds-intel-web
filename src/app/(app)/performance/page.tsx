@@ -51,6 +51,7 @@ import type { LiveBet, ModelV2Stats, CalibratedHeadlineStats } from "@/lib/engin
 import { PerformanceClient } from "@/components/performance-client";
 import type { PublicBotStat, SanitizedBotBet } from "@/components/performance-leaderboard";
 import PicksForwardTestPanel from "@/components/picks-forward-test-panel";
+import { getPicksForwardTestSummary } from "@/lib/engine-data";
 import { PerformanceHistory } from "@/components/performance-history";
 import type { FullBetItem } from "@/components/performance-history";
 import { PerformanceExtras } from "@/components/performance-extras";
@@ -292,6 +293,44 @@ export default async function PerformancePage() {
   const cachedBots = buildCachedBotStats(cache, botsDB, isPro, isElite)
     .filter(b => b.maturityLabel !== 'experimental')
     .filter(b => !liveRetiredNames.has(b.name));
+
+  // PICKS-BOT-IN-LEADERBOARD-2026-09-14. bot_sharp_forward_test_v1 is the bot
+  // that actually produces the picks readers receive, and it was missing from
+  // the leaderboard entirely — it writes NO simulated_bets (it reads through to
+  // picks_forward_test), and `bot_breakdown` is built from simulated_bets. So
+  // the fleet table listed everything EXCEPT the one strategy we publish.
+  //
+  // Injected from its own ledger rather than faked into simulated_bets: writing
+  // it there would pull it into every bot-cohort query in the codebase and
+  // re-contaminate the track record (see migration 342's header).
+  //
+  // TWO DELIBERATE CHOICES so this row cannot mislead:
+  //  * hasEnoughData uses ITS OWN pre-registered checkpoint (200 settled), not
+  //    the table's loose `settled >= 5`. At n=5 it currently reads +25.8% ROI,
+  //    and the table sorts the "enough data" group by ROI — so the default
+  //    convention would rank a five-bet sample above bots with 640. It sits in
+  //    "still collecting", sorted by n, until its own rule says otherwise.
+  //  * avgClv is the MARGIN-CORRECTED number, not the raw ratio. Break-even CLV
+  //    is the closing book's margin, not zero; the raw figure would read
+  //    positive while the honest one is negative.
+  const picksSummary = await getPicksForwardTestSummary();
+  if (picksSummary && picksSummary.published > 0) {
+    const mc = picksSummary.clvMarginCorrected;
+    cachedBots.push({
+      name: "bot_sharp_forward_test_v1",
+      settled: picksSummary.settled,
+      won: isPro ? picksSummary.won : 0,
+      lost: isPro ? picksSummary.settled - picksSummary.won : 0,
+      pnl: isPro ? picksSummary.pnlUnits : null,
+      roi: picksSummary.roi == null ? null : picksSummary.roi * 100,
+      clvDirection: mc == null ? "neutral" : mc > 0 ? "positive" : "negative",
+      avgClv: isElite ? (mc == null ? null : mc * 100) : null,
+      currentBankroll: null,
+      startingBankroll: null,
+      hasEnoughData: picksSummary.settled >= 200,
+      maturityLabel: "testing",
+    });
+  }
 
   // (retired_bot_breakdown filter removed with RetiredStrategiesSection)
 
