@@ -148,9 +148,17 @@ export default async function PicksPage() {
             Priced against the sharpest line — no model
           </p>
           <h1 className="text-balance text-3xl font-semibold tracking-tight sm:text-5xl">
+            {/* PICKS-HEADLINE-COUNT-2026-09-14: "N picks on the board" counts
+                only UNRESOLVED picks, but the list below is headed "Today · 8
+                picks" — so the moment anything settled the page read "3 picks
+                on the board" above a list of 8. The count was never wrong; it
+                was just unambiguous only while nothing had settled yet, which
+                stopped being true on day one. Say which number it is. */}
             {upcoming.length > 0
-              ? `${upcoming.length} pick${upcoming.length === 1 ? "" : "s"} on the board`
-              : "No picks on the board right now"}
+              ? `${upcoming.length} pick${upcoming.length === 1 ? "" : "s"} still to settle`
+              : picks.length > 0
+                ? "All of today's picks have settled"
+                : "No picks on the board right now"}
           </h1>
           <p className="mx-auto max-w-xl text-balance text-sm text-neutral-400 sm:text-base">
             A pick is a price that beats the sharpest line in the market, with
