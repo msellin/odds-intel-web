@@ -1208,11 +1208,13 @@ export default async function ShadowBotsPage() {
         </p>
       </header>
 
-      {/* PICKS forward test — its own panel, deliberately ABOVE the bot
-          portfolio and visually separated, because its numbers are in
-          DIFFERENT UNITS from everything below (flat 1 unit, multiplicative
-          sharp edge) and pooling them would be meaningless. */}
-      <ForwardTestPanel arms={ftArms} />
+      {/* PICKS-MOVED-TO-PERFORMANCE-2026-09-14: the published-picks panel that
+          used to sit here has moved to /performance, where it belongs. This page
+          is the 🤖 OWN bot fleet — paper strategies for the operator's own money.
+          The picks we SEND TO READERS are a different product on a different
+          price basis (best across all books worldwide, not the three we can
+          place at); showing them here while an OWN paper instrument showed on
+          the customer page had the two products exactly swapped. */}
 
       {/* Discipline check — hand-picked vs left alone. Deliberately placed
           above the portfolio numbers: if the discretionary layer is costing
@@ -1719,6 +1721,12 @@ export default async function ShadowBotsPage() {
             title: "Real-money capable · Coolbet UI placer",
             blurb: "Place at Coolbet's own price through the UI placer, behind the validated per-market gates (real money OFF unless explicitly toggled).",
             names: ["bot_coolbet_1x2_model_v1", "bot_coolbet_ou_model_v1"],
+          },
+          {
+            title: "Sharp anchor · TIGHT gate — instrument (paper)",
+            blurb:
+              "Not a strategy — an INSTRUMENT. It measures the one configuration the original 70,200-cell sweep could not express: that grid gated on expected ROI (p\u00d7odds\u22121) while the live gate is a probability difference (p\u22121/odds), which is a curve in odds. Swept correctly it was the only survivor. Both research rounds that produced it still expect it to fail \u2014 promotion needs margin-corrected own-book CLV > 0 at n\u2265300, and ROI may never promote it at any value.",
+            names: ["bot_trigger_1x2_sharp_tight_v1"],
           },
           {
             title: "Trigger engine · model vs sharp anchor (paper)",
