@@ -919,7 +919,7 @@ export default async function ShadowBotsPage() {
     const { data: page } = await db
       .from("shadow_bets_unique")
       .select(
-        "id, bot_id, match_id, market, selection, odds_at_pick, odds_at_pick_live, result, pick_time, clv, clv_pinnacle, clv_pinnacle_live"
+        "id, bot_id, match_id, market, selection, odds_at_pick, odds_at_pick_live, result, pick_time, clv, clv_pinnacle, clv_pinnacle_live, closing_bookmaker"
       )
       .in(
         "bot_id",
