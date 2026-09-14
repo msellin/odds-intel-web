@@ -6036,3 +6036,61 @@ export async function getPicksForwardTestSummary(): Promise<PicksForwardTestSumm
     nClvMc: Number(r.n_clv_mc ?? 0),
   };
 }
+
+// PICKS-BOT-ACTS-LIKE-THE-OTHERS-2026-09-14. The leaderboard row for
+// bot_sharp_forward_test_v1 needs the same things every other row has: a
+// bankroll chart and an expandable bet list. Both are driven by the shared
+// `SanitizedBotBet[]`, which comes from `simulated_bets` — a table this bot
+// deliberately does not write to (migration 342: writing there would pull the
+// published picks into every bot-cohort query and re-contaminate the ledger).
+//
+// So its bets are read from its OWN table and shaped to the same contract.
+//
+// UNITS: the published rule stakes a flat 1 unit; every other bot on that page
+// runs a EUR 1000 bankroll at EUR 10 flat. Rendering 1.03 units next to
+// EUR 1,339 would make the newest strategy look like a rounding error, so the
+// unit ledger is scaled by STAKE_EUR. This changes no stored value and no
+// stopping rule — those are evaluated on CLV in units, untouched.
+export const PICKS_FORWARD_TEST_STAKE_EUR = 10;
+export const PICKS_FORWARD_TEST_START_BANKROLL = 1000;
+
+export async function getPicksForwardTestBets(): Promise<Array<{
+  id: string; match: string; league: string; placedAt: string; market: string;
+  selection: string; odds: number; stake: number | null; result: string;
+  pnl: number; bankrollAfter: number | null; modelProb: number;
+  clv: number | null; closingOdds: number | null;
+}>> {
+  const supabase = createSupabasePublic();
+  const { data, error } = await supabase
+    .from("picks_forward_test_public")
+    .select("*")
+    .order("published_at", { ascending: true });
+  if (error || !data) return [];
+
+  const S = PICKS_FORWARD_TEST_STAKE_EUR;
+  let running = PICKS_FORWARD_TEST_START_BANKROLL;
+  return (data as Array<Record<string, unknown>>).map((r) => {
+    const pnlUnits = r.pnl == null ? 0 : Number(r.pnl);
+    const settled = r.outcome != null;
+    if (settled) running += pnlUnits * S;
+    return {
+      id: String(r.id),
+      match: `${r.home_team ?? "?"} v ${r.away_team ?? "?"}`,
+      league: String(r.league ?? ""),
+      placedAt: String(r.published_at ?? ""),
+      market: String(r.market ?? ""),
+      selection: String(r.selection ?? ""),
+      odds: Number(r.odds ?? 0),
+      stake: S,
+      result: String(r.outcome ?? "pending"),
+      pnl: pnlUnits * S,
+      bankrollAfter: settled ? running : null,
+      // p_sharp is the de-vigged Pinnacle probability this rule bets against —
+      // the same slot the other bots fill with a MODEL probability. Different
+      // provenance, same meaning to a reader: "what we think the chance is".
+      modelProb: r.p_sharp == null ? 0 : Number(r.p_sharp),
+      clv: r.clv == null ? null : Number(r.clv),
+      closingOdds: r.closing_odds == null ? null : Number(r.closing_odds),
+    };
+  });
+}

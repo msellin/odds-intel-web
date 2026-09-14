@@ -51,7 +51,12 @@ import type { LiveBet, ModelV2Stats, CalibratedHeadlineStats } from "@/lib/engin
 import { PerformanceClient } from "@/components/performance-client";
 import type { PublicBotStat, SanitizedBotBet } from "@/components/performance-leaderboard";
 import PicksForwardTestPanel from "@/components/picks-forward-test-panel";
-import { getPicksForwardTestSummary } from "@/lib/engine-data";
+import {
+  getPicksForwardTestSummary,
+  getPicksForwardTestBets,
+  PICKS_FORWARD_TEST_STAKE_EUR,
+  PICKS_FORWARD_TEST_START_BANKROLL,
+} from "@/lib/engine-data";
 import { PerformanceHistory } from "@/components/performance-history";
 import type { FullBetItem } from "@/components/performance-history";
 import { PerformanceExtras } from "@/components/performance-extras";
@@ -199,6 +204,15 @@ async function LoggedInPerformanceSection({
     getPublicCohortBotNames(),
   ]);
   const sanitizedBets = sanitizeBets(allBetsRaw, isElite);
+  // PICKS-BOT-ACTS-LIKE-THE-OTHERS-2026-09-14: its bets come from
+  // picks_forward_test, not simulated_bets, so they are appended to the same
+  // array the chart and expandable bet list already read. Without this the row
+  // would open to an empty chart — present but inert, which is worse than
+  // absent because it reads as "this strategy has done nothing".
+  const picksBets = (await getPicksForwardTestBets()).map((b) => ({
+    ...b, bot: "bot_sharp_forward_test_v1",
+  })) as unknown as SanitizedBotBet[];
+  sanitizedBets.push(...picksBets);
 
   // PERF-HISTORY-COHORT-MATCH (2026-08-21): the "+X% n=Y" ROI headline is
   // getCalibratedHeadlineStats — filtered to production public cohort. The
@@ -325,8 +339,14 @@ export default async function PerformancePage() {
       roi: picksSummary.roi == null ? null : picksSummary.roi * 100,
       clvDirection: mc == null ? "neutral" : mc > 0 ? "positive" : "negative",
       avgClv: isElite ? (mc == null ? null : mc * 100) : null,
-      currentBankroll: null,
-      startingBankroll: null,
+      // Same basis as every other row: EUR 1000 start, EUR 10 flat. The rule
+      // stakes 1 unit; showing 1.03 next to EUR 1,339 would make the newest
+      // strategy look like a rounding error. Scaling changes no stored value
+      // and no stopping rule — those read CLV in units.
+      currentBankroll: isElite
+        ? PICKS_FORWARD_TEST_START_BANKROLL + picksSummary.pnlUnits * PICKS_FORWARD_TEST_STAKE_EUR
+        : null,
+      startingBankroll: PICKS_FORWARD_TEST_START_BANKROLL,
       hasEnoughData: picksSummary.settled >= 200,
       maturityLabel: "testing",
     });
