@@ -1,61 +1,58 @@
 /**
- * /picks — recent + upcoming pre-match picks.
+ * /picks — the pre-registered sharp-edge forward test.
  *
- * PICKS-USER-GATE 2026-08-22 — auth-aware:
- *   - Signed-out visitors see the calibrated-only cohort (same set the
- *     public Telegram channel ships and the same set /api/v1/upcoming
- *     returns publicly).
- *   - Signed-in visitors see the wider calibrated+beta+active cohort, plus
- *     a per-row "Mark bet" checkbox that persists to `user_pick_marks` so
- *     they can track which picks they've manually placed with a book. The
- *     wider cohort is fetched server-side inside this component and never
- *     exposed via any JSON endpoint — anonymous scrapers cannot pull it
- *     from the network tab.
+ * PICKS-PAGE-SHOW-FORWARD-TEST (2026-09-14). This page used to read
+ * `simulated_bets` filtered to calibrated bots and show a MODEL edge. Migration
+ * 335 removed the O/U Platt calibrator that had manufactured ~8-9 percentage
+ * points of that edge for months (fitted on raw ensemble probabilities, applied
+ * to Pinnacle-shrunk ones), and with it gone nothing clears the old model
+ * floors: the query returned nothing and the page was dead.
  *
- * Counterpart to /performance (full settled ledger). This page shows the
- * -24h/+36h window: today's picks that have already settled (with W/L badge)
- * plus everything upcoming.
+ * It now renders `picks_forward_test`, live arm only. See
+ * src/lib/forward-test-picks.ts for the three rules this page exists to hold —
+ * no backtest number, no /performance link, no junk-anchor arm.
+ *
+ * TIER: free, including signed-out. The same picks go to the public Telegram
+ * channel the moment they are generated, so there is nothing here to gate. The
+ * old auth-aware cohort split (PICKS-USER-GATE) went with the model path — this
+ * rule has ONE cohort by construction (top 8 a day), and splitting it would
+ * change what is being measured in a running pre-registered test.
  */
 import Link from "next/link";
 import { Nav } from "@/components/nav";
 import {
-  createSupabaseServer,
-  createServerServiceClient,
-} from "@/lib/supabase-server";
-import {
-  fetchUpcomingPicks,
-  placementTriggerOdds,
-  PUBLIC_MATURITY_LABELS,
-  SIGNED_IN_MATURITY_LABELS,
-  type UpcomingPick,
-} from "@/lib/upcoming-picks";
+  ci95,
+  hasStarted,
+  sharpBreakEvenOdds,
+  fetchForwardTestPicks,
+  fetchForwardTestSummary,
+  type ForwardTestPick,
+  type ForwardTestSummary,
+} from "@/lib/forward-test-picks";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Live picks — OddsIntel",
+  title: "Sharp-line picks — OddsIntel",
   description:
-    "Football picks the model is flagging right now. Every pick logged before kickoff, settlement tracked on the public ledger.",
+    "Football picks priced against the sharpest line in the market, not against a model. Pre-registered forward test, running publicly since 14 September 2026.",
 };
 
+const START_DATE = "14 September 2026";
+
 function formatMarket(market: string, selection: string): string {
-  const mm = (market || "").toLowerCase();
-  const norm = mm === "o/u" || mm === "over_under_25" ? "ou25" : mm;
-  if (norm === "1x2") {
-    if (selection === "home") return "Home win";
-    if (selection === "away") return "Away win";
-    if (selection === "draw") return "Draw";
+  const m = (market || "").toLowerCase();
+  const s = (selection || "").toLowerCase();
+  if (m === "1x2") {
+    if (s === "home") return "Home win";
+    if (s === "away") return "Away win";
+    if (s === "draw") return "Draw";
     return selection;
   }
-  if (norm === "ou25") {
-    if (selection.toLowerCase().includes("over")) return "Over 2.5 goals";
-    if (selection.toLowerCase().includes("under")) return "Under 2.5 goals";
+  if (m.startsWith("over_under")) {
+    if (s.includes("over")) return "Over 2.5 goals";
+    if (s.includes("under")) return "Under 2.5 goals";
     return selection;
-  }
-  if (norm === "btts") {
-    return selection.toLowerCase().includes("yes")
-      ? "Both teams to score: Yes"
-      : "Both teams to score: No";
   }
   return `${market} · ${selection}`;
 }
@@ -65,111 +62,203 @@ function formatKickoff(iso: string | null): { date: string; time: string } {
   const d = new Date(iso);
   const today = new Date();
   const tomorrow = new Date(today.getTime() + 24 * 3600 * 1000);
-  const isToday = d.toDateString() === today.toDateString();
-  const isTomorrow = d.toDateString() === tomorrow.toDateString();
-  const date = isToday
-    ? "Today"
-    : isTomorrow
-      ? "Tomorrow"
-      : d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+  const yesterday = new Date(today.getTime() - 24 * 3600 * 1000);
+  const date =
+    d.toDateString() === today.toDateString()
+      ? "Today"
+      : d.toDateString() === tomorrow.toDateString()
+        ? "Tomorrow"
+        : d.toDateString() === yesterday.toDateString()
+          ? "Yesterday"
+          : d.toLocaleDateString("en-GB", {
+              weekday: "short",
+              day: "numeric",
+              month: "short",
+            });
   const time =
-    d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }) +
-    " UTC";
+    d.toLocaleTimeString("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "UTC",
+    }) + " UTC";
   return { date, time };
 }
 
-function ResultBadge({ result, kickoff }: { result: string; kickoff: string | null }) {
-  const kickoffPassed = kickoff ? new Date(kickoff).getTime() < Date.now() : false;
-  if (result === "pending") {
-    if (kickoffPassed) {
-      return (
-        <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-amber-400">
-          <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
-          Live
-        </span>
-      );
-    }
-    return null;
-  }
-  if (result === "won") {
+function OutcomeBadge({
+  outcome,
+  kickoff,
+}: {
+  outcome: ForwardTestPick["outcome"];
+  kickoff: string | null;
+}) {
+  if (outcome === "won")
     return (
       <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-emerald-400">
         Won
       </span>
     );
-  }
-  if (result === "lost") {
+  if (outcome === "lost")
     return (
       <span className="rounded-md bg-rose-500/15 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-rose-400">
         Lost
       </span>
     );
-  }
-  if (result === "void") {
+  if (outcome === "push" || outcome === "void")
     return (
       <span className="rounded-md bg-neutral-500/15 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-neutral-400">
-        Void
+        {outcome === "push" ? "Push" : "Void"}
       </span>
     );
-  }
+  if (hasStarted(kickoff))
+    return (
+      <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-amber-400">
+        <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
+        Live
+      </span>
+    );
   return null;
 }
 
+/**
+ * The running result.
+ *
+ * Everything shown here is the LIVE ledger. The +5.5% backtest that motivated
+ * the rule is NOT rendered anywhere on this page and must not be added: its 95%
+ * CI is [-0.7, +11.7], it includes zero, and it was computed on the same window
+ * that chose the rule's odds cap and alignment tolerance. Showing it beside live
+ * picks would read as a track record, which is exactly the claim this method
+ * does not have.
+ */
+function RunningResult({ s }: { s: ForwardTestSummary }) {
+  const roiPct = s.roi != null ? s.roi * 100 : null;
+  const roiCi = ci95(s.roi_sd, s.settled);
+  const roiCiPct = roiCi != null ? roiCi * 100 : null;
+  const clvPct =
+    s.clv_margin_corrected != null ? s.clv_margin_corrected * 100 : null;
+  const clvCi = ci95(s.clv_mc_sd, s.n_clv_mc);
+  const clvCiPct = clvCi != null ? clvCi * 100 : null;
+
+  const straddlesZero =
+    roiPct != null && roiCiPct != null
+      ? roiPct - roiCiPct <= 0 && roiPct + roiCiPct >= 0
+      : null;
+
+  return (
+    <section className="mt-8 rounded-xl border border-white/[0.06] bg-white/[0.02] p-5 sm:p-6">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-base font-semibold text-neutral-100">
+          Running result
+        </h2>
+        <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
+          Live ledger · since {START_DATE}
+        </p>
+      </div>
+
+      {s.settled < 1 ? (
+        <p className="mt-3 text-sm text-neutral-400">
+          {s.published} pick{s.published === 1 ? "" : "s"} published,{" "}
+          {s.pending} still to settle. Nothing has settled yet, so there is no
+          number to show. There will be one here, win or lose.
+        </p>
+      ) : (
+        <>
+          <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
+                Settled
+              </p>
+              <p className="font-mono text-lg font-semibold tabular-nums text-neutral-100">
+                {s.settled}
+              </p>
+              <p className="mt-0.5 text-[11px] text-neutral-500">
+                {s.won} won · {s.settled - s.won} lost
+                {s.refunded > 0 ? ` · ${s.refunded} refunded` : ""}
+              </p>
+            </div>
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
+                Return
+              </p>
+              <p className="font-mono text-lg font-semibold tabular-nums text-neutral-100">
+                {roiPct != null ? `${roiPct >= 0 ? "+" : ""}${roiPct.toFixed(1)}%` : "—"}
+              </p>
+              <p className="mt-0.5 text-[11px] text-neutral-500">
+                {roiPct != null && roiCiPct != null
+                  ? `95% CI ${(roiPct - roiCiPct).toFixed(1)} to ${(roiPct + roiCiPct).toFixed(1)}`
+                  : "CI needs more settled picks"}
+              </p>
+            </div>
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
+                Closing-line value
+              </p>
+              <p className="font-mono text-lg font-semibold tabular-nums text-neutral-100">
+                {clvPct != null ? `${clvPct >= 0 ? "+" : ""}${clvPct.toFixed(1)}%` : "—"}
+              </p>
+              <p className="mt-0.5 text-[11px] text-neutral-500">
+                {clvPct != null
+                  ? `n=${s.n_clv_mc}${clvCiPct != null ? ` · ±${clvCiPct.toFixed(1)}` : ""}`
+                  : "not measurable yet"}
+              </p>
+            </div>
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
+                Units
+              </p>
+              <p className="font-mono text-lg font-semibold tabular-nums text-neutral-100">
+                {s.pnl_units != null
+                  ? `${s.pnl_units >= 0 ? "+" : ""}${s.pnl_units.toFixed(2)}`
+                  : "—"}
+              </p>
+              <p className="mt-0.5 text-[11px] text-neutral-500">
+                flat 1 unit per pick
+              </p>
+            </div>
+          </div>
+
+          {straddlesZero === true && (
+            <p className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/[0.05] px-4 py-3 text-xs text-amber-200/90">
+              The confidence interval includes zero. At this sample size this
+              result is <strong>not evidence of an edge</strong> — in either
+              direction. Betting returns are noisy enough that a few hundred
+              picks cannot separate a good method from a break-even one, which
+              is why the closing-line number above matters more than the return.
+            </p>
+          )}
+        </>
+      )}
+
+      <p className="mt-4 text-xs leading-relaxed text-neutral-500">
+        Every pick is recorded before kickoff and settled automatically, winners
+        and losers alike. What counts as a pick, and what result would make us
+        stop, were both written down before the first one was published.
+        Closing-line value is corrected for the closing book&apos;s own margin,
+        so zero means break-even rather than &ldquo;beat the quoted price&rdquo;.
+      </p>
+    </section>
+  );
+}
+
 export default async function PicksPage() {
-  const auth = await createSupabaseServer();
-  const {
-    data: { user },
-  } = await auth.auth.getUser();
-  const isSignedIn = !!user;
-
-  // Admin-only: show the PLACEMENT-trigger odds (the price a pick must reach to
-  // clear the Coolbet edge floor: 1x2 = 10% home-underdogs only (FAVLONG-CUTS;
-  // draw/away/home-fav not placed → no trigger shown), O/U = 8%) instead of the public
-  // break-even, so the operator can eyeball whether the real-money bot should
-  // fire on a given game. docs/BETTING_GATE_DECISIONS.md.
-  let isSuperadmin = false;
-  if (user) {
-    try {
-      const db = createServerServiceClient();
-      const { data: profile } = await db
-        .from("profiles")
-        .select("is_superadmin")
-        .eq("id", user.id)
-        .single();
-      isSuperadmin = !!profile?.is_superadmin;
-    } catch {
-      isSuperadmin = false;
-    }
-  }
-
-  const maturityLabels = isSignedIn
-    ? SIGNED_IN_MATURITY_LABELS
-    : PUBLIC_MATURITY_LABELS;
-
-  let picks: UpcomingPick[] = [];
-  let hiddenPickCount = 0;
-  let generatedAt = new Date().toISOString();
+  let picks: ForwardTestPick[] = [];
+  let summary: ForwardTestSummary | null = null;
+  let loadFailed = false;
   try {
-    const result = await fetchUpcomingPicks(maturityLabels);
-    picks = result.picks;
-    generatedAt = new Date().toISOString();
-    if (!isSignedIn) {
-      const fullResult = await fetchUpcomingPicks(SIGNED_IN_MATURITY_LABELS);
-      hiddenPickCount = Math.max(0, fullResult.picks.length - picks.length);
-    }
+    [picks, summary] = await Promise.all([
+      fetchForwardTestPicks(),
+      fetchForwardTestSummary(),
+    ]);
   } catch {
-    picks = [];
+    loadFailed = true;
   }
 
-  // Group by kickoff date for cleaner reading
-  const groups = new Map<string, UpcomingPick[]>();
+  const upcoming = picks.filter((p) => p.outcome == null);
+  const groups = new Map<string, ForwardTestPick[]>();
   for (const p of picks) {
     const { date } = formatKickoff(p.kickoff_utc);
     if (!groups.has(date)) groups.set(date, []);
     groups.get(date)!.push(p);
   }
-
-  const publicPickCount = picks.length; // for header count
 
   return (
     <div className="min-h-dvh bg-neutral-950 text-neutral-50 antialiased">
@@ -178,73 +267,66 @@ export default async function PicksPage() {
       <main className="mx-auto max-w-4xl px-4 pt-12 pb-20">
         <div className="space-y-2 text-center">
           <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-emerald-400">
-            Today&apos;s picks + next 36 hours
+            Priced against the sharpest line — no model
           </p>
           <h1 className="text-balance text-3xl font-semibold tracking-tight sm:text-5xl">
-            {publicPickCount > 0
-              ? `${publicPickCount} pick${publicPickCount === 1 ? "" : "s"} the model has flagged`
-              : "No active picks right now"}
+            {upcoming.length > 0
+              ? `${upcoming.length} pick${upcoming.length === 1 ? "" : "s"} on the board`
+              : "No picks on the board right now"}
           </h1>
           <p className="mx-auto max-w-xl text-balance text-sm text-neutral-400 sm:text-base">
-            Each pick is logged before kickoff and tracked on the{" "}
-            <Link href="/performance" className="text-emerald-400 hover:underline">
-              public ledger
-            </Link>
-            . Results settle automatically.
+            A pick is a price that beats the sharpest line in the market, with
+            the bookmaker&apos;s margin stripped out, by at least 3%. Up to eight
+            a day. Some days there are none.
           </p>
         </div>
 
-        {!isSignedIn && hiddenPickCount > 0 && (
-          <div className="mt-8 flex flex-col gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.05] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-emerald-300">
-                {hiddenPickCount} more pick{hiddenPickCount === 1 ? "" : "s"} from beta bots today
-              </p>
-              <p className="mt-0.5 text-xs text-neutral-400">
-                You&apos;re seeing the public cohort — same as Telegram. Sign in to unlock the full list and track which ones you&apos;ve placed.
-              </p>
-            </div>
-            <Link
-              href="/login?next=/picks"
-              className="shrink-0 rounded-md bg-emerald-500 px-4 py-2 text-sm font-semibold text-neutral-950 hover:bg-emerald-400"
-            >
-              Sign in →
-            </Link>
+        {/* The honest framing, above everything. This method has no history and
+            the page says so before it shows a single number. */}
+        <div className="mt-8 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.05] px-5 py-4">
+          <p className="text-sm font-semibold text-emerald-300">
+            New method, tracked from {START_DATE}. No past performance is
+            claimed.
+          </p>
+          <p className="mt-1.5 text-xs leading-relaxed text-neutral-400">
+            These picks use no prediction model. Each one is priced directly
+            against the sharpest available line with the margin removed. The
+            method starts at zero on the date above — any earlier track record on
+            this site belongs to a different, model-based method and does not
+            carry over to these picks.
+          </p>
+        </div>
+
+        {summary && <RunningResult s={summary} />}
+
+        {loadFailed && (
+          <div className="mt-8 rounded-xl border border-white/[0.06] bg-white/[0.02] p-6 text-center text-sm text-neutral-400">
+            Couldn&apos;t load picks right now. This is a loading problem, not a
+            result — try again shortly.
           </div>
         )}
 
-        {publicPickCount === 0 ? (
-          <div className="mt-12 rounded-xl border border-white/[0.06] bg-white/[0.02] p-10 text-center">
+        {!loadFailed && picks.length === 0 ? (
+          <div className="mt-10 rounded-xl border border-white/[0.06] bg-white/[0.02] p-10 text-center">
             <p className="text-sm text-neutral-400">
-              The model didn&apos;t find any value bets in the next 36 hours.
+              Nothing clears the bar in the current window.
               <br />
-              Check back later — most leagues are on summer break right now (June–July).
-              <br />
-              You can still browse the historical{" "}
-              <Link href="/performance" className="text-emerald-400 hover:underline">
-                track record
-              </Link>{" "}
-              and the{" "}
-              <Link
-                href="/api/v1/track-record"
-                className="font-mono text-emerald-400 hover:underline"
-              >
-                /api/v1/track-record
-              </Link>{" "}
-              JSON feed.
+              That is a normal outcome, not an outage — the rule publishes only
+              prices that beat the sharp line by 3% or more, and on a thin day no
+              price does.
             </p>
           </div>
         ) : (
           <div className="mt-10 space-y-8">
             {Array.from(groups.entries()).map(([date, group]) => (
               <section key={date}>
-                <h2 className="mb-3 text-xs font-mono uppercase tracking-widest text-neutral-500">
+                <h2 className="mb-3 font-mono text-xs uppercase tracking-widest text-neutral-500">
                   {date} · {group.length} pick{group.length === 1 ? "" : "s"}
                 </h2>
                 <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]">
                   {group.map((p, idx) => {
                     const { time } = formatKickoff(p.kickoff_utc);
-                    const edgeHigh = (p.edge_pct ?? 0) >= 10;
+                    const edgePct = p.edge != null ? p.edge * 100 : null;
                     return (
                       <div
                         key={p.id}
@@ -270,8 +352,22 @@ export default async function PicksPage() {
                               {p.away_team ?? "Away"}
                             </p>
                             <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-emerald-300">
-                              <span>Pick: {formatMarket(p.market, p.selection)}</span>
-                              <ResultBadge result={p.result} kickoff={p.kickoff_utc} />
+                              <span>
+                                Pick: {formatMarket(p.market, p.selection)}
+                              </span>
+                              <OutcomeBadge
+                                outcome={p.outcome}
+                                kickoff={p.kickoff_utc}
+                              />
+                              {p.clv != null && (
+                                <span
+                                  className="font-mono text-[10px] text-neutral-500"
+                                  title="Closing-line value: how our price compared with the same book's closing price. Positive means we were on before the line moved."
+                                >
+                                  CLV {p.clv >= 0 ? "+" : ""}
+                                  {(p.clv * 100).toFixed(1)}%
+                                </span>
+                              )}
                             </p>
                           </div>
                           <div className="flex items-baseline gap-4 text-right sm:gap-6">
@@ -280,60 +376,42 @@ export default async function PicksPage() {
                                 Odds
                               </p>
                               <p className="font-mono text-base font-semibold tabular-nums text-neutral-100 sm:text-lg">
-                                {p.odds?.toFixed(2) ?? "—"}
+                                {p.odds != null ? Number(p.odds).toFixed(2) : "—"}
                               </p>
-                              {/* Break-even price. Kept deliberately quiet — it
-                                  only matters at the moment of placing, and a
-                                  loud second number next to the odds would
-                                  compete with the odds themselves. ADMIN sees the
-                                  PLACEMENT-trigger price instead (what the Coolbet
-                                  bot needs to fire), for spot-checking. */}
-                              {isSuperadmin
-                                ? (() => {
-                                    const trig = placementTriggerOdds(
-                                      p.min_odds,
-                                      p.market,
-                                      p.selection,
-                                    );
-                                    // Two anchor points so the edge is validatable:
-                                    // break-even (0% edge, = 1/cal_prob) and the
-                                    // placement price (10% home-dog / 8% floor). The shown ODDS
-                                    // sit between them — more odds = more edge,
-                                    // monotonically. Seeing both makes it obvious the
-                                    // pick is a real +EV edge, just below the robust bar.
-                                    const be = p.min_odds;
-                                    return (
-                                      <p
-                                        className="font-mono text-[10px] tabular-nums text-amber-500/80"
-                                        title={`Admin validation. be = break-even (0% edge = 1/cal_prob): below this the bet is −EV. place ≥ = the price that clears the ${p.market === "1x2" ? "10% (home-underdogs only)" : "8%"} real-money floor (what Telegram + the Coolbet placer require). The shown odds sit between them: more odds = more edge. docs/BETTING_GATE_DECISIONS.md.`}
-                                      >
-                                        {be != null ? `be ${be.toFixed(2)}` : ""}
-                                        {be != null && trig != null ? " · " : ""}
-                                        {trig != null
-                                          ? `place ≥ ${trig.toFixed(2)}`
-                                          : "no place (edge < floor at any odds)"}
-                                      </p>
-                                    );
-                                  })()
-                                : p.min_odds != null && (
-                                    <p
-                                      className="font-mono text-[10px] tabular-nums text-neutral-600"
-                                      title={`Break-even price. This pick is only +EV at ${p.min_odds.toFixed(2)} or better — below that the edge is gone and the bet is negative expected value. Odds move after a pick is posted, so check the price you are actually offered against this before placing.`}
-                                    >
-                                      min {p.min_odds.toFixed(2)}
-                                    </p>
-                                  )}
+                              {/* Break-even against the SHARP line (1 / P_shin),
+                                  kept deliberately quiet — it only matters at
+                                  the moment of placing. Odds move after a pick
+                                  is posted, so a reader must be able to check
+                                  the price they are actually offered against
+                                  this before placing. */}
+                              <p className="font-mono text-[10px] tabular-nums text-neutral-600">
+                                {(() => {
+                                  const be = sharpBreakEvenOdds(p.p_sharp);
+                                  return be != null ? (
+                                    <span title={`Break-even price against the sharp line. This pick is only +EV at ${be.toFixed(2)} or better — below that the edge is gone. Odds move after a pick is posted, so check the price you are actually offered against this.`}>
+                                      min {be.toFixed(2)}
+                                    </span>
+                                  ) : null;
+                                })()}
+                                {p.alignment_gap_minutes != null && (
+                                  <span
+                                    className="text-neutral-700"
+                                    title="How far apart the sharp reference quote and this price were when the pick was made. The rule caps this at 60 minutes: comparing a fresh sharp line against a stale price measures drift, not value."
+                                  >
+                                    {sharpBreakEvenOdds(p.p_sharp) != null ? " · " : ""}
+                                    {Math.round(p.alignment_gap_minutes)}m apart
+                                  </span>
+                                )}
+                              </p>
                             </div>
                             <div>
                               <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
-                                Edge
+                                Edge vs sharp
                               </p>
-                              <p
-                                className={`font-mono text-base font-semibold tabular-nums sm:text-lg ${
-                                  edgeHigh ? "text-emerald-400" : "text-neutral-100"
-                                }`}
-                              >
-                                {p.edge_pct != null ? `+${p.edge_pct.toFixed(1)}%` : "—"}
+                              <p className="font-mono text-base font-semibold tabular-nums text-neutral-100 sm:text-lg">
+                                {edgePct != null
+                                  ? `+${edgePct.toFixed(1)}%`
+                                  : "—"}
                               </p>
                             </div>
                             {p.bookmaker && (
@@ -341,7 +419,9 @@ export default async function PicksPage() {
                                 <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
                                   Book
                                 </p>
-                                <p className="text-xs text-neutral-300">{p.bookmaker}</p>
+                                <p className="text-xs text-neutral-300">
+                                  {p.bookmaker}
+                                </p>
                               </div>
                             )}
                           </div>
@@ -355,35 +435,32 @@ export default async function PicksPage() {
           </div>
         )}
 
+        {/* Deliberately NOT a link to /performance. That ledger was priced on a
+            model edge we have since shown to be manufactured, and it survives in
+            2 bots of 46 — linking it from here would imply a claim that does not
+            transfer to this method. */}
         <section className="mt-16 rounded-xl border border-white/[0.06] bg-white/[0.02] p-6">
           <h2 className="mb-2 text-base font-semibold text-neutral-100">
-            Get picks delivered live
+            Get picks as they post
           </h2>
           <p className="text-sm text-neutral-400">
-            Picks land here as the model fires them. To get them pushed to your phone
-            instantly, join the free Telegram channel.
+            Every pick here goes to the free Telegram channel at the same moment,
+            with the same price and the same edge. Nothing is held back or
+            posted late.
           </p>
-          <div className="mt-4 flex items-center gap-3">
+          <div className="mt-4">
             <Link
               href="https://t.me/oddsintelpicks"
               className="rounded-md bg-emerald-500 px-4 py-2 text-sm font-semibold text-neutral-950 hover:bg-emerald-400"
             >
               Join Telegram
             </Link>
-            <Link
-              href="/api/v1/upcoming"
-              className="rounded-md border border-white/15 bg-white/[0.04] px-4 py-2 text-sm font-mono font-semibold text-neutral-100 hover:bg-white/[0.08]"
-            >
-              View raw JSON
-            </Link>
           </div>
         </section>
 
         <p className="mt-6 text-center text-xs text-neutral-500">
-          {isSignedIn
-            ? "Signed in — showing calibrated + beta + active production strategies."
-            : "Public cohort — calibrated strategies only (same set as Telegram)."}{" "}
-          Generated at {new Date(generatedAt).toLocaleString()}.
+          Odds move. Check the price you are actually offered before placing
+          anything — a pick is only worth taking near the price it was found at.
         </p>
       </main>
     </div>

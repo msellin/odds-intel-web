@@ -1,60 +1,53 @@
 /**
  * GET /api/v1/upcoming
  *
- * PUBLIC, auth-free JSON feed of recent + upcoming pre-match picks. This is
- * the ONLY externally-fetchable feed of picks, and it is deliberately
- * narrowed to the same cohort the public Telegram channel ships
- * (@oddsintelpicks) so the two surfaces match one-to-one.
+ * PUBLIC, auth-free JSON feed of recent + upcoming pre-match picks. This is the
+ * ONLY externally-fetchable feed of picks, and it exists to match the public
+ * Telegram channel (@oddsintelpicks) one-to-one.
  *
- * PICKS-USER-GATE (2026-08-22): narrowed from calibrated+beta+active down to
- * calibrated only. Signed-in users get the wider cohort when they load
- * /picks — that widening happens server-side inside the page render, never
- * via a JSON endpoint. This means the beta+active picks cannot be scraped
- * from the network tab by an anon caller.
+ * PICKS-PAGE-SHOW-FORWARD-TEST (2026-09-14) — REPOINTED. This route used to
+ * serve `simulated_bets` from calibrated bots, and its contract was "the same
+ * cohort the public Telegram channel ships". That stopped being true the day
+ * the channel switched to the pre-registered sharp-edge forward test: migration
+ * 335 removed the O/U Platt calibrator that had manufactured ~8-9pp of the
+ * published model edge, after which nothing cleared the old model floors and
+ * this feed returned an empty list while claiming to mirror a channel that was
+ * posting daily. An endpoint that documents a cohort it no longer serves is
+ * worse than one that 404s.
+ *
+ * It now serves `picks_forward_test`, live arm only — the exact rows posted to
+ * the channel.
+ *
+ * CONTRACT CHANGE, stated rather than slipped in: `edge_pct` is now a SHARP
+ * edge (the price against the Shin-de-vigged Pinnacle line, no model) where it
+ * used to be a MODEL edge (our calibrated probability minus the implied price).
+ * They are different rulers and are NOT comparable across the change, so
+ * `meta.edge_basis` names which one a response carries. `min_odds` was already
+ * stripped here and stays absent: it was a model break-even, and this rule has
+ * no model to take one from.
  *
  * Scope (intentional):
- *   - bots.maturity_label = 'calibrated'  — same set the public Telegram sends
- *   - bots.retired_at IS NULL  — exclude retired bots
- *   - bots.name NOT LIKE 'inplay_%'  — pre-match cohort only
- *   - market IN ('1x2', 'over_under_25', 'o/u', 'btts')  — pre-match only
- *   - match kickoff between start of today UTC and NOW() + 36 hours
- *   - result IN ('pending','won','lost','void')  — badge shows outcome
- *
- * PICKS-COHORT-ALIGN (2026-08-21): added retired_at + inplay_% filters so
- * /picks describes the SAME cohort as /performance's ledger + hero.
- *
- * PICKS-WIDEN (2026-07-08): earlier version was NOW→NOW+36h + result='pending'
- * only, which made /picks look empty as soon as a match kicked off. Widening
- * backward + surfacing result badges lets the page double as social proof.
+ *   - arm = 'live' — enforced in the view, so the junk-anchor negative control
+ *     can never leak into a public feed
+ *   - kickoffs from 24h back through +36h, so the feed does not go dark the
+ *     moment a match kicks off
+ *   - settled picks carry their outcome, and their CLV once it is computed
  *
  * Cache: 60s. Rate limit: 60 req/min/IP.
  */
 import { NextResponse } from "next/server";
 import { checkRateLimit } from "@/lib/rate-limit";
-import {
-  fetchUpcomingPicks,
-  PUBLIC_MATURITY_LABELS,
-} from "@/lib/upcoming-picks";
+import { fetchForwardTestPicks } from "@/lib/forward-test-picks";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 60;
 
-// DUPLICATED-BUSINESS-RULES-AUDIT-2026-09-05.
-//
-// This route used to carry its own copy of the cohort rule: a second
-// `PRE_MATCH_MARKETS`, a second `PUBLIC_MATURITY_LABELS`, a second
-// `adminClient()`, a second `BetRow`, and a line-for-line duplicate of the
-// query, the dedupe and the row mapping in `lib/upcoming-picks.ts` — which
-// /picks calls for the SAME picks. Two implementations of one feed is how the
-// landing and /performance came to publish +13.10% and +17.39% for identical
-// bets on 2026-09-05.
-//
-// It now calls `fetchUpcomingPicks()`. The published JSON is unchanged:
-// same cohort (calibrated only), same window, same dedupe, same fields. The
-// one field the shared fetcher additionally computes, `min_odds`, is stripped
-// below — publishing a break-even floor on the anon feed is a product
-// decision, not a refactor.
+// DUPLICATED-BUSINESS-RULES-AUDIT-2026-09-05 still applies: there is ONE
+// definition of the picks cohort and both /picks and this route call it. It now
+// lives in lib/forward-test-picks.ts, and the `arm = 'live'` filter lives one
+// level deeper still, in the database view, where a call site cannot forget it.
 const HORIZON_HOURS_FORWARD = 36;
+const HORIZON_HOURS_BACK = 24;
 
 export async function GET(req: Request) {
   const ip =
@@ -69,30 +62,48 @@ export async function GET(req: Request) {
     );
   }
 
+  const nowMs = Date.now();
+  const start = new Date(nowMs - HORIZON_HOURS_BACK * 3600 * 1000).toISOString();
+  const end = new Date(nowMs + HORIZON_HOURS_FORWARD * 3600 * 1000).toISOString();
+
   let picks: Array<Record<string, unknown>>;
-  let start: string;
-  let end: string;
   try {
-    // Single definition of the picks cohort — see lib/upcoming-picks.ts.
-    const res = await fetchUpcomingPicks(PUBLIC_MATURITY_LABELS);
-    start = res.windowStart;
-    end = res.windowEnd;
-    // `min_odds` is computed by the shared fetcher for /picks; it is not part
-    // of this endpoint's published contract, so drop it rather than silently
-    // widening the public payload.
-    picks = res.picks.map(({ min_odds: _minOdds, ...rest }) => rest);
+    const rows = await fetchForwardTestPicks(
+      HORIZON_HOURS_BACK,
+      HORIZON_HOURS_FORWARD,
+    );
+    picks = rows.map((p) => ({
+      id: p.id,
+      match_id: p.match_id,
+      kickoff_utc: p.kickoff_utc,
+      league: p.league,
+      country: p.country,
+      home_team: p.home_team,
+      away_team: p.away_team,
+      market: p.market,
+      selection: p.selection,
+      odds: p.odds,
+      // SHARP edge, as a percentage. See meta.edge_basis.
+      edge_pct: p.edge != null ? Number((Number(p.edge) * 100).toFixed(2)) : null,
+      bookmaker: p.bookmaker,
+      posted_at_utc: p.published_at,
+      // Minutes between the sharp reference quote and this price when the pick
+      // was made. Published per row because it is the quantity that separated a
+      // +8.47% backtest from a +5.5% one — staleness, not edge.
+      alignment_gap_minutes: p.alignment_gap_minutes,
+      result: p.outcome ?? "pending",
+      clv: p.clv,
+    }));
   } catch (e) {
     return NextResponse.json(
       {
         error: "DB error",
-        // Strip the fetcher's context prefix so this endpoint's 500 body is
-        // unchanged from when it ran its own query.
         detail: (e instanceof Error ? e.message : String(e)).replace(
-          /^upcoming picks: /,
+          /^forward-test picks: /,
           "",
         ),
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
   const horizonHoursForward = HORIZON_HOURS_FORWARD;
@@ -112,10 +123,12 @@ export async function GET(req: Request) {
         window_end_utc: end,
         horizon_hours_forward: horizonHoursForward,
         count: picks.length,
+        edge_basis:
+          "sharp — edge = P(Shin-de-vigged Pinnacle) x best_book_price - 1. NOT a model edge. Before 2026-09-14 this field carried a MODEL edge (calibrated probability minus implied price); the two are different rulers and are not comparable across that date.",
         scope:
-          "public feed — pre-match picks from calibrated bots only (same cohort as the Telegram public channel), non-retired, non-inplay, kickoffs from start of today UTC through +36h. Signed-in users see a wider cohort (calibrated + beta + active) inline on /picks; that wider set is not available via any JSON endpoint. Includes settled picks (won/lost/void) so the feed doesn't go dark right after a match kicks off.",
+          "public feed — the pre-registered sharp-edge forward test, live arm only, exactly the picks posted to the public Telegram channel. Rule: edge >= 3%, odds <= 4.0, sharp anchor and bet quote within 60 minutes, top 8 per day by edge. Kickoffs from 24h back through +36h, so the feed does not go dark the moment a match kicks off. The junk-anchor negative control is never served here.",
         notes:
-          "Picks with result='pending' are live. Settled picks (won/lost/void) come off /api/v1/track-record's ledger once the match finishes. Use match_id to correlate.",
+          "No past performance is claimed for this method: it started 2026-09-14 at zero. Picks with result='pending' have not settled. 'push'/'void' mean the stake was returned. `clv` is the raw price ratio against the same book's closing price, with no margin removed, so break-even on it is that book's margin rather than zero.",
       },
       picks,
     },

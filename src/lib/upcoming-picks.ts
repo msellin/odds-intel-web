@@ -1,4 +1,22 @@
 /**
+ * Server-only pick fetchers for the MODEL-ERA picks surfaces.
+ *
+ * ⚠️ NO LONGER ON THE /picks READ PATH (PICKS-PAGE-SHOW-FORWARD-TEST,
+ * 2026-09-14). /picks and /api/v1/upcoming now read the pre-registered
+ * sharp-edge forward test via `lib/forward-test-picks.ts`; migration 335
+ * removed the O/U Platt calibrator and nothing clears the old model floors, so
+ * `fetchUpcomingPicks` returns an empty list today.
+ *
+ * What is still LIVE in this file: `fetchUserPickMarkStates` (the operator's
+ * mark states on /admin/shadow-bots), `breakEvenOdds` and
+ * `placementTriggerOdds` (the model break-even and placement-trigger
+ * arithmetic, pinned by PICKS-MIN-ODDS-WRONG-FORMULA and
+ * FLOORS-ONE-SOURCE-CROSS-LANGUAGE), and `PUBLIC_MATURITY_LABELS` (still read
+ * by the model-era ledger endpoint). Retained rather than deleted because the
+ * model path is paused, not removed — but nothing below describes what a reader
+ * sees on /picks today.
+ *
+ * ── historical, for the model path ──
  * Server-only pick fetchers for /picks.
  *
  * PICKS-USER-GATE 2026-08-22 — /api/v1/upcoming is the PUBLIC picks feed and
