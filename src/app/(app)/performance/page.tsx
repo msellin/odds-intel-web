@@ -50,6 +50,7 @@ import {
 import type { LiveBet, ModelV2Stats, CalibratedHeadlineStats } from "@/lib/engine-data";
 import { PerformanceClient } from "@/components/performance-client";
 import type { PublicBotStat, SanitizedBotBet } from "@/components/performance-leaderboard";
+import PicksForwardTestPanel from "@/components/picks-forward-test-panel";
 import { PerformanceHistory } from "@/components/performance-history";
 import type { FullBetItem } from "@/components/performance-history";
 import { PerformanceExtras } from "@/components/performance-extras";
@@ -318,6 +319,14 @@ export default async function PerformancePage() {
     // The (app) layout's px-2/px-4 is small enough that we don't
     // need to fight it — just constrain to 4xl + auto-center.
     <div className="mx-auto w-full max-w-4xl">
+      {/* PICKS-ON-PERFORMANCE-2026-09-14 — above the leaderboard and outside the
+          logged-in branch, deliberately. These are the picks we actually send to
+          readers; the leaderboard below is the bot fleet, which is a different
+          thing and mostly operator-facing. Ungated for the same reason the
+          pre-registration requires: the published set and the recorded set must
+          be identical, so a tier-dependent cut would evaluate the stopping rules
+          on a cohort no reader saw. */}
+      <PicksForwardTestPanel />
       {isLoggedIn ? (
         <Suspense
           fallback={

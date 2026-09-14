@@ -5988,3 +5988,51 @@ export async function resolveRecapSlug(slugParam: string): Promise<string | null
   }
   return null;
 }
+
+// ─── PICKS forward test (published picks) ────────────────────────────────────
+// PICKS-ON-PERFORMANCE-2026-09-14. The published picks had no home on
+// /performance: bot_sharp_forward_test_v1 writes NO simulated_bets (it reads
+// through to picks_forward_test), and the leaderboard is built on
+// simulated_bets, so the one thing readers actually receive was the one thing
+// the page could not show. Meanwhile an OWN paper instrument WAS showing, via a
+// 'experiment' vs 'experimental' typo. The page was wrong in both directions.
+export type PicksForwardTestSummary = {
+  ruleVersion: string;
+  startedAt: string;
+  published: number;
+  settled: number;
+  pending: number;
+  won: number;
+  pnlUnits: number;
+  roi: number | null;
+  roiSd: number | null;
+  clvMarginCorrected: number | null;
+  clvMcSd: number | null;
+  nClvMc: number;
+};
+
+export async function getPicksForwardTestSummary(): Promise<PicksForwardTestSummary | null> {
+  const supabase = createSupabasePublic();
+  const { data, error } = await supabase
+    .from("picks_forward_test_summary")
+    .select("*")
+    .order("started_at", { ascending: false })
+    .limit(1);
+  if (error || !data || data.length === 0) return null;
+  const r = data[0] as Record<string, unknown>;
+  const num = (v: unknown) => (v == null ? null : Number(v));
+  return {
+    ruleVersion: String(r.rule_version ?? ""),
+    startedAt: String(r.started_at ?? ""),
+    published: Number(r.published ?? 0),
+    settled: Number(r.settled ?? 0),
+    pending: Number(r.pending ?? 0),
+    won: Number(r.won ?? 0),
+    pnlUnits: Number(r.pnl_units ?? 0),
+    roi: num(r.roi),
+    roiSd: num(r.roi_sd),
+    clvMarginCorrected: num(r.clv_margin_corrected),
+    clvMcSd: num(r.clv_mc_sd),
+    nClvMc: Number(r.n_clv_mc ?? 0),
+  };
+}
