@@ -523,6 +523,10 @@ interface ShadowBet {
   pick_time: string;
   clv: number | null;
   clv_pinnacle: number | null;
+  // Which book supplied the close `clv` was computed against. NULL means the
+  // retired arbitrary-book fallback (SHADOW-CLV-NO-ARBITRARY-FALLBACK); those
+  // rows are excluded from CLV, not corrected.
+  closing_bookmaker: string | null;
 }
 interface BotRow {
   id: string;
@@ -549,6 +553,7 @@ interface Summary {
   roi: number;
   hitRate: number;
   avgClvPct: number | null;
+  clvUsableN: number;
   clvCount: number;
   avgPinClvPct: number | null;
   pinClvCount: number;
@@ -607,12 +612,27 @@ function summarise(cfg: (typeof SHADOW_BOTS)[number], bot: BotRow, bets: ShadowB
   const hitRate = settled > 0 ? (won / settled) * 100 : 0;
   // CLV populated at settlement (settled shadow bets only). Skip rows
   // where clv is null (still pending or capture failed).
+  // SHADOW-CLV-NO-ARBITRARY-FALLBACK-2026-09-14: OWN-BOOK rows only.
+  // `clv` is only meaningful against the close AT THE BOOK THE BOT PRICED AT.
+  // Rows with no `closing_bookmaker` came through the retired arbitrary-book
+  // fallback, and since `odds_at_pick` is the MAX across accessible books,
+  // comparing it against an arbitrary book reads positive whether or not the
+  // bet had edge. Measured on the live fleet, those rows ran 4-10pp HIGH on
+  // four bots of four (worst: bot_coolbet_trigger_sharp_1x2_v1, 38.9% of its
+  // rows, +14.78% via fallback against +4.51% own-book). Including them is how
+  // a losing bot renders as a promotion candidate.
   const clvVals = mine
+    .filter((b) => b.closing_bookmaker != null)
     .map((b) => (b.clv != null ? Number(b.clv) : null))
     .filter((v): v is number => v != null);
   const avgClvPct = clvVals.length > 0
     ? (clvVals.reduce((s, v) => s + v, 0) / clvVals.length) * 100
     : null;
+  // How many settled rows are actually JUDGEABLE. A bot with hundreds of
+  // settled picks and zero own-book closes has no verdict at all, and the page
+  // must say so rather than render its unanchored ROI as if it meant something
+  // (bot_corners_paper_shadow_v1 reads +9.60% on 568 settled rows, 0 usable).
+  const clvUsableN = clvVals.length;
 
   // SHADOW-CLV-BOOKMAKER-FIX-2026-08-26: the validator to actually read.
   // `clv` above compares odds_at_pick against whichever bookmaker happened to
@@ -718,6 +738,7 @@ function summarise(cfg: (typeof SHADOW_BOTS)[number], bot: BotRow, bets: ShadowB
     roi,
     hitRate,
     avgClvPct,
+    clvUsableN,
     clvCount: clvVals.length,
     avgPinClvPct,
     pinClvCount: pinClvVals.length,
