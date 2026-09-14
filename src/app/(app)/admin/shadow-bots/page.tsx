@@ -775,9 +775,15 @@ export default async function ShadowBotsPage() {
   // `picks_forward_test_arm_summary` — which carries BOTH arms, because the
   // junk-anchor negative control is only useful to someone who can see it, and
   // this page is the only surface that shows it.
+  // FORWARD-TEST-SUMMARY-POOLS-RULE-VERSIONS-2026-09-15: one row per
+  // (rule_version, arm). NEVER summed across rule_version — v1 was closed at
+  // n=8 when v2 added the 20% price-ratio cap, and carrying a closed test's n
+  // into a running one is the discipline failure the pre-registration exists to
+  // prevent. Ordered newest-rule-first so the running test is at the top.
   const { data: ftArmsRaw } = await db
     .from("picks_forward_test_arm_summary")
     .select("*")
+    .order("started_at", { ascending: false })
     .order("arm");
   const ftArms = (ftArmsRaw ?? []) as ForwardTestArm[];
 
@@ -2067,6 +2073,7 @@ function Denied({ text = "Access denied." }: { text?: string }) {
 // live arm's number means nothing — which is a thing the operator has to be
 // able to SEE, hence this page and not /picks.
 interface ForwardTestArm {
+  rule_version: string;
   arm: string;
   started_at: string | null;
   published: number;
@@ -2092,7 +2099,12 @@ function pct(v: number | null | undefined, dp = 1): string {
 
 function ForwardTestPanel({ arms }: { arms: ForwardTestArm[] }) {
   if (!arms.length) return null;
-  const live = arms.find((a) => a.arm === "live");
+  // The CURRENT rule is the newest started_at; everything else is a closed test
+  // shown below it, never added to it.
+  const currentRule = arms[0].rule_version.replace(/\+DEGENERATE_JUNK_DAY1$/, "");
+  const live = arms.find(
+    (a) => a.arm === "live" && a.rule_version === currentRule,
+  );
   // The pre-registered early-stop trigger that is NOT about the result: median
   // anchor-to-bet alignment drifting above 60 min is the staleness failure
   // returning, and it invalidated the first version of this backtest (+8.47%
@@ -2113,6 +2125,7 @@ function ForwardTestPanel({ arms }: { arms: ForwardTestArm[] }) {
       <table className="mt-2 w-full text-xs">
         <thead className="text-[10px] uppercase tracking-wider text-neutral-600">
           <tr>
+            <th className="py-1 text-left font-normal">Rule</th>
             <th className="py-1 text-left font-normal">Arm</th>
             <th className="py-1 text-right font-normal">Published</th>
             <th className="py-1 text-right font-normal">Settled</th>
@@ -2130,7 +2143,16 @@ function ForwardTestPanel({ arms }: { arms: ForwardTestArm[] }) {
                 : null;
             const roi = a.roi != null ? Number(a.roi) * 100 : null;
             return (
-              <tr key={a.arm} className="border-t border-white/[0.04]">
+              <tr
+                key={`${a.rule_version}|${a.arm}`}
+                className={`border-t border-white/[0.04] ${
+                  a.rule_version.startsWith(currentRule) ? "" : "opacity-60"
+                }`}
+              >
+                <td className="py-1 font-mono text-[10px] text-neutral-500">
+                  {a.rule_version.replace("sharp_edge_", "")}
+                  {a.rule_version.startsWith(currentRule) ? "" : " (closed)"}
+                </td>
                 <td className="py-1">
                   {a.arm === "live" ? (
                     <span className="text-sky-300">live</span>
@@ -2182,7 +2204,9 @@ function ForwardTestPanel({ arms }: { arms: ForwardTestArm[] }) {
       </table>
 
       <p className="mt-2 text-[10px] leading-relaxed text-neutral-500">
-        Pre-registered 2026-09-14. STOP at n=200 if margin-corrected CLV &lt;
+        One row per rule version — never added together: a rule change starts a
+        new test with its own n, and carrying a closed test&apos;s count forward
+        reports a result early on a mix of two rules. STOP at n=200 if margin-corrected CLV &lt;
         −2%, STOP at n=400 if &lt; 0, promote or kill at n=800 on the ROI CI.
         The primary instrument is margin-corrected CLV, not ROI: per-bet return
         variance is ~1.32, so confirming a true +3% ROI at 80% power needs

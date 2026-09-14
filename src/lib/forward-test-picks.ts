@@ -52,6 +52,7 @@ export interface ForwardTestPick {
   /** Sharp edge as a FRACTION (0.053 = +5.3%). Not a probability-point edge. */
   edge: number | null;
   p_sharp: number | null;
+  rule_version: string;
   /** Minutes between the anchor quote and the bet quote. The rule caps it at 60. */
   alignment_gap_minutes: number | null;
   kickoff_utc: string | null;
@@ -67,6 +68,8 @@ export interface ForwardTestPick {
 }
 
 export interface ForwardTestSummary {
+  /** Which pre-registered rule produced these picks. NEVER pool across it. */
+  rule_version: string;
   started_at: string | null;
   published: number;
   pending: number;
@@ -145,8 +148,8 @@ export async function fetchForwardTestPicks(
     .from("picks_forward_test_public")
     .select(
       `id, match_id, market, selection, odds, bookmaker, edge, p_sharp,
-       alignment_gap_minutes, kickoff_utc, published_at, league, country,
-       home_team, away_team, outcome, pnl, clv, clv_margin_corrected`,
+       rule_version, alignment_gap_minutes, kickoff_utc, published_at, league,
+       country, home_team, away_team, outcome, pnl, clv, clv_margin_corrected`,
     )
     .gte("kickoff_utc", new Date(now - hoursBack * 3600_000).toISOString())
     .lte("kickoff_utc", new Date(now + hoursForward * 3600_000).toISOString())
@@ -157,15 +160,34 @@ export async function fetchForwardTestPicks(
   return (data ?? []) as unknown as ForwardTestPick[];
 }
 
-/** The running result. Null when the view is unreachable — callers show nothing
- *  rather than a zero, because "0.0%" and "we don't know" are different facts. */
-export async function fetchForwardTestSummary(): Promise<ForwardTestSummary | null> {
+/**
+ * The running result of the CURRENT pre-registered rule.
+ *
+ * FORWARD-TEST-SUMMARY-POOLS-RULE-VERSIONS (2026-09-15). `picks_forward_test_summary`
+ * returns ONE ROW PER `rule_version`, and these rows must never be summed. A
+ * rule change starts a new test with a new start date and its own n — v1
+ * (`sharp_edge_v1_2026_09_14`) was closed at n=8 when v2 added the 20%
+ * book/anchor price-ratio cap — and carrying a closed test's n into a running
+ * one is the exact discipline failure the pre-registration exists to prevent. A
+ * checkpoint at n=200 would fire eight picks early on a mix of two rules.
+ *
+ * So: the current test is the row with the latest `started_at`, and earlier
+ * rows are returned separately rather than silently dropped. A closed
+ * pre-registered test keeps its own number; it just is not this one.
+ *
+ * Null when the view is unreachable — callers show nothing rather than a zero,
+ * because "0.0%" and "we don't know" are different facts.
+ */
+export async function fetchForwardTestSummary(): Promise<{
+  current: ForwardTestSummary;
+  closed: ForwardTestSummary[];
+} | null> {
   const sb = createSupabasePublic();
   const { data, error } = await sb
     .from("picks_forward_test_summary")
     .select("*")
-    .limit(1)
-    .maybeSingle();
-  if (error || !data) return null;
-  return data as unknown as ForwardTestSummary;
+    .order("started_at", { ascending: false });
+  if (error || !data || data.length === 0) return null;
+  const rows = data as unknown as ForwardTestSummary[];
+  return { current: rows[0], closed: rows.slice(1) };
 }

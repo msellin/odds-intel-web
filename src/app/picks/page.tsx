@@ -129,7 +129,13 @@ function OutcomeBadge({
  * picks would read as a track record, which is exactly the claim this method
  * does not have.
  */
-function RunningResult({ s }: { s: ForwardTestSummary }) {
+function RunningResult({
+  s,
+  closed,
+}: {
+  s: ForwardTestSummary;
+  closed: ForwardTestSummary[];
+}) {
   const roiPct = s.roi != null ? s.roi * 100 : null;
   const roiCi = ci95(s.roi_sd, s.settled);
   const roiCiPct = roiCi != null ? roiCi * 100 : null;
@@ -150,7 +156,14 @@ function RunningResult({ s }: { s: ForwardTestSummary }) {
           Running result
         </h2>
         <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
-          Live ledger · since {START_DATE}
+          Live ledger ·{" "}
+          {s.started_at
+            ? new Date(s.started_at).toLocaleDateString("en-GB", {
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              })
+            : START_DATE}
         </p>
       </div>
 
@@ -228,6 +241,18 @@ function RunningResult({ s }: { s: ForwardTestSummary }) {
         </>
       )}
 
+      {closed.length > 0 && (
+        <p className="mt-3 text-xs leading-relaxed text-neutral-500">
+          {closed.length === 1 ? "An earlier version" : `${closed.length} earlier versions`}{" "}
+          of the selection rule {closed.length === 1 ? "was" : "were"} closed and
+          {closed.length === 1 ? " its" : " their"} picks (
+          {closed.reduce((a, c) => a + c.published, 0)} in total) are counted
+          separately, not added to the figures above. Tightening a rule starts a
+          new test — carrying the old count forward is how a result gets reported
+          early on a mix of two different rules.
+        </p>
+      )}
+
       <p className="mt-4 text-xs leading-relaxed text-neutral-500">
         Every pick is recorded before kickoff and settled automatically, winners
         and losers alike. What counts as a pick, and what result would make us
@@ -241,7 +266,8 @@ function RunningResult({ s }: { s: ForwardTestSummary }) {
 
 export default async function PicksPage() {
   let picks: ForwardTestPick[] = [];
-  let summary: ForwardTestSummary | null = null;
+  let summary: { current: ForwardTestSummary; closed: ForwardTestSummary[] } | null =
+    null;
   let loadFailed = false;
   try {
     [picks, summary] = await Promise.all([
@@ -297,7 +323,9 @@ export default async function PicksPage() {
           </p>
         </div>
 
-        {summary && <RunningResult s={summary} />}
+        {summary && (
+          <RunningResult s={summary.current} closed={summary.closed} />
+        )}
 
         {loadFailed && (
           <div className="mt-8 rounded-xl border border-white/[0.06] bg-white/[0.02] p-6 text-center text-sm text-neutral-400">
