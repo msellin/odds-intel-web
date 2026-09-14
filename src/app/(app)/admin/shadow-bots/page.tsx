@@ -187,6 +187,8 @@ const BOT_BADGES: Record<string, BotBadge> = {
   bot_trigger_1x2_sharp_v1: { book: "Coolbet+Unibet", market: "1x2", money: "paper", anchor: "sharp" },
   bot_trigger_ou_model_v1: { book: "Coolbet+Unibet", market: "O/U 2.5", money: "paper", anchor: "model" },
   bot_trigger_ou_sharp_v1: { book: "Coolbet+Unibet", market: "O/U 2.5", money: "paper", anchor: "sharp" },
+  // SHARP-TIGHT-INSTRUMENT (2026-09-15) — an INSTRUMENT, not a strategy.
+  bot_trigger_1x2_sharp_tight_v1: { book: "Coolbet+Epicbet+Unibet", market: "1x2", money: "paper", anchor: "sharp" },
   bot_ou35_model_v1: { book: "Coolbet", market: "O/U 3.5", money: "paper", anchor: "model" },
   bot_corners_paper_shadow_v1: { book: "Betano/Unibet", market: "corners", money: "paper", anchor: "sharp" },
   // PAPER-BOTS-INVISIBLE-2026-09-11: these two have been writing picks since
@@ -427,6 +429,14 @@ const SHADOW_BOTS: Array<{
       "Fires when any placeable book beats the de-vigged Pinnacle O/U 2.5 line by ≥ 3% (no odds floor) · PAPER",
     backtestN: 0,
     backtestRoi: 0,
+  },
+  {
+    name: "bot_trigger_1x2_sharp_tight_v1",
+    title: "1x2 · SHARP anchor · TIGHT gate — INSTRUMENT (paper, all books)",
+    subtitle:
+      "MEASURING, not believing. P_sharp − 1/odds ≥ 2% AND odds ≤ 2.50, pooled over Coolbet/Epicbet/Unibet. Backtest n=225, ROI +17.1% (OOS +23.4%, no losing fold) — but a 12-DAY effect whose margin-corrected own-book CLV is −5.4% to −7.6%, vs ~−7.2% for a random leg. Promotion requires own-book CLV > 0 at n ≥ 300; ROI may NEVER promote it.",
+    backtestN: 225,
+    backtestRoi: 17.1,
   },
   {
     name: "bot_pin_1x2_home_v1",
