@@ -766,6 +766,21 @@ export default async function ShadowBotsPage() {
     updated_at: string;
   }[];
 
+  // ── PICKS-FORWARD-TEST-BOT-2026-09-14 ─────────────────────────────────────
+  // The PUBLISHED picks (bot_sharp_forward_test_v1) are NOT in shadow_bets and
+  // must never be: migration 342's header explains that both bet tables are
+  // bot-scoped with staking semantics, so these flat-stake pre-registered rows
+  // would be absorbed by every bot-cohort aggregate on this page without
+  // announcing themselves. They get their own panel, read from
+  // `picks_forward_test_arm_summary` — which carries BOTH arms, because the
+  // junk-anchor negative control is only useful to someone who can see it, and
+  // this page is the only surface that shows it.
+  const { data: ftArmsRaw } = await db
+    .from("picks_forward_test_arm_summary")
+    .select("*")
+    .order("arm");
+  const ftArms = (ftArmsRaw ?? []) as ForwardTestArm[];
+
   const _startOfDayUtc = new Date();
   _startOfDayUtc.setUTCHours(0, 0, 0, 0);
   const _dayIso = _startOfDayUtc.toISOString();
@@ -1155,6 +1170,12 @@ export default async function ShadowBotsPage() {
           {activeSummaries.length} active · {nRetired} retired · {totalsAll.total.toLocaleString()} picks · {totalsAll.settled.toLocaleString()} settled · promote/retire at {MIN_SETTLED_FOR_DECISION} settled &amp; {MIN_DAYS_FOR_DECISION} days
         </p>
       </header>
+
+      {/* PICKS forward test — its own panel, deliberately ABOVE the bot
+          portfolio and visually separated, because its numbers are in
+          DIFFERENT UNITS from everything below (flat 1 unit, multiplicative
+          sharp edge) and pooling them would be meaningless. */}
+      <ForwardTestPanel arms={ftArms} />
 
       {/* Discipline check — hand-picked vs left alone. Deliberately placed
           above the portfolio numbers: if the discretionary layer is costing
@@ -2029,5 +2050,152 @@ function formatPickLabel(market: string, selection: string): string {
 function Denied({ text = "Access denied." }: { text?: string }) {
   return (
     <div className="flex items-center justify-center py-24 text-muted-foreground">{text}</div>
+  );
+}
+
+
+// ── PICKS forward test panel (PICKS-FORWARD-TEST-BOT-2026-09-14) ────────────
+//
+// bot_sharp_forward_test_v1 is registered in workers/registry/bot_registry.py
+// but writes NO simulated_bets and NO shadow_bets rows, so it cannot appear in
+// the SHADOW_BOTS table above — there is nothing there to aggregate, by design.
+// This panel is its surface.
+//
+// It shows BOTH arms. The junk-anchor arm is the negative control: the same
+// rule with the Pinnacle anchor shuffled to a different fixture, expected to
+// lose roughly the vig. If it ever makes money the harness is broken and the
+// live arm's number means nothing — which is a thing the operator has to be
+// able to SEE, hence this page and not /picks.
+interface ForwardTestArm {
+  arm: string;
+  started_at: string | null;
+  published: number;
+  pending: number;
+  refunded: number;
+  settled: number;
+  won: number;
+  pnl_units: number | null;
+  roi: number | null;
+  roi_sd: number | null;
+  n_clv_mc: number;
+  clv_margin_corrected: number | null;
+  clv_mc_sd: number | null;
+  avg_gap_min: number | null;
+  max_gap_min: number | null;
+}
+
+function pct(v: number | null | undefined, dp = 1): string {
+  if (v == null) return "—";
+  const n = Number(v) * 100;
+  return `${n >= 0 ? "+" : ""}${n.toFixed(dp)}%`;
+}
+
+function ForwardTestPanel({ arms }: { arms: ForwardTestArm[] }) {
+  if (!arms.length) return null;
+  const live = arms.find((a) => a.arm === "live");
+  // The pre-registered early-stop trigger that is NOT about the result: median
+  // anchor-to-bet alignment drifting above 60 min is the staleness failure
+  // returning, and it invalidated the first version of this backtest (+8.47%
+  // unaligned vs +5.5% aligned).
+  const gapAlarm = (live?.max_gap_min ?? 0) > 60;
+
+  return (
+    <section className="mb-6 rounded-lg border border-sky-500/20 bg-sky-500/[0.03] px-4 py-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <span className="text-xs font-medium text-sky-300/90">
+          PICKS forward test · bot_sharp_forward_test_v1
+        </span>
+        <span className="text-[10px] text-neutral-500">
+          published picks · flat 1 unit · NOT in simulated_bets or shadow_bets
+        </span>
+      </div>
+
+      <table className="mt-2 w-full text-xs">
+        <thead className="text-[10px] uppercase tracking-wider text-neutral-600">
+          <tr>
+            <th className="py-1 text-left font-normal">Arm</th>
+            <th className="py-1 text-right font-normal">Published</th>
+            <th className="py-1 text-right font-normal">Settled</th>
+            <th className="py-1 text-right font-normal">ROI (units)</th>
+            <th className="py-1 text-right font-normal">95% CI</th>
+            <th className="py-1 text-right font-normal">CLV (margin-corr.)</th>
+            <th className="py-1 text-right font-normal">Max gap</th>
+          </tr>
+        </thead>
+        <tbody className="text-neutral-300">
+          {arms.map((a) => {
+            const ci =
+              a.roi_sd != null && a.settled >= 2
+                ? 1.96 * (Number(a.roi_sd) / Math.sqrt(a.settled))
+                : null;
+            const roi = a.roi != null ? Number(a.roi) * 100 : null;
+            return (
+              <tr key={a.arm} className="border-t border-white/[0.04]">
+                <td className="py-1">
+                  {a.arm === "live" ? (
+                    <span className="text-sky-300">live</span>
+                  ) : (
+                    <span
+                      className="text-neutral-500"
+                      title="Negative control — same rule, anchor shuffled to a different fixture. Expected to lose roughly the vig. Never published. NOTE: the 2026-09-14 rows are degenerate (they duplicate the live arm) and carry a rule_version ending +DEGENERATE_JUNK_DAY1."
+                    >
+                      junk anchor (control)
+                    </span>
+                  )}
+                </td>
+                <td className="py-1 text-right tabular-nums">{a.published}</td>
+                <td className="py-1 text-right tabular-nums">
+                  {a.settled}
+                  <span className="text-neutral-600">
+                    {" "}
+                    ({a.won}W/{a.settled - a.won}L
+                    {a.refunded ? `/${a.refunded}R` : ""})
+                  </span>
+                </td>
+                <td
+                  className={`py-1 text-right tabular-nums ${
+                    roi == null ? "" : roi >= 0 ? "text-emerald-400" : "text-rose-400"
+                  }`}
+                >
+                  {pct(a.roi)}
+                </td>
+                <td className="py-1 text-right tabular-nums text-neutral-500">
+                  {roi != null && ci != null
+                    ? `${(roi - ci * 100).toFixed(1)} / ${(roi + ci * 100).toFixed(1)}`
+                    : "—"}
+                </td>
+                <td className="py-1 text-right tabular-nums">
+                  {pct(a.clv_margin_corrected)}
+                  <span className="text-neutral-600"> (n={a.n_clv_mc})</span>
+                </td>
+                <td
+                  className={`py-1 text-right tabular-nums ${
+                    (a.max_gap_min ?? 0) > 60 ? "text-amber-400" : "text-neutral-500"
+                  }`}
+                >
+                  {a.max_gap_min != null ? `${Math.round(Number(a.max_gap_min))}m` : "—"}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+
+      <p className="mt-2 text-[10px] leading-relaxed text-neutral-500">
+        Pre-registered 2026-09-14. STOP at n=200 if margin-corrected CLV &lt;
+        −2%, STOP at n=400 if &lt; 0, promote or kill at n=800 on the ROI CI.
+        The primary instrument is margin-corrected CLV, not ROI: per-bet return
+        variance is ~1.32, so confirming a true +3% ROI at 80% power needs
+        ≈15,600 bets. Prior is a +5.5% backtest with a 95% CI of [−0.7, +11.7] —
+        no demonstrated edge, and it is never shown to readers.
+        {gapAlarm && (
+          <span className="text-amber-400">
+            {" "}
+            ⚠ Max anchor-to-bet gap is over the 60-minute rule cap — that is the
+            staleness failure returning, and it is a pre-registered early stop.
+          </span>
+        )}
+      </p>
+    </section>
   );
 }
