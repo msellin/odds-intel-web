@@ -347,8 +347,19 @@ export default async function PerformancePage() {
         ? PICKS_FORWARD_TEST_START_BANKROLL + picksSummary.pnlUnits * PICKS_FORWARD_TEST_STAKE_EUR
         : null,
       startingBankroll: PICKS_FORWARD_TEST_START_BANKROLL,
-      hasEnoughData: picksSummary.settled >= 200,
-      maturityLabel: "testing",
+      // Same bar as every other bot on this page (settled >= 5), so it lands in
+      // the main list rather than "in development (< 5 bets)" — a label that was
+      // simply false for a bot with 8 published and 5 settled.
+      //
+      // I had set this to its own pre-registered checkpoint (200) to stop a
+      // five-bet sample out-ranking a 640-bet one, since the proven group sorts
+      // by ROI. That protection now comes from the TESTING chip instead, which
+      // the page's own legend already defines as "still collecting" — the same
+      // mechanism that marks bot_high_roi_global_v2 as BETA at n=51. Using a
+      // private threshold for one bot made the page inconsistent AND mislabelled
+      // it; the chip is the honest signal and it is already there.
+      hasEnoughData: picksSummary.settled >= 5,
+      maturityLabel: "testing",   // legend: "TESTING (still collecting)"
     });
   }
 
