@@ -21,13 +21,10 @@
 import Link from "next/link";
 import { Nav } from "@/components/nav";
 import {
-  ci95,
   hasStarted,
   sharpBreakEvenOdds,
   fetchForwardTestPicks,
-  fetchForwardTestSummary,
   type ForwardTestPick,
-  type ForwardTestSummary,
 } from "@/lib/forward-test-picks";
 
 export const dynamic = "force-dynamic";
@@ -119,161 +116,16 @@ function OutcomeBadge({
   return null;
 }
 
-/**
- * The running result.
- *
- * Everything shown here is the LIVE ledger. The +5.5% backtest that motivated
- * the rule is NOT rendered anywhere on this page and must not be added: its 95%
- * CI is [-0.7, +11.7], it includes zero, and it was computed on the same window
- * that chose the rule's odds cap and alignment tolerance. Showing it beside live
- * picks would read as a track record, which is exactly the claim this method
- * does not have.
- */
-function RunningResult({
-  s,
-  closed,
-}: {
-  s: ForwardTestSummary;
-  closed: ForwardTestSummary[];
-}) {
-  const roiPct = s.roi != null ? s.roi * 100 : null;
-  const roiCi = ci95(s.roi_sd, s.settled);
-  const roiCiPct = roiCi != null ? roiCi * 100 : null;
-  const clvPct =
-    s.clv_margin_corrected != null ? s.clv_margin_corrected * 100 : null;
-  const clvCi = ci95(s.clv_mc_sd, s.n_clv_mc);
-  const clvCiPct = clvCi != null ? clvCi * 100 : null;
-
-  const straddlesZero =
-    roiPct != null && roiCiPct != null
-      ? roiPct - roiCiPct <= 0 && roiPct + roiCiPct >= 0
-      : null;
-
-  return (
-    <section className="mt-8 rounded-xl border border-white/[0.06] bg-white/[0.02] p-5 sm:p-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-base font-semibold text-neutral-100">
-          Running result
-        </h2>
-        <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
-          Live ledger ·{" "}
-          {s.started_at
-            ? new Date(s.started_at).toLocaleDateString("en-GB", {
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              })
-            : START_DATE}
-        </p>
-      </div>
-
-      {s.settled < 1 ? (
-        <p className="mt-3 text-sm text-neutral-400">
-          {s.published} pick{s.published === 1 ? "" : "s"} published,{" "}
-          {s.pending} still to settle. Nothing has settled yet, so there is no
-          number to show. There will be one here, win or lose.
-        </p>
-      ) : (
-        <>
-          <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <div>
-              <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
-                Settled
-              </p>
-              <p className="font-mono text-lg font-semibold tabular-nums text-neutral-100">
-                {s.settled}
-              </p>
-              <p className="mt-0.5 text-[11px] text-neutral-500">
-                {s.won} won · {s.settled - s.won} lost
-                {s.refunded > 0 ? ` · ${s.refunded} refunded` : ""}
-              </p>
-            </div>
-            <div>
-              <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
-                Return
-              </p>
-              <p className="font-mono text-lg font-semibold tabular-nums text-neutral-100">
-                {roiPct != null ? `${roiPct >= 0 ? "+" : ""}${roiPct.toFixed(1)}%` : "—"}
-              </p>
-              <p className="mt-0.5 text-[11px] text-neutral-500">
-                {roiPct != null && roiCiPct != null
-                  ? `95% CI ${(roiPct - roiCiPct).toFixed(1)} to ${(roiPct + roiCiPct).toFixed(1)}`
-                  : "CI needs more settled picks"}
-              </p>
-            </div>
-            <div>
-              <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
-                Closing-line value
-              </p>
-              <p className="font-mono text-lg font-semibold tabular-nums text-neutral-100">
-                {clvPct != null ? `${clvPct >= 0 ? "+" : ""}${clvPct.toFixed(1)}%` : "—"}
-              </p>
-              <p className="mt-0.5 text-[11px] text-neutral-500">
-                {clvPct != null
-                  ? `n=${s.n_clv_mc}${clvCiPct != null ? ` · ±${clvCiPct.toFixed(1)}` : ""}`
-                  : "not measurable yet"}
-              </p>
-            </div>
-            <div>
-              <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
-                Units
-              </p>
-              <p className="font-mono text-lg font-semibold tabular-nums text-neutral-100">
-                {s.pnl_units != null
-                  ? `${s.pnl_units >= 0 ? "+" : ""}${s.pnl_units.toFixed(2)}`
-                  : "—"}
-              </p>
-              <p className="mt-0.5 text-[11px] text-neutral-500">
-                flat 1 unit per pick
-              </p>
-            </div>
-          </div>
-
-          {straddlesZero === true && (
-            <p className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/[0.05] px-4 py-3 text-xs text-amber-200/90">
-              The confidence interval includes zero. At this sample size this
-              result is <strong>not evidence of an edge</strong> — in either
-              direction. Betting returns are noisy enough that a few hundred
-              picks cannot separate a good method from a break-even one, which
-              is why the closing-line number above matters more than the return.
-            </p>
-          )}
-        </>
-      )}
-
-      {closed.length > 0 && (
-        <p className="mt-3 text-xs leading-relaxed text-neutral-500">
-          {closed.length === 1 ? "An earlier version" : `${closed.length} earlier versions`}{" "}
-          of the selection rule {closed.length === 1 ? "was" : "were"} closed and
-          {closed.length === 1 ? " its" : " their"} picks (
-          {closed.reduce((a, c) => a + c.published, 0)} in total) are counted
-          separately, not added to the figures above. Tightening a rule starts a
-          new test — carrying the old count forward is how a result gets reported
-          early on a mix of two different rules.
-        </p>
-      )}
-
-      <p className="mt-4 text-xs leading-relaxed text-neutral-500">
-        Every pick is recorded before kickoff and settled automatically, winners
-        and losers alike. What counts as a pick, and what result would make us
-        stop, were both written down before the first one was published.
-        Closing-line value is corrected for the closing book&apos;s own margin,
-        so zero means break-even rather than &ldquo;beat the quoted price&rdquo;.
-      </p>
-    </section>
-  );
-}
+// RUNNING-RESULT-REMOVED-FROM-PICKS-2026-09-14 (owner): the RunningResult
+// component that stood here is gone with its mount. The running result lives
+// on /performance now — one track record in one place, rather than two that
+// drift apart.
 
 export default async function PicksPage() {
   let picks: ForwardTestPick[] = [];
-  let summary: { current: ForwardTestSummary; closed: ForwardTestSummary[] } | null =
-    null;
   let loadFailed = false;
   try {
-    [picks, summary] = await Promise.all([
-      fetchForwardTestPicks(),
-      fetchForwardTestSummary(),
-    ]);
+    picks = await fetchForwardTestPicks();
   } catch {
     loadFailed = true;
   }
@@ -323,9 +175,13 @@ export default async function PicksPage() {
           </p>
         </div>
 
-        {summary && (
-          <RunningResult s={summary.current} closed={summary.closed} />
-        )}
+        {/* RUNNING-RESULT-REMOVED-FROM-PICKS-2026-09-14 (owner). /picks is the
+            pick list — what is on today and at what price. The running result
+            lives on /performance, where the fleet's numbers already are, so a
+            reader sees one track record in one place instead of two that will
+            drift apart. It is also n=5 right now, and a results block at the top
+            of a pick list invites exactly the reading the method does not
+            support yet. */}
 
         {loadFailed && (
           <div className="mt-8 rounded-xl border border-white/[0.06] bg-white/[0.02] p-6 text-center text-sm text-neutral-400">

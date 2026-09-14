@@ -76,7 +76,25 @@ export function PerformanceClient({
   }, [nonExperimentalBets, botsDB, isPro, isElite]);
 
   // Leaderboard rows: computed for Pro+ when toggle data is available, else cache.
-  const leaderboardBots: PublicBotStat[] = computedBots ?? cachedBots;
+  //
+  // LEADERBOARD-ROW-FLASH-2026-09-14: this used to be a bare
+  // `computedBots ?? cachedBots`, which made bot_sharp_forward_test_v1 appear on
+  // load and then vanish. The Suspense FALLBACK renders `cachedBots` (where the
+  // published-picks row is injected server-side), then the resolved section
+  // swaps in `computedBots` — rebuilt from `aggregateBets`, i.e. from
+  // simulated_bets, a table that bot deliberately does not write to. So the
+  // recompute silently dropped it, and the row flickered out.
+  //
+  // Merge instead of replace: keep every computed row (that is the point of the
+  // live recompute — fresh retirements and new bots without waiting for the
+  // 30-min cache rebuild), and carry over any cache-only row it has no opinion
+  // about. Written generally rather than name-matching the one bot, because any
+  // future read-through strategy hits exactly this.
+  const leaderboardBots: PublicBotStat[] = useMemo(() => {
+    if (!computedBots) return cachedBots;
+    const seen = new Set(computedBots.map((b) => b.name));
+    return [...computedBots, ...cachedBots.filter((b) => !seen.has(b.name))];
+  }, [computedBots, cachedBots]);
 
   // Count non-experimental active bots with enough data for the scale row
   const botsTracked = leaderboardBots.filter(b => b.hasEnoughData).length || null;
