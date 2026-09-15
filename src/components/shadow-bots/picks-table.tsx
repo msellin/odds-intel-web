@@ -3,8 +3,8 @@ import { botEdgeThreshold } from "@/lib/coolbet-edge";
 import { ENGINE_MIN_ODDS_BY_MARKET } from "@/lib/generated/engine-floors";
 import type { PlacerBotRow, Quote, SessionState, ShadowBotsPageData } from "@/lib/shadow-bots/queries";
 import { oddsKey } from "@/lib/shadow-bots/queries";
-import { BOOK_CHIP } from "@/lib/shadow-bots/labels";
-import { pickVerdict, PICK_VERDICT_RANK } from "@/lib/shadow-bots/verdict";
+import { BOOK_CHIP, isInplayControlBot } from "@/lib/shadow-bots/labels";
+import { pickVerdict, quoteFreshness, PICK_VERDICT_RANK, QUOTE_MAX_AGE_MIN } from "@/lib/shadow-bots/verdict";
 import { PicksRow, type PickRowData } from "@/components/shadow-bots/picks-row";
 
 /** Market key for the placer's per-market odds floor (engine-floors.ts). */
@@ -23,7 +23,11 @@ export function buildPickRows(
 ): PickRowData[] {
   const placerByName = new Map<string, PlacerBotRow>(data.placerBots.map((p) => [p.bot_name, p]));
   const rows: PickRowData[] = data.upcoming.map((pick) => {
-    const quotes = data.quotes[oddsKey(pick.match_id, pick.market, pick.selection)] ?? [];
+    const inplay = pick.inplay_minute != null;
+    // An in-play row gets NO book quotes: `odds_snapshots` is pre-match only, so
+    // the newest row for a running fixture is a price that has stopped existing.
+    // Its decision price is `odds_at_pick` — the book's on-screen number.
+    const quotes = inplay ? [] : (data.quotes[oddsKey(pick.match_id, pick.market, pick.selection)] ?? []);
     let best: Quote | null = null;
     let unplaceable: Quote | null = null;
     for (const q of quotes) {
@@ -52,6 +56,7 @@ export function buildPickRows(
       minutesToKo,
       placementPaused: state.placement_paused,
       botEnabled: placer ? placer.ui_place_enabled : null,
+      inplay,
     });
     return {
       pick,
@@ -62,6 +67,8 @@ export function buildPickRows(
       unplaceable,
       verdict,
       minutesToKo,
+      inplay,
+      isControlArm: isInplayControlBot(pick.bot_name),
       markState: markStates[pick.id] ?? 0,
       stake: FLAT_STAKE_EUR,
     };
@@ -79,6 +86,9 @@ export function PicksTable({ rows, truncatedBooks }: { rows: PickRowData[]; trun
     acc[r.verdict.verdict] = (acc[r.verdict.verdict] ?? 0) + 1;
     return acc;
   }, {});
+  const inplayCount = rows.filter((r) => r.inplay).length;
+  // One definition of stale — quoteFreshness(), the same call the row makes.
+  const staleCount = rows.filter((r) => quoteFreshness(r.pick.decision_quote_age_min) === "STALE").length;
   const th = "px-2 py-1.5 text-left font-normal whitespace-nowrap";
   return (
     <section className="mb-8">
@@ -87,6 +97,8 @@ export function PicksTable({ rows, truncatedBooks }: { rows: PickRowData[]; trun
         <span className="font-mono text-[11px] text-neutral-500">
           {rows.length} pending · PLACE {counts.PLACE ?? 0} · THIN {counts.THIN ?? 0} · SKIP {counts.SKIP ?? 0} · BLOCKED{" "}
           {counts.BLOCKED ?? 0}
+          {inplayCount > 0 ? ` · in-play ${inplayCount}` : ""}
+          {staleCount > 0 ? ` · stale decision quote ${staleCount}` : ""}
         </span>
       </div>
       {truncatedBooks.length > 0 && (
@@ -110,8 +122,14 @@ export function PicksTable({ rows, truncatedBooks }: { rows: PickRowData[]; trun
                 <th className={`${th} text-right`} title="Best price at a book we can place at (CB/UB). EB shown greyed when nothing placeable">
                   Best placeable
                 </th>
-                <th className={`${th} text-right`} title="Age of that quote in minutes">
-                  Age
+                <th
+                  className={`${th} text-right`}
+                  title={`Age of the quote the BOT decided on; FRESH under ${QUOTE_MAX_AGE_MIN} min, stale rows greyed`}
+                >
+                  Decision
+                </th>
+                <th className={`${th} text-right`} title="Age of the live quote shown to the left, in minutes">
+                  Shown age
                 </th>
                 <th className={`${th} text-right`} title="1 / anchor probability">
                   Break-even

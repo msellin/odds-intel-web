@@ -7,12 +7,15 @@
  *                       that logs a hand-placed bet into `real_bets`.
  *   3. Which bots work — the pre-registered verdict per non-retired bot on
  *                       margin-corrected own-book CLV.
+ *   4. Promotions     — active `promo_terms` with their ledger EV vs realised
+ *                       (OWN Phase 2). Read-only; terms are entered with
+ *                       `scripts/promo_ev.py` in the engine repo.
  *
  * Bot list is `bots WHERE retired_at IS NULL` — nothing hardcoded, so a new bot
  * appears the moment it has a `bots` row and its first `shadow_bets` write
  * (visibility invariant, dev/active/own-implementation-plan.md).
  *
- * Reads: `loadShadowBotsPage()` (cached 60 s, 8 queries) + `loadSessionState()`
+ * Reads: `loadShadowBotsPage()` (cached 60 s, 10 queries) + `loadSessionState()`
  * (fresh, 1 query) + per-user pick marks (1 query) + auth/profile (2).
  * Decision rules live in lib/shadow-bots/verdict.ts.
  */
@@ -25,6 +28,7 @@ import { loadSessionState, loadShadowBotsPage } from "@/lib/shadow-bots/queries"
 import { SafetyStrip } from "@/components/shadow-bots/safety-strip";
 import { buildPickRows, PicksTable } from "@/components/shadow-bots/picks-table";
 import { Scoreboard } from "@/components/shadow-bots/scoreboard";
+import { Promotions } from "@/components/shadow-bots/promotions";
 
 export default async function ShadowBotsPage() {
   const supabase = await createSupabaseServer();
@@ -62,6 +66,8 @@ export default async function ShadowBotsPage() {
       <PicksTable rows={rows} truncatedBooks={data.truncatedBooks} />
 
       <Scoreboard bots={data.bots} clvRows={data.clvRows} placerBots={data.placerBots} />
+
+      <Promotions promos={data.promos} error={data.promoError} />
 
       <p className="mt-8 text-xs text-neutral-500">
         <Link href="/admin/ops" className="underline underline-offset-4 hover:text-neutral-300">

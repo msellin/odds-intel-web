@@ -54,3 +54,53 @@ export const BOOK_CHIP: Record<string, { chip: string; placeable: boolean; realB
   "Unibet-Site": { chip: "UB", placeable: true, realBetsName: "Unibet" },
   Epicbet: { chip: "EB", placeable: false, realBetsName: "Epicbet" },
 };
+
+/**
+ * Compact age for a table cell: `—` · `12m` · `4h` · `3d`.
+ *
+ * Minutes up to 2 h, hours up to 48 h, days beyond. NULL renders `—` and MUST
+ * NOT be styled as fresh anywhere — see `quoteFreshness()` in verdict.ts, which
+ * gives NULL its own UNKNOWN state. A negative age (clock skew between the
+ * engine host and this one) clamps to `0m` rather than printing `-3m`.
+ */
+export function formatAge(min: number | null | undefined): string {
+  if (min == null || !Number.isFinite(min)) return "—";
+  if (min <= 0) return "0m";
+  if (min < 120) return `${Math.round(min)}m`;
+  if (min < 2880) return `${Math.round(min / 60)}h`;
+  return `${Math.round(min / 1440)}d`;
+}
+
+/**
+ * The in-play rig's CONTROL arm — same two triggers, priced off API-Football's
+ * live aggregate instead of the book's on-screen board (migration 357). Its
+ * price is a feed nobody can bet, so it is marked CONTROL and never offers a
+ * Place action: the gap between the arms is the measurement, not a strategy.
+ */
+export const INPLAY_CONTROL_BOTS = new Set(["bot_inplay_slowstate_afctl_v1"]);
+
+export function isInplayControlBot(botName: string | null | undefined): boolean {
+  return botName != null && INPLAY_CONTROL_BOTS.has(botName);
+}
+
+/** `true` when `validTo` is in the future and within `days` of `now`. */
+export function expiresWithinDays(
+  validTo: string | null | undefined,
+  days: number,
+  now: number = Date.now(),
+): boolean {
+  if (!validTo) return false;
+  const t = Date.parse(validTo);
+  if (!Number.isFinite(t)) return false;
+  return t >= now && t - now <= days * 86400_000;
+}
+
+/** Promo type → short chip text. Unknown types fall through to the raw value. */
+export const PROMO_TYPE_LABEL: Record<string, string> = {
+  odds_boost: "odds boost",
+  free_bet: "free bet",
+  acca_insurance: "acca ins.",
+  deposit_bonus: "deposit",
+  cashback: "cashback",
+  other: "other",
+};

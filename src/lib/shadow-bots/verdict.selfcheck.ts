@@ -2,7 +2,8 @@
  * Dependency-free self-check for verdict.ts (the repo has no test runner).
  *
  * Run:
- *   npx tsc src/lib/shadow-bots/verdict.ts src/lib/shadow-bots/verdict.selfcheck.ts \
+ *   npx tsc src/lib/shadow-bots/verdict.ts src/lib/shadow-bots/labels.ts \
+ *       src/lib/shadow-bots/verdict.selfcheck.ts \
  *       --outDir /tmp/verdict-check --module commonjs --target es2022 \
  *       --skipLibCheck --esModuleInterop --types node && node /tmp/verdict-check/verdict.selfcheck.js
  *
@@ -14,11 +15,16 @@ import {
   gateFloor,
   liveEdge,
   pickVerdict,
+  inplayOverride,
+  quoteFreshness,
   botVerdict,
   meanSd,
+  NO_INPLAY_PLACER_REASON,
+  PAUSED_REASON,
   PREREG_MIN_N,
   QUOTE_MAX_AGE_MIN,
 } from "./verdict";
+import { expiresWithinDays, formatAge, isInplayControlBot } from "./labels";
 
 const close = (a: number | null, b: number, msg = "", eps = 1e-9) => {
   assert.ok(a != null, `${msg} expected ${b}, got null`);
@@ -66,6 +72,66 @@ assert.equal(pickVerdict({ ...base, prob: 0.09, threshold: 0.1, livePrice: 12 })
 // placer odds floor gates real-money bots: 1x2 at 2.79 with p=0.5, thr=0.1 → gate 2.80
 assert.equal(pickVerdict({ ...base, prob: 0.5, oddsFloor: 2.8, livePrice: 2.79 }).verdict, "THIN");
 assert.equal(pickVerdict({ ...base, prob: 0.5, oddsFloor: 2.8, livePrice: 2.8 }).verdict, "PLACE");
+
+// ── freshness (display addition 1a, 2026-09-15) ────────────────────────────
+// NULL is UNKNOWN, never FRESH — a missing age is not a guarantee.
+assert.equal(quoteFreshness(null), "UNKNOWN");
+assert.equal(quoteFreshness(undefined), "UNKNOWN");
+assert.equal(quoteFreshness(Number.NaN), "UNKNOWN");
+assert.equal(quoteFreshness(0), "FRESH");
+assert.equal(quoteFreshness(QUOTE_MAX_AGE_MIN - 0.01), "FRESH");
+assert.equal(quoteFreshness(QUOTE_MAX_AGE_MIN), "STALE", "threshold is strict <");
+assert.equal(quoteFreshness(4000), "STALE");
+
+assert.equal(formatAge(null), "—");
+assert.equal(formatAge(undefined), "—");
+assert.equal(formatAge(Number.NaN), "—");
+assert.equal(formatAge(-3), "0m", "clock skew clamps, never prints a negative age");
+assert.equal(formatAge(12), "12m");
+assert.equal(formatAge(29.6), "30m");
+assert.equal(formatAge(119), "119m");
+assert.equal(formatAge(120), "2h", "minutes up to 2 h");
+assert.equal(formatAge(240), "4h");
+assert.equal(formatAge(2879), "48h");
+assert.equal(formatAge(2880), "2d", "hours up to 48 h");
+assert.equal(formatAge(4320), "3d");
+
+// ── in-play (display addition 1b, 2026-09-15) ──────────────────────────────
+// An in-play row can NEVER read PLACE: there is no placer for in-play anywhere.
+const inplayBase = { ...base, inplay: true };
+assert.equal(pickVerdict(inplayBase).verdict, "SKIP", "in-play never PLACE");
+assert.equal(pickVerdict(inplayBase).reason, NO_INPLAY_PLACER_REASON);
+assert.equal(pickVerdict({ ...inplayBase, livePrice: 3.0 }).verdict, "SKIP", "in-play never THIN");
+// kickoff is in the past for every in-play pick — that must not read as the reason
+assert.equal(pickVerdict({ ...inplayBase, minutesToKo: -77 }).reason, NO_INPLAY_PLACER_REASON);
+// …but a paused system still shows BLOCKED: "the machine is off" outranks it.
+assert.equal(pickVerdict({ ...inplayBase, placementPaused: true }).verdict, "BLOCKED");
+assert.equal(pickVerdict({ ...inplayBase, placementPaused: true }).reason, PAUSED_REASON);
+// the override is the same rule, in isolation
+assert.equal(inplayOverride(pickVerdict(base)).verdict, "SKIP");
+assert.equal(
+  inplayOverride({ verdict: "BLOCKED", reason: PAUSED_REASON, breakEven: null, gateFloor: null, liveEdge: null }).verdict,
+  "BLOCKED",
+);
+assert.equal(
+  inplayOverride({ verdict: "BLOCKED", reason: "kickoff < 3 min", breakEven: null, gateFloor: null, liveEdge: null }).verdict,
+  "SKIP",
+  "a started fixture is the normal state in play, not a block",
+);
+// the flag is opt-in: an absent `inplay` leaves the pre-match ladder untouched
+assert.equal(pickVerdict(base).verdict, "PLACE");
+
+assert.equal(isInplayControlBot("bot_inplay_slowstate_afctl_v1"), true);
+assert.equal(isInplayControlBot("bot_inplay_slowstate_v1"), false, "the LIVE arm is not the control");
+assert.equal(isInplayControlBot(null), false);
+
+// ── promo expiry highlight (display addition 2, 2026-09-15) ────────────────
+const t0 = Date.parse("2026-09-15T12:00:00Z");
+assert.equal(expiresWithinDays(null, 7, t0), false);
+assert.equal(expiresWithinDays("not a date", 7, t0), false);
+assert.equal(expiresWithinDays("2026-09-21T12:00:00Z", 7, t0), true);
+assert.equal(expiresWithinDays("2026-09-22T12:00:01Z", 7, t0), false, "8 days out is not expiring");
+assert.equal(expiresWithinDays("2026-09-14T12:00:00Z", 7, t0), false, "already expired is not 'expiring'");
 
 // ── per-bot verdict ────────────────────────────────────────────────────────
 assert.equal(botVerdict({ n: 17, mean: 0.05, sd: 0.01 }).kind, "COLLECTING");

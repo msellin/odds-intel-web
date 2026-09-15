@@ -3,7 +3,7 @@
  *
  * Two entry points:
  *   • `loadShadowBotsPage()` — everything that is safe to share across
- *     operators for 60 s, wrapped in `unstable_cache`. 8 PostgREST queries.
+ *     operators for 60 s, wrapped in `unstable_cache`. 10 PostgREST queries.
  *   • `loadSessionState()`   — the safety flags, read FRESH on every request.
  *     A 60 s-stale "placement paused" chip is a lie the operator acts on, and
  *     it is one cheap single-row read.
@@ -17,6 +17,13 @@
  * Now the ledger read is `shadow_bets_own_book_clv` filtered to the active
  * bots (~450 rows today) and snapshots are bounded to the fixtures + markets
  * actually on the table.
+ *
+ * 2026-09-15 (OWN-SURFACE-DISPLAY-ADDITIONS): 8 → 10 queries. +1 for in-play
+ * picks (a SEPARATE read, not a widened window on the pre-match one: an in-play
+ * pick's fixture has already kicked off, and relaxing `matches.date >= now`
+ * would let started fixtures crowd future ones out of the 1500-row limit).
+ * +1 for the promotions panel, which is ONE read — `promo_terms` with
+ * `promo_ledger` embedded on its FK. Nothing is fetched per row.
  */
 import { unstable_cache } from "next/cache";
 import { createServerServiceClient } from "@/lib/supabase-server";
@@ -69,6 +76,10 @@ export interface UpcomingPick {
   recommended_bookmaker: string | null;
   pick_time: string;
   decision_quote_age_min: number | null;
+  /** Non-NULL only for the in-play rig's picks — the minute the trigger fired. */
+  inplay_minute: number | null;
+  inplay_score_home: number | null;
+  inplay_score_away: number | null;
   kickoff: string;
   home: string;
   away: string;
@@ -92,6 +103,36 @@ export interface BotClvRow {
   odds_at_pick_live: number | null;
 }
 
+/** One active `promo_terms` row plus its `promo_ledger` aggregates. */
+export interface PromoRow {
+  id: string;
+  book: string;
+  promo_type: string;
+  title: string;
+  boost_pct: number | null;
+  boost_applies_to: string | null;
+  face_value_eur: number | null;
+  stake_returned: boolean | null;
+  min_odds: number | null;
+  max_stake_eur: number | null;
+  min_legs: number | null;
+  refund_eur: number | null;
+  refund_cash: boolean | null;
+  rollover_x: number | null;
+  deposit_eur: number | null;
+  single_use: boolean | null;
+  valid_to: string | null;
+  source_url: string | null;
+  /** promo_ledger rows pointing at this terms row. */
+  taken: number;
+  evSum: number;
+  /** Σ realised P&L over SETTLED rows only, and how many those were. */
+  realisedSum: number;
+  settled: number;
+  /** Σ EV over the SAME settled rows — the only honest comparand for realised. */
+  evSumSettled: number;
+}
+
 export interface ShadowBotsPageData {
   bots: BotRow[];
   placerBots: PlacerBotRow[];
@@ -102,6 +143,9 @@ export interface ShadowBotsPageData {
   /** Books whose snapshot fetch hit the row cap — their column may be incomplete. */
   truncatedBooks: string[];
   clvRows: BotClvRow[];
+  promos: PromoRow[];
+  /** Set when the promo read failed (e.g. PostgREST schema cache) — shown, never swallowed. */
+  promoError: string | null;
   loadedAt: string;
   queryCount: number;
 }
@@ -114,7 +158,20 @@ const SNAPSHOT_BOOKS = ["Coolbet", "Unibet-Site", "Epicbet"] as const;
 const SNAPSHOT_ROW_CAP = 3000;
 const SNAPSHOT_WINDOW_H = 12;
 const UPCOMING_LIMIT = 1500;
+/** In-play picks pending at once. The rig fires at most twice per fixture. */
+const INPLAY_LIMIT = 300;
 const CLV_PAGE = 5000;
+
+/** Shared projection for both pick reads — they map to the same row shape. */
+const PICK_SELECT = `id, bot_id, bot_name, match_id, market, selection, odds_at_pick,
+   model_probability, calibrated_prob, recommended_bookmaker, pick_time,
+   decision_quote_age_min, inplay_minute, inplay_score_home, inplay_score_away,
+   matches!inner (
+     date,
+     leagues ( name, country, tier ),
+     home_team:teams!matches_home_team_id_fkey ( name ),
+     away_team:teams!matches_away_team_id_fkey ( name )
+   )`;
 
 export const oddsKey = (m: string, market: string, selection: string) =>
   `${m}|${market.toLowerCase()}|${selection.toLowerCase()}`;
@@ -136,9 +193,10 @@ async function _loadShadowBotsPage(): Promise<ShadowBotsPageData> {
   const bots = (botsRaw ?? []) as BotRow[];
   const botIds = bots.map((b) => b.id);
 
-  // 2 · placer toggles · 3 · today's real bets · 4 · upcoming picks — independent.
-  queryCount += 3;
-  const [placerRes, realRes, upcomingRes] = await Promise.all([
+  // 2 · placer toggles · 3 · today's real bets · 4 · upcoming picks
+  // 5 · in-play picks · 6 · promotions — all independent.
+  queryCount += 5;
+  const [placerRes, realRes, upcomingRes, inplayRes, promoRes] = await Promise.all([
     db.from("coolbet_placer_bots").select("bot_name, ui_place_enabled, note").order("bot_name"),
     db
       .from("real_bets")
@@ -147,21 +205,36 @@ async function _loadShadowBotsPage(): Promise<ShadowBotsPageData> {
       .limit(500),
     db
       .from("shadow_bets_unique")
-      .select(
-        `id, bot_id, bot_name, match_id, market, selection, odds_at_pick, model_probability,
-         calibrated_prob, recommended_bookmaker, pick_time, decision_quote_age_min,
-         matches!inner (
-           date,
-           leagues ( name, country, tier ),
-           home_team:teams!matches_home_team_id_fkey ( name ),
-           away_team:teams!matches_away_team_id_fkey ( name )
-         )`,
-      )
+      .select(PICK_SELECT)
       .is("bot_retired_at", null)
       .eq("result", "pending")
       .gte("matches.date", nowIso)
       .order("matches(date)", { ascending: true })
       .limit(UPCOMING_LIMIT),
+    // In-play picks: NO kickoff filter — by definition their fixture has
+    // already started, so the pre-match window above can never contain them.
+    db
+      .from("shadow_bets_unique")
+      .select(PICK_SELECT)
+      .is("bot_retired_at", null)
+      .eq("result", "pending")
+      .not("inplay_minute", "is", null)
+      .order("pick_time", { ascending: false })
+      .limit(INPLAY_LIMIT),
+    // Promotions: ONE read — active terms with their ledger rows embedded on
+    // promo_ledger.promo_terms_id. Both tables are empty until the owner enters
+    // terms, so this is a few bytes in the normal case.
+    db
+      .from("promo_terms")
+      .select(
+        `id, book, promo_type, title, boost_pct, boost_applies_to, face_value_eur,
+         stake_returned, min_odds, max_stake_eur, min_legs, refund_eur, refund_cash,
+         rollover_x, deposit_eur, single_use, valid_to, source_url,
+         promo_ledger ( ev_eur, realised_pnl_eur, settled_at )`,
+      )
+      .eq("active", true)
+      .order("valid_to", { ascending: true, nullsFirst: false })
+      .limit(200),
   ]);
 
   const placerBots = (placerRes.data ?? []) as PlacerBotRow[];
@@ -196,6 +269,9 @@ async function _loadShadowBotsPage(): Promise<ShadowBotsPageData> {
     recommended_bookmaker: string | null;
     pick_time: string;
     decision_quote_age_min: number | string | null;
+    inplay_minute: number | string | null;
+    inplay_score_home: number | string | null;
+    inplay_score_away: number | string | null;
     matches: {
       date: string;
       leagues: { name: string | null; country: string | null; tier: number | null } | null;
@@ -204,34 +280,53 @@ async function _loadShadowBotsPage(): Promise<ShadowBotsPageData> {
     } | null;
   };
   const num = (v: number | string | null | undefined) => (v == null ? null : Number(v));
+  const int = (v: number | string | null | undefined) => (v == null ? null : Math.trunc(Number(v)));
   // The view is DISTINCT ON (bot, match, market, selection) so no JS dedup is
   // needed; rows without a joined fixture cannot be placed and are dropped.
-  const upcoming: UpcomingPick[] = ((upcomingRes.data ?? []) as unknown as UpRaw[])
-    .filter((r) => r.matches?.date)
-    .map((r) => ({
-      id: r.id,
-      bot_id: r.bot_id,
-      bot_name: r.bot_name ?? "?",
-      match_id: r.match_id,
-      market: r.market,
-      selection: r.selection,
-      odds_at_pick: num(r.odds_at_pick),
-      calibrated_prob: num(r.calibrated_prob),
-      model_probability: num(r.model_probability),
-      recommended_bookmaker: r.recommended_bookmaker,
-      pick_time: r.pick_time,
-      decision_quote_age_min: num(r.decision_quote_age_min),
-      kickoff: r.matches!.date,
-      home: r.matches!.home_team?.name ?? "Home",
-      away: r.matches!.away_team?.name ?? "Away",
-      league: r.matches!.leagues?.name ?? null,
-      country: r.matches!.leagues?.country ?? null,
-      tier: r.matches!.leagues?.tier ?? null,
-    }));
+  const mapPicks = (raw: unknown): UpcomingPick[] =>
+    ((raw ?? []) as UpRaw[])
+      .filter((r) => r.matches?.date)
+      .map((r) => ({
+        id: r.id,
+        bot_id: r.bot_id,
+        bot_name: r.bot_name ?? "?",
+        match_id: r.match_id,
+        market: r.market,
+        selection: r.selection,
+        odds_at_pick: num(r.odds_at_pick),
+        calibrated_prob: num(r.calibrated_prob),
+        model_probability: num(r.model_probability),
+        recommended_bookmaker: r.recommended_bookmaker,
+        pick_time: r.pick_time,
+        decision_quote_age_min: num(r.decision_quote_age_min),
+        inplay_minute: int(r.inplay_minute),
+        inplay_score_home: int(r.inplay_score_home),
+        inplay_score_away: int(r.inplay_score_away),
+        kickoff: r.matches!.date,
+        home: r.matches!.home_team?.name ?? "Home",
+        away: r.matches!.away_team?.name ?? "Away",
+        league: r.matches!.leagues?.name ?? null,
+        country: r.matches!.leagues?.country ?? null,
+        tier: r.matches!.leagues?.tier ?? null,
+      }));
 
-  // 5–7 · latest quote per book, bounded to the fixtures + markets on the table.
-  const matchIds = Array.from(new Set(upcoming.map((u) => u.match_id)));
-  const markets = Array.from(new Set(upcoming.map((u) => u.market.toLowerCase())));
+  const prematch = mapPicks(upcomingRes.data as unknown);
+  // The two reads cannot overlap (kickoff past vs future), but dedupe on id
+  // anyway — a row appearing twice would double a verdict count.
+  const seenPickIds = new Set(prematch.map((p) => p.id));
+  const upcoming: UpcomingPick[] = [
+    ...prematch,
+    ...mapPicks(inplayRes.data as unknown).filter((p) => !seenPickIds.has(p.id)),
+  ];
+
+  // 7–9 · latest quote per book, bounded to the fixtures + markets on the table.
+  // PRE-MATCH rows only: `odds_snapshots` is filtered `is_live = false`, so for a
+  // fixture already in play the newest row is the price the board closed at
+  // before kick-off. Rendering that as an in-play row's "best placeable" would
+  // show a price that no longer exists — the exact failure KAMBI-FEED-DIVERGENCE
+  // is about. In-play rows carry their own on-screen price in `odds_at_pick`.
+  const matchIds = Array.from(new Set(prematch.map((u) => u.match_id)));
+  const markets = Array.from(new Set(prematch.map((u) => u.market.toLowerCase())));
   const since = new Date(Date.now() - SNAPSHOT_WINDOW_H * 3600 * 1000).toISOString();
   const quotes: Record<string, Quote[]> = {};
   const truncatedBooks: string[] = [];
@@ -265,7 +360,7 @@ async function _loadShadowBotsPage(): Promise<ShadowBotsPageData> {
     }
   }
 
-  // 8 · settled own-book rows for the ACTIVE bots only — the scoreboard input.
+  // 10 · settled own-book rows for the ACTIVE bots only — the scoreboard input.
   const clvRows: BotClvRow[] = [];
   if (botIds.length > 0) {
     for (let from = 0; ; from += CLV_PAGE) {
@@ -282,6 +377,51 @@ async function _loadShadowBotsPage(): Promise<ShadowBotsPageData> {
     }
   }
 
+  // Promotions — aggregate the embedded ledger in JS (the panel shows at most a
+  // handful of terms; a per-row aggregate read would be one query per promo).
+  type PromoRaw = Omit<PromoRow, "taken" | "evSum" | "realisedSum" | "settled" | "evSumSettled"> & {
+    boost_pct: number | string | null;
+    face_value_eur: number | string | null;
+    min_odds: number | string | null;
+    max_stake_eur: number | string | null;
+    refund_eur: number | string | null;
+    rollover_x: number | string | null;
+    deposit_eur: number | string | null;
+    promo_ledger: { ev_eur: number | string | null; realised_pnl_eur: number | string | null; settled_at: string | null }[] | null;
+  };
+  const promos: PromoRow[] = ((promoRes.data ?? []) as unknown as PromoRaw[]).map((t) => {
+    const legs = t.promo_ledger ?? [];
+    let evSum = 0;
+    let realisedSum = 0;
+    let evSumSettled = 0;
+    let settled = 0;
+    for (const l of legs) {
+      const ev = Number(l.ev_eur ?? 0);
+      if (Number.isFinite(ev)) evSum += ev;
+      if (l.settled_at != null) {
+        settled++;
+        if (Number.isFinite(ev)) evSumSettled += ev;
+        const r = Number(l.realised_pnl_eur ?? 0);
+        if (Number.isFinite(r)) realisedSum += r;
+      }
+    }
+    return {
+      ...t,
+      boost_pct: num(t.boost_pct),
+      face_value_eur: num(t.face_value_eur),
+      min_odds: num(t.min_odds),
+      max_stake_eur: num(t.max_stake_eur),
+      refund_eur: num(t.refund_eur),
+      rollover_x: num(t.rollover_x),
+      deposit_eur: num(t.deposit_eur),
+      taken: legs.length,
+      evSum,
+      realisedSum,
+      evSumSettled,
+      settled,
+    };
+  });
+
   return {
     bots,
     placerBots,
@@ -290,6 +430,10 @@ async function _loadShadowBotsPage(): Promise<ShadowBotsPageData> {
     quotes,
     truncatedBooks,
     clvRows,
+    promos,
+    // Surfaced, not swallowed: "no promos" and "the read failed" look identical
+    // in an empty table, and only one of them is a reason to stop trusting it.
+    promoError: promoRes.error?.message ?? null,
     loadedAt: nowIso,
     queryCount,
   };

@@ -29,6 +29,32 @@ export const QUOTE_MAX_AGE_MIN = 30;
 /** Inside this many minutes of kickoff the placer refuses; so do we. */
 export const KO_BLOCK_MIN = 3;
 
+/** Reason string for the paused-system block. A constant because the in-play
+ * override below has to recognise it without matching a free-text string. */
+export const PAUSED_REASON = "placement paused";
+/**
+ * Standing reason on every in-play row. There is no placer for in-play at any
+ * book we can bet — the slow-state rig is an INSTRUMENT, priced off Epicbet's
+ * on-screen board, and nothing downstream can stake it. Shown so the operator
+ * is never invited to act on a row the system cannot execute.
+ */
+export const NO_INPLAY_PLACER_REASON = "no in-play placer";
+
+/**
+ * How fresh the quote a decision rested on was.
+ * `UNKNOWN` is a THIRD state on purpose: a NULL age means either the leg was
+ * written before `decision_quote_age_min` existed (2026-09-15) or the bot has
+ * no freshness gate at all. Folding it into FRESH would read as a guarantee we
+ * never made — the exact shape of RELIABILITY_LEDGER §"unconfirmable".
+ */
+export type Freshness = "FRESH" | "STALE" | "UNKNOWN";
+
+/** FRESH strictly under QUOTE_MAX_AGE_MIN; NULL/non-finite is UNKNOWN, never FRESH. */
+export function quoteFreshness(ageMin: number | null | undefined): Freshness {
+  if (ageMin == null || !Number.isFinite(ageMin)) return "UNKNOWN";
+  return ageMin < QUOTE_MAX_AGE_MIN ? "FRESH" : "STALE";
+}
+
 export type PickVerdict = "PLACE" | "THIN" | "SKIP" | "BLOCKED";
 export const PICK_VERDICT_RANK: Record<PickVerdict, number> = {
   PLACE: 0,
@@ -90,6 +116,8 @@ export interface PickVerdictInput {
    * placer row (paper bot) — the toggle does not apply and cannot block.
    */
   botEnabled: boolean | null;
+  /** `shadow_bets.inplay_minute IS NOT NULL` — the pick was raised in play. */
+  inplay?: boolean;
 }
 
 export interface PickVerdictResult {
@@ -108,14 +136,16 @@ export interface PickVerdictResult {
  *             or no break-even (no anchor prob)
  *   PLACE   — price ≥ gate floor (and quote < 30 min, not blocked)
  *   THIN    — price ≥ break-even but < gate floor (or gate unreachable)
+ *
+ * `pickVerdict` wraps this with `inplayOverride` — see below.
  */
-export function pickVerdict(i: PickVerdictInput): PickVerdictResult {
+function corePickVerdict(i: PickVerdictInput): PickVerdictResult {
   const be = breakEven(i.prob);
   const gf = gateFloor(i.prob, i.threshold, i.oddsFloor);
   const le = liveEdge(i.prob, i.livePrice);
   const base = { breakEven: be, gateFloor: gf, liveEdge: le };
 
-  if (i.placementPaused) return { verdict: "BLOCKED", reason: "placement paused", ...base };
+  if (i.placementPaused) return { verdict: "BLOCKED", reason: PAUSED_REASON, ...base };
   if (i.botEnabled === false) return { verdict: "BLOCKED", reason: "bot toggled off", ...base };
   if (i.minutesToKo < KO_BLOCK_MIN) return { verdict: "BLOCKED", reason: "kickoff < 3 min", ...base };
 
@@ -134,6 +164,27 @@ export function pickVerdict(i: PickVerdictInput): PickVerdictResult {
     reason: gf == null ? "gate unreachable at this prob" : "above break-even, below gate",
     ...base,
   };
+}
+
+/**
+ * In-play override — an in-play row can NEVER read PLACE.
+ *
+ * Why a separate pure function rather than another branch inside the ladder:
+ * this is not a threshold that could be retuned, it is a statement about what
+ * exists. No placement path accepts an in-play leg, so a green chip on such a
+ * row would be an instruction the operator cannot carry out. Applied LAST so a
+ * paused system still shows BLOCKED — "the whole machine is off" is a truer and
+ * more urgent message than "this particular row is unplaceable".
+ */
+export function inplayOverride(v: PickVerdictResult): PickVerdictResult {
+  if (v.verdict === "BLOCKED" && v.reason === PAUSED_REASON) return v;
+  return { ...v, verdict: "SKIP", reason: NO_INPLAY_PLACER_REASON };
+}
+
+/** The per-pick verdict, with the in-play override applied when it applies. */
+export function pickVerdict(i: PickVerdictInput): PickVerdictResult {
+  const v = corePickVerdict(i);
+  return i.inplay === true ? inplayOverride(v) : v;
 }
 
 // ── per-bot verdict (pre-registration) ─────────────────────────────────────
