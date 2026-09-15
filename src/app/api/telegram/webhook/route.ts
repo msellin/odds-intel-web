@@ -78,8 +78,17 @@ async function handleStatusCommand(
 
   const healthGlyph = state.session_healthy ? "✅" : "❌";
   const pausedLine = state.placement_paused
-    ? `\n🛑 PAUSED — reason: ${state.placement_paused_reason || "(none)"}\n   paused at: ${fmtTimeAgo(state.placement_paused_at)}`
+    ? `\n🛑 PLACEMENT PAUSED — reason: ${state.placement_paused_reason || "(none)"}\n   paused at: ${fmtTimeAgo(state.placement_paused_at)}`
     : "";
+
+  // PICKS-PUBLISH-DECOUPLED-FROM-OWN-PAUSE (2026-09-15, engine mig 353).
+  // Two independent switches now, and /status must show both — the whole
+  // failure being fixed is that one of them was invisible while it silently
+  // did the other's job. Publishing OFF is the customer-visible one, so it
+  // gets the louder glyph even though placement is the one that risks money.
+  const publishingLine = state.publishing_paused
+    ? `\n📴 PICK PUBLISHING PAUSED — customers are getting NOTHING\n   reason: ${state.publishing_paused_reason || "(none)"}\n   paused at: ${fmtTimeAgo(state.publishing_paused_at)}`
+    : `\n📣 Pick publishing: ON (@oddsintelpicks)`;
 
   // MAC-DAEMON-HEARTBEAT (mig 251): >35min stale = daemon process
   // likely dead. Below 35min: show last tick result. Never seen:
@@ -104,6 +113,7 @@ async function handleStatusCommand(
   const lines = [
     `${healthGlyph} Coolbet session — ${state.session_healthy ? "healthy" : "UNHEALTHY"}`,
     pausedLine,
+    publishingLine,
     ``,
     daemonLine,
     ``,
@@ -197,6 +207,7 @@ async function handlePauseCommand(
   await sendReply(
     chatId,
     `🛑 Auto-placer PAUSED. Next pipeline tick will skip placements until /resume.\n` +
+    `Pick publishing is NOT affected — use /pausepicks for that.\n` +
     `Reason logged: ${reason || "(none)"}`,
   );
 }
@@ -220,6 +231,58 @@ async function handleResumeCommand(
   await sendReply(chatId, "▶️  Auto-placer RESUMED. Next pipeline tick will place qualifying bets again.");
 }
 
+// PICKS-PUBLISH-DECOUPLED-FROM-OWN-PAUSE (2026-09-15) — the customer feed's
+// own kill switch. Until engine migration 353, /pause was the only thing that
+// could silence @oddsintelpicks, and it did so as an undocumented side effect
+// of halting REAL-MONEY placement. Two different decisions ("stop staking our
+// money" vs "stop publishing to readers") must not share one flag: the
+// OWN-path verdict of 2026-09-14 flipped the placement flag and armed a
+// customer-feed outage nobody asked for. The operator keeps a deliberate
+// switch — this one — and it says what it does.
+async function handlePausePicksCommand(
+  chatId: number,
+  admin: ReturnType<typeof createAdmin>,
+  reason: string,
+): Promise<void> {
+  const { error } = await admin
+    .from("coolbet_session_state")
+    .update({
+      publishing_paused: true,
+      publishing_paused_at: new Date().toISOString(),
+      publishing_paused_reason: reason || "operator /pausepicks",
+    })
+    .eq("id", 1);
+  if (error) {
+    await sendReply(chatId, `❌ Could not set publishing_paused: ${error.message}`);
+    return;
+  }
+  await sendReply(
+    chatId,
+    `📴 Pick publishing PAUSED. Nothing further reaches @oddsintelpicks until /resumepicks.\n` +
+    `Real-money placement is unaffected — use /pause for that.\n` +
+    `Reason logged: ${reason || "(none)"}`,
+  );
+}
+
+async function handleResumePicksCommand(
+  chatId: number,
+  admin: ReturnType<typeof createAdmin>,
+): Promise<void> {
+  const { error } = await admin
+    .from("coolbet_session_state")
+    .update({
+      publishing_paused: false,
+      publishing_paused_at: null,
+      publishing_paused_reason: null,
+    })
+    .eq("id", 1);
+  if (error) {
+    await sendReply(chatId, `❌ Could not clear publishing_paused: ${error.message}`);
+    return;
+  }
+  await sendReply(chatId, "📣 Pick publishing RESUMED — qualifying picks post to @oddsintelpicks again.");
+}
+
 async function handleHelpCommand(chatId: number): Promise<void> {
   await sendReply(
     chatId,
@@ -228,8 +291,10 @@ async function handleHelpCommand(chatId: number): Promise<void> {
       "",
       "/status        — session health, JWT TTL, last heartbeat, errors",
       "/today         — real_bets placed in last 24h + stake + PnL",
-      "/pause <reason>— halt auto-placement until /resume (instant; no restart)",
-      "/resume        — re-enable auto-placement",
+      "/pause <reason>— halt REAL-MONEY placement until /resume (does not touch picks)",
+      "/resume        — re-enable real-money placement",
+      "/pausepicks <reason> — stop posting picks to @oddsintelpicks",
+      "/resumepicks   — resume posting picks to @oddsintelpicks",
       "/help          — this message",
       "",
       "User commands (anyone):",
@@ -546,7 +611,22 @@ export async function POST(req: NextRequest) {
     await handleTodayCommand(chatId, admin);
     return new NextResponse("OK", { status: 200 });
   }
-  if (text.startsWith("/pause") && isOperator(chatId)) {
+  // ORDER MATTERS, and the anchors are not decorative: `/pausepicks` must be
+  // tested before `/pause`, and `/pause` is anchored with (\s|$) so it cannot
+  // swallow it. A bare startsWith("/pause") would route /pausepicks into the
+  // real-money switch — pausing placement while the operator believed they had
+  // silenced the customer feed, which is the exact class of confusion this
+  // whole change exists to remove.
+  if (/^\/pausepicks(\s|$)/.test(text) && isOperator(chatId)) {
+    const reason = text.replace(/^\/pausepicks(\s|$)/, "").trim();
+    await handlePausePicksCommand(chatId, admin, reason);
+    return new NextResponse("OK", { status: 200 });
+  }
+  if (text === "/resumepicks" && isOperator(chatId)) {
+    await handleResumePicksCommand(chatId, admin);
+    return new NextResponse("OK", { status: 200 });
+  }
+  if (/^\/pause(\s|$)/.test(text) && isOperator(chatId)) {
     // /pause <reason — free text>
     const reason = text.replace(/^\/pause(\s|$)/, "").trim();
     await handlePauseCommand(chatId, admin, reason);
