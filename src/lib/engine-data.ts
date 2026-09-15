@@ -6011,15 +6011,7 @@ export type PicksForwardTestSummary = {
   nClvMc: number;
 };
 
-export async function getPicksForwardTestSummary(): Promise<PicksForwardTestSummary | null> {
-  const supabase = createSupabasePublic();
-  const { data, error } = await supabase
-    .from("picks_forward_test_summary")
-    .select("*")
-    .order("started_at", { ascending: false })
-    .limit(1);
-  if (error || !data || data.length === 0) return null;
-  const r = data[0] as Record<string, unknown>;
+function mapForwardTestRow(r: Record<string, unknown>): PicksForwardTestSummary {
   const num = (v: unknown) => (v == null ? null : Number(v));
   return {
     ruleVersion: String(r.rule_version ?? ""),
@@ -6035,6 +6027,50 @@ export async function getPicksForwardTestSummary(): Promise<PicksForwardTestSumm
     clvMcSd: num(r.clv_mc_sd),
     nClvMc: Number(r.n_clv_mc ?? 0),
   };
+}
+
+/**
+ * Every pre-registered rule version that has published picks, newest first.
+ *
+ * FORWARD-TEST-VERSIONS-DO-NOT-VANISH (2026-09-15). This used to be
+ * `.limit(1)` — the newest `started_at` and nothing else — and that made every
+ * rule-version bump silently erase the public record. Two consequences, both
+ * live at the time:
+ *
+ *   * the panel presented **v1, a closed rule, as the current method**, because
+ *     v1 was the newest version that had published anything while the engine
+ *     had already moved to v3;
+ *   * on v4's first pick, v1's result (n=8, ROI -37.1%, margin-corrected CLV
+ *     -11.1%) would have disappeared from every public surface.
+ *
+ * A scoreboard that resets itself whenever the number goes bad is worse than no
+ * scoreboard, and this one would have done it on a schedule: v1 -> v2 -> v3 in
+ * two days. A closed pre-registered test keeps its own number; it just is not
+ * the running one.
+ *
+ * `current` is the newest version WITH PUBLISHED PICKS, which is not
+ * necessarily the rule the engine is executing — the view only knows what has
+ * rows. Callers must therefore label by `ruleVersion`, never as "the live rule".
+ *
+ * NEVER SUM `current` AND `closed` (FORWARD-TEST-SUMMARY-POOLS-RULE-VERSIONS):
+ * a rule change starts a new test with its own n, and pooling would fire an
+ * n=200 checkpoint early on a mixture of rules.
+ *
+ * Null when the view is unreachable — callers show nothing rather than a zero,
+ * because "0.0%" and "we don't know" are different facts.
+ */
+export async function getPicksForwardTestSummary(): Promise<{
+  current: PicksForwardTestSummary;
+  closed: PicksForwardTestSummary[];
+} | null> {
+  const supabase = createSupabasePublic();
+  const { data, error } = await supabase
+    .from("picks_forward_test_summary")
+    .select("*")
+    .order("started_at", { ascending: false });
+  if (error || !data || data.length === 0) return null;
+  const rows = (data as Record<string, unknown>[]).map(mapForwardTestRow);
+  return { current: rows[0], closed: rows.slice(1) };
 }
 
 // PICKS-BOT-ACTS-LIKE-THE-OTHERS-2026-09-14. The leaderboard row for

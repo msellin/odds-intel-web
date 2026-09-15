@@ -23,9 +23,19 @@ import { getPicksForwardTestSummary } from "@/lib/engine-data";
  * readers. The previous published track record was inflated by a calibration
  * bug precisely because a modelled number reached a customer surface unlabelled.
  */
+/** `sharp_edge_v3_2026_09_14` -> `v3`. Readers should not have to parse a slug,
+ *  but the version MUST be visible: two rules with different n and different
+ *  results are two different claims, and an unlabelled number invites pooling. */
+function shortVersion(ruleVersion: string): string {
+  const m = /_v(\d+)_/.exec(ruleVersion);
+  return m ? `v${m[1]}` : ruleVersion;
+}
+
 export default async function PicksForwardTestPanel() {
-  const s = await getPicksForwardTestSummary();
-  if (!s || s.published === 0) return null;
+  const summary = await getPicksForwardTestSummary();
+  if (!summary || summary.current.published === 0) return null;
+  const s = summary.current;
+  const closed = summary.closed.filter((c) => c.published > 0);
 
   const started = new Date(s.startedAt).toLocaleDateString("en-GB", {
     day: "numeric", month: "short", year: "numeric",
@@ -47,7 +57,7 @@ export default async function PicksForwardTestPanel() {
       <div className="mb-1 flex flex-wrap items-baseline gap-2">
         <h2 className="text-sm font-semibold text-neutral-100">Published picks</h2>
         <span className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wider text-sky-300">
-          new method · tracking from {started}
+          rule {shortVersion(s.ruleVersion)} · tracking from {started}
         </span>
       </div>
 
@@ -75,6 +85,43 @@ export default async function PicksForwardTestPanel() {
           sub={s.settled > 0 ? `${s.won}/${s.settled} won` : undefined}
         />
       </div>
+
+      {/* FORWARD-TEST-VERSIONS-DO-NOT-VANISH (2026-09-15). Earlier rule versions
+          keep their numbers, in public, for as long as the method exists.
+          Before this the panel showed only the newest version, so each bump
+          erased the previous record — and the bumps come fast (v1 to v3 inside
+          two days). A track record that resets whenever the number turns bad is
+          not a track record. These are NEVER added to the figures above: a rule
+          change starts a new test with its own n, and pooling them would fire a
+          pre-registered checkpoint early on a mixture of rules. */}
+      {closed.length > 0 && (
+        <div className="mt-4 border-t border-white/[0.06] pt-3">
+          <p className="mb-2 text-[11px] text-neutral-500">
+            <strong className="text-neutral-400">Earlier versions of this rule.</strong>{" "}
+            Each one is a separate test with its own sample — shown in full, not
+            added to the numbers above and not removed when a new version starts.
+          </p>
+          <div className="space-y-1">
+            {closed.map((c) => (
+              <div
+                key={c.ruleVersion}
+                className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 font-mono text-[11px] text-neutral-400"
+              >
+                <span className="text-neutral-300">rule {shortVersion(c.ruleVersion)}</span>
+                <span>closed</span>
+                <span>{c.published} published</span>
+                <span>{c.settled} settled</span>
+                <span>
+                  CLV {c.nClvMc > 0 ? `${pct(c.clvMarginCorrected)} (n=${c.nClvMc})` : "—"}
+                </span>
+                <span className={c.pnlUnits >= 0 ? "text-neutral-400" : "text-rose-400/80"}>
+                  P&amp;L {c.pnlUnits >= 0 ? "+" : ""}{c.pnlUnits.toFixed(2)}u
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <p className="mt-3 text-[11px] leading-relaxed text-neutral-500">
         <strong className="text-neutral-400">How to read this.</strong> Closing-line

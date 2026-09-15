@@ -327,7 +327,12 @@ export default async function PerformancePage() {
   //  * avgClv is the MARGIN-CORRECTED number, not the raw ratio. Break-even CLV
   //    is the closing book's margin, not zero; the raw figure would read
   //    positive while the honest one is negative.
-  const picksSummary = await getPicksForwardTestSummary();
+  // FORWARD-TEST-VERSIONS-DO-NOT-VANISH (2026-09-15): the getter now returns
+  // every rule version that has published, newest first. The leaderboard row
+  // reads the CURRENT one only — pooling a closed test's n into a running one
+  // is the discipline failure the pre-registration exists to prevent. The
+  // closed versions are rendered by PicksForwardTestPanel, not dropped.
+  const picksSummary = (await getPicksForwardTestSummary())?.current ?? null;
   if (picksSummary && picksSummary.published > 0) {
     const mc = picksSummary.clvMarginCorrected;
     cachedBots.push({
