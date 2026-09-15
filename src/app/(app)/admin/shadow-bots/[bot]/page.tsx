@@ -249,8 +249,16 @@ export default async function ShadowBotDetailPage({
   params: Promise<{ bot: string }>;
 }) {
   const { bot: botName } = await params;
-  const cfg = ALLOWED[botName];
-  if (!cfg) notFound();
+  // OWN Phase 6 (2026-09-15): the index is DB-driven (bots WHERE retired_at IS
+  // NULL) and links every active bot here. A bot without an ALLOWED entry gets a
+  // generic header instead of a 404 — the map only adds prose. The 404 stays
+  // for names that are not a registered bot at all (checked against `bots`).
+  if (!/^[a-z0-9_]+$/.test(botName)) notFound();
+  const cfg = ALLOWED[botName] ?? {
+    title: botName,
+    subtitle: "Registered bot without a curated description yet.",
+    detail: "",
+  };
 
   const supabase = await createSupabaseServer();
   const {
@@ -271,6 +279,7 @@ export default async function ShadowBotDetailPage({
     .eq("name", botName)
     .single();
   if (!botRow?.id) {
+    if (!ALLOWED[botName]) notFound();
     return (
       <div className="mx-auto max-w-4xl px-6 py-10">
         <BackLink />

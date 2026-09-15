@@ -33,6 +33,8 @@ export async function POST(req: Request) {
 
   let body: {
     simulatedBetId?: string;
+    /** OWN Phase 6: the shadow_bets row this hand-placed bet came from (mig 354). */
+    shadowBetId?: string;
     botId?: string;
     matchId?: string;
     market?: string;
@@ -49,7 +51,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
 
-  const { matchId, market, selection, bookmaker, capturedOdds, actualOdds, stake, notes, botId, simulatedBetId } = body;
+  const { matchId, market, selection, bookmaker, capturedOdds, actualOdds, stake, notes, botId, simulatedBetId, shadowBetId } = body;
 
   if (!matchId || !market || !selection || !bookmaker) {
     return NextResponse.json({ error: "missing required fields" }, { status: 400 });
@@ -103,6 +105,7 @@ export async function POST(req: Request) {
     .from("real_bets")
     .insert({
       simulated_bet_id: simulatedBetId ?? null,
+      shadow_bet_id: shadowBetId ?? null,
       bot_id: botId || null,
       match_id: matchId,
       market,
@@ -112,6 +115,9 @@ export async function POST(req: Request) {
       actual_odds: actualOdds,
       stake,
       notes: notes ?? null,
+      // Manual, unconfirmed: the account reconciler flips this to TRUE when it
+      // finds the ticket, or FALSE if it never does (mig 325). Never TRUE here.
+      placed_real: null,
     })
     .select("id")
     .single();
