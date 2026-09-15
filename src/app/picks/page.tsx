@@ -121,6 +121,128 @@ function OutcomeBadge({
 // on /performance now — one track record in one place, rather than two that
 // drift apart.
 
+/**
+ * PICKS-BOARD-VS-RESULTS (2026-09-15). One row renderer, used by both sections.
+ *
+ * The page used to render EVERY pick in one kickoff-date list, and the fetch
+ * window is keyed on kickoff with a 24h lookback. So on a morning before the
+ * day's batch had published, a reader arrived to yesterday's settled losers
+ * sitting at the top of the page and nothing else — the owner's words were
+ * "we are still showing yesterdays pick on /picks page, where are todays?".
+ *
+ * Nothing was broken: the picks had simply not been published yet. But a board
+ * that cannot say "there is nothing on the board yet" is indistinguishable from
+ * one that is broken, and that is the whole complaint. Split the two.
+ */
+function PickRow({ p }: { p: ForwardTestPick }) {
+  const { time } = formatKickoff(p.kickoff_utc);
+  const edgePct = p.edge != null ? p.edge * 100 : null;
+  return (
+    <div className="border-t border-white/[0.04] px-4 py-4 first:border-t-0 sm:px-5">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="min-w-0 flex-1">
+          <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
+            {time}
+            {p.league && (
+              <>
+                {" · "}
+                {p.country ? `${p.country} ` : ""}
+                {p.league}
+              </>
+            )}
+          </p>
+          <p className="mt-0.5 truncate text-sm font-semibold text-neutral-100 sm:text-base">
+            {p.home_team ?? "Home"}{" "}
+            <span className="text-neutral-500">vs</span>{" "}
+            {p.away_team ?? "Away"}
+          </p>
+          <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-emerald-300">
+            <span>Pick: {formatMarket(p.market, p.selection)}</span>
+            <OutcomeBadge outcome={p.outcome} kickoff={p.kickoff_utc} />
+            {p.clv != null && (
+              <span
+                className="font-mono text-[10px] text-neutral-500"
+                title="Closing-line value: how our price compared with the same book's closing price. Positive means we were on before the line moved."
+              >
+                CLV {p.clv >= 0 ? "+" : ""}
+                {(p.clv * 100).toFixed(1)}%
+              </span>
+            )}
+          </p>
+        </div>
+        <div className="flex items-baseline gap-4 text-right sm:gap-6">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
+              Odds
+            </p>
+            <p className="font-mono text-base font-semibold tabular-nums text-neutral-100 sm:text-lg">
+              {p.odds != null ? Number(p.odds).toFixed(2) : "—"}
+            </p>
+            {/* Break-even against the SHARP line (1 / P_shin), kept deliberately
+                quiet — it only matters at the moment of placing. Odds move after
+                a pick is posted, so a reader must be able to check the price
+                they are actually offered against this before placing. */}
+            <p className="font-mono text-[10px] tabular-nums text-neutral-600">
+              {(() => {
+                const be = sharpBreakEvenOdds(p.p_sharp);
+                return be != null ? (
+                  <span title={`Break-even price against the sharp line. This pick is only +EV at ${be.toFixed(2)} or better — below that the edge is gone. Odds move after a pick is posted, so check the price you are actually offered against this.`}>
+                    min {be.toFixed(2)}
+                  </span>
+                ) : null;
+              })()}
+              {p.alignment_gap_minutes != null && (
+                <span
+                  className="text-neutral-700"
+                  title="How far apart the sharp reference quote and this price were when the pick was made. The rule caps this at 60 minutes: comparing a fresh sharp line against a stale price measures drift, not value."
+                >
+                  {sharpBreakEvenOdds(p.p_sharp) != null ? " · " : ""}
+                  {Math.round(p.alignment_gap_minutes)}m apart
+                </span>
+              )}
+            </p>
+          </div>
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
+              Edge vs sharp
+            </p>
+            <p className="font-mono text-base font-semibold tabular-nums text-neutral-100 sm:text-lg">
+              {edgePct != null ? `+${edgePct.toFixed(1)}%` : "—"}
+            </p>
+          </div>
+          {p.bookmaker && (
+            <div className="hidden sm:block">
+              <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
+                Book
+              </p>
+              <p className="text-xs text-neutral-300">{p.bookmaker}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PickGroups({ groups }: { groups: Map<string, ForwardTestPick[]> }) {
+  return (
+    <div className="space-y-8">
+      {Array.from(groups.entries()).map(([date, group]) => (
+        <section key={date}>
+          <h2 className="mb-3 font-mono text-xs uppercase tracking-widest text-neutral-500">
+            {date} · {group.length} pick{group.length === 1 ? "" : "s"}
+          </h2>
+          <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]">
+            {group.map((p) => (
+              <PickRow key={p.id} p={p} />
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
 export default async function PicksPage() {
   let picks: ForwardTestPick[] = [];
   let loadFailed = false;
@@ -130,9 +252,19 @@ export default async function PicksPage() {
     loadFailed = true;
   }
 
-  const upcoming = picks.filter((p) => p.outcome == null);
+  // PICKS-BOARD-VS-RESULTS: split on whether the fixture has kicked off, not on
+  // whether it has an outcome. A pick whose match is in play has no outcome yet
+  // but is no longer actionable, and putting it on the board tells a reader to
+  // bet a game that is already running.
+  const board = picks.filter((p) => !hasStarted(p.kickoff_utc));
+  const settled = picks
+    .filter((p) => hasStarted(p.kickoff_utc))
+    .sort((a, b) =>
+      (b.kickoff_utc ?? "").localeCompare(a.kickoff_utc ?? ""),
+    );
+
   const groups = new Map<string, ForwardTestPick[]>();
-  for (const p of picks) {
+  for (const p of board) {
     const { date } = formatKickoff(p.kickoff_utc);
     if (!groups.has(date)) groups.set(date, []);
     groups.get(date)!.push(p);
@@ -148,17 +280,20 @@ export default async function PicksPage() {
             Priced against the sharpest line — no model
           </p>
           <h1 className="text-balance text-3xl font-semibold tracking-tight sm:text-5xl">
-            {/* PICKS-HEADLINE-COUNT-2026-09-14. The rebuild in 80aedd1 changed
-                what this counts and it was a regression, not a rewording. The
-                previous page headlined `publicPickCount` — EVERY public pick,
-                settled or not — under "Today's picks + next 36 hours". The
-                rebuild switched it to `upcoming.length`, unresolved only. Both
-                read identically until the first pick settled, which happened
-                hours after the first batch, and the page then said "3 picks on
-                the board" above a list headed "Today · 8 picks".
-                Counting the whole board again, as it did before. */}
-            {picks.length > 0
-              ? `${picks.length} pick${picks.length === 1 ? "" : "s"} on the board`
+            {/* PICKS-HEADLINE-COUNT-2026-09-14, revised 2026-09-15.
+                History: 80aedd1 switched this from EVERY public pick to
+                `upcoming.length` (unresolved only) while the list below still
+                counted everything, so the page could say "3 picks on the board"
+                above a list headed "Today · 8 picks". The fix then was to count
+                everything again, matching the list.
+                It now counts `board` — picks whose match has NOT kicked off —
+                and the list below it counts the same set, because settled picks
+                moved to their own section (PICKS-BOARD-VS-RESULTS). The headline
+                and the list still agree; they just agree on a smaller, truer
+                number. An empty board now says so instead of showing yesterday's
+                finished bets. */}
+            {board.length > 0
+              ? `${board.length} pick${board.length === 1 ? "" : "s"} on the board`
               : "No picks on the board right now"}
           </h1>
           <p className="mx-auto max-w-xl text-balance text-sm text-neutral-400 sm:text-base">
@@ -199,133 +334,47 @@ export default async function PicksPage() {
           </div>
         )}
 
-        {!loadFailed && picks.length === 0 ? (
+        {!loadFailed && board.length === 0 && (
           <div className="mt-10 rounded-xl border border-white/[0.06] bg-white/[0.02] p-10 text-center">
             <p className="text-sm text-neutral-400">
-              Nothing clears the bar in the current window.
-              <br />
-              That is a normal outcome, not an outage — the rule publishes only
-              prices that beat the sharp line by 3% or more, and on a thin day no
-              price does.
+              Nothing on the board right now.
+            </p>
+            <p className="mx-auto mt-2 max-w-md text-xs leading-relaxed text-neutral-500">
+              Picks appear here the moment they are published, and the same
+              moment they reach Telegram. A quiet board is a normal outcome, not
+              an outage — the rule publishes only prices that beat the sharp line
+              by 3% or more, and on a thin day no price does.
             </p>
           </div>
-        ) : (
-          <div className="mt-10 space-y-8">
-            {Array.from(groups.entries()).map(([date, group]) => (
-              <section key={date}>
-                <h2 className="mb-3 font-mono text-xs uppercase tracking-widest text-neutral-500">
-                  {date} · {group.length} pick{group.length === 1 ? "" : "s"}
-                </h2>
-                <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]">
-                  {group.map((p, idx) => {
-                    const { time } = formatKickoff(p.kickoff_utc);
-                    const edgePct = p.edge != null ? p.edge * 100 : null;
-                    return (
-                      <div
-                        key={p.id}
-                        className={`px-4 py-4 sm:px-5 ${
-                          idx > 0 ? "border-t border-white/[0.04]" : ""
-                        }`}
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-                          <div className="min-w-0 flex-1">
-                            <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
-                              {time}
-                              {p.league && (
-                                <>
-                                  {" · "}
-                                  {p.country ? `${p.country} ` : ""}
-                                  {p.league}
-                                </>
-                              )}
-                            </p>
-                            <p className="mt-0.5 truncate text-sm font-semibold text-neutral-100 sm:text-base">
-                              {p.home_team ?? "Home"}{" "}
-                              <span className="text-neutral-500">vs</span>{" "}
-                              {p.away_team ?? "Away"}
-                            </p>
-                            <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-emerald-300">
-                              <span>
-                                Pick: {formatMarket(p.market, p.selection)}
-                              </span>
-                              <OutcomeBadge
-                                outcome={p.outcome}
-                                kickoff={p.kickoff_utc}
-                              />
-                              {p.clv != null && (
-                                <span
-                                  className="font-mono text-[10px] text-neutral-500"
-                                  title="Closing-line value: how our price compared with the same book's closing price. Positive means we were on before the line moved."
-                                >
-                                  CLV {p.clv >= 0 ? "+" : ""}
-                                  {(p.clv * 100).toFixed(1)}%
-                                </span>
-                              )}
-                            </p>
-                          </div>
-                          <div className="flex items-baseline gap-4 text-right sm:gap-6">
-                            <div>
-                              <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
-                                Odds
-                              </p>
-                              <p className="font-mono text-base font-semibold tabular-nums text-neutral-100 sm:text-lg">
-                                {p.odds != null ? Number(p.odds).toFixed(2) : "—"}
-                              </p>
-                              {/* Break-even against the SHARP line (1 / P_shin),
-                                  kept deliberately quiet — it only matters at
-                                  the moment of placing. Odds move after a pick
-                                  is posted, so a reader must be able to check
-                                  the price they are actually offered against
-                                  this before placing. */}
-                              <p className="font-mono text-[10px] tabular-nums text-neutral-600">
-                                {(() => {
-                                  const be = sharpBreakEvenOdds(p.p_sharp);
-                                  return be != null ? (
-                                    <span title={`Break-even price against the sharp line. This pick is only +EV at ${be.toFixed(2)} or better — below that the edge is gone. Odds move after a pick is posted, so check the price you are actually offered against this.`}>
-                                      min {be.toFixed(2)}
-                                    </span>
-                                  ) : null;
-                                })()}
-                                {p.alignment_gap_minutes != null && (
-                                  <span
-                                    className="text-neutral-700"
-                                    title="How far apart the sharp reference quote and this price were when the pick was made. The rule caps this at 60 minutes: comparing a fresh sharp line against a stale price measures drift, not value."
-                                  >
-                                    {sharpBreakEvenOdds(p.p_sharp) != null ? " · " : ""}
-                                    {Math.round(p.alignment_gap_minutes)}m apart
-                                  </span>
-                                )}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
-                                Edge vs sharp
-                              </p>
-                              <p className="font-mono text-base font-semibold tabular-nums text-neutral-100 sm:text-lg">
-                                {edgePct != null
-                                  ? `+${edgePct.toFixed(1)}%`
-                                  : "—"}
-                              </p>
-                            </div>
-                            {p.bookmaker && (
-                              <div className="hidden sm:block">
-                                <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
-                                  Book
-                                </p>
-                                <p className="text-xs text-neutral-300">
-                                  {p.bookmaker}
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-            ))}
+        )}
+
+        {board.length > 0 && (
+          <div className="mt-10">
+            <PickGroups groups={groups} />
           </div>
+        )}
+
+        {/* Settled picks live BELOW the board and are labelled as results, not
+            as picks. They used to be interleaved into the same kickoff-date
+            list, so a reader arriving before the day's batch published saw
+            yesterday's finished bets presented as the current board. Every one
+            is shown — winners and losers — because a results section that
+            quietly drops the losers is the dishonest version of this. */}
+        {settled.length > 0 && (
+          <section className="mt-14">
+            <h2 className="mb-1 text-sm font-semibold text-neutral-300">
+              Already kicked off
+            </h2>
+            <p className="mb-3 text-xs text-neutral-500">
+              Recently published picks whose match has started or finished. Shown
+              in full, settled or not — no result is dropped.
+            </p>
+            <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02] opacity-70">
+              {settled.map((p) => (
+                <PickRow key={p.id} p={p} />
+              ))}
+            </div>
+          </section>
         )}
 
         {/* Deliberately NOT a link to /performance. That ledger was priced on a
