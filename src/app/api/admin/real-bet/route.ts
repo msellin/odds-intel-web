@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
 
@@ -125,5 +126,11 @@ export async function POST(req: Request) {
   if (error || !data) {
     return NextResponse.json({ error: error?.message ?? "insert failed" }, { status: 500 });
   }
+  // LOGGED-PICKS-INVISIBLE (2026-09-15): the shadow-bots page caches its reads
+  // for 60 s, so a refresh straight after logging showed the pick untouched and
+  // the day's manual count still at zero — the operator reasonably concluded
+  // nothing had saved. Drop that cache on write; a bet the operator just
+  // recorded must be visible on the next paint, not up to a minute later.
+  revalidatePath("/admin/shadow-bots");
   return NextResponse.json({ id: data.id });
 }

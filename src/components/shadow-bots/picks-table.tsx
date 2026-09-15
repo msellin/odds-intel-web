@@ -78,6 +78,7 @@ export function buildPickRows(
       minutesToKo,
       inplay,
       isControlArm: isInplayControlBot(pick.bot_name),
+      alreadyLogged: data.loggedPickIds.has(pick.id),
       // Automation state is CONTEXT on the row, not a verdict — see verdict.ts.
       automationOff: state.placement_paused || placer?.ui_place_enabled === false,
       markState: markStates[pick.id] ?? 0,

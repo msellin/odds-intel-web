@@ -8,6 +8,8 @@ import type { Quote, UpcomingPick } from "@/lib/shadow-bots/queries";
 import { BOOK_CHIP, botShortLabel, formatAge, formatPickLabel } from "@/lib/shadow-bots/labels";
 
 export interface PickRowData {
+  /** Already recorded in real_bets today — shown, and the button says so. */
+  alreadyLogged: boolean;
   /** placement_paused OR this bot toggled off — context, never a verdict. */
   automationOff: boolean;
   pick: UpcomingPick;
@@ -219,7 +221,15 @@ const showPlaceAction = !r.inplay && !r.isControlArm && r.best != null && chip !
       <td className={`${td} whitespace-nowrap`}>
         <div className="flex items-center gap-2">
           <PickBetMark pickId={pick.id} initialState={r.markState} />
-          {showPlaceAction && r.best && chip && (
+          {r.alreadyLogged && (
+            <span
+              className={`${CHIP} border-emerald-500/40 text-emerald-300`}
+              title="You already recorded a bet on this pick today (real_bets). It will settle and be scored against the closing line."
+            >
+              LOGGED
+            </span>
+          )}
+          {!r.alreadyLogged && showPlaceAction && r.best && chip && (
             <PlaceAction
               shadowBetId={pick.id}
               botId={pick.bot_id}

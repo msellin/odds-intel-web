@@ -159,6 +159,8 @@ export interface ShadowBotsPageData {
   /** Books whose snapshot fetch hit the row cap — their column may be incomplete. */
   truncatedBooks: string[];
   scoreboard: BotScoreRow[];
+  /** shadow_bets ids already recorded in real_bets TODAY — the row shows it. */
+  loggedPickIds: Set<string>;
   promos: PromoRow[];
   /** Set when the promo read failed (e.g. PostgREST schema cache) — shown, never swallowed. */
   promoError: string | null;
@@ -216,7 +218,12 @@ async function _loadShadowBotsPage(): Promise<ShadowBotsPageData> {
     db.from("coolbet_placer_bots").select("bot_name, ui_place_enabled, note").order("bot_name"),
     db
       .from("real_bets")
-      .select("bookmaker, stake, placed_real")
+      // LOGGED-PICKS-INVISIBLE (2026-09-15): `shadow_bet_id` is selected so the
+      // picks table can show that a pick is ALREADY recorded. Without it the row
+      // looked untouched after logging, which both hid the operator's own work
+      // and invited a second write (there is no unique index yet — see
+      // SHADOW-BOTS-REVIEW-RESIDUE).
+      .select("bookmaker, stake, placed_real, shadow_bet_id")
       .gte("placed_at", dayStart.toISOString())
       .limit(500),
     db
@@ -261,7 +268,13 @@ async function _loadShadowBotsPage(): Promise<ShadowBotsPageData> {
     unconfirmedCount: 0,
     unconfirmedStake: 0,
   };
-  for (const r of (realRes.data ?? []) as { stake: number | string | null; placed_real: boolean | null }[]) {
+  const loggedPickIds = new Set<string>();
+  for (const r of (realRes.data ?? []) as {
+    stake: number | string | null;
+    placed_real: boolean | null;
+    shadow_bet_id: string | null;
+  }[]) {
+    if (r.shadow_bet_id) loggedPickIds.add(r.shadow_bet_id);
     const stake = Number(r.stake ?? 0);
     if (r.placed_real === true) {
       todayRealBets.confirmedCount++;
@@ -448,6 +461,7 @@ async function _loadShadowBotsPage(): Promise<ShadowBotsPageData> {
     quotes,
     truncatedBooks,
     scoreboard,
+    loggedPickIds,
     promos,
     // Surfaced, not swallowed: "no promos" and "the read failed" look identical
     // in an empty table, and only one of them is a reason to stop trusting it.

@@ -100,11 +100,20 @@ export function SafetyStrip({
         </a>
         <Chip
           label="today"
-          value={`${today.confirmedCount}/${DAILY_MAX_BETS} · €${today.confirmedStake.toFixed(0)}/${DAILY_MAX_STAKE_EUR}`}
+          // LOGGED-PICKS-INVISIBLE (2026-09-15): the manual count used to live only
+          // in the tooltip, so logging two bets by hand left the strip reading
+          // "0/80 · €0/800" and the operator reasonably concluded nothing saved.
+          // A hand-placed bet is real exposure; it belongs in the visible number.
+          value={
+            `${today.confirmedCount}/${DAILY_MAX_BETS} · €${today.confirmedStake.toFixed(0)}/${DAILY_MAX_STAKE_EUR}` +
+            (today.unconfirmedCount > 0
+              ? `  +${today.unconfirmedCount} manual €${today.unconfirmedStake.toFixed(0)}`
+              : "")
+          }
           tone={
             today.confirmedCount >= DAILY_MAX_BETS || today.confirmedStake >= DAILY_MAX_STAKE_EUR ? "bad" : "off"
           }
-          title={`Confirmed real_bets today (placed_real = true). ${today.unconfirmedCount} unconfirmed manual (€${today.unconfirmedStake.toFixed(0)}) not counted.`}
+          title={`Confirmed automated placements today (placed_real = true) against the daily caps. "+N manual" is what YOU recorded by hand: real exposure, but unconfirmed until the account reconciler matches the ticket, so it is shown separately rather than folded into the automated caps.`}
         />
         <span className="ml-auto" />
         <Chip
