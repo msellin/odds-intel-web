@@ -160,6 +160,61 @@ export async function fetchForwardTestPicks(
   return (data ?? []) as unknown as ForwardTestPick[];
 }
 
+export interface BoardLeg {
+  match_id: string;
+  market: string;
+  selection: string;
+  odds: number | null;
+  bookmaker: string | null;
+  p_sharp: number | null;
+  /** Expected-ROI edge AT THE CURRENT PRICE. Negative-to-small is normal here. */
+  edge: number | null;
+  odds_breakeven: number | null;
+  odds_grade_b: number | null;
+  odds_grade_a: number | null;
+  anchor_overround: number | null;
+  kickoff_utc: string | null;
+  updated_at: string;
+  league: string | null;
+  country: string | null;
+  home_team: string | null;
+  away_team: string | null;
+}
+
+/**
+ * The live candidate board — every leg at or above break-even against the sharp
+ * line, with the price it would need to become a pick.
+ *
+ * PICKS-BOARD-WATCHLIST (2026-09-15). The pre-registered rule publishes only
+ * legs clearing a 3% expected-ROI floor, and on a flat day that is nothing at
+ * all (0 of 31 the day this shipped). Showing the board with required prices
+ * gives a reader something every day WITHOUT lowering the floor: the arithmetic
+ * is exact and claims nothing — edge = p_sharp x odds - 1, so the price needed
+ * for a target edge t is (1 + t) / p_sharp.
+ *
+ * ⚠️ THESE ARE NOT PICKS AND MUST NEVER BE RENDERED AS PICKS. A leg here did not
+ * qualify. It comes from `picks_board`, a display table replaced every 30
+ * minutes — not from `picks_forward_test`, which is the graded, pre-registered
+ * ledger whose n feeds the stopping rules. Do not merge, count, or settle these.
+ *
+ * Returns [] rather than throwing: the watchlist is a nice-to-have and must
+ * never take the picks page down with it.
+ */
+export async function fetchBoard(): Promise<BoardLeg[]> {
+  const sb = createSupabasePublic();
+  const { data, error } = await sb
+    .from("picks_board_public")
+    .select(
+      `match_id, market, selection, odds, bookmaker, p_sharp, edge,
+       odds_breakeven, odds_grade_b, odds_grade_a, anchor_overround,
+       kickoff_utc, updated_at, league, country, home_team, away_team`,
+    )
+    .order("edge", { ascending: false })
+    .limit(40);
+  if (error || !data) return [];
+  return data as unknown as BoardLeg[];
+}
+
 /**
  * The running result of the CURRENT pre-registered rule.
  *

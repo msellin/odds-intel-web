@@ -24,7 +24,9 @@ import {
   hasStarted,
   sharpBreakEvenOdds,
   fetchForwardTestPicks,
+  fetchBoard,
   type ForwardTestPick,
+  type BoardLeg,
 } from "@/lib/forward-test-picks";
 
 export const dynamic = "force-dynamic";
@@ -251,6 +253,10 @@ export default async function PicksPage() {
   } catch {
     loadFailed = true;
   }
+  // The watchlist never takes the page down: fetchBoard swallows its own errors.
+  // Named `watchlist`, not `board` — `board` above is the set of PUBLISHED picks
+  // that have not kicked off, and conflating the two is the whole risk here.
+  const watchlist: BoardLeg[] = await fetchBoard();
 
   // PICKS-BOARD-VS-RESULTS: split on whether the fixture has kicked off, not on
   // whether it has an outcome. A pick whose match is in play has no outcome yet
@@ -352,6 +358,80 @@ export default async function PicksPage() {
           <div className="mt-10">
             <PickGroups groups={groups} />
           </div>
+        )}
+
+        {/* PICKS-BOARD-WATCHLIST (2026-09-15). What the rule is LOOKING at, and
+            the price each leg would have to reach. This exists so a flat day
+            shows something honest instead of an empty page — on the day it
+            shipped, 0 of 31 legs cleared the floor.
+
+            These are deliberately NOT styled as picks and are never counted as
+            picks: they come from `picks_board` (a display table refreshed every
+            30 minutes), not from the pre-registered ledger. The number shown is
+            arithmetic off the sharp line — "worth taking at 2.18 or better" —
+            and predicts nothing about whether it wins. */}
+        {watchlist.length > 0 && (
+          <section className="mt-14">
+            <h2 className="mb-1 text-sm font-semibold text-neutral-300">
+              On the watchlist — not picks yet
+            </h2>
+            <p className="mb-3 max-w-2xl text-xs leading-relaxed text-neutral-500">
+              Prices the sharp line says are close but not yet worth taking. The
+              target is what the price would need to reach to clear our 3% bar —
+              it is arithmetic against the sharpest line, not a forecast. If you
+              find the target price somewhere, it is a bet on the same terms as
+              anything above; if you only find today&apos;s price, it is not.
+            </p>
+            <div className="overflow-x-auto rounded-xl border border-white/[0.06] bg-white/[0.02]">
+              <table className="w-full min-w-[34rem] text-sm">
+                <thead>
+                  <tr className="border-b border-white/[0.06] text-left font-mono text-[10px] uppercase tracking-wider text-neutral-500">
+                    <th className="px-4 py-2 font-normal">Match</th>
+                    <th className="px-3 py-2 font-normal">Pick</th>
+                    <th className="px-3 py-2 text-right font-normal">Best now</th>
+                    <th className="px-3 py-2 text-right font-normal">Target</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {watchlist.slice(0, 12).map((b) => (
+                    <tr
+                      key={`${b.match_id}-${b.market}-${b.selection}`}
+                      className="border-t border-white/[0.04]"
+                    >
+                      <td className="px-4 py-2.5">
+                        <div className="truncate text-neutral-200">
+                          {b.home_team ?? "Home"}{" "}
+                          <span className="text-neutral-600">vs</span>{" "}
+                          {b.away_team ?? "Away"}
+                        </div>
+                        <div className="font-mono text-[10px] text-neutral-600">
+                          {formatKickoff(b.kickoff_utc).time}
+                          {b.league ? ` · ${b.league}` : ""}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 text-neutral-300">
+                        {formatMarket(b.market, b.selection)}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono tabular-nums text-neutral-300">
+                        {b.odds != null ? Number(b.odds).toFixed(2) : "—"}
+                        {b.bookmaker && (
+                          <div className="text-[10px] text-neutral-600">
+                            {b.bookmaker}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono tabular-nums text-emerald-300">
+                        {b.odds_grade_b != null
+                          ? Number(b.odds_grade_b).toFixed(2)
+                          : "—"}
+                        <div className="text-[10px] text-neutral-600">to qualify</div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
         )}
 
         {/* Settled picks live BELOW the board and are labelled as results, not
