@@ -34,6 +34,105 @@ export const ENGINE_MIN_ODDS_BY_MARKET: Record<string, number> =
  *  fold-robust at 10%. */
 export const ENGINE_MODEL_1X2_HOME_FLOOR = 0.1;
 
+export const ENGINE_BOT_FLOORS: Record<string, {
+  edgeFloor: number | null;
+  oddsFloor: number | null;
+  oddsCap: number | null;
+  realMoney: boolean;
+}> =
+  {
+  "bot_coolbet_1x2_model_v1": {
+    "edgeFloor": 0.1,
+    "oddsFloor": 2.8,
+    "oddsCap": null,
+    "realMoney": true
+  },
+  "bot_coolbet_ou_model_v1": {
+    "edgeFloor": 0.08,
+    "oddsFloor": 1.8,
+    "oddsCap": null,
+    "realMoney": true
+  },
+  "bot_coolbet_trigger_sharp_1x2_v1": {
+    "edgeFloor": 0.03,
+    "oddsFloor": 1.01,
+    "oddsCap": null,
+    "realMoney": false
+  },
+  "bot_coolbet_trigger_sharp_ou_v1": {
+    "edgeFloor": 0.03,
+    "oddsFloor": 1.01,
+    "oddsCap": null,
+    "realMoney": false
+  },
+  "bot_high_roi_global_v2": {
+    "edgeFloor": null,
+    "oddsFloor": null,
+    "oddsCap": null,
+    "realMoney": false
+  },
+  "bot_inplay_slowstate_afctl_v1": {
+    "edgeFloor": null,
+    "oddsFloor": null,
+    "oddsCap": null,
+    "realMoney": false
+  },
+  "bot_inplay_slowstate_v1": {
+    "edgeFloor": null,
+    "oddsFloor": null,
+    "oddsCap": null,
+    "realMoney": false
+  },
+  "bot_ou35_model_v1": {
+    "edgeFloor": 0.08,
+    "oddsFloor": 1.8,
+    "oddsCap": null,
+    "realMoney": false
+  },
+  "bot_sharp_forward_test_v1": {
+    "edgeFloor": 0.03,
+    "oddsFloor": null,
+    "oddsCap": null,
+    "realMoney": false
+  },
+  "bot_trigger_1x2_sharp_tight_v1": {
+    "edgeFloor": 0.02,
+    "oddsFloor": 1.01,
+    "oddsCap": 2.5,
+    "realMoney": false
+  },
+  "bot_trigger_1x2_sharp_v1": {
+    "edgeFloor": 0.03,
+    "oddsFloor": 1.01,
+    "oddsCap": null,
+    "realMoney": false
+  },
+  "bot_trigger_ou_sharp_v1": {
+    "edgeFloor": 0.03,
+    "oddsFloor": 1.01,
+    "oddsCap": null,
+    "realMoney": false
+  },
+  "bot_unibet_trigger_sharp_1x2_v1": {
+    "edgeFloor": 0.03,
+    "oddsFloor": 1.01,
+    "oddsCap": null,
+    "realMoney": false
+  },
+  "bot_unibet_trigger_sharp_ou_v1": {
+    "edgeFloor": 0.03,
+    "oddsFloor": 1.01,
+    "oddsCap": null,
+    "realMoney": false
+  },
+  "bot_v10_all": {
+    "edgeFloor": null,
+    "oddsFloor": null,
+    "oddsCap": null,
+    "realMoney": false
+  }
+};
+
 /** Parity fixture, computed by Python's real min_edge_for_pick(). A test
  *  asserts the TS rule reproduces every row. Constants agreeing while the RULE
  *  drifts is exactly how these paths diverged before, so pinning the numbers

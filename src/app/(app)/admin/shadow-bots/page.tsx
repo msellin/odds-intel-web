@@ -65,7 +65,7 @@ export default async function ShadowBotsPage() {
 
       <PicksTable rows={rows} truncatedBooks={data.truncatedBooks} />
 
-      <Scoreboard bots={data.bots} clvRows={data.clvRows} placerBots={data.placerBots} />
+      <Scoreboard bots={data.bots} scoreboard={data.scoreboard} placerBots={data.placerBots} />
 
       <Promotions promos={data.promos} error={data.promoError} />
 

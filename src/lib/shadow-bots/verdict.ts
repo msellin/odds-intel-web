@@ -24,8 +24,23 @@ export const PREREG_RETIRE_CLV = -0.02;
 export const CI_Z = 1.96;
 
 // ── per-pick thresholds ─────────────────────────────────────────────────────
-/** A live quote this old (minutes) is stale: SKIP, never PLACE. */
+/**
+ * A LIVE quote this old (minutes) is stale: SKIP, never PLACE. This is the age
+ * of the price we are showing you now — how likely it is to still be on the
+ * book's screen.
+ */
 export const QUOTE_MAX_AGE_MIN = 30;
+
+/**
+ * A DECISION quote older than this was not a price anybody could take when the
+ * bot decided. 60 is the ENGINE's definition, not a second opinion: the trigger
+ * matcher refuses a stale leg at 60 (`FRESHNESS_MAX_AGE_MIN`) and
+ * `shadow_bets_own_book_clv.decision_quote_fresh` is `<= 60`. The page used 30
+ * here too, so two live rows were badged STALE while the engine counted them
+ * FRESH (decision-surface review, 2026-09-15). Two different quantities, two
+ * constants, each named for what it measures.
+ */
+export const DECISION_FRESH_MAX_MIN = 60;
 /** Inside this many minutes of kickoff the placer refuses; so do we. */
 export const KO_BLOCK_MIN = 3;
 
@@ -52,7 +67,7 @@ export type Freshness = "FRESH" | "STALE" | "UNKNOWN";
 /** FRESH strictly under QUOTE_MAX_AGE_MIN; NULL/non-finite is UNKNOWN, never FRESH. */
 export function quoteFreshness(ageMin: number | null | undefined): Freshness {
   if (ageMin == null || !Number.isFinite(ageMin)) return "UNKNOWN";
-  return ageMin < QUOTE_MAX_AGE_MIN ? "FRESH" : "STALE";
+  return ageMin <= DECISION_FRESH_MAX_MIN ? "FRESH" : "STALE";
 }
 
 export type PickVerdict = "PLACE" | "THIN" | "SKIP" | "BLOCKED";
@@ -101,15 +116,36 @@ export interface PickVerdictInput {
   prob: number | null;
   /** The bot's edge threshold in probability points (e.g. 0.10). */
   threshold: number;
-  /** Placer odds floor for this market, if the placer gates this bot; else null. */
+  /**
+   * The bot's OWN odds floor, from the registry (`ENGINE_BOT_FLOORS`). Was
+   * derived from `coolbet_placer_bots` — a table only the two real-money bots
+   * have a row in — so for every other bot it resolved to null and the gate
+   * floor rendered LOWER than the bot's own, turning rows into PLACE that the
+   * engine has never been allowed to stake (review, 2026-09-15).
+   */
   oddsFloor: number | null;
+  /**
+   * The bot's odds CAP, if it has one (the sharp-tight instrument is
+   * `edge >= 2% AND odds <= 2.50`). A cap is not a floor: above it the
+   * pre-registration says the edge is noise, so a price above the cap must
+   * never read as better — or the greenest row would be the one the rule
+   * excludes.
+   */
+  oddsCap?: number | null;
   /** Best price at a PLACEABLE book (Coolbet / Unibet-Site). Null = none. */
   livePrice: number | null;
   /** Age of that quote in minutes. Null when there is no quote. */
   quoteAgeMin: number | null;
   /** Minutes until kickoff (negative = started). */
   minutesToKo: number;
-  /** coolbet_session_state.placement_paused */
+  /**
+   * coolbet_session_state.placement_paused. NOTE (2026-09-15): this is context,
+   * NOT a blocker. It halts the AUTOMATED placer; the operator places by hand,
+   * and the Place button on this page only RECORDS what they placed. Blocking
+   * the row on it meant the ledger never learned about a hand-placed bet — the
+   * opposite of why that path exists. The safety strip states it loudly; the
+   * row shows a muted "auto off" marker; the verdict stays about the PRICE.
+   */
   placementPaused: boolean;
   /**
    * coolbet_placer_bots.ui_place_enabled for this bot. `null` = the bot has no
@@ -145,8 +181,11 @@ function corePickVerdict(i: PickVerdictInput): PickVerdictResult {
   const le = liveEdge(i.prob, i.livePrice);
   const base = { breakEven: be, gateFloor: gf, liveEdge: le };
 
-  if (i.placementPaused) return { verdict: "BLOCKED", reason: PAUSED_REASON, ...base };
-  if (i.botEnabled === false) return { verdict: "BLOCKED", reason: "bot toggled off", ...base };
+  // BLOCKED means "you cannot act on this row", not "automation is off".
+  // placement_paused and the per-bot toggle govern the AUTOMATED placer; they
+  // are surfaced as a muted marker and in the safety strip instead of
+  // flattening every row to BLOCKED and hiding the price verdict (review
+  // 2026-09-15: all 44 rows read BLOCKED, so the column carried no information).
   if (i.minutesToKo < KO_BLOCK_MIN) return { verdict: "BLOCKED", reason: "kickoff < 3 min", ...base };
 
   if (i.livePrice == null || !(i.livePrice > 1)) {
@@ -158,6 +197,10 @@ function corePickVerdict(i: PickVerdictInput): PickVerdictResult {
   if (be == null) return { verdict: "SKIP", reason: "no anchor probability", ...base };
   if (i.livePrice < be) return { verdict: "SKIP", reason: "price below break-even", ...base };
 
+  const cap = i.oddsCap ?? null;
+  if (cap != null && i.livePrice > cap) {
+    return { verdict: "SKIP", reason: `above the ${cap.toFixed(2)} odds cap`, ...base };
+  }
   if (gf != null && i.livePrice >= gf) return { verdict: "PLACE", reason: "price clears gate floor", ...base };
   return {
     verdict: "THIN",
@@ -177,7 +220,12 @@ function corePickVerdict(i: PickVerdictInput): PickVerdictResult {
  * more urgent message than "this particular row is unplaceable".
  */
 export function inplayOverride(v: PickVerdictResult): PickVerdictResult {
-  if (v.verdict === "BLOCKED" && v.reason === PAUSED_REASON) return v;
+  // The kickoff cutoff is converted too, deliberately: an in-play pick is BY
+  // DEFINITION past kickoff, so leaving it BLOCKED would make every in-play row
+  // blame its own kickoff instead of naming the real reason — there is no
+  // Epicbet in-play placer. (Before 2026-09-15 the exception here was
+  // placement_paused; that stopped being a blocker when automation became
+  // context rather than a verdict, so no BLOCKED reason survives for in-play.)
   return { ...v, verdict: "SKIP", reason: NO_INPLAY_PLACER_REASON };
 }
 

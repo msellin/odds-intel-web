@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { CoolbetPlacerToggle } from "@/components/coolbet-placer-toggle";
 import { execOdds } from "@/lib/engine-data";
-import type { BotClvRow, BotRow, PlacerBotRow } from "@/lib/shadow-bots/queries";
+import type { BotScoreRow, BotRow, PlacerBotRow } from "@/lib/shadow-bots/queries";
 import { botShortLabel } from "@/lib/shadow-bots/labels";
 import { botVerdict, meanSd, PREREG_MIN_N, type BotVerdictKind } from "@/lib/shadow-bots/verdict";
 
@@ -21,30 +21,36 @@ const pct = (v: number | null, dp = 1) => (v == null ? "—" : `${v >= 0 ? "+" :
  */
 export function Scoreboard({
   bots,
-  clvRows,
+  scoreboard,
   placerBots,
 }: {
   bots: BotRow[];
-  clvRows: BotClvRow[];
+  scoreboard: BotScoreRow[];
   placerBots: PlacerBotRow[];
 }) {
-  const byBot = new Map<string, BotClvRow[]>();
-  for (const r of clvRows) (byBot.get(r.bot_id) ?? byBot.set(r.bot_id, []).get(r.bot_id)!).push(r);
   const placerByName = new Map(placerBots.map((p) => [p.bot_name, p]));
-
+  const byBot = new Map(scoreboard.map((r) => [r.bot_id, r]));
   const rows = bots
     .map((b) => {
-      const mine = byBot.get(b.id) ?? [];
-      const stats = meanSd(mine.map((r) => (r.clv_margin_corrected == null ? null : Number(r.clv_margin_corrected))));
+      const sc = byBot.get(b.id);
+      const n = Number(sc?.clv_n ?? 0);
+      const mean = sc?.clv_mc_mean == null ? null : Number(sc.clv_mc_mean);
+      const sd = sc?.clv_mc_sd == null ? null : Number(sc.clv_mc_sd);
+      const stats = { n, mean, sd };
       const v = botVerdict(stats);
-      const fresh = mine.filter((r) => r.decision_quote_fresh === true).length;
-      const rets = mine
-        .filter((r) => r.result === "won" || r.result === "lost")
-        .map((r) => (r.result === "won" ? execOdds(r.odds_at_pick, r.odds_at_pick_live) - 1 : -1));
-      const roi = rets.length ? rets.reduce((a, c) => a + c, 0) / rets.length : null;
-      return { bot: b, settled: mine.length, stats, v, fresh, roi, placer: placerByName.get(b.name) ?? null };
+      // TWO populations, never mixed (migration 360): ROI over EVERY settled
+      // pick, CLV over the own-book-closed subset. Computing ROI over the CLV
+      // subset flipped the sign on 4 of 11 bots.
+      return {
+        bot: b,
+        settled: Number(sc?.settled_n ?? 0),
+        stats,
+        v,
+        fresh: Number(sc?.decision_fresh_n ?? 0),
+        roi: sc?.settled_roi == null ? null : Number(sc.settled_roi),
+        placer: placerByName.get(b.name) ?? null,
+      };
     })
-    // real-money-capable first, then by n desc
     .sort((a, b) => Number(!!b.placer) - Number(!!a.placer) || b.settled - a.settled);
 
   const th = "px-2 py-1.5 text-left font-normal";
@@ -57,7 +63,7 @@ export function Scoreboard({
           <thead className="bg-white/[0.02] text-[10px] font-mono uppercase tracking-wider text-neutral-500">
             <tr>
               <th className={th}>Bot</th>
-              <th className={`${th} text-right`} title="Settled picks with an own-book close (shadow_bets_own_book_clv)">
+              <th className={`${th} text-right`} title="EVERY settled pick — the honest ROI denominator (migration 360)">
                 n settled
               </th>
               <th className={`${th} text-right`} title="Rows with margin-corrected own-book CLV — the pre-registration's n">
@@ -127,8 +133,11 @@ export function Scoreboard({
       </div>
       <p className="mt-2 text-[11px] leading-relaxed text-neutral-500">
         ROI is a cross-check, not the verdict: per-bet sd ≈ 1.3, so confirming a true +3% ROI needs
-        ~15,600 settled bets. Margin-corrected own-book CLV is written at settlement from 2026-09-15
-        (migration 355); rows settled before then have none and count toward n settled only.
+        ~15,600 settled bets. TWO populations, never mixed (migration 360): <strong>n settled</strong> and
+        ROI cover EVERY settled pick at the executable price; <strong>n CLV</strong> and the
+        margin-corrected CLV cover only picks whose own book had a complete closing market — the
+        pre-registered decision variable. Computing ROI over the CLV subset flipped the sign on 4 of
+        11 bots, so they are shown side by side rather than as one number.
       </p>
     </section>
   );

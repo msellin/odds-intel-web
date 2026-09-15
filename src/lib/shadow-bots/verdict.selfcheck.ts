@@ -17,6 +17,7 @@ import {
   pickVerdict,
   inplayOverride,
   quoteFreshness,
+  DECISION_FRESH_MAX_MIN,
   botVerdict,
   meanSd,
   NO_INPLAY_PLACER_REASON,
@@ -60,13 +61,18 @@ assert.equal(pickVerdict({ ...base, livePrice: 2.4 }).verdict, "SKIP", "< break-
 assert.equal(pickVerdict({ ...base, livePrice: null }).verdict, "SKIP", "no placeable price");
 assert.equal(pickVerdict({ ...base, quoteAgeMin: QUOTE_MAX_AGE_MIN }).verdict, "SKIP", "stale quote");
 assert.equal(pickVerdict({ ...base, quoteAgeMin: QUOTE_MAX_AGE_MIN - 1 }).verdict, "PLACE");
-assert.equal(pickVerdict({ ...base, placementPaused: true }).verdict, "BLOCKED");
-assert.equal(pickVerdict({ ...base, botEnabled: false }).verdict, "BLOCKED", "bot toggled off");
+// AUTOMATION IS CONTEXT, NOT A VERDICT (2026-09-15). placement_paused and the
+// per-bot toggle halt the AUTOMATED placer. This page's Place button only
+// RECORDS a bet the operator placed by hand, so blocking the row on them hid
+// the price verdict on every row AND stopped the hand-placed bet from ever
+// reaching `real_bets`. The row shows an "auto off" marker instead.
+assert.equal(pickVerdict({ ...base, placementPaused: true }).verdict, "PLACE");
+assert.equal(pickVerdict({ ...base, botEnabled: false }).verdict, "PLACE", "toggle is not a price fact");
 assert.equal(pickVerdict({ ...base, botEnabled: true }).verdict, "PLACE");
 assert.equal(pickVerdict({ ...base, minutesToKo: 2.9 }).verdict, "BLOCKED", "KO < 3 min");
 assert.equal(pickVerdict({ ...base, minutesToKo: 3 }).verdict, "PLACE");
-// BLOCKED wins over SKIP: a paused system never shows a SKIP that reads as a price problem
-assert.equal(pickVerdict({ ...base, placementPaused: true, livePrice: null }).verdict, "BLOCKED");
+// A genuine price problem still reads as one while automation is off.
+assert.equal(pickVerdict({ ...base, placementPaused: true, livePrice: null }).verdict, "SKIP");
 // unreachable gate but above break-even → THIN, never PLACE
 assert.equal(pickVerdict({ ...base, prob: 0.09, threshold: 0.1, livePrice: 12 }).verdict, "THIN");
 // placer odds floor gates real-money bots: 1x2 at 2.79 with p=0.5, thr=0.1 → gate 2.80
@@ -79,8 +85,14 @@ assert.equal(quoteFreshness(null), "UNKNOWN");
 assert.equal(quoteFreshness(undefined), "UNKNOWN");
 assert.equal(quoteFreshness(Number.NaN), "UNKNOWN");
 assert.equal(quoteFreshness(0), "FRESH");
-assert.equal(quoteFreshness(QUOTE_MAX_AGE_MIN - 0.01), "FRESH");
-assert.equal(quoteFreshness(QUOTE_MAX_AGE_MIN), "STALE", "threshold is strict <");
+// The DECISION badge follows the ENGINE's 60-minute definition (the matcher
+// refuses a stale leg at 60; `decision_quote_fresh` is `<= 60`). The 30-minute
+// QUOTE_MAX_AGE_MIN governs the LIVE quote and the SKIP rule — two different
+// quantities, two constants (review 2026-09-15: one constant served both, so
+// rows were badged STALE while the engine counted them FRESH).
+assert.equal(quoteFreshness(DECISION_FRESH_MAX_MIN), "FRESH", "boundary is inclusive");
+assert.equal(quoteFreshness(DECISION_FRESH_MAX_MIN + 0.01), "STALE");
+assert.notEqual(DECISION_FRESH_MAX_MIN, QUOTE_MAX_AGE_MIN, "the two ages are not the same quantity");
 assert.equal(quoteFreshness(4000), "STALE");
 
 assert.equal(formatAge(null), "—");
@@ -104,20 +116,25 @@ assert.equal(pickVerdict(inplayBase).reason, NO_INPLAY_PLACER_REASON);
 assert.equal(pickVerdict({ ...inplayBase, livePrice: 3.0 }).verdict, "SKIP", "in-play never THIN");
 // kickoff is in the past for every in-play pick — that must not read as the reason
 assert.equal(pickVerdict({ ...inplayBase, minutesToKo: -77 }).reason, NO_INPLAY_PLACER_REASON);
-// …but a paused system still shows BLOCKED: "the machine is off" outranks it.
-assert.equal(pickVerdict({ ...inplayBase, placementPaused: true }).verdict, "BLOCKED");
-assert.equal(pickVerdict({ ...inplayBase, placementPaused: true }).reason, PAUSED_REASON);
+// …and an in-play row is SKIP regardless of automation state.
+assert.equal(pickVerdict({ ...inplayBase, placementPaused: true }).verdict, "SKIP");
+// placement_paused is CONTEXT, not a blocker (2026-09-15): it halts the
+// AUTOMATED placer, while this page's Place button only RECORDS a hand-placed
+// bet. A paused system must still show the price verdict.
+assert.notEqual(pickVerdict({ ...inplayBase, placementPaused: true }).reason, PAUSED_REASON);
+assert.equal(pickVerdict({ ...inplayBase, placementPaused: true }).verdict, "SKIP");
 // the override is the same rule, in isolation
 assert.equal(inplayOverride(pickVerdict(base)).verdict, "SKIP");
-assert.equal(
-  inplayOverride({ verdict: "BLOCKED", reason: PAUSED_REASON, breakEven: null, gateFloor: null, liveEdge: null }).verdict,
-  "BLOCKED",
-);
+// An in-play pick is past kickoff BY DEFINITION, so the cutoff must be
+// converted — otherwise every in-play row blames its own kickoff instead of
+// naming the real reason (there is no Epicbet in-play placer).
 assert.equal(
   inplayOverride({ verdict: "BLOCKED", reason: "kickoff < 3 min", breakEven: null, gateFloor: null, liveEdge: null }).verdict,
   "SKIP",
   "a started fixture is the normal state in play, not a block",
 );
+assert.equal(pickVerdict({ ...inplayBase, minutesToKo: -35 }).verdict, "SKIP");
+assert.equal(pickVerdict({ ...inplayBase, minutesToKo: -35 }).reason, "no in-play placer");
 // the flag is opt-in: an absent `inplay` leaves the pre-match ladder untouched
 assert.equal(pickVerdict(base).verdict, "PLACE");
 
@@ -151,3 +168,18 @@ close(ms.mean, 0.1);
 close(ms.sd, 0.2);
 
 console.log("verdict.selfcheck: all assertions passed");
+
+// ── 2026-09-15 corrections from the decision-surface review ────────────────
+// A price ABOVE an odds cap is not a better price — the pre-registration says
+// the edge above the cap is noise, so it must never read PLACE.
+{
+  const capped = { ...base, prob: 0.5, threshold: 0.02, oddsFloor: null, oddsCap: 2.5 };
+  assert.equal(pickVerdict({ ...capped, livePrice: 2.4 }).verdict, "PLACE");
+  assert.equal(pickVerdict({ ...capped, livePrice: 2.6 }).verdict, "SKIP");
+  assert.match(pickVerdict({ ...capped, livePrice: 2.6 }).reason, /odds cap/);
+}
+// The DECISION freshness threshold is the engine's 60, not the live-quote 30.
+assert.equal(quoteFreshness(45), "FRESH");
+assert.equal(quoteFreshness(61), "STALE");
+assert.equal(quoteFreshness(null), "UNKNOWN");
+console.log("verdict.selfcheck: 2026-09-15 corrections asserted");

@@ -94,6 +94,22 @@ export interface Quote {
   ts: string;
 }
 
+export interface BotScoreRow {
+  bot_id: string;
+  bot_name: string;
+  /** EVERY settled pick — the honest ROI denominator. */
+  settled_n: number;
+  settled_won: number;
+  settled_pnl_eur: number | string | null;
+  settled_roi: number | string | null;
+  /** Own-book-closed subset — the pre-registered CLV/verdict population. */
+  clv_n: number;
+  clv_mc_mean: number | string | null;
+  clv_mc_sd: number | string | null;
+  decision_fresh_n: number;
+  decision_age_known_n: number;
+}
+
 export interface BotClvRow {
   bot_id: string;
   clv_margin_corrected: number | null;
@@ -142,7 +158,7 @@ export interface ShadowBotsPageData {
   quotes: Record<string, Quote[]>;
   /** Books whose snapshot fetch hit the row cap — their column may be incomplete. */
   truncatedBooks: string[];
-  clvRows: BotClvRow[];
+  scoreboard: BotScoreRow[];
   promos: PromoRow[];
   /** Set when the promo read failed (e.g. PostgREST schema cache) — shown, never swallowed. */
   promoError: string | null;
@@ -360,21 +376,23 @@ async function _loadShadowBotsPage(): Promise<ShadowBotsPageData> {
     }
   }
 
-  // 10 · settled own-book rows for the ACTIVE bots only — the scoreboard input.
-  const clvRows: BotClvRow[] = [];
+  // 10 · the scoreboard, from the ENGINE's view (migration 360). It was a paged
+  // fetch of every own-book-closed row, aggregated here — which computed ROI
+  // over the subset that HAPPENS to have a closing anchor and flipped the sign
+  // on 4 of 11 bots (bot_ou35_model_v1: true −11.3% over n=226 rendered as
+  // +30.0% over n=23). The view keeps the two populations separate and labelled,
+  // and one row per bot replaces a full-ledger fetch.
+  const scoreboard: BotScoreRow[] = [];
   if (botIds.length > 0) {
-    for (let from = 0; ; from += CLV_PAGE) {
-      queryCount++;
-      const { data } = await db
-        .from("shadow_bets_own_book_clv")
-        .select("bot_id, clv_margin_corrected, decision_quote_fresh, result, odds_at_pick, odds_at_pick_live")
-        .in("bot_id", botIds)
-        .order("id", { ascending: true })
-        .range(from, from + CLV_PAGE - 1);
-      const rows = (data ?? []) as BotClvRow[];
-      clvRows.push(...rows);
-      if (rows.length < CLV_PAGE) break;
-    }
+    queryCount++;
+    const { data } = await db
+      .from("shadow_bot_scoreboard")
+      .select(
+        "bot_id, bot_name, settled_n, settled_won, settled_pnl_eur, settled_roi, " +
+          "clv_n, clv_mc_mean, clv_mc_sd, decision_fresh_n, decision_age_known_n",
+      )
+      .in("bot_id", botIds);
+    scoreboard.push(...((data ?? []) as unknown as BotScoreRow[]));
   }
 
   // Promotions — aggregate the embedded ledger in JS (the panel shows at most a
@@ -429,7 +447,7 @@ async function _loadShadowBotsPage(): Promise<ShadowBotsPageData> {
     upcoming,
     quotes,
     truncatedBooks,
-    clvRows,
+    scoreboard,
     promos,
     // Surfaced, not swallowed: "no promos" and "the read failed" look identical
     // in an empty table, and only one of them is a reason to stop trusting it.

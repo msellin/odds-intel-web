@@ -8,6 +8,8 @@ import type { Quote, UpcomingPick } from "@/lib/shadow-bots/queries";
 import { BOOK_CHIP, botShortLabel, formatAge, formatPickLabel } from "@/lib/shadow-bots/labels";
 
 export interface PickRowData {
+  /** placement_paused OR this bot toggled off — context, never a verdict. */
+  automationOff: boolean;
   pick: UpcomingPick;
   prob: number | null;
   threshold: number;
@@ -65,7 +67,14 @@ export function PicksRow({ r }: { r: PickRowData }) {
   const canPlace = verdict.verdict === "PLACE" || verdict.verdict === "THIN";
   // The control arm is priced off API-Football's aggregate — there is nothing to
   // place at that number, so it never gets an action, whatever the verdict says.
-  const showPlaceAction = !r.inplay && !r.isControlArm && r.best != null && chip != null;
+  // The Place button RECORDS a bet the operator placed by hand at the book; it
+// stakes nothing. So it is deliberately NOT gated on placement_paused or the
+// per-bot toggle — those halt the AUTOMATED placer. Gating it meant a
+// hand-placed bet never reached `real_bets` and was never settled or
+// CLV-scored, which is the whole reason that path exists (review 2026-09-15).
+// Still withheld for in-play and the control arm: there is no in-play placer,
+// and the control arm is priced off a feed nobody can bet.
+const showPlaceAction = !r.inplay && !r.isControlArm && r.best != null && chip != null;
   const td = "px-2 py-1.5 align-middle";
   const mono = "font-mono text-xs tabular-nums text-neutral-200";
   const score =
@@ -114,6 +123,14 @@ export function PicksRow({ r }: { r: PickRowData }) {
             title="Control arm: same trigger priced off API-Football's aggregate. Measurement only, never placeable."
           >
             CONTROL
+          </span>
+        )}
+        {r.automationOff && (
+          <span
+            className={`${CHIP} ml-1 border-white/15 text-neutral-500`}
+            title="The automated placer is paused or this bot is toggled off. You can still place by hand and record it."
+          >
+            auto off
           </span>
         )}
       </td>

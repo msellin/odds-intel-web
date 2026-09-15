@@ -1,6 +1,6 @@
 import { FLAT_STAKE_EUR } from "@/lib/engine-data";
 import { botEdgeThreshold } from "@/lib/coolbet-edge";
-import { ENGINE_MIN_ODDS_BY_MARKET } from "@/lib/generated/engine-floors";
+import { ENGINE_MIN_ODDS_BY_MARKET, ENGINE_BOT_FLOORS } from "@/lib/generated/engine-floors";
 import type { PlacerBotRow, Quote, SessionState, ShadowBotsPageData } from "@/lib/shadow-bots/queries";
 import { oddsKey } from "@/lib/shadow-bots/queries";
 import { BOOK_CHIP, isInplayControlBot } from "@/lib/shadow-bots/labels";
@@ -43,14 +43,23 @@ export function buildPickRows(
     const prob = pick.calibrated_prob ?? pick.model_probability;
     const threshold = botEdgeThreshold(pick.bot_name);
     const placer = placerByName.get(pick.bot_name) ?? null;
-    // The placer's odds floor (2.80 / 1.80) only gates bots it can place.
+    // The bot's OWN floors, from the REGISTRY — the machine-checked source for
+    // what each bot is. This used to read the placer table, which only the two
+    // real-money bots have a row in, so every other bot got a null floor and a
+    // gate floor LOWER than its own (review 2026-09-15: 20 of 40 rows would
+    // have read PLACE for bots the engine has never been allowed to stake).
+    // Falls back to the per-market floor only for a bot the registry lacks.
+    const regFloors = ENGINE_BOT_FLOORS[pick.bot_name] ?? null;
     const mk = marketKey(pick.market);
-    const oddsFloor = placer && mk ? ENGINE_MIN_ODDS_BY_MARKET[mk] ?? null : null;
+    const oddsFloor =
+      regFloors?.oddsFloor ?? (mk ? ENGINE_MIN_ODDS_BY_MARKET[mk] ?? null : null);
+    const oddsCap = regFloors?.oddsCap ?? null;
     const minutesToKo = (Date.parse(pick.kickoff) - now) / 60000;
     const verdict = pickVerdict({
       prob,
       threshold,
       oddsFloor,
+      oddsCap,
       livePrice: best?.odds ?? null,
       quoteAgeMin: bestAgeMin,
       minutesToKo,
@@ -69,6 +78,8 @@ export function buildPickRows(
       minutesToKo,
       inplay,
       isControlArm: isInplayControlBot(pick.bot_name),
+      // Automation state is CONTEXT on the row, not a verdict — see verdict.ts.
+      automationOff: state.placement_paused || placer?.ui_place_enabled === false,
       markState: markStates[pick.id] ?? 0,
       stake: FLAT_STAKE_EUR,
     };
