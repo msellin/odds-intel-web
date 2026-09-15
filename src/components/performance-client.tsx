@@ -106,13 +106,11 @@ export function PerformanceClient({
   // the previous `!retiredAt` count was 43 because it also included in-play
   // + experimental bots, which produced a confusing 43 vs 25 mismatch on the
   // same page.
+  // PERFORMANCE-SHOWS-EVERY-BOT (2026-09-15): the count must match the table.
+  // It previously excluded experimental bots while the table did too; now both
+  // include them, so the number a reader counts and the number we print agree.
   const activeBotCount = botsDB
-    ? botsDB.filter(
-        (b) =>
-          !b.retiredAt &&
-          !isLiveBot(b.name) &&
-          (b.maturityLabel ?? "active") !== "experimental",
-      ).length
+    ? botsDB.filter((b) => !b.retiredAt && !isLiveBot(b.name)).length
     : null;
   const retiredBotCount = botsDB ? botsDB.filter((b) => !!b.retiredAt).length : null;
 

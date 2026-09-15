@@ -304,8 +304,11 @@ export default async function PerformancePage() {
   // bot_breakdown query already filters retired bots at write time, but a bot
   // retired between cache rebuilds would otherwise still show in the active
   // list. Same pattern as the retired_breakdown filter below, inverse direction.
+  // PERFORMANCE-SHOWS-EVERY-BOT (2026-09-15, owner). The experimental filter
+  // that stood here was undocumented and hid 13 of 15 active bots. This page is
+  // the measurement surface; curation of what customers are OFFERED happens on
+  // /picks via bots.show_on_picks.
   const cachedBots = buildCachedBotStats(cache, botsDB, isPro, isElite)
-    .filter(b => b.maturityLabel !== 'experimental')
     .filter(b => !liveRetiredNames.has(b.name));
 
   // PICKS-BOT-IN-LEADERBOARD-2026-09-14. bot_sharp_forward_test_v1 is the bot

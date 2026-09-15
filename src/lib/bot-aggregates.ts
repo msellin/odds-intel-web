@@ -318,8 +318,17 @@ export function buildPublicBotStats(
   // Cache path already filters via dashboard_cache.bot_breakdown (settlement.py
   // joins `WHERE is_active AND retired_at IS NULL`), but the client-side
   // aggregateBets toggle would otherwise resurrect them from raw bets data.
-  // Experimental bots are excluded from the public leaderboard entirely.
-  const activeBots = botsDB.filter((b) => !b.retiredAt && b.maturityLabel !== 'experimental');
+  // PERFORMANCE-SHOWS-EVERY-BOT (2026-09-15, owner): experimental bots are NO
+  // LONGER excluded. /performance is where bots are MEASURED — hiding a bot
+  // there hides the evidence, and on 2026-09-15 it hid 13 of 15 active bots,
+  // including every sharp-anchored strategy. The curation decision belongs on
+  // /picks, which is governed by `bots.show_on_picks` (migration 356), not here.
+  //
+  // Safe because the row carries its own MaturityChip and the table already
+  // separates "enough data" from "still collecting": an experimental bot with
+  // 5 settled bets sorts into the collecting group rather than above a bot
+  // with 640.
+  const activeBots = botsDB.filter((b) => !b.retiredAt);
   const rows: PublicBotStatShape[] = activeBots.map((dbBot): PublicBotStatShape => {
     const botBets = betsByBot[dbBot.name] || [];
     const settled = botBets.filter((b) => b.result !== "pending" && b.result !== "void");

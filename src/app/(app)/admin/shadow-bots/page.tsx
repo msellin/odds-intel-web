@@ -28,6 +28,7 @@ import { loadSessionState, loadShadowBotsPage } from "@/lib/shadow-bots/queries"
 import { SafetyStrip } from "@/components/shadow-bots/safety-strip";
 import { buildPickRows, PicksTable } from "@/components/shadow-bots/picks-table";
 import { Scoreboard } from "@/components/shadow-bots/scoreboard";
+import { HowItWorks } from "@/components/shadow-bots/how-it-works";
 import { Promotions } from "@/components/shadow-bots/promotions";
 
 export default async function ShadowBotsPage() {
@@ -55,7 +56,10 @@ export default async function ShadowBotsPage() {
       <SafetyStrip state={state} placerBots={data.placerBots} today={data.todayRealBets} />
 
       <header className="mb-5">
-        <h1 className="text-xl font-semibold text-neutral-100">Shadow bots</h1>
+        <div className="flex items-center justify-between gap-4">
+          <h1 className="text-xl font-semibold text-neutral-100">Shadow bots</h1>
+          <HowItWorks />
+        </div>
         <p className="mt-1 text-xs text-neutral-500">
           {data.bots.length} active bots · {data.upcoming.length} pending picks · data cached 60 s (loaded{" "}
           {new Date(data.loadedAt).toLocaleTimeString("en-GB", { timeZone: "UTC" })} UTC, {data.queryCount} queries) ·
