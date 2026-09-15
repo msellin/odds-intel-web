@@ -20,7 +20,7 @@ The landing comparison block reads
 [`ledger/comparison_*.json`](https://github.com/msellin/odds-intel-engine/tree/main/ledger)
 from the engine repo at runtime (6h revalidate). When the weekly cron
 in the engine refreshes those JSONs, the landing auto-updates with no
-Vercel rebuild.
+VPS rebuild (the landing re-fetches them on its own 6h revalidate).
 
 ## Stack
 

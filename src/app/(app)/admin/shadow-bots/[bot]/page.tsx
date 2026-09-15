@@ -58,7 +58,10 @@ const ALLOWED: Record<string, { title: string; subtitle: string; detail: string 
   },
   // MERGE-TRIGGER-BOTS (2026-09-11) — four book-agnostic configs replacing the
   // eight per-book trigger bots above. EVERY-REGISTRY-BOT-IS-VISIBLE exists
-  // because this map and SHADOW_BOTS on the index are TWO hardcoded lists for
+  // (HISTORICAL: the index's SHADOW_BOTS array is GONE since 2026-09-15 — it
+  // lists `bots WHERE retired_at IS NULL` from the DB, and an unknown bot gets a
+  // generic header here rather than a 404. Kept for the reasoning.)
+  // because this map and SHADOW_BOTS on the index were TWO hardcoded lists for
   // one bot, and a bot missing from this one renders a notFound() from a row
   // that looks fine.
   bot_trigger_1x2_model_v1: {
@@ -588,7 +591,7 @@ export default async function ShadowBotDetailPage({
               <div className="text-right" title="Coolbet's CURRENT price for this selection (latest snapshot in the last 12h). Compare to Min odds — pending picks only.">
                 Now CB
               </div>
-              <div className="text-right" title="Unibet's CURRENT price, from the PLACEABLE unibet.ee site feed. The Kambi API price is deliberately not shown — unibet.ee left that feed on 2026-09-06 and it disagrees with the site on 91 pct of quotes. Pending picks only.">
+              <div className="text-right" title="Unibet's current price from the PLACEABLE unibet.ee site feed (never the Kambi API — it left that feed 2026-09-06). Pending picks only.">
                 Now UB
               </div>
               <div className="text-right" title="Epicbet's CURRENT price (30-min ingest at :02/:32 UTC). Pending picks only.">
