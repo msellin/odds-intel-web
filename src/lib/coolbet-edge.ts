@@ -103,6 +103,20 @@ export const BOT_EDGE_THRESHOLDS: Record<string, number> = {
   bot_sweep_ou35_v1: 0.03,
   bot_pin_1x2_home_v1: 0.03,
   bot_pin_1x2_draw_tier4_v1: 0.05,
+  // OWN Phase 6 (2026-09-15): the active fleet per workers/registry/bot_registry.py
+  // `edge_floor`. Before this the sharp trigger bots fell through to the 0.08
+  // default, so /admin/shadow-bots computed their gate floor at a MODEL-sized
+  // edge on a SHARP anchor — a 3% overlay on Pinnacle was shown as needing 8%,
+  // and every one of their picks read "below floor". Same silent failure as
+  // bot_coolbet_value_v1 above.
+  bot_coolbet_trigger_sharp_1x2_v1: 0.03,
+  bot_coolbet_trigger_sharp_ou_v1: 0.03,
+  bot_unibet_trigger_sharp_1x2_v1: 0.03,
+  bot_unibet_trigger_sharp_ou_v1: 0.03,
+  bot_trigger_1x2_sharp_v1: 0.03,
+  bot_trigger_ou_sharp_v1: 0.03,
+  bot_trigger_1x2_sharp_tight_v1: 0.02,
+  bot_ou35_model_v1: 0.08,
 };
 
 /** Edge threshold for a shadow bot. Unknown bots fall back to 0.08, matching
