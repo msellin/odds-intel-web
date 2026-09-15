@@ -386,24 +386,27 @@ export default async function PicksPage() {
               </span>
             </summary>
             <p className="mb-3 mt-2 max-w-2xl text-xs leading-relaxed text-neutral-500">
-              Prices the sharp line says are close but not yet worth taking. The
-              target is what the price would need to reach to clear our 3% bar —
-              it is arithmetic against the sharpest line, not a forecast. If you
-              find the target price somewhere, it is a bet on the same terms as
-              anything above; if you only find today&apos;s price, it is not.
+              Prices the sharp line says are close but not yet worth taking.
+              <strong className="text-neutral-400"> Grade B</strong> is the price
+              that beats the sharpest line by 3% — our bar for publishing a pick.
+              <strong className="text-neutral-400"> Grade A</strong> is 5%. Both
+              are arithmetic against the sharp line, not forecasts. Find one of
+              those prices and it is a bet on the same terms as anything we
+              publish; at today&apos;s prices it is not.
             </p>
             <div className="overflow-x-auto rounded-xl border border-white/[0.06] bg-white/[0.02]">
-              <table className="w-full min-w-[34rem] text-sm">
+              <table className="w-full min-w-[40rem] text-sm">
                 <thead>
                   <tr className="border-b border-white/[0.06] text-left font-mono text-[10px] uppercase tracking-wider text-neutral-500">
                     <th className="px-4 py-2 font-normal">Match</th>
                     <th className="px-3 py-2 font-normal">Pick</th>
                     <th className="px-3 py-2 text-right font-normal">Best now</th>
-                    <th className="px-3 py-2 text-right font-normal">Target</th>
+                    <th className="px-3 py-2 text-right font-normal">Grade B</th>
+                    <th className="px-3 py-2 text-right font-normal">Grade A</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {watchlist.slice(0, 12).map((b) => (
+                  {watchlist.map((b) => (
                     <tr
                       key={`${b.match_id}-${b.market}-${b.selection}`}
                       className="border-t border-white/[0.04]"
@@ -434,7 +437,13 @@ export default async function PicksPage() {
                         {b.odds_grade_b != null
                           ? Number(b.odds_grade_b).toFixed(2)
                           : "—"}
-                        <div className="text-[10px] text-neutral-600">to qualify</div>
+                        <div className="text-[10px] text-neutral-600">+3% vs sharp</div>
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono tabular-nums text-emerald-200">
+                        {b.odds_grade_a != null
+                          ? Number(b.odds_grade_a).toFixed(2)
+                          : "—"}
+                        <div className="text-[10px] text-neutral-600">+5% vs sharp</div>
                       </td>
                     </tr>
                   ))}
