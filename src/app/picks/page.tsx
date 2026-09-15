@@ -263,11 +263,10 @@ export default async function PicksPage() {
   // but is no longer actionable, and putting it on the board tells a reader to
   // bet a game that is already running.
   const board = picks.filter((p) => !hasStarted(p.kickoff_utc));
-  const settled = picks
-    .filter((p) => hasStarted(p.kickoff_utc))
-    .sort((a, b) =>
-      (b.kickoff_utc ?? "").localeCompare(a.kickoff_utc ?? ""),
-    );
+  // Not rendered — /picks shows the live board only; results are on
+  // /performance. Counted so the empty-board copy can distinguish "nothing
+  // qualified today" from "everything already kicked off".
+  const settledCount = picks.filter((p) => hasStarted(p.kickoff_utc)).length;
 
   const groups = new Map<string, ForwardTestPick[]>();
   for (const p of board) {
@@ -445,28 +444,14 @@ export default async function PicksPage() {
           </details>
         )}
 
-        {/* Settled picks live BELOW the board and are labelled as results, not
-            as picks. They used to be interleaved into the same kickoff-date
-            list, so a reader arriving before the day's batch published saw
-            yesterday's finished bets presented as the current board. Every one
-            is shown — winners and losers — because a results section that
-            quietly drops the losers is the dishonest version of this. */}
-        {settled.length > 0 && (
-          <section className="mt-14">
-            <h2 className="mb-1 text-sm font-semibold text-neutral-300">
-              Already kicked off
-            </h2>
-            <p className="mb-3 text-xs text-neutral-500">
-              Recently published picks whose match has started or finished. Shown
-              in full, settled or not — no result is dropped.
-            </p>
-            <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02] opacity-70">
-              {settled.map((p) => (
-                <PickRow key={p.id} p={p} />
-              ))}
-            </div>
-          </section>
-        )}
+        {/* SETTLED PICKS ARE NOT SHOWN HERE (owner, 2026-09-15). An
+            "Already kicked off" section was added earlier today to stop
+            yesterday's finished bets appearing where the live board should be.
+            The page never had such a section before, and the owner's call is
+            that /picks stays what it has always been — what is on the board
+            now. Results live on /performance. The `settled` split is kept
+            because the board must still exclude fixtures that have kicked off;
+            it is simply not rendered. */}
 
         {/* Deliberately NOT a link to /performance. That ledger was priced on a
             model edge we have since shown to be manufactured, and it survives in
