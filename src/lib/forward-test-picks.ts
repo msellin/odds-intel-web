@@ -14,7 +14,10 @@
  *
  * What replaced it uses NO MODEL. A pick is a price that beats the Shin-de-vigged
  * Pinnacle line by >= 3%, at odds <= 4.0, with the anchor quote and the bet quote
- * within 60 minutes, top 8 a day by edge. The rule and its stopping criteria are
+ * within 60 minutes. There is NO daily selection cap — `TOP_N = 8` was
+ * pre-registered and dropped on 2026-09-15 (PICKS-NO-DAILY-CAP) once it was
+ * shown to be discarding qualifying legs on busy days; a 60/day runaway breaker
+ * remains. The rule and its stopping criteria are
  * locked in dev/active/picks-forward-test-preregistration.md (engine repo) and
  * pinned by the smoke test PICKS-FORWARD-TEST-RULE-LOCKED.
  *
@@ -135,6 +138,34 @@ export function sharpBreakEvenOdds(pSharp: number | null): number | null {
 export function hasStarted(kickoffUtc: string | null): boolean {
   if (!kickoffUtc) return false;
   return new Date(kickoffUtc).getTime() < Date.now();
+}
+
+/**
+ * Hours elapsed since midnight UTC — the lookback that means "today, all of it".
+ *
+ * PICKS-SHOW-WHOLE-DAY (2026-09-15, owner: "picks page loses daily picks, only
+ * shows upcoming ... before 14 sept change, it showed all todays, even the ones
+ * that were settled"). /picks uses a KICKOFF-keyed window, and a fixed 24h
+ * lookback is the wrong shape for a day's card: at 20:00 it reaches back into
+ * yesterday evening, and at 06:00 it reaches back almost the whole of yesterday
+ * while the morning's own picks have not published yet. That is how the page
+ * came to show yesterday's settled losers and nothing else.
+ *
+ * Anchoring the lookback to the start of the UTC day fixes both ends at once:
+ * every pick kicking off TODAY stays on the page for the whole day, won or lost
+ * or in play, and yesterday drops off at midnight instead of trailing a rolling
+ * 24 hours behind the clock.
+ *
+ * UTC, not the viewer's timezone, because kickoffs are stored in UTC and this
+ * runs server-side — a server-local day boundary would silently follow whatever
+ * TZ the box happens to have.
+ */
+export function hoursSinceUtcMidnight(now: Date = new Date()): number {
+  return (
+    now.getUTCHours() +
+    now.getUTCMinutes() / 60 +
+    now.getUTCSeconds() / 3600
+  );
 }
 
 /** Fixtures kicking off from `hoursBack` ago to `hoursForward` ahead. */

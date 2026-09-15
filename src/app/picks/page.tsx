@@ -15,7 +15,8 @@
  * TIER: free, including signed-out. The same picks go to the public Telegram
  * channel the moment they are generated, so there is nothing here to gate. The
  * old auth-aware cohort split (PICKS-USER-GATE) went with the model path — this
- * rule has ONE cohort by construction (top 8 a day), and splitting it would
+ * rule has ONE cohort by construction (every qualifying leg, no selection cap
+ * since PICKS-NO-DAILY-CAP-2026-09-15), and splitting it would
  * change what is being measured in a running pre-registered test.
  */
 import Link from "next/link";
@@ -25,6 +26,7 @@ import {
   sharpBreakEvenOdds,
   fetchForwardTestPicks,
   fetchBoard,
+  hoursSinceUtcMidnight,
   type ForwardTestPick,
   type BoardLeg,
 } from "@/lib/forward-test-picks";
@@ -124,17 +126,29 @@ function OutcomeBadge({
 // drift apart.
 
 /**
- * PICKS-BOARD-VS-RESULTS (2026-09-15). One row renderer, used by both sections.
+ * One row renderer for every pick on the page, kicked off or not.
  *
- * The page used to render EVERY pick in one kickoff-date list, and the fetch
- * window is keyed on kickoff with a 24h lookback. So on a morning before the
- * day's batch had published, a reader arrived to yesterday's settled losers
- * sitting at the top of the page and nothing else — the owner's words were
- * "we are still showing yesterdays pick on /picks page, where are todays?".
+ * HISTORY, because this row has been moved twice in two days and the reasons
+ * are easy to re-break:
  *
- * Nothing was broken: the picks had simply not been published yet. But a board
- * that cannot say "there is nothing on the board yet" is indistinguishable from
- * one that is broken, and that is the whole complaint. Split the two.
+ * PICKS-BOARD-VS-RESULTS (2026-09-15, morning) hid every pick whose fixture had
+ * kicked off. The problem it was actually solving was a *window* problem — the
+ * fetch looks back a rolling 24h from the clock, so before the day's batch
+ * published, the page held yesterday's settled losers and nothing else, which
+ * the owner reported as an outage ("we are still showing yesterdays pick on
+ * /picks page, where are todays?"). Hiding started fixtures did stop that, but
+ * it also threw away the day's own picks the moment they kicked off.
+ *
+ * PICKS-SHOW-WHOLE-DAY (2026-09-15, owner) undoes the hiding and fixes the
+ * window instead: the lookback is anchored to midnight UTC
+ * (`hoursSinceUtcMidnight`), so yesterday is gone but ALL of today stays —
+ * "before 14 sept change, it showed all todays, even the ones that were
+ * settled..so it should show all 4 still". A reader who followed a pick at
+ * lunchtime can still find it in the evening and see how it went.
+ *
+ * What stops a settled pick reading as a live one is the badge, not removal:
+ * `OutcomeBadge` marks every row Won / Lost / Push / Void / Live, and the price
+ * column is the price the pick was found at, not an offer.
  */
 function PickRow({ p }: { p: ForwardTestPick }) {
   const { time } = formatKickoff(p.kickoff_utc);
@@ -249,7 +263,9 @@ export default async function PicksPage() {
   let picks: ForwardTestPick[] = [];
   let loadFailed = false;
   try {
-    picks = await fetchForwardTestPicks();
+    // PICKS-SHOW-WHOLE-DAY: look back to midnight UTC, not a rolling 24h.
+    // See hoursSinceUtcMidnight() for why the day boundary is the right anchor.
+    picks = await fetchForwardTestPicks(hoursSinceUtcMidnight(), 48);
   } catch {
     loadFailed = true;
   }
@@ -258,18 +274,16 @@ export default async function PicksPage() {
   // that have not kicked off, and conflating the two is the whole risk here.
   const watchlist: BoardLeg[] = await fetchBoard();
 
-  // PICKS-BOARD-VS-RESULTS: split on whether the fixture has kicked off, not on
-  // whether it has an outcome. A pick whose match is in play has no outcome yet
-  // but is no longer actionable, and putting it on the board tells a reader to
-  // bet a game that is already running.
-  const board = picks.filter((p) => !hasStarted(p.kickoff_utc));
-  // Not rendered — /picks shows the live board only; results are on
-  // /performance. Counted so the empty-board copy can distinguish "nothing
-  // qualified today" from "everything already kicked off".
-  const settledCount = picks.filter((p) => hasStarted(p.kickoff_utc)).length;
+  // Every pick in the window is rendered. The split below is for the COUNT LINE
+  // only — a reader needs to know how many of these are still bettable, and
+  // that is a different number from how many were published today. Splitting on
+  // kickoff rather than on `outcome == null` because a match in play has no
+  // outcome yet and is not bettable either.
+  const stillOpen = picks.filter((p) => !hasStarted(p.kickoff_utc)).length;
+  const startedCount = picks.length - stillOpen;
 
   const groups = new Map<string, ForwardTestPick[]>();
-  for (const p of board) {
+  for (const p of picks) {
     const { date } = formatKickoff(p.kickoff_utc);
     if (!groups.has(date)) groups.set(date, []);
     groups.get(date)!.push(p);
@@ -285,26 +299,32 @@ export default async function PicksPage() {
             Priced against the sharpest line — no model
           </p>
           <h1 className="text-balance text-3xl font-semibold tracking-tight sm:text-5xl">
-            {/* PICKS-HEADLINE-COUNT-2026-09-14, revised 2026-09-15.
-                History: 80aedd1 switched this from EVERY public pick to
-                `upcoming.length` (unresolved only) while the list below still
-                counted everything, so the page could say "3 picks on the board"
-                above a list headed "Today · 8 picks". The fix then was to count
-                everything again, matching the list.
-                It now counts `board` — picks whose match has NOT kicked off —
-                and the list below it counts the same set, because settled picks
-                moved to their own section (PICKS-BOARD-VS-RESULTS). The headline
-                and the list still agree; they just agree on a smaller, truer
-                number. An empty board now says so instead of showing yesterday's
-                finished bets. */}
-            {board.length > 0
-              ? `${board.length} pick${board.length === 1 ? "" : "s"} on the board`
+            {/* PICKS-HEADLINE-COUNT-2026-09-14, revised twice on 2026-09-15.
+                THE INVARIANT: this number and the list below it count the SAME
+                set. 80aedd1 broke it by counting unresolved picks above a list
+                that counted everything — the page said "3 picks on the board"
+                over a list headed "Today · 8 picks".
+                It counts `picks` again, which is now every pick kicking off
+                today or in the next 48h, settled ones included
+                (PICKS-SHOW-WHOLE-DAY). How many are still bettable is a real
+                and different fact, so it is stated underneath rather than
+                folded into this number. */}
+            {picks.length > 0
+              ? `${picks.length} pick${picks.length === 1 ? "" : "s"} on the board`
               : "No picks on the board right now"}
           </h1>
+          {picks.length > 0 && startedCount > 0 && (
+            <p className="font-mono text-[11px] uppercase tracking-wider text-neutral-500">
+              {stillOpen === 0
+                ? "All kicked off — today's card, kept on the page"
+                : `${stillOpen} still to kick off · ${startedCount} running or finished`}
+            </p>
+          )}
           <p className="mx-auto max-w-xl text-balance text-sm text-neutral-400 sm:text-base">
             A pick is a price that beats the sharpest line in the market, with
-            the bookmaker&apos;s margin stripped out, by at least 3%. Up to eight
-            a day. Some days there are none.
+            the bookmaker&apos;s margin stripped out, by at least 3%. Every
+            price that clears that bar is published — there is no daily cap, so
+            a busy Saturday runs long and a thin Tuesday shows none.
           </p>
         </div>
 
@@ -339,7 +359,7 @@ export default async function PicksPage() {
           </div>
         )}
 
-        {!loadFailed && board.length === 0 && (
+        {!loadFailed && picks.length === 0 && (
           <div className="mt-10 rounded-xl border border-white/[0.06] bg-white/[0.02] p-10 text-center">
             <p className="text-sm text-neutral-400">
               Nothing on the board right now.
@@ -348,12 +368,14 @@ export default async function PicksPage() {
               Picks appear here the moment they are published, and the same
               moment they reach Telegram. A quiet board is a normal outcome, not
               an outage — the rule publishes only prices that beat the sharp line
-              by 3% or more, and on a thin day no price does.
+              by 3% or more, and on a thin day no price does. Today&apos;s picks
+              stay on this page after kickoff, so an empty board means none were
+              published today, not that they have scrolled away.
             </p>
           </div>
         )}
 
-        {board.length > 0 && (
+        {picks.length > 0 && (
           <div className="mt-10">
             <PickGroups groups={groups} />
           </div>
@@ -453,14 +475,14 @@ export default async function PicksPage() {
           </details>
         )}
 
-        {/* SETTLED PICKS ARE NOT SHOWN HERE (owner, 2026-09-15). An
-            "Already kicked off" section was added earlier today to stop
-            yesterday's finished bets appearing where the live board should be.
-            The page never had such a section before, and the owner's call is
-            that /picks stays what it has always been — what is on the board
-            now. Results live on /performance. The `settled` split is kept
-            because the board must still exclude fixtures that have kicked off;
-            it is simply not rendered. */}
+        {/* NO SEPARATE SETTLED SECTION (owner, 2026-09-15). A section under a
+            heading of its own was added earlier today and removed the same day:
+            the page never had one, and splitting the day's card in two made it
+            less readable, not more. Today's settled picks are in the SAME list
+            as everything else, in kickoff order, carrying a Won/Lost badge —
+            which is how the page worked before 14 September. The running track
+            record still lives on /performance; this is one day's card, not a
+            ledger. */}
 
         {/* Deliberately NOT a link to /performance. That ledger was priced on a
             model edge we have since shown to be manufactured, and it survives in

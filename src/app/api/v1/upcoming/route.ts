@@ -126,7 +126,7 @@ export async function GET(req: Request) {
         edge_basis:
           "sharp — edge = P(Shin-de-vigged Pinnacle) x best_book_price - 1. NOT a model edge. Before 2026-09-14 this field carried a MODEL edge (calibrated probability minus implied price); the two are different rulers and are not comparable across that date.",
         scope:
-          "public feed — the pre-registered sharp-edge forward test, live arm only, exactly the picks posted to the public Telegram channel. Rule: edge >= 3%, odds <= 4.0, sharp anchor and bet quote within 60 minutes, top 8 per day by edge. Kickoffs from 24h back through +36h, so the feed does not go dark the moment a match kicks off. The junk-anchor negative control is never served here.",
+          "public feed — the pre-registered sharp-edge forward test, live arm only, exactly the picks posted to the public Telegram channel. Rule: edge >= 3%, odds <= 4.0, sharp anchor and bet quote within 60 minutes, no daily selection cap (a 60/day runaway breaker only). Kickoffs from 24h back through +36h, so the feed does not go dark the moment a match kicks off. The junk-anchor negative control is never served here.",
         notes:
           "No past performance is claimed for this method: it started 2026-09-14 at zero. Picks with result='pending' have not settled. 'push'/'void' mean the stake was returned. `clv` is the raw price ratio against the same book's closing price, with no margin removed, so break-even on it is that book's margin rather than zero.",
       },
