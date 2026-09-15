@@ -371,11 +371,22 @@ export default async function PicksPage() {
             arithmetic off the sharp line — "worth taking at 2.18 or better" —
             and predicts nothing about whether it wins. */}
         {watchlist.length > 0 && (
-          <section className="mt-14">
-            <h2 className="mb-1 text-sm font-semibold text-neutral-300">
-              On the watchlist — not picks yet
-            </h2>
-            <p className="mb-3 max-w-2xl text-xs leading-relaxed text-neutral-500">
+          <details className="mt-14 group">
+            {/* COLLAPSED BY DEFAULT (owner, 2026-09-15). The watchlist is a
+                secondary feature — "here is what we are watching, and the price
+                it would need" — and it must not compete with the picks for
+                attention. A reader who wants it opens it; everyone else sees a
+                one-line summary and the picks above. */}
+            <summary className="cursor-pointer list-none text-sm font-semibold text-neutral-300 hover:text-neutral-100">
+              <span className="inline-flex items-center gap-2">
+                <span className="font-mono text-[10px] text-neutral-600 transition-transform group-open:rotate-90">
+                  ▶
+                </span>
+                On the watchlist — {watchlist.length} price
+                {watchlist.length === 1 ? "" : "s"} we&apos;re tracking, not picks yet
+              </span>
+            </summary>
+            <p className="mb-3 mt-2 max-w-2xl text-xs leading-relaxed text-neutral-500">
               Prices the sharp line says are close but not yet worth taking. The
               target is what the price would need to reach to clear our 3% bar —
               it is arithmetic against the sharpest line, not a forecast. If you
@@ -431,7 +442,7 @@ export default async function PicksPage() {
                 </tbody>
               </table>
             </div>
-          </section>
+          </details>
         )}
 
         {/* Settled picks live BELOW the board and are labelled as results, not
