@@ -24,9 +24,9 @@ Vercel rebuild.
 
 ## Stack
 
-- Next.js 15 (App Router) + TypeScript + Tailwind CSS
+- Next.js 16 (App Router) + TypeScript + Tailwind CSS
 - Supabase Postgres + Auth + Storage
-- Vercel hosting
+- Hetzner VPS hosting (pm2 :3000 behind nginx; auto-deploy on push to main via `.github/workflows/deploy.yml`) — Vercel dropped 2026-07-07
 - Sentry user feedback widget
 - PostHog analytics
 
