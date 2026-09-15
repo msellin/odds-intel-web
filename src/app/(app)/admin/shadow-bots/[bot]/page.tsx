@@ -237,6 +237,9 @@ interface ShadowBetRow {
   recommended_bookmaker: string | null;
   pick_time: string;
   result: string | null;
+  closing_odds: number | string | null;
+  closing_bookmaker: string | null;
+  clv_margin_corrected: number | string | null;
   clv: number | null;
   matches: {
     date: string;
@@ -302,6 +305,7 @@ export default async function ShadowBotDetailPage({
     .select(
       `id, match_id, market, selection, odds_at_pick, odds_at_pick_live, model_probability,
        calibrated_prob, edge_percent, recommended_bookmaker, pick_time, result, clv,
+       closing_odds, closing_bookmaker, clv_margin_corrected,
        matches!inner (
          date,
          leagues ( name, country, tier ),
@@ -588,8 +592,11 @@ export default async function ShadowBotDetailPage({
               <div title="Real money actually staked: the price we got and the venue we got it at (real_bets). Where no real bet was placed, the dimmed name is the book the bot QUOTED (recommended_bookmaker) — a reference price, not a placement.">
                 Bet made
               </div>
-              <div className="text-right" title="Coolbet's CURRENT price for this selection (latest snapshot in the last 12h). Compare to Min odds — pending picks only.">
-                Now CB
+              {/* On a SETTLED row these three collapse into one cell showing the
+                  book's CLOSE and the margin-corrected closing-line value — a
+                  finished match has no current price (2026-09-15). */}
+              <div className="text-right" title="PENDING rows: Coolbet's current price (latest snapshot, last 12h). SETTLED rows: these three columns become the closing price at the pick's own book and its margin-corrected CLV.">
+                Now CB<span className="text-neutral-600"> / close</span>
               </div>
               <div className="text-right" title="Unibet's current price from the PLACEABLE unibet.ee site feed (never the Kambi API — it left that feed 2026-09-06). Pending picks only.">
                 Now UB
@@ -649,6 +656,12 @@ function BetRow({
   placedOdds?: number;
   placedBook?: string;
 }) {
+  // SETTLED-ROW-CLOSING-PRICE (2026-09-15): a finished pick shows the book's
+  // CLOSE and the margin-corrected closing-line value instead of three "current
+  // price" cells that a finished match can never fill.
+  const isSettled = b.result === "won" || b.result === "lost";
+  const closeOdds = b.closing_odds == null ? null : Number(b.closing_odds);
+  const mcClv = b.clv_margin_corrected == null ? null : Number(b.clv_margin_corrected);
   const ko = b.matches?.date ? new Date(b.matches.date) : null;
   const kickoffDate = ko
     ? ko.toLocaleString("en-GB", { day: "2-digit", month: "short", timeZone: "UTC" })
@@ -773,6 +786,42 @@ function BetRow({
           {b.recommended_bookmaker ?? "—"}
         </div>
       )}
+      {/* SETTLED-ROW-CLOSING-PRICE (2026-09-15). The three "Now CB/UB/EB" cells are
+          fetched for PENDING picks only — a finished match has no meaningful current
+          price — so on every settled row they rendered three permanent dashes. The
+          owner asked why. What IS meaningful on a settled row is the price the book
+          CLOSED at and what that says about the price we took, so the three cells
+          collapse into that. Break-even for the raw ratio is the book's own margin,
+          not zero, which is why the MARGIN-CORRECTED number is the one in colour. */}
+      {isSettled ? (
+        <div
+          className="col-span-3 mt-0.5 text-right font-mono text-xs tabular-nums sm:mt-0"
+          title={
+            closeOdds == null
+              ? "No closing price recorded at this pick's own book, so its closing-line value cannot be judged. A blank here is honest — we never substitute another book's close."
+              : `Closed ${closeOdds.toFixed(2)} at ${b.closing_bookmaker ?? "its own book"}` +
+                (mcClv == null
+                  ? " · margin-corrected CLV needs that book's full closing market, which is missing"
+                  : ` · margin-corrected CLV ${(mcClv * 100).toFixed(1)}% (break-even 0, not the raw ratio)`)
+          }
+        >
+          {closeOdds == null ? (
+            <span className="text-neutral-600">no close</span>
+          ) : (
+            <>
+              <span className="text-neutral-400">{closeOdds.toFixed(2)}</span>
+              {mcClv != null && (
+                <span className={mcClv >= 0 ? "text-emerald-300" : "text-red-300"}>
+                  {" "}
+                  {mcClv >= 0 ? "+" : ""}
+                  {(mcClv * 100).toFixed(1)}%
+                </span>
+              )}
+            </>
+          )}
+        </div>
+      ) : (
+        <>
       <div
         className="mt-0.5 text-right font-mono text-sm tabular-nums sm:mt-0"
         title={
@@ -815,6 +864,8 @@ function BetRow({
           <span className="text-violet-300">{eb.odds.toFixed(2)}</span>
         )}
       </div>
+        </>
+      )}
       <div className="mt-0.5 text-right font-mono text-sm tabular-nums sm:mt-0" title="Manually check this at your book of choice (Coolbet, Bet365, whatever). If the current price meets or beats this number, the pick still has real edge. If not, skip.">
         {minBetOdds != null
           ? <span className="text-amber-300">≥{minBetOdds.toFixed(2)}</span>
