@@ -23,20 +23,47 @@ import Link from "next/link";
 import { Nav } from "@/components/nav";
 import {
   hasStarted,
-  sharpBreakEvenOdds,
-  fetchForwardTestPicks,
+  breakEvenFromFairProb,
+  fetchPublicPicks,
   fetchBoard,
   hoursSinceUtcMidnight,
-  type ForwardTestPick,
+  type PublicPick,
   type BoardLeg,
 } from "@/lib/forward-test-picks";
+
+/**
+ * PICKS-SHOW-BOTH-BOTS (2026-09-16). How each bot family's number is labelled.
+ *
+ * The two edges are measured against different yardsticks and are NOT
+ * comparable — a 16-point model edge at odds of 4.00 is about +64% expected
+ * return, a 3.3% sharp edge is 3.3%. Putting both families on one page without
+ * distinct labels re-creates on the web exactly what MODEL-EDGE-LABEL fixed in
+ * the Telegram channel the day before. Driven off `edge_kind`, which the view
+ * guarantees is non-null, so there is no default branch to get wrong.
+ */
+const EDGE_LABEL = {
+  sharp: "Edge vs sharp",
+  model: "Model edge",
+} as const;
+
+const EDGE_EXPLAINER = {
+  sharp:
+    "How far this price beats the sharpest line in the market once the bookmaker's margin is stripped out. An expected return: +3% means 3% above break-even.",
+  model:
+    "How far our own model's probability exceeds the price. Measured in probability points, NOT a return — at odds of 4.00, a 16-point edge is a much larger expected return than the number suggests. It is not comparable with the sharp edge above.",
+} as const;
+
+const ANCHOR_NAME = {
+  sharp: "the sharp line",
+  model: "our model",
+} as const;
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Sharp-line picks — OddsIntel",
   description:
-    "Football picks priced against the sharpest line in the market, not against a model. Pre-registered forward test, running publicly since 14 September 2026.",
+    "Football picks from two bots: one priced against the sharpest line in the market, one from our own probability model. Every pick says which, and is logged before kickoff.",
 };
 
 const START_DATE = "14 September 2026";
@@ -89,7 +116,7 @@ function OutcomeBadge({
   outcome,
   kickoff,
 }: {
-  outcome: ForwardTestPick["outcome"];
+  outcome: PublicPick["outcome"];
   kickoff: string | null;
 }) {
   if (outcome === "won")
@@ -150,7 +177,7 @@ function OutcomeBadge({
  * `OutcomeBadge` marks every row Won / Lost / Push / Void / Live, and the price
  * column is the price the pick was found at, not an offer.
  */
-function PickRow({ p }: { p: ForwardTestPick }) {
+function PickRow({ p }: { p: PublicPick }) {
   const { time } = formatKickoff(p.kickoff_utc);
   const edgePct = p.edge != null ? p.edge * 100 : null;
   return (
@@ -200,9 +227,11 @@ function PickRow({ p }: { p: ForwardTestPick }) {
                 they are actually offered against this before placing. */}
             <p className="font-mono text-[10px] tabular-nums text-neutral-600">
               {(() => {
-                const be = sharpBreakEvenOdds(p.p_sharp);
+                // Break-even is 1/fair_prob in both arms — but against a
+                // DIFFERENT anchor, so the tooltip names which one.
+                const be = breakEvenFromFairProb(p.fair_prob);
                 return be != null ? (
-                  <span title={`Break-even price against the sharp line. This pick is only +EV at ${be.toFixed(2)} or better — below that the edge is gone. Odds move after a pick is posted, so check the price you are actually offered against this.`}>
+                  <span title={`Break-even price against ${ANCHOR_NAME[p.edge_kind]}. This pick is only +EV at ${be.toFixed(2)} or better — below that the edge is gone. Odds move after a pick is posted, so check the price you are actually offered against this.`}>
                     min {be.toFixed(2)}
                   </span>
                 ) : null;
@@ -212,15 +241,18 @@ function PickRow({ p }: { p: ForwardTestPick }) {
                   className="text-neutral-700"
                   title="How far apart the sharp reference quote and this price were when the pick was made. The rule caps this at 60 minutes: comparing a fresh sharp line against a stale price measures drift, not value."
                 >
-                  {sharpBreakEvenOdds(p.p_sharp) != null ? " · " : ""}
+                  {breakEvenFromFairProb(p.fair_prob) != null ? " · " : ""}
                   {Math.round(p.alignment_gap_minutes)}m apart
                 </span>
               )}
             </p>
           </div>
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
-              Edge vs sharp
+            <p
+              className="font-mono text-[10px] uppercase tracking-wider text-neutral-500"
+              title={EDGE_EXPLAINER[p.edge_kind]}
+            >
+              {EDGE_LABEL[p.edge_kind]}
             </p>
             <p className="font-mono text-base font-semibold tabular-nums text-neutral-100 sm:text-lg">
               {edgePct != null ? `+${edgePct.toFixed(1)}%` : "—"}
@@ -240,7 +272,7 @@ function PickRow({ p }: { p: ForwardTestPick }) {
   );
 }
 
-function PickGroups({ groups }: { groups: Map<string, ForwardTestPick[]> }) {
+function PickGroups({ groups }: { groups: Map<string, PublicPick[]> }) {
   return (
     <div className="space-y-8">
       {Array.from(groups.entries()).map(([date, group]) => (
@@ -260,12 +292,12 @@ function PickGroups({ groups }: { groups: Map<string, ForwardTestPick[]> }) {
 }
 
 export default async function PicksPage() {
-  let picks: ForwardTestPick[] = [];
+  let picks: PublicPick[] = [];
   let loadFailed = false;
   try {
     // PICKS-SHOW-WHOLE-DAY: look back to midnight UTC, not a rolling 24h.
     // See hoursSinceUtcMidnight() for why the day boundary is the right anchor.
-    picks = await fetchForwardTestPicks(hoursSinceUtcMidnight(), 48);
+    picks = await fetchPublicPicks(hoursSinceUtcMidnight(), 48);
   } catch {
     loadFailed = true;
   }
@@ -282,7 +314,7 @@ export default async function PicksPage() {
   const stillOpen = picks.filter((p) => !hasStarted(p.kickoff_utc)).length;
   const startedCount = picks.length - stillOpen;
 
-  const groups = new Map<string, ForwardTestPick[]>();
+  const groups = new Map<string, PublicPick[]>();
   for (const p of picks) {
     const { date } = formatKickoff(p.kickoff_utc);
     if (!groups.has(date)) groups.set(date, []);
@@ -295,8 +327,13 @@ export default async function PicksPage() {
 
       <main className="mx-auto max-w-4xl px-4 pt-12 pb-20">
         <div className="space-y-2 text-center">
+          {/* PICKS-SHOW-BOTH-BOTS (2026-09-16): this said "Priced against the
+              sharpest line — no model", which stopped being true the moment
+              bot_v10_all's picks landed on this page. A page-level claim about
+              HOW a pick is made cannot survive two methods sharing the page;
+              the claim now belongs per row, where EDGE_LABEL puts it. */}
           <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-emerald-400">
-            Priced against the sharpest line — no model
+            Two bots, two methods — every pick says which
           </p>
           <h1 className="text-balance text-3xl font-semibold tracking-tight sm:text-5xl">
             {/* PICKS-HEADLINE-COUNT-2026-09-14, revised twice on 2026-09-15.
@@ -321,27 +358,58 @@ export default async function PicksPage() {
             </p>
           )}
           <p className="mx-auto max-w-xl text-balance text-sm text-neutral-400 sm:text-base">
-            A pick is a price that beats the sharpest line in the market, with
-            the bookmaker&apos;s margin stripped out, by at least 3%. Every
-            price that clears that bar is published — there is no daily cap, so
-            a busy Saturday runs long and a thin Tuesday shows none.
+            <strong className="text-neutral-300">Sharp-edge</strong> picks beat
+            the sharpest line in the market, margin stripped out, by at least
+            3%. <strong className="text-neutral-300">Model</strong> picks come
+            from our own probability model. Nothing is capped — a busy Saturday
+            runs long, a thin Tuesday shows none.
           </p>
         </div>
 
         {/* The honest framing, above everything. This method has no history and
             the page says so before it shows a single number. */}
+        {/* PICKS-SHOW-BOTH-BOTS (2026-09-16). This box used to make ONE claim
+            for the whole page — "these picks use no prediction model", tracked
+            from zero. With both families here that claim is half false, and the
+            half that is false is the half with months of history behind it.
+            The two methods therefore get two separate statements. What must
+            NOT happen is the sharp method borrowing the model's record: that
+            is the precise confusion the 14 Sep reset existed to prevent. */}
         <div className="mt-8 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.05] px-5 py-4">
           <p className="text-sm font-semibold text-emerald-300">
-            New method, tracked from {START_DATE}. No past performance is
-            claimed.
+            Two methods, two separate records. Neither borrows the other&apos;s.
           </p>
-          <p className="mt-1.5 text-xs leading-relaxed text-neutral-400">
-            These picks use no prediction model. Each one is priced directly
-            against the sharpest available line with the margin removed. The
-            method starts at zero on the date above — any earlier track record on
-            this site belongs to a different, model-based method and does not
-            carry over to these picks.
-          </p>
+          <dl className="mt-2 space-y-2 text-xs leading-relaxed text-neutral-400">
+            <div>
+              <dt className="inline font-semibold text-neutral-300">
+                Sharp-edge —{" "}
+              </dt>
+              <dd className="inline">
+                uses no prediction model at all. Each pick is priced directly
+                against the sharpest available line with the bookmaker&apos;s
+                margin removed. It starts at zero on {START_DATE} and{" "}
+                <strong className="text-neutral-300">
+                  no past performance is claimed for it
+                </strong>
+                .
+              </dd>
+            </div>
+            <div>
+              <dt className="inline font-semibold text-neutral-300">
+                Model —{" "}
+              </dt>
+              <dd className="inline">
+                our own probability model, running since long before that date,
+                with its record on the performance page. Its edge is measured
+                against our model rather than against the market, so{" "}
+                <strong className="text-neutral-300">
+                  its percentage is not comparable with a sharp-edge one
+                </strong>{" "}
+                — a 16% model edge and a 3% sharp edge are different quantities,
+                not a 5x difference.
+              </dd>
+            </div>
+          </dl>
         </div>
 
         {/* RUNNING-RESULT-REMOVED-FROM-PICKS-2026-09-14 (owner). /picks is the

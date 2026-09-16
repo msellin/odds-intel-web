@@ -191,6 +191,105 @@ export async function fetchForwardTestPicks(
   return (data ?? []) as unknown as ForwardTestPick[];
 }
 
+/**
+ * A pick offered to customers, from EITHER bot family.
+ *
+ * PICKS-SHOW-BOTH-BOTS (2026-09-16). /picks read only `picks_forward_test`, so
+ * `bot_v10_all` — which publishes to the public Telegram channel and sits on
+ * /performance as CALIBRATED with 641 settled bets — never appeared on the
+ * page. Owner, twice: "i see 15 Sept Ludogorets II vs Fratria ... on botv10 in
+ * performance page, but not on picks page, why?" and "these systems need to be
+ * combined and users need to have those 3 picks as well".
+ *
+ * It was never a missing flag. The two families write to two DIFFERENT LEDGERS
+ * — `picks_forward_test` (sharp) and `simulated_bets` (model) — and the union,
+ * plus the `bots.show_on_picks` curation gate, lives in the `picks_public_all`
+ * view (migration 361). In the DATABASE, deliberately: same reasoning as
+ * `arm = 'live'`, a view cannot forget a filter the way a call site can.
+ */
+export interface PublicPick {
+  id: string;
+  /**
+   * ⚠️ LOAD-BEARING. `edge` below means two different things and they are NOT
+   * comparable:
+   *
+   *   'sharp' -> p_sharp x odds - 1        a RETURN, vs a de-vigged Pinnacle line
+   *   'model' -> cal_prob - 1/odds         PROBABILITY POINTS, vs our own model
+   *
+   * A reader who sees +16.0 next to +3.3 and concludes the first is five times
+   * better has been misled by us — a 16-point model edge at odds of 4.00 is
+   * roughly +64% expected return. Every render of `edge` MUST switch its label
+   * on this field, and so must the break-even tooltip, because `fair_prob` is
+   * an anchor probability from two different anchors. SYSTEM_MAP §1.
+   */
+  edge_kind: "sharp" | "model";
+  /** Which bot produced it — shown per row so the two families stay tellable apart. */
+  bot: string;
+  match_id: string;
+  market: string;
+  selection: string;
+  odds: number | null;
+  bookmaker: string | null;
+  /** A FRACTION in both arms (0.047 = 4.7). See edge_kind for what it measures. */
+  edge: number | null;
+  /** The anchor probability: p_sharp (sharp) or calibrated_prob (model). */
+  fair_prob: number | null;
+  rule_version: string | null;
+  alignment_gap_minutes: number | null;
+  kickoff_utc: string | null;
+  published_at: string;
+  league: string | null;
+  country: string | null;
+  home_team: string | null;
+  away_team: string | null;
+  outcome: "won" | "lost" | "push" | "void" | null;
+  clv: number | null;
+}
+
+/**
+ * Break-even price for a pick: 1 / fair_prob.
+ *
+ * Works for both arms because `fair_prob` is whichever anchor probability that
+ * arm is priced against — but it is break-even AGAINST A DIFFERENT ANCHOR in
+ * each, so any UI that shows it must say which (drive the wording off
+ * `edge_kind`). Returns null rather than a wrong number on unusable input: a
+ * missing floor is honest, an invented one is not.
+ */
+export function breakEvenFromFairProb(fairProb: number | null): number | null {
+  if (fairProb == null) return null;
+  const p = Number(fairProb);
+  if (!Number.isFinite(p) || p <= 0 || p >= 1) return null;
+  return Number((1 / p).toFixed(2));
+}
+
+/**
+ * Every pick offered to customers, both families, kicking off in the window.
+ *
+ * Same day-anchored window as before (see hoursSinceUtcMidnight): today stays
+ * all day, yesterday drops at midnight.
+ */
+export async function fetchPublicPicks(
+  hoursBack = 24,
+  hoursForward = 48,
+): Promise<PublicPick[]> {
+  const sb = createSupabasePublic();
+  const now = Date.now();
+  const { data, error } = await sb
+    .from("picks_public_all")
+    .select(
+      `id, edge_kind, bot, match_id, market, selection, odds, bookmaker, edge,
+       fair_prob, rule_version, alignment_gap_minutes, kickoff_utc, published_at,
+       league, country, home_team, away_team, outcome, clv`,
+    )
+    .gte("kickoff_utc", new Date(now - hoursBack * 3600_000).toISOString())
+    .lte("kickoff_utc", new Date(now + hoursForward * 3600_000).toISOString())
+    .order("kickoff_utc", { ascending: true })
+    .limit(200);
+
+  if (error) throw new Error(`public picks: ${error.message}`);
+  return (data ?? []) as unknown as PublicPick[];
+}
+
 export interface BoardLeg {
   match_id: string;
   market: string;
