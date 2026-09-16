@@ -15,20 +15,37 @@
  * posting daily. An endpoint that documents a cohort it no longer serves is
  * worse than one that 404s.
  *
- * It now serves `picks_forward_test`, live arm only — the exact rows posted to
- * the channel.
+ * It now serves `picks_public_all` — BOTH bot families, the exact rows posted
+ * to the channel.
  *
- * CONTRACT CHANGE, stated rather than slipped in: `edge_pct` is now a SHARP
- * edge (the price against the Shin-de-vigged Pinnacle line, no model) where it
- * used to be a MODEL edge (our calibrated probability minus the implied price).
- * They are different rulers and are NOT comparable across the change, so
- * `meta.edge_basis` names which one a response carries. `min_odds` was already
- * stripped here and stays absent: it was a model break-even, and this rule has
- * no model to take one from.
+ * SECOND CONTRACT CHANGE, 2026-09-16 (PICKS-SHOW-BOTH-BOTS), stated rather
+ * than slipped in. This served the sharp arm alone from 2026-09-14. /picks now
+ * renders both families, and leaving this endpoint on the sharp ledger would
+ * have (a) split ONE published cohort across two surfaces — the thing
+ * PICKS-COHORT-ALIGN exists to prevent — and (b) left the `scope` string below
+ * claiming to be "exactly the picks posted to the public Telegram channel"
+ * while `bot_v10_all` posted to that channel and was absent here.
+ *
+ * ⚠️ SO `edge_pct` NOW CARRIES TWO DIFFERENT QUANTITIES, and the new
+ * `edge_kind` field says which per row:
+ *
+ *     'sharp' -> P(Shin-de-vigged Pinnacle) x price - 1   an expected RETURN
+ *     'model' -> calibrated_prob - 1/price                PROBABILITY POINTS
+ *
+ * A consumer that averages `edge_pct` across rows is now averaging two
+ * different units and must split on `edge_kind` first. `edge_kind` and `bot`
+ * are ADDITIVE — no existing field changed name or type — but this is the
+ * breaking-ish part and it is why `meta.edge_basis` leads with it.
+ *
+ * (The first change, 2026-09-14: `edge_pct` went from a MODEL edge to a SHARP
+ * one when the page was repointed. `min_odds` was stripped then and stays
+ * absent — it was a model break-even.)
  *
  * Scope (intentional):
  *   - arm = 'live' — enforced in the view, so the junk-anchor negative control
  *     can never leak into a public feed
+ *   - `bots.show_on_picks` — the model arm is curated; a bot is invisible here
+ *     until someone switches it on
  *   - kickoffs from 24h back through +36h, so the feed does not go dark the
  *     moment a match kicks off
  *   - settled picks carry their outcome, and their CLV once it is computed
@@ -37,7 +54,7 @@
  */
 import { NextResponse } from "next/server";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { fetchForwardTestPicks } from "@/lib/forward-test-picks";
+import { fetchPublicPicks } from "@/lib/forward-test-picks";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 60;
@@ -68,7 +85,13 @@ export async function GET(req: Request) {
 
   let picks: Array<Record<string, unknown>>;
   try {
-    const rows = await fetchForwardTestPicks(
+    // PICKS-SHOW-BOTH-BOTS (2026-09-16). Was fetchForwardTestPicks — the sharp
+    // arm only. /picks moved to the union of both bot families, and leaving
+    // this endpoint on the sharp ledger would have split one published cohort
+    // across two surfaces (PICKS-COHORT-ALIGN), AND left this route's own meta
+    // claiming to be "exactly the picks posted to the public Telegram channel"
+    // while bot_v10_all posted to that channel and was absent here.
+    const rows = await fetchPublicPicks(
       HORIZON_HOURS_BACK,
       HORIZON_HOURS_FORWARD,
     );
@@ -83,7 +106,16 @@ export async function GET(req: Request) {
       market: p.market,
       selection: p.selection,
       odds: p.odds,
-      // SHARP edge, as a percentage. See meta.edge_basis.
+      // ⚠️ edge_pct MEANS TWO DIFFERENT THINGS AND edge_kind SAYS WHICH.
+      //   'sharp' -> p_sharp x odds - 1       an expected RETURN
+      //   'model' -> cal_prob - 1/odds        PROBABILITY POINTS
+      // They are not comparable and must never be averaged together. A 16.0
+      // model edge at odds of 4.00 is roughly +64% expected return; a 3.3
+      // sharp edge is 3.3%. Both fields are new as of 2026-09-16 and are
+      // ADDITIVE — no existing field changed name or type — but a consumer
+      // that was averaging edge_pct across rows must now split on edge_kind.
+      edge_kind: p.edge_kind,
+      bot: p.bot,
       edge_pct: p.edge != null ? Number((Number(p.edge) * 100).toFixed(2)) : null,
       bookmaker: p.bookmaker,
       posted_at_utc: p.published_at,
@@ -124,11 +156,11 @@ export async function GET(req: Request) {
         horizon_hours_forward: horizonHoursForward,
         count: picks.length,
         edge_basis:
-          "sharp — edge = P(Shin-de-vigged Pinnacle) x best_book_price - 1. NOT a model edge. Before 2026-09-14 this field carried a MODEL edge (calibrated probability minus implied price); the two are different rulers and are not comparable across that date.",
+          "MIXED as of 2026-09-16 — read `edge_kind` on every pick before comparing any two. edge_kind='sharp': edge_pct = P(Shin-de-vigged Pinnacle) x best_book_price - 1, an expected RETURN. edge_kind='model': edge_pct = calibrated_probability - 1/price, PROBABILITY POINTS against our own model, NOT a return — a 16.0 model edge at odds of 4.00 is roughly +64% expected return. The two are different rulers and must never be averaged together. History: before 2026-09-14 this field was model-only; from 2026-09-14 to 2026-09-16 it was sharp-only.",
         scope:
-          "public feed — the pre-registered sharp-edge forward test, live arm only, exactly the picks posted to the public Telegram channel. Rule: edge >= 3%, odds <= 4.0, sharp anchor and bet quote within 60 minutes, no daily selection cap (a 60/day runaway breaker only). Kickoffs from 24h back through +36h, so the feed does not go dark the moment a match kicks off. The junk-anchor negative control is never served here.",
+          "public feed — every pick posted to the public Telegram channel, from BOTH bot families, identified per row by `edge_kind` and `bot`. SHARP arm: the pre-registered forward test, live arm only — edge >= 3%, odds <= 4.0, sharp anchor and bet quote within 60 minutes, no daily selection cap (a 60/day runaway breaker only). MODEL arm: bots with bots.show_on_picks = true, pre-match singles only, no combos and no in-play. Kickoffs from 24h back through +36h, so the feed does not go dark the moment a match kicks off. The junk-anchor negative control is never served here.",
         notes:
-          "No past performance is claimed for this method: it started 2026-09-14 at zero. Picks with result='pending' have not settled. 'push'/'void' mean the stake was returned. `clv` is the raw price ratio against the same book's closing price, with no margin removed, so break-even on it is that book's margin rather than zero.",
+          "No past performance is claimed for the SHARP method: it started 2026-09-14 at zero. The MODEL arm predates that and has its own separate record; neither arm's history transfers to the other. Picks with result='pending' have not settled. 'push'/'void' mean the stake was returned. `clv` is the raw price ratio against the same book's closing price, with no margin removed, so break-even on it is that book's margin rather than zero.",
       },
       picks,
     },

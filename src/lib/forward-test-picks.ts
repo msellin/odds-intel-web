@@ -109,26 +109,27 @@ export function ci95(sd: number | null, n: number): number | null {
 }
 
 /**
- * Break-even price for a forward-test pick: 1 / P_shin.
+ * `sharpBreakEvenOdds(p_sharp)` and `fetchForwardTestPicks()` lived here until
+ * 2026-09-16. Both are deleted, not deprecated, and the reason is the same:
  *
- * A pick is only worth taking near the price it was found at. Odds move after
- * publication, and a pick posted at 3.00 is worthless well above 2.60 — so the
- * reader needs the price below which the bet is negative-EV *against the sharp
- * line*, which is simply the reciprocal of the de-vigged sharp probability.
+ *  * `sharpBreakEvenOdds` was `1 / P_shin` — break-even against the de-vigged
+ *    Pinnacle line — and /picks was its only caller. PICKS-SHOW-BOTH-BOTS put
+ *    both bot families on that page, where the anchor is `p_sharp` for one arm
+ *    and `calibrated_prob` for the other. `breakEvenFromFairProb(fair_prob)`
+ *    replaces it: same arithmetic, either anchor, and the caller must name
+ *    which one (ANCHOR_NAME in picks/page.tsx). Two functions computing one
+ *    number is how a page ends up showing a break-even against an anchor the
+ *    edge was never measured from.
  *
- * This replaces the model-era break-even (`breakEvenOdds` in upcoming-picks.ts,
- * `1 / cal_prob`). Same purpose, different estimator: the anchor is now the
- * Shin-de-vigged Pinnacle line rather than our calibrated model — which is the
- * whole point of the method change, and the reason the two numbers must not be
- * mixed. Returns null rather than a wrong number when p_sharp is unusable; a
- * missing floor is honest, an invented one is not.
+ *  * `fetchForwardTestPicks` read `picks_forward_test_public` — the sharp arm
+ *    alone — and both of its callers, /picks and /api/v1/upcoming, now read
+ *    `picks_public_all` via `fetchPublicPicks`. Leaving it exported would have
+ *    left a SECOND definition of "the published cohort" for a future call site
+ *    to pick by accident, which is precisely what PICKS-COHORT-ALIGN exists to
+ *    stop.
+ *
+ * Git history has both if a reader needs the old shapes.
  */
-export function sharpBreakEvenOdds(pSharp: number | null): number | null {
-  if (pSharp == null) return null;
-  const p = Number(pSharp);
-  if (!Number.isFinite(p) || p <= 0 || p >= 1) return null;
-  return Number((1 / p).toFixed(2));
-}
 
 /**
  * Whether a fixture has kicked off. Lives here rather than inline in the page
@@ -168,45 +169,6 @@ export function hoursSinceUtcMidnight(now: Date = new Date()): number {
   );
 }
 
-/** Fixtures kicking off from `hoursBack` ago to `hoursForward` ahead. */
-export async function fetchForwardTestPicks(
-  hoursBack = 24,
-  hoursForward = 48,
-): Promise<ForwardTestPick[]> {
-  const sb = createSupabasePublic();
-  const now = Date.now();
-  const { data, error } = await sb
-    .from("picks_forward_test_public")
-    .select(
-      `id, match_id, market, selection, odds, bookmaker, edge, p_sharp,
-       rule_version, alignment_gap_minutes, kickoff_utc, published_at, league,
-       country, home_team, away_team, outcome, pnl, clv, clv_margin_corrected`,
-    )
-    .gte("kickoff_utc", new Date(now - hoursBack * 3600_000).toISOString())
-    .lte("kickoff_utc", new Date(now + hoursForward * 3600_000).toISOString())
-    .order("kickoff_utc", { ascending: true })
-    .limit(200);
-
-  if (error) throw new Error(`forward-test picks: ${error.message}`);
-  return (data ?? []) as unknown as ForwardTestPick[];
-}
-
-/**
- * A pick offered to customers, from EITHER bot family.
- *
- * PICKS-SHOW-BOTH-BOTS (2026-09-16). /picks read only `picks_forward_test`, so
- * `bot_v10_all` — which publishes to the public Telegram channel and sits on
- * /performance as CALIBRATED with 641 settled bets — never appeared on the
- * page. Owner, twice: "i see 15 Sept Ludogorets II vs Fratria ... on botv10 in
- * performance page, but not on picks page, why?" and "these systems need to be
- * combined and users need to have those 3 picks as well".
- *
- * It was never a missing flag. The two families write to two DIFFERENT LEDGERS
- * — `picks_forward_test` (sharp) and `simulated_bets` (model) — and the union,
- * plus the `bots.show_on_picks` curation gate, lives in the `picks_public_all`
- * view (migration 361). In the DATABASE, deliberately: same reasoning as
- * `arm = 'live'`, a view cannot forget a filter the way a call site can.
- */
 export interface PublicPick {
   id: string;
   /**
