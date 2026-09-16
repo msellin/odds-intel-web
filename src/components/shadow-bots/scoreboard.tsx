@@ -30,14 +30,17 @@ const TRACK_CHIP: Record<BotTrack, string | null> = {
   LEAD: "border-sky-400/50 text-sky-300",
   NEGATIVE: "border-white/10 text-neutral-500",
   CANDIDATE: "border-white/15 text-neutral-400",
-  EARLY: null,
+  OPEN: "border-white/15 text-neutral-400",
 };
 const TRACK_TITLE: Record<BotTrack, string> = {
   LEAD: "The candidate closest to resolving: mean margin-corrected CLV above zero on the most legs. "
     + "This is where to look — NOT a claim that it works. Its CI still spans zero.",
   NEGATIVE: "The whole 95% CI sits below zero. Decided at this n — more legs tell you how negative, not whether.",
   CANDIDATE: "Mean above zero past the leg floor, but another bot is further along.",
-  EARLY: `Too few legs for the sign to mean anything (under ${LEAD_MIN_N}), or a negative mean whose CI still spans zero.`,
+  OPEN: "NOT RULED OUT — a positive truth is still inside this bot's 95% interval, either because it has too "
+    + `few legs (under ${LEAD_MIN_N}) or because its CI still spans zero. More CLV legs can still move it. `
+    + "Caveat: CLV is measured against the closing line, so it cannot see a book that is PERSISTENTLY soft "
+    + "in a segment — that only shows up in outcomes.",
 };
 
 const pct = (v: number | null, dp = 1) => (v == null ? "—" : `${v >= 0 ? "+" : ""}${(v * 100).toFixed(dp)}%`);

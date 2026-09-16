@@ -145,6 +145,14 @@ const showPlaceAction = !r.inplay && !r.isControlArm && r.best != null && chip !
             CI &lt; 0
           </span>
         )}
+        {r.track === "OPEN" && (
+          <span
+            className={`${CHIP} ml-1 border-white/15 text-neutral-500`}
+            title="Not ruled out: a positive truth is still inside this bot's 95% CLV interval. More legs can still move it."
+          >
+            OPEN
+          </span>
+        )}
         {r.isControlArm && (
           <span
             className={`${CHIP} ml-1 border-dashed border-white/25 text-neutral-400`}

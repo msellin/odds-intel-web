@@ -313,15 +313,16 @@ export function botVerdict(s: BotStats): BotVerdictResult {
  *             for the sign to mean anything, and the most legs among those.
  *             Exactly one bot, or none.
  *   CANDIDATE mean above zero and past LEAD_MIN_N, but another bot is further along.
- *   EARLY     everything else — too few legs to have a sign, or a negative mean
- *             whose CI still spans zero.
+ *   OPEN      everything else — too few legs to have a sign, or a negative mean
+ *             whose CI still spans zero. This is the "not ruled out" bucket: a
+ *             positive truth is still inside the interval.
  *
  * Note the asymmetry, and that it is intentional: NEGATIVE needs the entire CI
  * below zero, LEAD needs only a positive mean. Ruling a bot OUT should be hard;
  * pointing the operator AT one is a suggestion about where to look, not a claim
  * that it works. The page must never render LEAD as an endorsement.
  */
-export type BotTrack = "LEAD" | "CANDIDATE" | "NEGATIVE" | "EARLY";
+export type BotTrack = "LEAD" | "CANDIDATE" | "NEGATIVE" | "OPEN";
 
 /**
  * Below this many CLV legs the sign of the mean is noise, so a bot cannot be
@@ -331,13 +332,24 @@ export type BotTrack = "LEAD" | "CANDIDATE" | "NEGATIVE" | "EARLY";
  */
 export const LEAD_MIN_N = 30;
 
-/** NEGATIVE / positive-mean / EARLY, before the cross-bot LEAD pick is applied. */
-export function botTrackKind(s: BotStats): "NEGATIVE" | "CANDIDATE" | "EARLY" {
+/**
+ * NEGATIVE / positive-mean / OPEN, before the cross-bot LEAD pick is applied.
+ *
+ * ONE LIMIT, STATED HERE BECAUSE THE PAGE CANNOT STATE IT: OPEN means more
+ * margin-corrected CLV could still move this bot, and CLV is measured against
+ * the closing line. A book that is PERSISTENTLY soft in some segment has a
+ * closing line that is wrong too, so CLV there reads ≈ −margin by construction
+ * and accumulating it will never reveal the edge. That class of mispricing is
+ * only visible in OUTCOMES, which need ~15,600 bets to resolve at ROI's
+ * variance. OPEN is therefore "not ruled out by this instrument", never "not
+ * ruled out by anything".
+ */
+export function botTrackKind(s: BotStats): "NEGATIVE" | "CANDIDATE" | "OPEN" {
   const { ciHalf } = botVerdict(s);
-  if (s.mean == null) return "EARLY";
+  if (s.mean == null) return "OPEN";
   if (ciHalf != null && s.mean + ciHalf < 0) return "NEGATIVE";
   if (s.n >= LEAD_MIN_N && s.mean > 0) return "CANDIDATE";
-  return "EARLY";
+  return "OPEN";
 }
 
 /**

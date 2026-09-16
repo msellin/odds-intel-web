@@ -217,10 +217,10 @@ console.log("verdict.selfcheck: 2026-09-15 corrections asserted");
   // Negative mean but the CI still spans zero — not ruled out.
   for (const n of ["bot_coolbet_ou_model_v1", "bot_trigger_1x2_sharp_tight_v1",
                    "bot_coolbet_trigger_sharp_ou_v1", "bot_high_roi_global_v2"]) {
-    assert.equal(track(n), "EARLY", n + " CI still spans zero — not decided");
+    assert.equal(track(n), "OPEN", n + " CI still spans zero — not decided");
   }
   // Positive mean but too few legs for the sign to mean anything.
-  assert.equal(track("bot_unibet_trigger_sharp_ou_v1"), "EARLY", "n=17 < LEAD_MIN_N");
+  assert.equal(track("bot_unibet_trigger_sharp_ou_v1"), "OPEN", "n=17 < LEAD_MIN_N");
   assert.equal(track("bot_unibet_trigger_sharp_1x2_v1"), "LEAD");
 
   // THE ASYMMETRY, asserted directly: ruling OUT needs the whole CI below zero,
@@ -231,7 +231,7 @@ console.log("verdict.selfcheck: 2026-09-15 corrections asserted");
   assert.ok(0.0114 - 1.96 * (0.151 / Math.sqrt(92)) < 0, "and its CI does span zero");
 
   // n below the floor can never lead, however good it looks.
-  assert.equal(botTrackKind({ n: LEAD_MIN_N - 1, mean: +0.087, sd: 0.294 }), "EARLY");
+  assert.equal(botTrackKind({ n: LEAD_MIN_N - 1, mean: +0.087, sd: 0.294 }), "OPEN");
   assert.equal(leadBotName([{ name: "x", stats: { n: 3, mean: +0.087, sd: 0.294 } }]), null,
     "no qualifying bot must return null, never the least-bad row");
   // An empty board has no lead.
