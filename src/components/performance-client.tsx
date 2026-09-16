@@ -16,6 +16,7 @@ import {
   filterExperimental,
   buildPublicBotStats,
   isLiveBot,
+  isPublicBot,
 } from "@/lib/bot-aggregates";
 
 interface BotDbRow {
@@ -106,11 +107,14 @@ export function PerformanceClient({
   // the previous `!retiredAt` count was 43 because it also included in-play
   // + experimental bots, which produced a confusing 43 vs 25 mismatch on the
   // same page.
-  // PERFORMANCE-SHOWS-EVERY-BOT (2026-09-15): the count must match the table.
-  // It previously excluded experimental bots while the table did too; now both
-  // include them, so the number a reader counts and the number we print agree.
+  // PERF-PUBLIC-IS-CALIBRATED-OR-BETA (2026-09-16): the count must match the
+  // table, and the table now lists only bots with live results behind them. The
+  // invariant is the point — a hero reading "15 strategies live" above a table
+  // of 2 rows is the mismatch this comment has been rewritten twice to prevent.
   const activeBotCount = botsDB
-    ? botsDB.filter((b) => !b.retiredAt && !isLiveBot(b.name)).length
+    ? botsDB.filter(
+        (b) => !b.retiredAt && !isLiveBot(b.name) && isPublicBot(b.maturityLabel),
+      ).length
     : null;
   const retiredBotCount = botsDB ? botsDB.filter((b) => !!b.retiredAt).length : null;
 

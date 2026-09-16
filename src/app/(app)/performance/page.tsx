@@ -57,6 +57,7 @@ import {
   PICKS_FORWARD_TEST_STAKE_EUR,
   PICKS_FORWARD_TEST_START_BANKROLL,
 } from "@/lib/engine-data";
+import { isPublicBot } from "@/lib/bot-aggregates";
 import { PerformanceHistory } from "@/components/performance-history";
 import type { FullBetItem } from "@/components/performance-history";
 import { PerformanceExtras } from "@/components/performance-extras";
@@ -304,11 +305,18 @@ export default async function PerformancePage() {
   // bot_breakdown query already filters retired bots at write time, but a bot
   // retired between cache rebuilds would otherwise still show in the active
   // list. Same pattern as the retired_breakdown filter below, inverse direction.
-  // PERFORMANCE-SHOWS-EVERY-BOT (2026-09-15, owner). The experimental filter
-  // that stood here was undocumented and hid 13 of 15 active bots. This page is
-  // the measurement surface; curation of what customers are OFFERED happens on
-  // /picks via bots.show_on_picks.
+  // PERF-PUBLIC-IS-CALIBRATED-OR-BETA (2026-09-16, owner). Only bots with live
+  // results behind them — `calibrated` or `beta` — are listed publicly. The 13
+  // `experimental` shadow bots are OWN-direction work with zero settled bets
+  // between them; their surface is /admin/shadow-bots. See PUBLIC_MATURITY_LABELS
+  // in lib/bot-aggregates.ts for the full reasoning, including why the opposite
+  // change was made the previous day and what it got wrong.
+  //
+  // `bot_sharp_forward_test_v1` is pushed in BELOW this filter, from its own
+  // ledger — it is the bot whose picks readers receive, so it stays regardless
+  // of its maturity label.
   const cachedBots = buildCachedBotStats(cache, botsDB, isPro, isElite)
+    .filter(b => isPublicBot(b.maturityLabel))
     .filter(b => !liveRetiredNames.has(b.name));
 
   // PICKS-BOT-IN-LEADERBOARD-2026-09-14. bot_sharp_forward_test_v1 is the bot

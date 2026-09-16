@@ -300,6 +300,56 @@ export interface PublicBotStatShape {
  * `buildBotStats` but emits `clvDirection` + tier-conditional fields the
  * way the cache version did. Used for the toggle's quality-only path.
  */
+/**
+ * Maturity labels a bot must carry to appear on the PUBLIC /performance page.
+ *
+ * PERF-PUBLIC-IS-CALIBRATED-OR-BETA (2026-09-16, owner: "it should be so that,
+ * the ones we have on performance page are either calibrated or beta ... all
+ * shadow bots are experimental ... most shadow bots are only for ourselves").
+ *
+ * HISTORY — this filter was removed and restored inside 24 hours, so the
+ * distinction it encodes is worth stating once, properly:
+ *
+ * The complaint on 2026-09-15 was that `bot_v10_all` published to Telegram but
+ * was missing from a customer surface. The fix was to drop the maturity filter
+ * entirely ("PERFORMANCE-SHOWS-EVERY-BOT"), on the reasoning that /performance
+ * is the measurement surface and hiding a bot there hides evidence. That
+ * over-corrected: it put all 13 experimental shadow bots on the page, every one
+ * of them with zero settled bets, so the leaderboard read as 13 rows of dashes
+ * under 2 rows of actual results.
+ *
+ * The reasoning was wrong in a specific way. /performance is where the operator
+ * measures bots, but it is also a PUBLIC page — and the shadow fleet is
+ * OWN-direction work (CLAUDE.md's OWN vs PICKS split): strategies run for the
+ * operator's own betting, most of which will be retired without ever being
+ * offered to anyone. A bot with no settled bets has no evidence to show a
+ * reader; publishing its empty row is not transparency, it is noise.
+ *
+ * `calibrated` and `beta` are exactly the labels that mean "there are live
+ * results behind this row". `experimental` means "still collecting", and its
+ * audience is /admin/shadow-bots, which shows the whole fleet and is where the
+ * operator actually watches them.
+ *
+ * NOT a fix for the original complaint: `bot_v10_all` is `calibrated` and was
+ * never hidden by this filter. Its absence from /picks is a separate gap,
+ * governed by `bots.show_on_picks` (migration 356), which nothing reads yet.
+ *
+ * DOES NOT apply to `bot_sharp_forward_test_v1`. That row is injected into the
+ * leaderboard AFTER this filter in /performance/page.tsx, from its own
+ * pre-registered ledger rather than from `simulated_bets` — it is the bot whose
+ * picks readers actually receive, and its record is the one thing on the page a
+ * reader can check against what was published.
+ */
+export const PUBLIC_MATURITY_LABELS: ReadonlySet<string> = new Set([
+  "calibrated",
+  "beta",
+]);
+
+/** Whether a bot's maturity label earns it a place on the public leaderboard. */
+export function isPublicBot(maturityLabel?: string | null): boolean {
+  return PUBLIC_MATURITY_LABELS.has(maturityLabel ?? "");
+}
+
 export function buildPublicBotStats(
   bets: LiveBet[],
   botsDB: BotDbRow[],
@@ -318,17 +368,9 @@ export function buildPublicBotStats(
   // Cache path already filters via dashboard_cache.bot_breakdown (settlement.py
   // joins `WHERE is_active AND retired_at IS NULL`), but the client-side
   // aggregateBets toggle would otherwise resurrect them from raw bets data.
-  // PERFORMANCE-SHOWS-EVERY-BOT (2026-09-15, owner): experimental bots are NO
-  // LONGER excluded. /performance is where bots are MEASURED — hiding a bot
-  // there hides the evidence, and on 2026-09-15 it hid 13 of 15 active bots,
-  // including every sharp-anchored strategy. The curation decision belongs on
-  // /picks, which is governed by `bots.show_on_picks` (migration 356), not here.
-  //
-  // Safe because the row carries its own MaturityChip and the table already
-  // separates "enough data" from "still collecting": an experimental bot with
-  // 5 settled bets sorts into the collecting group rather than above a bot
-  // with 640.
-  const activeBots = botsDB.filter((b) => !b.retiredAt);
+  // PERF-PUBLIC-IS-CALIBRATED-OR-BETA: and the shadow fleet never appears here
+  // at all — see PUBLIC_MATURITY_LABELS above for why.
+  const activeBots = botsDB.filter((b) => !b.retiredAt && isPublicBot(b.maturityLabel));
   const rows: PublicBotStatShape[] = activeBots.map((dbBot): PublicBotStatShape => {
     const botBets = betsByBot[dbBot.name] || [];
     const settled = botBets.filter((b) => b.result !== "pending" && b.result !== "void");
