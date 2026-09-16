@@ -4,7 +4,14 @@ import { ENGINE_MIN_ODDS_BY_MARKET, ENGINE_BOT_FLOORS } from "@/lib/generated/en
 import type { PlacerBotRow, Quote, SessionState, ShadowBotsPageData } from "@/lib/shadow-bots/queries";
 import { oddsKey } from "@/lib/shadow-bots/queries";
 import { BOOK_CHIP, isInplayControlBot } from "@/lib/shadow-bots/labels";
-import { pickVerdict, quoteFreshness, PICK_VERDICT_RANK, QUOTE_MAX_AGE_MIN } from "@/lib/shadow-bots/verdict";
+import {
+  botTrack,
+  leadBotName,
+  pickVerdict,
+  quoteFreshness,
+  PICK_VERDICT_RANK,
+  QUOTE_MAX_AGE_MIN,
+} from "@/lib/shadow-bots/verdict";
 import { PicksRow, type PickRowData } from "@/components/shadow-bots/picks-row";
 
 /** Market key for the placer's per-market odds floor (engine-floors.ts). */
@@ -22,6 +29,26 @@ export function buildPickRows(
   now = Date.now(),
 ): PickRowData[] {
   const placerByName = new Map<string, PlacerBotRow>(data.placerBots.map((p) => [p.bot_name, p]));
+  // TRACK, from the SAME scoreboard the table below reads, so the two surfaces
+  // cannot disagree about which bot is the lead. A green PLACE chip is a per-PICK
+  // price test and says nothing about whether the bot behind it works — on
+  // 2026-09-16 three of five PLACE rows belonged to the most conclusively
+  // negative bot on the board. This is what tells them apart.
+  const statsByName = new Map(
+    data.scoreboard.map((r) => [
+      r.bot_name,
+      {
+        n: Number(r.clv_n ?? 0),
+        mean: r.clv_mc_mean == null ? null : Number(r.clv_mc_mean),
+        sd: r.clv_mc_sd == null ? null : Number(r.clv_mc_sd),
+      },
+    ]),
+  );
+  const noStats = { n: 0, mean: null, sd: null };
+  // Built HERE, not in the query layer: `loggedPickIds` crosses `unstable_cache`
+  // and so must be JSON (see its doc comment).
+  const loggedIds = new Set(data.loggedPickIds);
+  const lead = leadBotName([...statsByName].map(([name, stats]) => ({ name, stats })));
   const rows: PickRowData[] = data.upcoming.map((pick) => {
     const inplay = pick.inplay_minute != null;
     // An in-play row gets NO book quotes: `odds_snapshots` is pre-match only, so
@@ -78,16 +105,21 @@ export function buildPickRows(
       minutesToKo,
       inplay,
       isControlArm: isInplayControlBot(pick.bot_name),
-      alreadyLogged: data.loggedPickIds.has(pick.id),
+      track: botTrack(statsByName.get(pick.bot_name) ?? noStats, pick.bot_name === lead),
+      alreadyLogged: loggedIds.has(pick.id),
       // Automation state is CONTEXT on the row, not a verdict — see verdict.ts.
       automationOff: state.placement_paused || placer?.ui_place_enabled === false,
       markState: markStates[pick.id] ?? 0,
       stake: FLAT_STAKE_EUR,
     };
   });
+  // Verdict band first (unchanged), then the lead bot's picks ahead of the rest
+  // of that band, then kickoff. The band still dominates: a SKIP from the lead
+  // must never sort above a PLACE.
   rows.sort(
     (a, b) =>
       PICK_VERDICT_RANK[a.verdict.verdict] - PICK_VERDICT_RANK[b.verdict.verdict] ||
+      Number(b.track === "LEAD") - Number(a.track === "LEAD") ||
       a.pick.kickoff.localeCompare(b.pick.kickoff),
   );
   return rows;
@@ -99,6 +131,8 @@ export function PicksTable({ rows, truncatedBooks }: { rows: PickRowData[]; trun
     return acc;
   }, {});
   const inplayCount = rows.filter((r) => r.inplay).length;
+  const leadCount = rows.filter((r) => r.track === "LEAD").length;
+  const negCount = rows.filter((r) => r.track === "NEGATIVE").length;
   // One definition of stale — quoteFreshness(), the same call the row makes.
   const staleCount = rows.filter((r) => quoteFreshness(r.pick.decision_quote_age_min) === "STALE").length;
   const th = "px-2 py-1.5 text-left font-normal whitespace-nowrap";
@@ -111,6 +145,10 @@ export function PicksTable({ rows, truncatedBooks }: { rows: PickRowData[]; trun
           {counts.BLOCKED ?? 0}
           {inplayCount > 0 ? ` · in-play ${inplayCount}` : ""}
           {staleCount > 0 ? ` · stale decision quote ${staleCount}` : ""}
+        </span>
+        <span className="font-mono text-[11px] text-neutral-500">
+          <span className="text-sky-300">LEAD {leadCount}</span>
+          {negCount > 0 ? ` · from CI<0 bots ${negCount}` : ""}
         </span>
       </div>
       {truncatedBooks.length > 0 && (

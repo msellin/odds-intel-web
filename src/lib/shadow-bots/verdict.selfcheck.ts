@@ -11,6 +11,10 @@
  */
 import * as assert from "node:assert/strict";
 import {
+  botTrack,
+  botTrackKind,
+  leadBotName,
+  LEAD_MIN_N,
   breakEven,
   gateFloor,
   liveEdge,
@@ -183,3 +187,62 @@ assert.equal(quoteFreshness(45), "FRESH");
 assert.equal(quoteFreshness(61), "STALE");
 assert.equal(quoteFreshness(null), "UNKNOWN");
 console.log("verdict.selfcheck: 2026-09-15 corrections asserted");
+
+// ── 2026-09-16 · TRACK: which bot am I actually watching? ───────────────────
+// Fixture is the REAL board of 2026-09-16 (mean/sd as fractions, from
+// shadow_bot_scoreboard). If the classification of these ten changes, the
+// change was deliberate or the rule broke — either way it must be seen.
+{
+  const board: Array<{ name: string; stats: { n: number; mean: number; sd: number } }> = [
+    { name: "bot_unibet_trigger_sharp_1x2_v1", stats: { n: 92, mean: +0.0114, sd: 0.151 } },
+    { name: "bot_unibet_trigger_sharp_ou_v1", stats: { n: 17, mean: +0.0008, sd: 0.086 } },
+    { name: "bot_high_roi_global_v2", stats: { n: 10, mean: -0.0022, sd: 0.091 } },
+    { name: "bot_coolbet_trigger_sharp_ou_v1", stats: { n: 27, mean: -0.0059, sd: 0.080 } },
+    { name: "bot_coolbet_trigger_sharp_1x2_v1", stats: { n: 102, mean: -0.0228, sd: 0.092 } },
+    { name: "bot_coolbet_ou_model_v1", stats: { n: 16, mean: -0.0249, sd: 0.078 } },
+    { name: "bot_trigger_1x2_sharp_tight_v1", stats: { n: 45, mean: -0.0299, sd: 0.130 } },
+    { name: "bot_coolbet_1x2_model_v1", stats: { n: 9, mean: -0.0359, sd: 0.053 } },
+    { name: "bot_v10_all", stats: { n: 155, mean: -0.0380, sd: 0.089 } },
+    { name: "bot_ou35_model_v1", stats: { n: 23, mean: -0.0469, sd: 0.040 } },
+  ];
+  const lead = leadBotName(board);
+  assert.equal(lead, "bot_unibet_trigger_sharp_1x2_v1", "the lead is the positive-mean bot with the most legs");
+
+  const track = (n: string) => botTrack(board.find((b) => b.name === n)!.stats, n === lead);
+  // Whole CI below zero — decided, not "slightly losing".
+  for (const n of ["bot_coolbet_trigger_sharp_1x2_v1", "bot_coolbet_1x2_model_v1",
+                   "bot_v10_all", "bot_ou35_model_v1"]) {
+    assert.equal(track(n), "NEGATIVE", n + " CI is entirely below zero");
+  }
+  // Negative mean but the CI still spans zero — not ruled out.
+  for (const n of ["bot_coolbet_ou_model_v1", "bot_trigger_1x2_sharp_tight_v1",
+                   "bot_coolbet_trigger_sharp_ou_v1", "bot_high_roi_global_v2"]) {
+    assert.equal(track(n), "EARLY", n + " CI still spans zero — not decided");
+  }
+  // Positive mean but too few legs for the sign to mean anything.
+  assert.equal(track("bot_unibet_trigger_sharp_ou_v1"), "EARLY", "n=17 < LEAD_MIN_N");
+  assert.equal(track("bot_unibet_trigger_sharp_1x2_v1"), "LEAD");
+
+  // THE ASYMMETRY, asserted directly: ruling OUT needs the whole CI below zero,
+  // being the LEAD needs only a positive mean. A bot with a positive mean and a
+  // CI that spans zero is still the lead — LEAD is where to look, not a claim
+  // that the bot works.
+  assert.equal(botTrackKind({ n: 92, mean: +0.0114, sd: 0.151 }), "CANDIDATE");
+  assert.ok(0.0114 - 1.96 * (0.151 / Math.sqrt(92)) < 0, "and its CI does span zero");
+
+  // n below the floor can never lead, however good it looks.
+  assert.equal(botTrackKind({ n: LEAD_MIN_N - 1, mean: +0.087, sd: 0.294 }), "EARLY");
+  assert.equal(leadBotName([{ name: "x", stats: { n: 3, mean: +0.087, sd: 0.294 } }]), null,
+    "no qualifying bot must return null, never the least-bad row");
+  // An empty board has no lead.
+  assert.equal(leadBotName([]), null);
+  // Ties break on n, then mean, then name — stable across renders.
+  assert.equal(
+    leadBotName([
+      { name: "b_second", stats: { n: 40, mean: 0.02, sd: 0.1 } },
+      { name: "a_first", stats: { n: 40, mean: 0.02, sd: 0.1 } },
+    ]),
+    "a_first",
+  );
+}
+console.log("verdict.selfcheck: 2026-09-16 TRACK asserted");

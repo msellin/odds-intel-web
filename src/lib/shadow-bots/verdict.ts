@@ -291,3 +291,81 @@ export function botVerdict(s: BotStats): BotVerdictResult {
   }
   return { kind: "OBSERVE", label: "OBSERVE", ciHalf, t };
 }
+
+// ── which bot am I actually watching? (2026-09-16) ───────────────────────────
+/**
+ * `botVerdict()` answers the PRE-REGISTERED question — "is this bot decided?"
+ * — and under n = 300 the honest answer is COLLECTING for every bot on the
+ * board. That is correct and it is useless as a place to look: fifteen bots
+ * render identically, so the operator's eye goes to the green PLACE chips
+ * instead, which are a per-PICK price test and say nothing about whether the
+ * bot behind them works. On 2026-09-16 three of the five PLACE rows belonged to
+ * the single most conclusively negative bot we have.
+ *
+ * TRACK is the second, weaker question: "given what we know TODAY, is this bot
+ * still a live candidate?" It is deliberately NOT a verdict and never gates
+ * anything — it only decides where the page points your attention.
+ *
+ *   NEGATIVE  the whole 95% CI sits below zero. Not "slightly losing" — decided,
+ *             at this n. More data on it buys information about how negative,
+ *             not about whether.
+ *   LEAD      the candidate closest to resolving: mean above zero on enough legs
+ *             for the sign to mean anything, and the most legs among those.
+ *             Exactly one bot, or none.
+ *   CANDIDATE mean above zero and past LEAD_MIN_N, but another bot is further along.
+ *   EARLY     everything else — too few legs to have a sign, or a negative mean
+ *             whose CI still spans zero.
+ *
+ * Note the asymmetry, and that it is intentional: NEGATIVE needs the entire CI
+ * below zero, LEAD needs only a positive mean. Ruling a bot OUT should be hard;
+ * pointing the operator AT one is a suggestion about where to look, not a claim
+ * that it works. The page must never render LEAD as an endorsement.
+ */
+export type BotTrack = "LEAD" | "CANDIDATE" | "NEGATIVE" | "EARLY";
+
+/**
+ * Below this many CLV legs the sign of the mean is noise, so a bot cannot be
+ * the lead however good it looks. 30 is a judgement call, not a pre-registered
+ * constant — with mc-CLV sd ≈ 8–15pp, n = 30 still leaves a ±3–5pp interval.
+ * It is here to stop an n = 3 bot at +8.7pp from becoming the thing we watch.
+ */
+export const LEAD_MIN_N = 30;
+
+/** NEGATIVE / positive-mean / EARLY, before the cross-bot LEAD pick is applied. */
+export function botTrackKind(s: BotStats): "NEGATIVE" | "CANDIDATE" | "EARLY" {
+  const { ciHalf } = botVerdict(s);
+  if (s.mean == null) return "EARLY";
+  if (ciHalf != null && s.mean + ciHalf < 0) return "NEGATIVE";
+  if (s.n >= LEAD_MIN_N && s.mean > 0) return "CANDIDATE";
+  return "EARLY";
+}
+
+/**
+ * The one bot to watch, or null when nothing qualifies — which is a legitimate
+ * and expected answer, and the page says so rather than promoting the
+ * least-bad row.
+ *
+ * Among CANDIDATEs, most legs wins: it is nearest its own resolution, so it is
+ * where waiting actually buys something. Ties break on the higher mean, then
+ * on name so the choice is stable across renders.
+ */
+export function leadBotName(
+  rows: Array<{ name: string; stats: BotStats }>,
+): string | null {
+  const c = rows.filter((r) => botTrackKind(r.stats) === "CANDIDATE");
+  if (c.length === 0) return null;
+  c.sort(
+    (a, b) =>
+      b.stats.n - a.stats.n ||
+      (b.stats.mean ?? 0) - (a.stats.mean ?? 0) ||
+      a.name.localeCompare(b.name),
+  );
+  return c[0].name;
+}
+
+/** Final per-bot track, given the board-wide lead. */
+export function botTrack(s: BotStats, isLead: boolean): BotTrack {
+  const k = botTrackKind(s);
+  if (k === "CANDIDATE") return isLead ? "LEAD" : "CANDIDATE";
+  return k;
+}

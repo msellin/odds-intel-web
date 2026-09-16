@@ -159,8 +159,17 @@ export interface ShadowBotsPageData {
   /** Books whose snapshot fetch hit the row cap — their column may be incomplete. */
   truncatedBooks: string[];
   scoreboard: BotScoreRow[];
-  /** shadow_bets ids already recorded in real_bets TODAY — the row shows it. */
-  loggedPickIds: Set<string>;
+  /**
+   * shadow_bets ids already recorded in real_bets TODAY — the row shows it.
+   *
+   * An ARRAY, not a Set, and it must stay one: this object is returned through
+   * `unstable_cache`, which serialises to JSON. A Set survives that as `{}`, so
+   * the uncached first render worked and every cached render for the next 60 s
+   * threw `loggedPickIds.has is not a function` — the page was down for
+   * everything but the first request after each revalidate (2026-09-16).
+   * Callers build their own Set; nothing non-JSON may cross this boundary.
+   */
+  loggedPickIds: string[];
   promos: PromoRow[];
   /** Set when the promo read failed (e.g. PostgREST schema cache) — shown, never swallowed. */
   promoError: string | null;
@@ -461,7 +470,7 @@ async function _loadShadowBotsPage(): Promise<ShadowBotsPageData> {
     quotes,
     truncatedBooks,
     scoreboard,
-    loggedPickIds,
+    loggedPickIds: [...loggedPickIds],
     promos,
     // Surfaced, not swallowed: "no promos" and "the read failed" look identical
     // in an empty table, and only one of them is a reason to stop trusting it.

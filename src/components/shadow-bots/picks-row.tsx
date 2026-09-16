@@ -2,7 +2,7 @@ import Link from "next/link";
 import { PickBetMark } from "@/components/pick-bet-mark";
 import { PlaceAction } from "@/components/shadow-bots/place-action";
 import { KoTime } from "@/components/shadow-bots/ko-time";
-import type { Freshness, PickVerdict, PickVerdictResult } from "@/lib/shadow-bots/verdict";
+import type { BotTrack, Freshness, PickVerdict, PickVerdictResult } from "@/lib/shadow-bots/verdict";
 import { quoteFreshness, QUOTE_MAX_AGE_MIN } from "@/lib/shadow-bots/verdict";
 import type { Quote, UpcomingPick } from "@/lib/shadow-bots/queries";
 import { BOOK_CHIP, botShortLabel, formatAge, formatPickLabel } from "@/lib/shadow-bots/labels";
@@ -26,6 +26,12 @@ export interface PickRowData {
   inplay: boolean;
   /** The in-play CONTROL arm (priced off AF's aggregate — a feed nobody can bet). */
   isControlArm: boolean;
+  /**
+   * Which bot this pick came from, on the "where do I look" axis (verdict.ts).
+   * A green PLACE chip is a per-PICK price test; this is the per-BOT record
+   * behind it. The two are independent and the row must show both.
+   */
+  track: BotTrack;
   markState: 0 | 1 | 2;
   stake: number;
 }
@@ -84,7 +90,11 @@ const showPlaceAction = !r.inplay && !r.isControlArm && r.best != null && chip !
       ? `${pick.inplay_score_home}-${pick.inplay_score_away}`
       : null;
   return (
-    <tr className={`border-t border-white/[0.05] text-sm ${stale ? "opacity-50" : ""}`}>
+    <tr
+      className={`border-t border-white/[0.05] text-sm ${stale ? "opacity-50" : ""} ${
+        r.track === "LEAD" ? "bg-sky-500/[0.06] shadow-[inset_3px_0_0_0_rgb(56_189_248/0.7)]" : ""
+      }`}
+    >
       <td className={td}>
         <KoTime iso={pick.kickoff} />
       </td>
@@ -119,6 +129,22 @@ const showPlaceAction = !r.inplay && !r.isControlArm && r.best != null && chip !
         >
           {botShortLabel(pick.bot_name)}
         </Link>
+        {r.track === "LEAD" && (
+          <span
+            className={`${CHIP} ml-1 border-sky-400/50 text-sky-300`}
+            title="The one bot worth watching: mean margin-corrected CLV above zero on the most legs, so it is nearest to resolving. Where to look — NOT a claim that it works; its CI still spans zero."
+          >
+            LEAD
+          </span>
+        )}
+        {r.track === "NEGATIVE" && (
+          <span
+            className={`${CHIP} ml-1 border-white/10 text-neutral-500`}
+            title="This bot's entire 95% CLV interval sits below zero — decided at this n. A PLACE chip here means the PRICE clears the bot's floor, not that the bot works."
+          >
+            CI &lt; 0
+          </span>
+        )}
         {r.isControlArm && (
           <span
             className={`${CHIP} ml-1 border-dashed border-white/25 text-neutral-400`}
