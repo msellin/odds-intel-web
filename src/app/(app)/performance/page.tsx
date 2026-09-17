@@ -343,7 +343,21 @@ export default async function PerformancePage() {
   // reads the CURRENT one only — pooling a closed test's n into a running one
   // is the discipline failure the pre-registration exists to prevent. The
   // closed versions are rendered by PicksForwardTestPanel, not dropped.
-  const picksSummary = (await getPicksForwardTestSummary())?.current ?? null;
+  // PICKS-ROW-RECONCILES-2026-09-17. Was `.current` — the CURRENT rule version
+  // only. The bets list under this row reads `picks_forward_test_public`, which
+  // carries EVERY live pick across all rule versions, so the two disagreed: on
+  // 2026-09-17 the row said 14 settled and the list a reader can count said 22.
+  //
+  // A reader who expands the row and counts gets a different answer from the
+  // page. That is indefensible whatever the statistics say, and the owner called
+  // it out directly. The row now shows the pooled record.
+  //
+  // The pre-registered test is UNAFFECTED: its stopping rules still read
+  // `current`, because pooling a closed rule's n into a running one would fire a
+  // checkpoint early on a mixture of rules. `PicksForwardTestPanel` continues to
+  // render the per-version breakdown. Two objects, two numbers, neither
+  // pretending to be the other.
+  const picksSummary = (await getPicksForwardTestSummary())?.pooled ?? null;
   if (picksSummary && picksSummary.published > 0) {
     const mc = picksSummary.clvMarginCorrected;
     cachedBots.push({

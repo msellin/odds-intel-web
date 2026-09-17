@@ -294,6 +294,23 @@ export interface BoardLeg {
  */
 export async function fetchBoard(): Promise<BoardLeg[]> {
   const sb = createSupabasePublic();
+  // PICKS-WATCHLIST-FUTURE-ONLY-2026-09-17. Two defects, both reader-visible.
+  //
+  // (1) NO KICKOFF FILTER. Neither this query nor `picks_board_public` bounded
+  //     kickoff, and `write_board` does not remove finished legs. Because the
+  //     list sorts by edge descending, yesterday's matches sat at the TOP:
+  //     measured 2026-09-16, 18 of the 40 rows had already kicked off, up to
+  //     19.6h earlier, several already settled — Liverpool v Tottenham was shown
+  //     as a price to watch 18.6h after kickoff, outcome `won`. A watchlist of
+  //     finished matches is worse than an empty one.
+  //
+  // (2) THE COUNT WAS A CAP. The caller renders `watchlist.length` as "N prices
+  //     we're tracking". With a hard `.limit(40)` against a view holding 132
+  //     rows, that read "40" every day regardless of the real number — a cap
+  //     presented as a measurement. The limit stays (the panel is collapsed and
+  //     40 is plenty to render) but the caller now says "top N by edge" instead
+  //     of implying it counted something.
+  const nowIso = new Date().toISOString();
   const { data, error } = await sb
     .from("picks_board_public")
     .select(
@@ -301,6 +318,7 @@ export async function fetchBoard(): Promise<BoardLeg[]> {
        odds_breakeven, odds_grade_b, odds_grade_a, anchor_overround,
        kickoff_utc, updated_at, league, country, home_team, away_team`,
     )
+    .gt("kickoff_utc", nowIso)
     .order("edge", { ascending: false })
     .limit(40);
   if (error || !data) return [];

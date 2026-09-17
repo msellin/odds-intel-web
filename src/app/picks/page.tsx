@@ -471,8 +471,8 @@ export default async function PicksPage() {
                 <span className="font-mono text-[10px] text-neutral-600 transition-transform group-open:rotate-90">
                   ▶
                 </span>
-                On the watchlist — {watchlist.length} price
-                {watchlist.length === 1 ? "" : "s"} we&apos;re tracking, not picks yet
+                On the watchlist — top {watchlist.length} price
+                {watchlist.length === 1 ? "" : "s"} by edge, not picks yet
               </span>
             </summary>
             <p className="mb-3 mt-2 max-w-2xl text-xs leading-relaxed text-neutral-500">

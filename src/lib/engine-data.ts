@@ -6062,6 +6062,7 @@ function mapForwardTestRow(r: Record<string, unknown>): PicksForwardTestSummary 
 export async function getPicksForwardTestSummary(): Promise<{
   current: PicksForwardTestSummary;
   closed: PicksForwardTestSummary[];
+  pooled: PicksForwardTestSummary;
 } | null> {
   const supabase = createSupabasePublic();
   const { data, error } = await supabase
@@ -6070,7 +6071,49 @@ export async function getPicksForwardTestSummary(): Promise<{
     .order("started_at", { ascending: false });
   if (error || !data || data.length === 0) return null;
   const rows = (data as Record<string, unknown>[]).map(mapForwardTestRow);
-  return { current: rows[0], closed: rows.slice(1) };
+
+  // PICKS-ROW-RECONCILES-2026-09-17. `current` is the CURRENT rule version and
+  // stays the basis for the pre-registered stopping rules — pooling versions
+  // there would fire an n=200 checkpoint early on a mixture of rules, which is
+  // the discipline failure the pre-registration exists to prevent.
+  //
+  // But the LEADERBOARD ROW is a different object from the TEST. A reader who
+  // expands that row counts every live pick ever published (the bets list reads
+  // `picks_forward_test_public`, all versions), and the summary was showing only
+  // the current version's n. On 2026-09-17 that read 14 settled against 22 in
+  // the list — a reader who counts gets a different answer from the page, which
+  // is indefensible whatever the statistics say.
+  //
+  // So: `pooled` is every live pick published to date, and it is what the public
+  // row uses. `current` and `closed` are untouched for the test's own machinery.
+  // Two objects, two numbers, both honest, neither pretending to be the other.
+  const pooled: PicksForwardTestSummary = {
+    ruleVersion: rows.length === 1 ? rows[0].ruleVersion : `${rows.length} rule versions`,
+    startedAt: rows[rows.length - 1].startedAt,
+    published: rows.reduce((a, r) => a + r.published, 0),
+    settled: rows.reduce((a, r) => a + r.settled, 0),
+    pending: rows.reduce((a, r) => a + r.pending, 0),
+    won: rows.reduce((a, r) => a + r.won, 0),
+    pnlUnits: rows.reduce((a, r) => a + r.pnlUnits, 0),
+    // ROI is recomputed from pooled units and pooled n, never averaged across
+    // versions — averaging ratios is the error that reported +10.94% where the
+    // stake-weighted truth was +6.51% (ANALYSIS_GOTCHAS 9a(h)).
+    roi: (() => {
+      const n = rows.reduce((a, r) => a + r.settled, 0);
+      return n > 0 ? rows.reduce((a, r) => a + r.pnlUnits, 0) / n : null;
+    })(),
+    roiSd: null,
+    // Margin-corrected CLV is n-weighted across versions; null when nothing has one.
+    clvMarginCorrected: (() => {
+      const w = rows.filter((r) => r.clvMarginCorrected != null && r.nClvMc > 0);
+      const n = w.reduce((a, r) => a + r.nClvMc, 0);
+      return n > 0 ? w.reduce((a, r) => a + (r.clvMarginCorrected as number) * r.nClvMc, 0) / n : null;
+    })(),
+    clvMcSd: null,
+    nClvMc: rows.reduce((a, r) => a + r.nClvMc, 0),
+  };
+
+  return { current: rows[0], closed: rows.slice(1), pooled };
 }
 
 // PICKS-BOT-ACTS-LIKE-THE-OTHERS-2026-09-14. The leaderboard row for
