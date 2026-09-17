@@ -131,18 +131,18 @@ const COMP_META: Omit<CompetitorRow, "theirN" | "theirRoi" | "ourN" | "ourRoi" |
 // competitor_audits_weekly.yml (Sunday 02:00 UTC). If the GitHub fetch
 // fails or the JSON shape is unexpected, we fall back to these so the
 // landing never renders empty rows.
-// LAST-REFRESH: 2026-09-02 audit snapshot.
+// LAST-REFRESH: 2026-09-17 audit snapshot.
 const COMP_FALLBACK: Record<
   string,
   { theirN: number; theirRoi: number; ourN: number; ourRoi: number;
     windowStart: string; windowEnd: string; snapshotAt: string }
 > = {
-  winnerodds:  { theirN:  691, theirRoi:  7.51, ourN:  529, ourRoi: 10.65,
-                 windowStart: "2026-05-04", windowEnd: "2026-09-03", snapshotAt: "2026-09-02" },
-  signalodds:  { theirN:  131, theirRoi: -3.55, ourN:  529, ourRoi: 10.65,
-                 windowStart: "2026-05-04", windowEnd: "2026-09-03", snapshotAt: "2026-09-02" },
-  deepbetting: { theirN:  479, theirRoi: -7.65, ourN:  529, ourRoi: 10.65,
-                 windowStart: "2026-05-04", windowEnd: "2026-09-03", snapshotAt: "2026-09-02" },
+  winnerodds:  { theirN:  313, theirRoi: 14.43, ourN:  688, ourRoi:  8.00,
+                 windowStart: "2026-05-04", windowEnd: "2026-09-18", snapshotAt: "2026-09-17" },
+  signalodds:  { theirN:  315, theirRoi: -3.57, ourN:  688, ourRoi:  8.00,
+                 windowStart: "2026-05-04", windowEnd: "2026-09-18", snapshotAt: "2026-09-17" },
+  deepbetting: { theirN:  595, theirRoi: -8.03, ourN:  688, ourRoi:  8.00,
+                 windowStart: "2026-05-04", windowEnd: "2026-09-18", snapshotAt: "2026-09-17" },
   forebet:     { theirN: 1136, theirRoi: -0.18, ourN:  529, ourRoi: 10.65,
                  windowStart: "2026-05-04", windowEnd: "2026-09-03", snapshotAt: "2026-09-02" },
   betaminic:   { theirN: 3498, theirRoi: 10.60, ourN:  529, ourRoi: 10.65,
