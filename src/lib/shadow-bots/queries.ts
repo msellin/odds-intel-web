@@ -387,13 +387,38 @@ async function _loadShadowBotsPage(): Promise<ShadowBotsPageData> {
     );
     for (const f of fetches) {
       if (f.rows.length >= SNAPSHOT_ROW_CAP) truncatedBooks.push(f.book);
-      const seen = new Set<string>();
+      // COOLBET-DOUBLE-WRITE (2026-09-17). Taking the LATEST row per key was
+      // measured at +1.87pp worse than the book's live quote, because a scrape
+      // pass can write the same selection twice seconds apart and the second
+      // write is worse 98.7% of the time. Against The Odds API's live Coolbet
+      // prices on 8 matched fixtures: reading `latest` gave +1.87pp, reading the
+      // BEST price within the burst reproduced the live quote EXACTLY (+0.00pp).
+      //
+      // So take the best price inside a SHORT window of the newest row. The
+      // window is deliberately tight: it must cover the double-write (observed
+      // 0.5-10s apart) without reaching back far enough to surface a price the
+      // market has since moved away from — showing a better price than the book
+      // currently offers is the mirage this project has been burned by before
+      // (ANALYSIS_GOTCHAS §52/§55).
+      const BURST_MS = 15_000;
+      const newest = new Map<string, number>();
       for (const r of f.rows) {
-        // newest-first within the book, so the first hit per key is its latest price
         const k = oddsKey(r.match_id, r.market, r.selection);
-        if (seen.has(k)) continue;
-        seen.add(k);
-        (quotes[k] ??= []).push({ book: f.book, odds: Number(r.odds), ts: r.timestamp });
+        const t = Date.parse(r.timestamp);
+        if (!newest.has(k)) newest.set(k, t);
+      }
+      const bestByKey = new Map<string, { odds: number; ts: string }>();
+      for (const r of f.rows) {
+        const k = oddsKey(r.match_id, r.market, r.selection);
+        const t = Date.parse(r.timestamp);
+        const n = newest.get(k);
+        if (n === undefined || n - t > BURST_MS) continue;
+        const o = Number(r.odds);
+        const cur = bestByKey.get(k);
+        if (!cur || o > cur.odds) bestByKey.set(k, { odds: o, ts: r.timestamp });
+      }
+      for (const [k, v] of bestByKey) {
+        (quotes[k] ??= []).push({ book: f.book, odds: v.odds, ts: v.ts });
       }
     }
   }
