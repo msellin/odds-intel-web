@@ -1,5 +1,6 @@
 "use client";
 
+import { CALIBRATED_SINCE } from "@/lib/engine-data";
 import { useState } from "react";
 import { TrendingUp, TrendingDown, Minus, ChevronRight } from "lucide-react";
 import Link from "next/link";
@@ -379,6 +380,25 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
               {isPro
                 ? `${activeBots.length} proven · click any row for bankroll chart`
                 : `${activeBots.length} proven strategies · Pro unlocks W/L, P&L, charts`}
+            </p>
+            {/* PERF-STATE-THE-PERIOD (2026-09-17). Every ROI on this table is
+                cumulative since CALIBRATED_SINCE, and until now the page never
+                said so. A return figure without its window is not checkable,
+                and "over what period, and how many bets?" is the first thing a
+                reader who takes the number seriously will ask. The Settled
+                column already answers the second half; this answers the first.
+
+                It is deliberately a plain statement rather than a disclaimer:
+                the numbers are what they are, and naming the window makes them
+                verifiable rather than weaker. */}
+            <p className="text-[11px] text-muted-foreground/70 mt-1">
+              Cumulative since{" "}
+              <span className="text-foreground">
+                {new Date(`${CALIBRATED_SINCE}T00:00:00Z`).toLocaleDateString("en-GB", {
+                  day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
+                })}
+              </span>{" "}
+              · flat stakes · logged before kickoff
             </p>
             {/* PERF-BOT-FUNNEL (2026-08-21) — surface the full strategy funnel
                 so visitors see how many total strategies we've tested, not
