@@ -77,8 +77,8 @@ export function PerformanceHero({
   const cal30 = calibrated?.last30d;
   const calRoi = cal?.roiPct ?? null;
   const calN = cal?.n ?? 0;
-  const placeableRoi = cal?.placeableRoiPct ?? null;
-  const placeableN = cal?.placeableN ?? 0;
+  const obtainableRoi = cal?.obtainableRoiPct ?? null;
+  const obtainableN = cal?.obtainableN ?? 0;
   // DUPLICATED-RULES-REMAINING-2026-09-06: was a bare "2026-05-04". The
   // cohort start is exported as CALIBRATED_SINCE; five copies of the literal
   // agreed only by coincidence, and the day one moved was the day the public
@@ -129,20 +129,21 @@ export function PerformanceHero({
           a separate method with its own record, shown above and tracked from zero
           since 14 Sep. It does not borrow this number.
         </p>
-        {/* ACCESSIBLE-BOOK-SET-SHRANK / V10-HAS-NO-EDGE. Computed live from the
-            same cohort rather than hardcoded: a stale caveat on an auditability
-            page is the same defect one level down. Measured 2026-09-21 the
-            headline is +8.17% (n=697) while the placeable-book arm is +0.04%
-            (n=147) — the edge sits in Marathonbet (+42.2%), the dead AF "Unibet"
-            feed (+18.3%), 10Bet (+21.4%) and Unibet-Kambi (+30.4%), none of
-            which we can bet. */}
-        {placeableRoi != null && placeableN > 0 && (
+        {/* KAMBI-FEED-DIVERGENCE. CORRECTED 2026-09-21: the first version of
+            this line published the three-book Estonian-licensing figure
+            (+0.04%), which is an OWN constraint and not a reader's — readers
+            here can bet Marathonbet, Bet365 and 10Bet perfectly well. The
+            honest public caveat is narrower: exclude only prices NOBODY could
+            have taken. That is Unibet-Kambi, where 38% of stored quotes read
+            higher than the site offered (median +3.3%, max +23.5%). Worth
+            0.92pp: +8.17% all books vs +7.25% without it. Computed live. */}
+        {obtainableRoi != null && obtainableN > 0 && obtainableN < calN && (
           <p className="mx-auto mt-2 max-w-xl text-balance text-xs leading-relaxed text-amber-400/80">
-            Priced at the best quote available when the pick was made. Much of that
-            figure comes from books we cannot bet from Estonia — on the three books
-            we can actually place at, the same picks return{" "}
-            <span className="font-mono font-semibold">{fmtRoi(placeableRoi)}</span>{" "}
-            over {placeableN.toLocaleString()} bets.
+            Priced at the best quote available when the pick was made. A small
+            number of those quotes came from a feed we later found was not
+            honoured by the bookmaker; excluding them the same picks return{" "}
+            <span className="font-mono font-semibold">{fmtRoi(obtainableRoi)}</span>{" "}
+            over {obtainableN.toLocaleString()} bets.
           </p>
         )}
       </section>

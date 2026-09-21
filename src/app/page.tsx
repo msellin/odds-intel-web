@@ -203,6 +203,11 @@ async function loadCompetitors(): Promise<CompetitorRow[]> {
           const j = (await res.json()) as {
             status?: string;
             snapshot_at_utc?: string;
+            /** FOREBET-SCRAPER-403-SILENTLY-GREEN-2026-09-21: newest kickoff
+             *  actually present in the scraped rows. Unlike snapshot_at_utc and
+             *  window.end, this does NOT stay fresh when a scrape fetches
+             *  nothing, so it is what the stale marker should show. */
+            data_through?: string;
             window?: { start?: string; end?: string };
             // n_total_picks / their_stats_claimed_odds are present only for
             // sources whose published odds we recompute (currently Forebet —
@@ -239,6 +244,16 @@ async function loadCompetitors(): Promise<CompetitorRow[]> {
             claimedRoi = j.their_stats_claimed_odds?.roi_pct;
             claimedN = j.their_stats_claimed_odds?.n;
             repricedOf = j.their_stats?.n_total_picks;
+          }
+          // FOREBET-SCRAPER-403-SILENTLY-GREEN-2026-09-21: when the audit
+          // downgrades to "stale-source" it now also publishes data_through —
+          // the newest kickoff actually present, as opposed to snapshot_at_utc
+          // (this run's clock) and window.end (today+1), both of which stay
+          // fresh on a scrape that fetched nothing. Show THAT date on the stale
+          // marker, so the page says how old the numbers really are instead of
+          // falling back to the hardcoded snapshot's date.
+          if (j.status === "stale-source" && j.data_through) {
+            theirAsOf = String(j.data_through).slice(0, 10);
           }
           // status !== "ok" leaves theirStale true and theirAsOf pinned to the
           // fallback's own date, so the UI can say when those figures are

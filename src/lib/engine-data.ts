@@ -3363,12 +3363,12 @@ export interface CalibratedHeadlineStats {
      *  Smaller than any-book median because Pinnacle is the sharpest book
      *  and has the tightest closing line. Shown as a credibility marker. */
     medianClvPinPct: number | null;
-    /** The same cohort restricted to PLACEABLE_BOOKMAKERS — the books we can
-     *  actually bet from Estonia. The all-books headline is carried by feeds
-     *  that are dead or unreachable (see the accumulation comment), so this is
-     *  the figure a reader can act on. */
-    placeableN: number;
-    placeableRoiPct: number | null;
+    /** The same cohort with UNOBTAINABLE_BOOKMAKERS removed — prices no
+     *  reader could have taken either, not merely books WE cannot place at.
+     *  This is a PICKS surface; our Estonian licensing is not a reader's
+     *  constraint and must not be published as one. */
+    obtainableN: number;
+    obtainableRoiPct: number | null;
     /** Settled rows EXCLUDED from roiPct because no accessible book quoted
      *  them at pick time — they were not placeable, and pricing them at the
      *  stale high-water mark inflated the public headline by +1.92pp
@@ -3450,14 +3450,26 @@ export async function getPublicCohortBotNames(): Promise<Set<string>> {
   return new Set((data as Array<{ name: string }>).map((r) => r.name));
 }
 
-// PERF-HEADLINE-IS-THE-RETIRED-ENGINE-2026-09-21. The books we can actually
-// place at from Estonia. Deliberately NOT every book we collect prices from:
-// the published headline is carried by Marathonbet, the AF "Unibet" feed,
-// 10Bet and Unibet-Kambi, none of which we can bet — Kambi was retired
-// outright for quoting prices the site did not honour. Pinnacle and Betfair
-// are excluded for licensing, Betano and Bet365 because we do not place there.
-// Keep in step with the engine's ACCESSIBLE_BOOKMAKERS.
-const PLACEABLE_BOOKMAKERS = ["Coolbet", "Epicbet", "Unibet-Site"] as const;
+// PERF-HEADLINE-IS-THE-RETIRED-ENGINE-2026-09-21, CORRECTED 2026-09-21.
+//
+// The first version of this filtered to the three books WE can place at from
+// Estonia (Coolbet/Epicbet/Unibet-Site) and published the result as a caveat.
+// That was the wrong lens for this page. /performance and /picks are PICKS
+// surfaces: they serve public readers who are not bound by our licensing, and
+// for whom Marathonbet, Bet365 and 10Bet are perfectly obtainable prices. Our
+// Estonian restriction is an OWN constraint and belongs nowhere near a public
+// track record.
+//
+// What IS a public-honesty problem is a price no reader could have taken
+// either. That is Unibet-Kambi, excluded from ACCESSIBLE_BOOKMAKERS on
+// 2026-09-06 (KAMBI-FEED-DIVERGENCE) because 38% of our stored Kambi prices
+// read HIGHER than the site actually offered — median +3.3%, max +23.5%. Those
+// rows price picks at quotes that never existed, so they inflate the published
+// figure for everyone.
+//
+// Measured 2026-09-21 on the published cohort: all books +8.17% (n=697),
+// excluding Kambi +7.25% (n=657). That 0.92pp is the honest correction.
+const UNOBTAINABLE_BOOKMAKERS = ["Unibet-Kambi"] as const;
 
 const _getCalibratedHeadlineStatsUncached =
   async (): Promise<CalibratedHeadlineStats> => {
@@ -3492,7 +3504,7 @@ const _getCalibratedHeadlineStatsUncached =
         allTime: {
           n: 0, stakeEur: 0, pnlEur: 0, roiPct: null,
           medianClvPct: null, meanClvPct: null, medianClvPinPct: null,
-          placeableN: 0, placeableRoiPct: null,
+          obtainableN: 0, obtainableRoiPct: null,
           unpriceableExcluded: 0, roiCoveragePct: 100,
           clvN: 0, clvBeatPct: null, sinceDate: CALIBRATED_SINCE,
         },
@@ -3501,7 +3513,7 @@ const _getCalibratedHeadlineStatsUncached =
     }
 
     let n = 0, pnlFlat = 0;
-    let nPlaceable = 0, pnlFlatPlaceable = 0;
+    let nObtainable = 0, pnlFlatObtainable = 0;
     // Settled rows excluded from ROI because no accessible book quoted them
     // at pick time — see LANDING-PERF-UNPLACEABLE-FALLBACK below.
     let unpriceable = 0;
@@ -3548,20 +3560,15 @@ const _getCalibratedHeadlineStatsUncached =
         : -FLAT_STAKE_EUR;
       n += 1;
       pnlFlat += pFlat;
-      // PERF-HEADLINE-IS-THE-RETIRED-ENGINE-2026-09-21. The all-books headline
-      // is carried almost entirely by books we cannot bet from Estonia.
-      // Measured 2026-09-21 on this exact cohort: Marathonbet +42.2% (n=62),
-      // the AF "Unibet" feed +18.3% (n=120), 10Bet +21.4% (n=52) and
-      // Unibet-Kambi +30.4% (n=12, a feed retired for quoting prices the site
-      // did not honour). Strip those and the same picks return -1.81%.
-      // So publish the reachable-book arm beside the headline, computed live
-      // rather than hardcoded, because this is the page whose pitch is
-      // auditability and a stale caveat is the same defect one level down.
-      if ((PLACEABLE_BOOKMAKERS as readonly string[]).includes(
+      // Exclude only prices NO reader could have taken — see
+      // UNOBTAINABLE_BOOKMAKERS. Computed live rather than hardcoded, because
+      // this is the page whose pitch is auditability and a stale caveat is the
+      // same defect one level down.
+      if (!(UNOBTAINABLE_BOOKMAKERS as readonly string[]).includes(
         String((r as { recommended_bookmaker?: string | null }).recommended_bookmaker ?? ""),
       )) {
-        nPlaceable += 1;
-        pnlFlatPlaceable += pFlat;
+        nObtainable += 1;
+        pnlFlatObtainable += pFlat;
       }
       if (r.clv != null) {
         const c = Number(r.clv) * 100;
@@ -3578,7 +3585,7 @@ const _getCalibratedHeadlineStatsUncached =
       }
     }
     const stakeFlat = n * FLAT_STAKE_EUR;
-    const stakeFlatPlaceable = nPlaceable * FLAT_STAKE_EUR;
+    const stakeFlatObtainable = nObtainable * FLAT_STAKE_EUR;
     const stakeFlat30 = n30 * FLAT_STAKE_EUR;
 
     function median(xs: number[]): number | null {
@@ -3607,10 +3614,10 @@ const _getCalibratedHeadlineStatsUncached =
         roiCoveragePct: n + unpriceable > 0
           ? Number(((100 * n) / (n + unpriceable)).toFixed(1))
           : 100,
-        // The same cohort restricted to books we can actually place at.
-        placeableN: nPlaceable,
-        placeableRoiPct: stakeFlatPlaceable > 0
-          ? Number(((100 * pnlFlatPlaceable) / stakeFlatPlaceable).toFixed(2))
+        // The same cohort with unobtainable-price rows removed.
+        obtainableN: nObtainable,
+        obtainableRoiPct: stakeFlatObtainable > 0
+          ? Number(((100 * pnlFlatObtainable) / stakeFlatObtainable).toFixed(2))
           : null,
         clvN: clvVals.length,
         clvBeatPct: clvVals.length
