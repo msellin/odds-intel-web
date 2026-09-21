@@ -193,6 +193,12 @@ interface BetRow {
   market: string;
   selection: string;
   odds_at_pick: number | null;
+  /** MODEL-TRAINING-DEBT (f), 2026-09-21. Age in minutes of the quote the pick
+   *  was decided on. `odds_at_pick` is frozen at insert and never refreshed, so
+   *  without this a reader cannot tell a price quoted two minutes ago from one
+   *  quoted yesterday. Measured over 14 days: median 22.4 min, but 62 of 487
+   *  picks (12.7%) were decided on a quote more than SIX HOURS old. */
+  decision_quote_age_min: number | null;
   edge_percent: number | null;
   calibrated_prob: number | null;
   recommended_bookmaker: string | null;
@@ -233,6 +239,7 @@ export async function fetchUpcomingPicks(
     .select(
       `id, match_id, created_at, market, selection,
        odds_at_pick, edge_percent, calibrated_prob, recommended_bookmaker, result,
+       decision_quote_age_min,
        matches!inner (
          date,
          leagues ( name, country ),
@@ -275,6 +282,7 @@ export async function fetchUpcomingPicks(
     market: r.market,
     selection: r.selection,
     odds: r.odds_at_pick,
+    quote_age_min: r.decision_quote_age_min,
     edge_pct:
       r.edge_percent != null
         ? Number((Number(r.edge_percent) * 100).toFixed(2))
