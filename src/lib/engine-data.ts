@@ -537,6 +537,70 @@ export interface LiveSnapshot {
 
 // ─── Signal intelligence batch fetch (SUX-1/2/3) ───────────────────────────
 
+// ALL-BETS-CEILING-DEAD (fixed 2026-09-21). The previous .limit(500) silently
+// truncated the per-bot aggregate tables once total bets exceeded 500, making
+// /admin/bots and the per-bot modal disagree with the /performance leaderboard.
+// It was replaced by .range(0, 19999) plus a warn above 20,000 — and THAT
+// guard could never fire, because our PostgREST runs with
+// PGRST_DB_MAX_ROWS=10000 (verified on the container 2026-09-21). The server
+// caps the response at 10,000 and says nothing: a capped response is byte-for-byte
+// indistinguishable from a complete one, so the page would have silently
+// aggregated half the ledger from the moment simulated_bets passed 10k, while a
+// guard sitting at 20k watched. Same shape as SHADOW-BOTS-DETAIL-TRUNCATION and
+// COMP-FALLBACK-DRIFT.
+//
+// Fixed by paging. The ceiling below is now a REAL ceiling: pagination stops
+// there and warns, and it is far enough above the table (4,672 rows on
+// 2026-09-21) to be a genuine anomaly rather than a routine cap.
+const PAGED_ROW_CEILING = 200000;
+
+// PostgREST refuses to return more rows than PGRST_DB_MAX_ROWS in one response,
+// whatever .range() asks for, and does NOT mark the response as partial in any
+// way the JS client surfaces. So any query that CAN exceed that cap must page,
+// or it is silently reporting on a subset.
+//
+// PAGE must stay comfortably below the deployed cap. At 5,000 against a 10,000
+// cap there is 2x headroom: if the cap were ever lowered to 5,000 or less, a
+// full page would come back short and the loop would stop early believing it
+// had reached the end. POSTGREST-PAGE-UNDER-MAX-ROWS pins the relationship.
+const POSTGREST_DB_MAX_ROWS = 10000;
+const PAGE = 5000;
+
+/**
+ * Read every row a filtered query matches, in PAGE-sized slices.
+ *
+ * `page(from, to)` must apply a deterministic .order() — without one, Postgres
+ * may return rows in a different order per page and paging will both duplicate
+ * and drop rows, which is worse than the truncation this exists to fix.
+ *
+ * Returns `truncated: true` only if the hard ceiling was reached, which is a
+ * real anomaly worth a warning rather than the routine state it used to be.
+ */
+async function fetchAllPaged<T>(
+  label: string,
+  ceiling: number,
+  page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
+): Promise<{ rows: T[]; truncated: boolean }> {
+  const rows: T[] = [];
+  for (let from = 0; from < ceiling; from += PAGE) {
+    const to = Math.min(from + PAGE, ceiling) - 1;
+    const { data, error } = await page(from, to);
+    if (error) {
+      console.warn(`[${label}] page ${from}-${to} failed:`, error);
+      return { rows, truncated: true };
+    }
+    if (!data || data.length === 0) return { rows, truncated: false };
+    rows.push(...data);
+    if (data.length < to - from + 1) return { rows, truncated: false };
+  }
+  console.warn(
+    `[${label}] stopped at the ${ceiling}-row ceiling — this figure is computed ` +
+    `on a SUBSET and understates the true total. Raise the ceiling or move this ` +
+    `aggregate into the database.`
+  );
+  return { rows, truncated: true };
+}
+
 const PULSE_SIGNAL_NAMES = [
   "bookmaker_disagreement",
   "importance_diff",
@@ -563,21 +627,34 @@ async function batchFetchSignalSummary(
   if (!matchIds.length) return {};
   const supabase = createSupabasePublic();
 
+  type PulseSignalRow = {
+    match_id: string; signal_name: string; signal_value: number; captured_at: string;
+  };
   const [signalCountsResult, keySignalsResult, predsResult] = await Promise.all([
     // Signal counts via RPC — replaces 60k-row fetch with a single aggregated DB call
     supabase.rpc("get_signal_counts", {
       p_match_ids: matchIds,
       p_since: todayStart.toISOString(),
     }),
-    // Latest values of key signals (for pulse + teasers)
-    supabase
-      .from("match_signals")
-      .select("match_id, signal_name, signal_value, captured_at")
-      .in("match_id", matchIds)
-      .in("signal_name", PULSE_SIGNAL_NAMES)
-      .gte("captured_at", todayStart.toISOString())
-      .order("captured_at", { ascending: false })
-      .limit(20000),
+    // Latest values of key signals (for pulse + teasers).
+    // ALL-BETS-CEILING-DEAD-2026-09-21: .limit(20000) against a server capped
+    // at PGRST_DB_MAX_ROWS=10000 could only ever return 10,000, silently — and
+    // match_signals wrote 20,755 rows for today's matches alone (all names).
+    // Paged so the pulse reflects every signal, not the newest 10k.
+    (async () => ({
+      data: (await fetchAllPaged<PulseSignalRow>(
+        "matchPulseSignals", PAGED_ROW_CEILING,
+        (from, to) => supabase
+          .from("match_signals")
+          .select("match_id, signal_name, signal_value, captured_at")
+          .in("match_id", matchIds)
+          .in("signal_name", PULSE_SIGNAL_NAMES)
+          .gte("captured_at", todayStart.toISOString())
+          .order("captured_at", { ascending: false })
+          .order("id", { ascending: false })
+          .range(from, to) as unknown as PromiseLike<{ data: PulseSignalRow[] | null; error: unknown }>,
+      )).rows,
+    }))(),
     // Prediction sources (for data grade A/B/D)
     supabase
       .from("predictions")
@@ -1225,17 +1302,23 @@ const _getLeagueHitRatesUncached = async (
         | null;
     } | null;
   };
-  const { data, error } = await supabase
-    .from("simulated_bets")
-    .select(
-      `result,
-       match:match_id(league:league_id(country, name))`
-    )
-    .gte("pick_time", since)
-    .in("result", ["won", "lost"])
-    .neq("market", "combo")
-    .range(0, 19999);
-  if (error || !data) return {};
+  // ALL-BETS-CEILING-DEAD-2026-09-21: .range(0, 19999) against a server capped
+  // at 10,000 silently computed these league win rates on a subset.
+  const { rows: data } = await fetchAllPaged<Row>(
+    "leagueWinRates", PAGED_ROW_CEILING,
+    (from, to) => supabase
+      .from("simulated_bets")
+      .select(
+        `result,
+         match:match_id(league:league_id(country, name))`
+      )
+      .gte("pick_time", since)
+      .in("result", ["won", "lost"])
+      .neq("market", "combo")
+      .order("id", { ascending: true })
+      .range(from, to) as unknown as PromiseLike<{ data: Row[] | null; error: unknown }>,
+  );
+  if (data.length === 0) return {};
 
   const agg = new Map<string, { wins: number; settled: number }>();
   for (const r of data as unknown as Row[]) {
@@ -1496,43 +1579,34 @@ export const getAllBotsFromDB = unstable_cache(
   { revalidate: 1800 }
 );
 
-// Hard ceiling on bet rows returned. The previous .limit(500) silently truncated
-// the per-bot aggregate tables once total bets exceeded 500, making
-// /admin/bots and the per-bot modal disagree with /performance leaderboard
-// (which reads pre-aggregated dashboard_cache.bot_breakdown). Range goes via
-// the PostgREST `Range` header so it bypasses Supabase's default db-max-rows
-// of 1000. If we ever hit the ceiling, the warn below fires — switch to
-// reading aggregates from dashboard_cache (see PRIORITY_QUEUE: BOT-AGGREGATES-SSOT).
-const ALL_BETS_CEILING = 20000;
-
 export async function getAllBets(): Promise<LiveBet[]> {
   const supabase = createSupabasePublic();
 
-  const { data, error } = await supabase
-    .from("simulated_bets")
-    .select(
-      `id, match_id, market, selection, odds_at_pick, odds_at_pick_live, pick_time, stake,
-       model_probability, calibrated_prob, edge_percent, closing_odds, clv, result, pnl,
-       bankroll_after, news_triggered, reasoning, strategy_profile,
-       combo_legs, combo_size, system_type,
-       bot:bot_id(id, name, strategy),
-       match:match_id(id, date,
-         home_team:home_team_id(name),
-         away_team:away_team_id(name),
-         league:league_id(name, country, tier)
-       )`
-    )
-    .order("pick_time", { ascending: false })
-    .range(0, ALL_BETS_CEILING - 1);
+  const { rows: data } = await fetchAllPaged<SimBetRow>(
+    "getAllBets", PAGED_ROW_CEILING,
+    (from, to) => supabase
+      .from("simulated_bets")
+      .select(
+        `id, match_id, market, selection, odds_at_pick, odds_at_pick_live, pick_time, stake,
+         model_probability, calibrated_prob, edge_percent, closing_odds, clv, result, pnl,
+         bankroll_after, news_triggered, reasoning, strategy_profile,
+         combo_legs, combo_size, system_type,
+         bot:bot_id(id, name, strategy),
+         match:match_id(id, date,
+           home_team:home_team_id(name),
+           away_team:away_team_id(name),
+           league:league_id(name, country, tier)
+         )`
+      )
+      // pick_time alone is not unique, so id breaks ties — without a total
+      // order Postgres may place an equal-pick_time row on either side of a
+      // page boundary, silently duplicating one row and dropping another.
+      .order("pick_time", { ascending: false })
+      .order("id", { ascending: false })
+      .range(from, to) as unknown as PromiseLike<{ data: SimBetRow[] | null; error: unknown }>,
+  );
 
-  if (error || !data) return [];
-
-  if (data.length >= ALL_BETS_CEILING) {
-    console.warn(
-      `[getAllBets] Hit ${ALL_BETS_CEILING}-row ceiling — per-bot aggregates ` +
-      `may be truncated. Time to ship BOT-AGGREGATES-SSOT (read from dashboard_cache).`
-    );
-  }
+  if (data.length === 0) return [];
 
   // Resolve leg match names for combo bets. combo_legs only contains match_id strings —
   // the modal needs "Home vs Away" + league per leg, so batch-fetch them in one query.
@@ -1931,22 +2005,44 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
       matchIdsWithCoolbetEvent.add(r.match_id);
     }
   }
-  const { data: coolbetEventRows } = await admin
-    .from("odds_snapshots")
-    .select("match_id")
-    .in("match_id", matchIds)
-    .eq("bookmaker", "Coolbet")
-    .range(0, 99999);
-  for (const r of ((coolbetEventRows ?? []) as Array<{ match_id: string }>)) {
+  // ALL-BETS-CEILING-DEAD-2026-09-21: asked for 100,000 against a server that
+  // caps at 10,000, and with NO .order() — so on a busy day it would have built
+  // this gating set from an ARBITRARY 10k slice. Bounded by pending bets, so
+  // normally one request (2 matches / ~320 rows measured 2026-09-21); it pages
+  // only when the queue is genuinely large.
+  const { rows: coolbetEventRows } = await fetchAllPaged<{ match_id: string }>(
+    "coolbetEventSet", PAGED_ROW_CEILING,
+    (from, to) => admin
+      .from("odds_snapshots")
+      .select("match_id")
+      .in("match_id", matchIds)
+      .eq("bookmaker", "Coolbet")
+      .order("id", { ascending: true })
+      .range(from, to) as unknown as PromiseLike<{ data: { match_id: string }[] | null; error: unknown }>,
+  );
+  for (const r of coolbetEventRows) {
     matchIdsWithCoolbetEvent.add(r.match_id);
   }
-  const { data: snaps } = await admin
-    .from("odds_snapshots")
-    .select("match_id, market, selection, bookmaker, odds, handicap_line, timestamp")
-    .in("match_id", matchIds)
-    .in("bookmaker", ["Coolbet", "Unibet", "Bet365", "Pinnacle"])
-    .order("timestamp", { ascending: false })
-    .range(0, 9999);
+  // ALL-BETS-CEILING-DEAD-2026-09-21: .range(0, 9999) sat exactly at the
+  // server cap, so "we got 10,000 rows" and "there were more" were the same
+  // observation. The map keeps the most-recent odds per key, so losing the tail
+  // silently drops whole (match, market, selection, book) quotes from a
+  // REAL-MONEY placement surface.
+  type SnapFetchRow = {
+    match_id: string; market: string; selection: string; bookmaker: string;
+    odds: number; handicap_line: number | null; timestamp: string;
+  };
+  const { rows: snaps } = await fetchAllPaged<SnapFetchRow>(
+    "placeableOddsMap", PAGED_ROW_CEILING,
+    (from, to) => admin
+      .from("odds_snapshots")
+      .select("match_id, market, selection, bookmaker, odds, handicap_line, timestamp")
+      .in("match_id", matchIds)
+      .in("bookmaker", ["Coolbet", "Unibet", "Bet365", "Pinnacle"])
+      .order("timestamp", { ascending: false })
+      .order("id", { ascending: false })
+      .range(from, to) as unknown as PromiseLike<{ data: SnapFetchRow[] | null; error: unknown }>,
+  );
 
   type SnapRow = { match_id: string; market: string; selection: string; bookmaker: string; odds: number; handicap_line: number | null };
   // Standard markets: match_id|market|selection|bookmaker → most-recent odds
@@ -1955,7 +2051,7 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
   // AH: match_id|selection|handicap_line|bookmaker → most-recent odds (5-part key)
   const ahSnapKey = (m: string, sel: string, hl: number, bm: string) => `${m}|${sel}|${hl}|${bm}`;
   const ahSnapMap = new Map<string, number>();
-  for (const s of (snaps ?? []) as SnapRow[]) {
+  for (const s of snaps as unknown as SnapRow[]) {
     if (s.market === "asian_handicap" && s.handicap_line != null) {
       const k = ahSnapKey(s.match_id, s.selection, s.handicap_line, s.bookmaker);
       if (!ahSnapMap.has(k)) ahSnapMap.set(k, Number(s.odds));
@@ -3487,19 +3583,38 @@ const _getCalibratedHeadlineStatsUncached =
     // stakes (r.stake) stay Kelly-weighted; we ignore them for the public
     // headline and use flat instead so this reconciles with WinnerOdds,
     // Tipstrr, SignalOdds, Forebet — all of which publish flat-stake ROI.
-    const { data, error } = await admin
-      .from("simulated_bets")
-      .select(
-        "created_at, odds_at_pick, odds_at_pick_live, result, clv, clv_pinnacle, recommended_bookmaker, bots!inner(name, maturity_label)",
-      )
-      .in("bots.maturity_label", HEADLINE_MATURITY_LABELS as unknown as string[])
-      .not("bots.name", "like", "inplay_%")
-      .in("market", CALIBRATED_PUBLIC_MARKETS as unknown as string[])
-      .in("result", ["won", "lost"])
-      .gte("created_at", `${CALIBRATED_SINCE}T00:00:00Z`)
-      .range(0, 19999);
+    type HeadlineRow = {
+      created_at: string;
+      odds_at_pick: number | string | null;
+      odds_at_pick_live: number | string | null;
+      result: string | null;
+      clv: number | string | null;
+      clv_pinnacle: number | string | null;
+      recommended_bookmaker: string | null;
+    };
+    // ALL-BETS-CEILING-DEAD-2026-09-21. This is the PUBLIC headline ROI
+    // cohort. It used .range(0, 19999) against a server capped at 10,000, so
+    // the moment the cohort passed 10k this page would have published a figure
+    // computed on a subset — no error, no visible difference, and the number
+    // would simply have stopped moving.
+    const { rows: data } = await fetchAllPaged<HeadlineRow>(
+      "calibratedPublicHeadline", PAGED_ROW_CEILING,
+      (from, to) => admin
+        .from("simulated_bets")
+        .select(
+          "created_at, odds_at_pick, odds_at_pick_live, result, clv, clv_pinnacle, recommended_bookmaker, bots!inner(name, maturity_label)",
+        )
+        .in("bots.maturity_label", HEADLINE_MATURITY_LABELS as unknown as string[])
+        .not("bots.name", "like", "inplay_%")
+        .in("market", CALIBRATED_PUBLIC_MARKETS as unknown as string[])
+        .in("result", ["won", "lost"])
+        .gte("created_at", `${CALIBRATED_SINCE}T00:00:00Z`)
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to) as unknown as PromiseLike<{ data: HeadlineRow[] | null; error: unknown }>,
+    );
 
-    if (error || !data) {
+    if (data.length === 0) {
       return {
         allTime: {
           n: 0, stakeEur: 0, pnlEur: 0, roiPct: null,
@@ -3942,8 +4057,20 @@ export async function getAccuracyStats(
     const since = new Date(Date.now() - daysBack * 86_400_000).toISOString();
     query = query.gte("kickoff_at", since);
   }
-  const { data, error } = await query.range(0, 49999);
-  if (error || !data) {
+  // ALL-BETS-CEILING-DEAD-2026-09-21. published_picks holds 47,576 settled rows
+  // (24,715 in the last 30 days), so .range(0, 49999) against a 10,000-row
+  // server cap meant this accuracy figure was computed on at most a fifth of
+  // the data — and reported as the whole. Nothing calls it today (/accuracy was
+  // removed by PRODUCT-COLLAPSE), so no published number was ever wrong; it is
+  // fixed rather than left as a trap for whoever revives the page.
+  const { rows: data } = await fetchAllPaged<Row>(
+    "getAccuracyStats", PAGED_ROW_CEILING,
+    (from, to) => query
+      .order("kickoff_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(from, to) as unknown as PromiseLike<{ data: Row[] | null; error: unknown }>,
+  );
+  if (data.length === 0) {
     return {
       total: 0, hits: 0, hitRate: 0,
       backfilledTotal: 0, backfilledHits: 0,
@@ -4443,24 +4570,28 @@ export async function getPredictionFixturesForSitemap(): Promise<FixtureSitemapE
   const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
   const until = new Date(Date.now() + 21 * 86_400_000).toISOString();
 
-  const { data, error } = await admin
+  // ALL-BETS-CEILING-DEAD-2026-09-21: a truncated sitemap silently drops URLs
+  // from search engines, and nothing about the response says it was cut.
+  type FixtureRow = {
+    id: string; date: string; status: string; league_id: string;
+    home_team: { name: string } | { name: string }[] | null;
+    away_team: { name: string } | { name: string }[] | null;
+  };
+  const { rows: data } = await fetchAllPaged<FixtureRow>(
+    "predictionFixturesSitemap", PAGED_ROW_CEILING,
+    (from, to) => admin
     .from("matches")
     .select("id, date, status, league_id, home_team:home_team_id(name), away_team:away_team_id(name)")
     .in("league_id", leagueIds)
     .gte("date", since)
     .lte("date", until)
     .order("date", { ascending: true })
-    .range(0, 9999);
-  if (error || !data) return [];
+    .order("id", { ascending: true })
+    .range(from, to) as unknown as PromiseLike<{ data: FixtureRow[] | null; error: unknown }>,
+  );
+  if (data.length === 0) return [];
 
-  type Row = {
-    id: string;
-    date: string;
-    status: string;
-    league_id: string;
-    home_team: { name: string } | { name: string }[] | null;
-    away_team: { name: string } | { name: string }[] | null;
-  };
+  type Row = FixtureRow;
   return (data as Row[]).flatMap((m) => {
     const leagueSlug = leagueSlugByid.get(m.league_id);
     const home = Array.isArray(m.home_team) ? m.home_team[0] : m.home_team;
@@ -5341,17 +5472,26 @@ const _getValueBetBookOddsUncached = async (
   const admin = createSupabaseAdmin();
   const matchIds = Array.from(new Set(bets.map((b) => b.matchId)));
 
-  const { data: snaps } = await admin
+  // ALL-BETS-CEILING-DEAD-2026-09-21
+  type BookSnapRow = {
+    match_id: string; market: string; selection: string;
+    bookmaker: string; odds: number; timestamp: string;
+  };
+  const { rows: snaps } = await fetchAllPaged<BookSnapRow>(
+    "valueBetBookOdds", PAGED_ROW_CEILING,
+    (from, to) => admin
     .from("odds_snapshots")
     .select("match_id, market, selection, bookmaker, odds, timestamp")
     .in("match_id", matchIds)
     .in("bookmaker", ["Coolbet", "Unibet", "Bet365", "Pinnacle"])
     .order("timestamp", { ascending: false })
-    .range(0, 9999);
+    .order("id", { ascending: false })
+    .range(from, to) as unknown as PromiseLike<{ data: BookSnapRow[] | null; error: unknown }>,
+  );
 
   const snapKey = (m: string, mk: string, sel: string, bm: string) => `${m}|${mk}|${sel}|${bm}`;
   const snapMap = new Map<string, number>();
-  for (const s of (snaps ?? []) as Array<{ match_id: string; market: string; selection: string; bookmaker: string; odds: number }>) {
+  for (const s of snaps) {
     const k = snapKey(s.match_id, s.market, s.selection, s.bookmaker);
     if (!snapMap.has(k)) snapMap.set(k, Number(s.odds));
   }
@@ -5412,8 +5552,17 @@ const _getPublicPerformanceExtrasUncached = async (): Promise<PublicPerformanceE
   // read from dashboard_cache.daily_pnl_curve_90d so the hero sparkline and
   // this chart land on identical endpoints. UI-METRIC-SOT (2026-06-06).
   const since = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString();
+  // ALL-BETS-CEILING-DEAD-2026-09-21: .range(0, 49999) against a 10,000-row cap.
+  type ExtrasRow = {
+    pick_time: string; result: string | null;
+    pnl: number | string | null; stake: number | string | null;
+    model_probability: number | null; calibrated_prob: number | null;
+    bot: { name: string; retired_at: string | null } | { name: string; retired_at: string | null }[] | null;
+  };
   const [{ data }, cache] = await Promise.all([
-    admin
+    (async () => ({ data: (await fetchAllPaged<ExtrasRow>(
+      "publicPerformanceExtras", PAGED_ROW_CEILING,
+      (from, to) => admin
       .from("simulated_bets")
       .select(
         "pick_time, result, pnl, stake, model_probability, calibrated_prob, bot:bot_id(name, retired_at)",
@@ -5421,7 +5570,9 @@ const _getPublicPerformanceExtrasUncached = async (): Promise<PublicPerformanceE
       .in("result", ["won", "lost"])
       .gte("pick_time", since)
       .order("pick_time", { ascending: true })
-      .range(0, 49999),
+      .order("id", { ascending: true })
+      .range(from, to) as unknown as PromiseLike<{ data: ExtrasRow[] | null; error: unknown }>,
+    )).rows }))(),
     getDashboardCache(),
   ]);
 
@@ -5724,16 +5875,21 @@ export async function getMatchIdsForSitemap(): Promise<Array<{ id: string; updat
   const windowEnd = new Date(now);
   windowEnd.setUTCDate(windowEnd.getUTCDate() + 14);
 
-  const { data, error } = await supabase
+  // ALL-BETS-CEILING-DEAD-2026-09-21: same sitemap truncation risk as above.
+  type SitemapRow = { id: string; updated_at: string };
+  const { rows: data } = await fetchAllPaged<SitemapRow>(
+    "matchIdsSitemap", PAGED_ROW_CEILING,
+    (from, to) => supabase
     .from("matches")
     .select("id, updated_at, league:league_id!inner(is_active)")
     .eq("league.is_active", true)
     .gte("date", windowStart.toISOString())
     .lte("date", windowEnd.toISOString())
     .order("date", { ascending: false })
-    .limit(20000);
+    .order("id", { ascending: false })
+    .range(from, to) as unknown as PromiseLike<{ data: SitemapRow[] | null; error: unknown }>,
+  );
 
-  if (error || !data) return [];
   return data.map((r) => ({ id: r.id as string, updatedAt: r.updated_at as string }));
 }
 
@@ -5928,15 +6084,21 @@ export async function getRecapIndex(limit = 60, offset = 0): Promise<RecapIndexE
 
   // Get A-tier match IDs with at least one settled bet — the quality gate.
   // Fetching more than needed so we can paginate after filtering.
-  const { data: betRows } = await admin
+  // ALL-BETS-CEILING-DEAD-2026-09-21
+  type RecapBetRow = { match_id: string; clv: number | string | null };
+  const { rows: betRows } = await fetchAllPaged<RecapBetRow>(
+    "recapIndexBets", PAGED_ROW_CEILING,
+    (from, to) => admin
     .from("simulated_bets")
     .select("match_id, clv")
     .neq("result", "pending")
-    .limit(20000);
+    .order("id", { ascending: false })
+    .range(from, to) as unknown as PromiseLike<{ data: RecapBetRow[] | null; error: unknown }>,
+  );
 
   type BetAgg = { match_id: string; clv: number | null };
   const betsByMatch = new Map<string, { count: number; clvSum: number; clvN: number }>();
-  for (const b of (betRows ?? []) as BetAgg[]) {
+  for (const b of betRows as unknown as BetAgg[]) {
     const mid = String(b.match_id);
     const cur = betsByMatch.get(mid) ?? { count: 0, clvSum: 0, clvN: 0 };
     cur.count++;
