@@ -77,6 +77,8 @@ export function PerformanceHero({
   const cal30 = calibrated?.last30d;
   const calRoi = cal?.roiPct ?? null;
   const calN = cal?.n ?? 0;
+  const placeableRoi = cal?.placeableRoiPct ?? null;
+  const placeableN = cal?.placeableN ?? 0;
   // DUPLICATED-RULES-REMAINING-2026-09-06: was a bare "2026-05-04". The
   // cohort start is exported as CALIBRATED_SINCE; five copies of the literal
   // agreed only by coincidence, and the day one moved was the day the public
@@ -90,8 +92,16 @@ export function PerformanceHero({
     <div className="space-y-6">
       {/* ── Big ROI hero — matches landing page language ─────────────── */}
       <section className="text-center pt-4 pb-4 sm:pt-6 sm:pb-6">
+        {/* PERF-HEADLINE-IS-THE-RETIRED-ENGINE-2026-09-21. This said "Verified
+            football track record" over a number computed on ONE of our two
+            engines. V10-HAS-NO-EDGE (2026-09-16) concluded the performance page
+            "cannot lead with this bot", and the sharp rule that produced 91 of
+            the last 101 published picks writes to picks_forward_test, not
+            simulated_bets, so it is structurally invisible here. Same rule as
+            PICKS-SHOW-BOTH-BOTS: per-method statements, neither arm borrowing
+            the other's record. */}
         <p className="font-mono text-xs uppercase tracking-[0.2em] text-emerald-400">
-          Verified football track record
+          Probability model · verified track record
         </p>
         <h1 className="mt-3 text-balance text-4xl font-semibold tracking-tight sm:text-6xl">
           <span className="sr-only">Performance — </span>
@@ -108,11 +118,33 @@ export function PerformanceHero({
           </span>
         </h1>
         <p className="mt-2 text-lg text-neutral-400 sm:text-2xl">
-          across {calN.toLocaleString()} verified pre-match picks
+          across {calN.toLocaleString()} verified pre-match picks from our probability model
         </p>
         <p className="mt-2 text-xs text-neutral-500 sm:text-sm">
-          Calibrated cohort · 1X2 + OU 2.5 · BTTS retired Sep 2026 · since {fmtDate(calSince)}
+          Model engine only · 1X2 + OU 2.5 · BTTS retired Sep 2026 · since {fmtDate(calSince)}
         </p>
+        <p className="mx-auto mt-3 max-w-xl text-balance text-xs leading-relaxed text-neutral-500">
+          This is the record of our probability model, which now contributes about
+          one pick a day. Most picks published today come from the sharp-edge rule —
+          a separate method with its own record, shown above and tracked from zero
+          since 14 Sep. It does not borrow this number.
+        </p>
+        {/* ACCESSIBLE-BOOK-SET-SHRANK / V10-HAS-NO-EDGE. Computed live from the
+            same cohort rather than hardcoded: a stale caveat on an auditability
+            page is the same defect one level down. Measured 2026-09-21 the
+            headline is +8.17% (n=697) while the placeable-book arm is +0.04%
+            (n=147) — the edge sits in Marathonbet (+42.2%), the dead AF "Unibet"
+            feed (+18.3%), 10Bet (+21.4%) and Unibet-Kambi (+30.4%), none of
+            which we can bet. */}
+        {placeableRoi != null && placeableN > 0 && (
+          <p className="mx-auto mt-2 max-w-xl text-balance text-xs leading-relaxed text-amber-400/80">
+            Priced at the best quote available when the pick was made. Much of that
+            figure comes from books we cannot bet from Estonia — on the three books
+            we can actually place at, the same picks return{" "}
+            <span className="font-mono font-semibold">{fmtRoi(placeableRoi)}</span>{" "}
+            over {placeableN.toLocaleString()} bets.
+          </p>
+        )}
       </section>
 
       {/* ── 4-tile metric strip (matches landing exactly) ────────────── */}
@@ -123,13 +155,13 @@ export function PerformanceHero({
             the number people should distrust. */}
         <div className="grid grid-cols-1 gap-px sm:grid-cols-3">
           <Metric
-            label="ROI · all-time"
+            label="Model ROI · all-time"
             value={fmtRoi(calRoi)}
             sub={`${calN.toLocaleString()} bets`}
             accent={calRoi != null && calRoi > 0 ? "positive" : null}
           />
           <Metric
-            label="ROI · last 30d"
+            label="Model ROI · last 30d"
             value={fmtRoi(cal30Roi)}
             sub={`${cal30N.toLocaleString()} bets`}
             accent={
@@ -141,7 +173,7 @@ export function PerformanceHero({
             }
           />
           <Metric
-            label="Bets logged"
+            label="Model picks logged"
             value={calN ? calN.toLocaleString() : "—"}
             sub={`since ${calSince}`}
           />

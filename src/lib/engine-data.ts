@@ -3363,6 +3363,12 @@ export interface CalibratedHeadlineStats {
      *  Smaller than any-book median because Pinnacle is the sharpest book
      *  and has the tightest closing line. Shown as a credibility marker. */
     medianClvPinPct: number | null;
+    /** The same cohort restricted to PLACEABLE_BOOKMAKERS — the books we can
+     *  actually bet from Estonia. The all-books headline is carried by feeds
+     *  that are dead or unreachable (see the accumulation comment), so this is
+     *  the figure a reader can act on. */
+    placeableN: number;
+    placeableRoiPct: number | null;
     /** Settled rows EXCLUDED from roiPct because no accessible book quoted
      *  them at pick time — they were not placeable, and pricing them at the
      *  stale high-water mark inflated the public headline by +1.92pp
@@ -3444,6 +3450,15 @@ export async function getPublicCohortBotNames(): Promise<Set<string>> {
   return new Set((data as Array<{ name: string }>).map((r) => r.name));
 }
 
+// PERF-HEADLINE-IS-THE-RETIRED-ENGINE-2026-09-21. The books we can actually
+// place at from Estonia. Deliberately NOT every book we collect prices from:
+// the published headline is carried by Marathonbet, the AF "Unibet" feed,
+// 10Bet and Unibet-Kambi, none of which we can bet — Kambi was retired
+// outright for quoting prices the site did not honour. Pinnacle and Betfair
+// are excluded for licensing, Betano and Bet365 because we do not place there.
+// Keep in step with the engine's ACCESSIBLE_BOOKMAKERS.
+const PLACEABLE_BOOKMAKERS = ["Coolbet", "Epicbet", "Unibet-Site"] as const;
+
 const _getCalibratedHeadlineStatsUncached =
   async (): Promise<CalibratedHeadlineStats> => {
     const admin = createSupabaseAdmin();
@@ -3463,7 +3478,7 @@ const _getCalibratedHeadlineStatsUncached =
     const { data, error } = await admin
       .from("simulated_bets")
       .select(
-        "created_at, odds_at_pick, odds_at_pick_live, result, clv, clv_pinnacle, bots!inner(name, maturity_label)",
+        "created_at, odds_at_pick, odds_at_pick_live, result, clv, clv_pinnacle, recommended_bookmaker, bots!inner(name, maturity_label)",
       )
       .in("bots.maturity_label", HEADLINE_MATURITY_LABELS as unknown as string[])
       .not("bots.name", "like", "inplay_%")
@@ -3477,6 +3492,7 @@ const _getCalibratedHeadlineStatsUncached =
         allTime: {
           n: 0, stakeEur: 0, pnlEur: 0, roiPct: null,
           medianClvPct: null, meanClvPct: null, medianClvPinPct: null,
+          placeableN: 0, placeableRoiPct: null,
           unpriceableExcluded: 0, roiCoveragePct: 100,
           clvN: 0, clvBeatPct: null, sinceDate: CALIBRATED_SINCE,
         },
@@ -3485,6 +3501,7 @@ const _getCalibratedHeadlineStatsUncached =
     }
 
     let n = 0, pnlFlat = 0;
+    let nPlaceable = 0, pnlFlatPlaceable = 0;
     // Settled rows excluded from ROI because no accessible book quoted them
     // at pick time — see LANDING-PERF-UNPLACEABLE-FALLBACK below.
     let unpriceable = 0;
@@ -3531,6 +3548,21 @@ const _getCalibratedHeadlineStatsUncached =
         : -FLAT_STAKE_EUR;
       n += 1;
       pnlFlat += pFlat;
+      // PERF-HEADLINE-IS-THE-RETIRED-ENGINE-2026-09-21. The all-books headline
+      // is carried almost entirely by books we cannot bet from Estonia.
+      // Measured 2026-09-21 on this exact cohort: Marathonbet +42.2% (n=62),
+      // the AF "Unibet" feed +18.3% (n=120), 10Bet +21.4% (n=52) and
+      // Unibet-Kambi +30.4% (n=12, a feed retired for quoting prices the site
+      // did not honour). Strip those and the same picks return -1.81%.
+      // So publish the reachable-book arm beside the headline, computed live
+      // rather than hardcoded, because this is the page whose pitch is
+      // auditability and a stale caveat is the same defect one level down.
+      if ((PLACEABLE_BOOKMAKERS as readonly string[]).includes(
+        String((r as { recommended_bookmaker?: string | null }).recommended_bookmaker ?? ""),
+      )) {
+        nPlaceable += 1;
+        pnlFlatPlaceable += pFlat;
+      }
       if (r.clv != null) {
         const c = Number(r.clv) * 100;
         clvVals.push(c);
@@ -3546,6 +3578,7 @@ const _getCalibratedHeadlineStatsUncached =
       }
     }
     const stakeFlat = n * FLAT_STAKE_EUR;
+    const stakeFlatPlaceable = nPlaceable * FLAT_STAKE_EUR;
     const stakeFlat30 = n30 * FLAT_STAKE_EUR;
 
     function median(xs: number[]): number | null {
@@ -3574,6 +3607,11 @@ const _getCalibratedHeadlineStatsUncached =
         roiCoveragePct: n + unpriceable > 0
           ? Number(((100 * n) / (n + unpriceable)).toFixed(1))
           : 100,
+        // The same cohort restricted to books we can actually place at.
+        placeableN: nPlaceable,
+        placeableRoiPct: stakeFlatPlaceable > 0
+          ? Number(((100 * pnlFlatPlaceable) / stakeFlatPlaceable).toFixed(2))
+          : null,
         clvN: clvVals.length,
         clvBeatPct: clvVals.length
           ? Number(((100 * clvBeats) / clvVals.length).toFixed(1))
