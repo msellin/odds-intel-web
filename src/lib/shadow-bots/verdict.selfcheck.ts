@@ -156,7 +156,12 @@ assert.equal(expiresWithinDays("2026-09-14T12:00:00Z", 7, t0), false, "already e
 
 // ── per-bot verdict ────────────────────────────────────────────────────────
 assert.equal(botVerdict({ n: 17, mean: 0.05, sd: 0.01 }).kind, "COLLECTING");
-assert.equal(botVerdict({ n: 17, mean: 0.05, sd: 0.01 }).label, `COLLECTING 17/${PREREG_MIN_N}`);
+// SHADOW-BOTS-COUNTER-UNITS (2026-09-21): the label carries its UNIT, because
+// this n counts margin-corrected own-book CLV rows and the column beside it on
+// the board counts settled bets. They diverge widely (v10 reference: 582
+// settled / 552 CLV; CB O/U model: 33 / 16), and a bare "16/300" next to "33"
+// reads as one of the two numbers being broken.
+assert.equal(botVerdict({ n: 17, mean: 0.05, sd: 0.01 }).label, `COLLECTING 17/${PREREG_MIN_N} CLV`);
 assert.equal(botVerdict({ n: 299, mean: -0.5, sd: 0.01 }).kind, "COLLECTING", "no RETIRE before n=300");
 // n=300, mean +1%, sd 0.08 → se 0.00462, CI half 0.00905 → lower 0.00095 > 0 → PROMOTE
 assert.equal(botVerdict({ n: 300, mean: 0.01, sd: 0.08 }).kind, "PROMOTE");

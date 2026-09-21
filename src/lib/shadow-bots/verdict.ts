@@ -281,7 +281,17 @@ export function botVerdict(s: BotStats): BotVerdictResult {
   const t = se != null && se > 0 && s.mean != null ? s.mean / se : null;
 
   if (s.n < PREREG_MIN_N) {
-    return { kind: "COLLECTING", label: `COLLECTING ${s.n}/${PREREG_MIN_N}`, ciHalf, t };
+    // SHADOW-BOTS-COUNTER-UNITS (2026-09-21). The label carries "CLV" because
+    // this n is NOT the settled-bet count sitting two columns to its left.
+    //
+    // The pre-registration's checkpoints are counted in margin-corrected
+    // own-book CLV ROWS, and a settled bet only yields one when we captured a
+    // close AT THE BOOK THE PICK WAS PRICED AT. So the two diverge, often
+    // widely: CB O/U model reads 33 settled / 16 CLV, v10 reference 582 / 552.
+    // Rendered as a bare "COLLECTING 16/300" beside "33", it reads as a bug in
+    // one number or the other — and the operator's reasonable conclusion,
+    // "it's further along than it says", is the wrong one.
+    return { kind: "COLLECTING", label: `COLLECTING ${s.n}/${PREREG_MIN_N} CLV`, ciHalf, t };
   }
   if (s.mean != null && ciHalf != null && s.mean - ciHalf > 0) {
     return { kind: "PROMOTE", label: "PROMOTE", ciHalf, t };

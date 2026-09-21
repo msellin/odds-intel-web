@@ -184,7 +184,7 @@ export function Scoreboard({
                 <td className="px-2 py-1.5">
                   <span
                     className={`inline-block whitespace-nowrap rounded border px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-wider ${VERDICT_TONE[v.kind]}`}
-                    title={`Pre-registration: COLLECTING if n < ${PREREG_MIN_N}; PROMOTE if CI lower > 0; RETIRE if mean < −2%; else OBSERVE`}
+                    title={`Pre-registration, counted in margin-corrected own-book CLV ROWS — not settled bets: COLLECTING if n < ${PREREG_MIN_N}; PROMOTE if CI lower > 0; RETIRE if mean < −2%; else OBSERVE. \u2116 SETTLED is higher because a settled bet only yields a CLV row when we captured a close at the book the pick was priced at. ROI can never promote a bot here at any value \u2014 per-bet return sd \u2248 1.3 means confirming a true +3% ROI needs ~15,600 settled bets.`}
                   >
                     {v.label}
                   </span>
