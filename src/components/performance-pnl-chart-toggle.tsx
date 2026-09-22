@@ -92,19 +92,55 @@ function CustomTooltip({
   );
 }
 
+
+/**
+ * Days a period covers. PERF-CHART-DAY-COUNT (2026-09-22).
+ *
+ * Owner: *"why 90d says 68 days, 30d says 28 days and only 7d says over 7 days"*.
+ * Two separate faults, and the 7d view was the worst of them even though it was
+ * the one that looked right.
+ *
+ * (1) THE LABEL COUNTED DATA POINTS, NOT DAYS. The curve has one row per day
+ *     that had a SETTLED bet — `daily_pnl_curve_*` is a GROUP BY DATE over
+ *     settled rows, so a quiet day produces no row at all. Measured 2026-09-22:
+ *     the 90d curve held 68 points across 89 calendar days (21 days with nothing
+ *     settled) and the 30d curve 28 across 30. "over 68d" was therefore counting
+ *     days-with-activity while reading as window length.
+ *
+ * (2) THE 7d WINDOW WAS NOT SEVEN DAYS. It was `slice(-7)` — the last seven
+ *     POINTS — which on a quiet book reaches back arbitrarily far. On the day
+ *     this was found it spanned Sep 13 → Sep 21, NINE days, while the label said
+ *     7d and the number underneath was being read as a week's P&L. It only ever
+ *     "agreed" with its label because the label counted the same points the
+ *     slice took, so two bugs cancelled into a plausible-looking pair.
+ *
+ * Every period is now cut by DATE from the latest day in the data, so the window
+ * means what the button says, and the subtitle states the real date range rather
+ * than a count that can mean either thing.
+ */
+function sliceByDays(curve: CurvePoint[], days: number): CurvePoint[] {
+  if (curve.length === 0) return curve;
+  // Anchor on the last day WE HAVE, not on today: settlement lands in batches,
+  // so anchoring on today silently shortens every window between runs.
+  const end = new Date(`${curve[curve.length - 1].d}T00:00:00Z`);
+  const start = new Date(end);
+  start.setUTCDate(start.getUTCDate() - (days - 1));
+  const startIso = start.toISOString().slice(0, 10);
+  return curve.filter((p) => p.d >= startIso);
+}
+
 export function PerformancePnlChartToggle({ curve30d, curve90d }: Props) {
   const [period, setPeriod] = useState<Period>("90d");
 
   const activeCurve: CurvePoint[] = useMemo(() => {
-    if (period === "90d") return curve90d ?? [];
-    if (period === "30d") return curve30d ?? [];
-    // 7d — slice the tail of the 30d curve. Only compute here so it stays
-    // consistent with the 30d data source (same cohort).
-    const src = curve30d ?? [];
-    if (src.length <= 7) return src;
-    // Slice last 7, rebase to zero so "7d P&L" reads as movement in the window,
-    // not the accumulated total from the 90d start.
-    const tail = src.slice(-7);
+    if (period === "90d") return sliceByDays(curve90d ?? [], 90);
+    if (period === "30d") return sliceByDays(curve30d ?? [], 30);
+    // 7d — cut the 30d curve to the last SEVEN DAYS (not the last seven points;
+    // see sliceByDays). Derived from the 30d source so the cohort matches.
+    const tail = sliceByDays(curve30d ?? [], 7);
+    if (tail.length === 0) return tail;
+    // Rebase to zero so "7d P&L" reads as movement WITHIN the window rather than
+    // the accumulated total carried in from the 90d start.
     const base = tail[0].cum;
     return tail.map((p) => ({ d: p.d, cum: Number((p.cum - base).toFixed(2)) }));
   }, [period, curve30d, curve90d]);
@@ -157,7 +193,13 @@ export function PerformancePnlChartToggle({ curve30d, curve90d }: Props) {
               {fmtEur(delta)}
             </span>
             <span className="text-xs text-neutral-500">
-              over {activeCurve.length}d · calibrated cohort
+              {/* The date range, not a count. The button already states the
+                  window; what a reader cannot otherwise tell is which days it
+                  actually covers — and a bare "68d" next to a "90d" button
+                  invites exactly the question that produced this fix. */}
+              {hasData
+                ? `${shortDate(activeCurve[0].d)} – ${shortDate(activeCurve[activeCurve.length - 1].d)} · ${activeCurve.length} settled day${activeCurve.length === 1 ? "" : "s"}`
+                : "calibrated cohort"}
             </span>
           </div>
         </div>
