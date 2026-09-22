@@ -116,8 +116,15 @@ function AnchorChip({ bot }: { bot: string }) {
     anchor === "model"     ? "bg-sky-500/15 text-sky-400 border-sky-500/25"
     : anchor === "sharp"     ? "bg-violet-500/15 text-violet-300 border-violet-500/25"
     : anchor === "consensus" ? "bg-teal-500/15 text-teal-300 border-teal-500/25"
+    : anchor === "none"      ? "bg-zinc-500/15 text-zinc-400 border-zinc-500/25"
     : null;
-  if (!style) return null;   // 'none' = internal strategy bot, nothing to claim
+  // 'none' gets a chip too, reading STRATEGY. It used to render nothing, which
+  // left a bot that IS on this page (bot_high_roi_global_v2, +25.2%) as the only
+  // unlabelled row — and "no label" reads as "unknown", not as "different kind".
+  // These bots do not price against an anchor at all; they are a filter over the
+  // model's own picks (that one is 1x2 home/away in ES/AU/IS at odds 1.50-5.50),
+  // so their ROI is not comparable with an anchored bot's either.
+  if (!style) return null;
   return (
     <span
       title={
@@ -125,11 +132,13 @@ function AnchorChip({ bot }: { bot: string }) {
           ? "Fair value comes from our own probability model."
           : anchor === "sharp"
           ? "Fair value comes from the sharpest single line, margin removed. No model."
-          : "Fair value comes from a consensus of 5+ bookmakers, margin removed. No model."
+          : anchor === "consensus"
+          ? "Fair value comes from a consensus of 5+ bookmakers, margin removed. No model."
+          : "A filter over the model's own picks rather than a price comparison — no separate fair-value anchor."
       }
       className={`rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider border ${style}`}
     >
-      {anchor}
+      {anchor === "none" ? "strategy" : anchor}
     </span>
   );
 }

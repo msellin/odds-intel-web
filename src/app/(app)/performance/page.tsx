@@ -413,7 +413,22 @@ export default async function PerformancePage() {
       // mechanism that marks bot_high_roi_global_v2 as BETA at n=51. Using a
       // private threshold for one bot made the page inconsistent AND mislabelled
       // it; the chip is the honest signal and it is already there.
-      hasEnoughData: picksSummary.settled >= 5,
+      // VISIBLE FROM THE FIRST PICK (2026-09-22, owner: "i still dont see that
+      // bot under performance page. why?").
+      //
+      // This was `settled >= 5`, the same bar every other bot gets. For a
+      // PUBLISHED arm that is the wrong bar: the consensus arm sent 21 picks to
+      // the channel on its first day and every one was still pending, so it
+      // scored 0 settled and collapsed into "in development (< 5 bets)". A
+      // reader who received 21 messages then opened /performance saw two bots,
+      // neither of which had sent them anything — the same "the table lists
+      // everything EXCEPT the strategy we publish" defect, for a third time.
+      //
+      // Published > 0 is the honest bar HERE because these rows are injected
+      // precisely because they publish. Nothing is dressed up: settled still
+      // reads 0, ROI still reads null, and the TESTING chip still says "still
+      // collecting" — which is the legend's own words for exactly this state.
+      hasEnoughData: picksSummary.published > 0,
       maturityLabel: "testing",   // legend: "TESTING (still collecting)"
     });
   }
