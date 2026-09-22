@@ -12,7 +12,9 @@
  *   - No marketing nav with /pricing /how-it-works /faq links
  *
  * What it does have:
- *   - One headline: ROI on calibrated pre-match picks, since launch
+ *   - One headline: the pick COUNT and the fact the ledger is open.
+ *     (Was ROI until 2026-09-22 — PERF-CLAIM-NOTHING. alpha = 0.0000 on
+ *      both markets, so an ROI headline asserted an edge we cannot show.)
  *   - One CTA pair: view ledger / join Telegram
  *   - One trust strip: count, CLV, hit-rate, link to OpenTimestamps anchor (TBD)
  *   - One methodology paragraph (2-3 sentences max)
@@ -70,7 +72,10 @@ async function getMeta(): Promise<TrackRecordMeta | null> {
 }
 
 export const metadata = {
-  title: "OddsIntel — verified football track record",
+  // PERF-CLAIM-NOTHING (2026-09-22): "verified track record" is a claim, and
+  // it is the first thing a search result shows. The ledger is the product;
+  // its being public is the fact worth titling.
+  title: "OddsIntel — a public football betting ledger",
   description:
     "Pre-match football picks with a public, time-stamped ledger. Every bet, every closing line, every result.",
 };
@@ -350,34 +355,52 @@ export default async function PreviewLanding() {
       <main className="mx-auto max-w-5xl px-4">
         <section className="pt-10 pb-8 sm:pt-20 sm:pb-10">
           <div className="mx-auto max-w-3xl space-y-4 text-center sm:space-y-5">
-            <p className="font-mono text-xs uppercase tracking-[0.2em] text-emerald-400">
-              Verified football track record
+            {/* PERF-CLAIM-NOTHING (2026-09-22, owner: "we should just fix it
+                and claim nothing"). This led with "+8.17% ROI" under "Verified
+                football track record" — the front door of the product, and the
+                strongest claim we make anywhere.
+
+                The number was real and correctly computed. The CLAIM it carries
+                is what is not supported: residual_test.py (1x2) and
+                residual_test_ou.py (O/U) both measured alpha = 0.0000 on every
+                arm and line on 2026-09-16, with model AUC 0.5796 against the
+                market's 0.6011 and residual AUC 0.4429 — below chance.
+                V10-HAS-NO-EDGE called it "not a number to correct, it is a
+                number to retire". Re-measured against the market on the same
+                bets 2026-09-22: +3.0pp over implied probability at z = +1.17,
+                n = 354, not distinguishable from zero.
+
+                A headline ROI on a page selling auditability is the one place
+                the claim has to go first. What replaces it is the thing that IS
+                true and IS the product: every pick is logged before kickoff and
+                the whole ledger is open, wins and losses alike. The numbers are
+                still on /performance — as a record, not as a promise. */}
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-neutral-400">
+              Football model · open ledger
             </p>
             <h1 className="text-balance text-4xl font-semibold tracking-tight sm:text-6xl">
-              {roi !== null ? (
+              {total > 0 ? (
                 <>
-                  <span className="text-emerald-400">
-                    {roi > 0 ? "+" : ""}
-                    {roi.toFixed(2)}% ROI
+                  <span className="text-neutral-100">
+                    {total.toLocaleString()} picks, logged before kickoff
                   </span>
                   <span className="mt-2 block text-lg font-normal text-neutral-400 sm:text-2xl">
-                    across {total.toLocaleString()} verified pre-match picks
+                    every one settled against official scores, in public
                   </span>
-                  {roiCiLow !== null && roiCiHigh !== null && (
-                    <span
-                      className="mt-3 block font-mono text-xs font-normal normal-case tracking-normal text-neutral-500 sm:text-sm"
-                      title="95% confidence interval on the ROI point estimate. Betting returns are high-variance: a few hundred settled bets leave a band this wide, so treat the headline as the middle of a range, not a precise figure. Priced at odds actually available at pick time."
-                    >
-                      95% CI {roiCiLow > 0 ? "+" : ""}{roiCiLow.toFixed(2)}% to{" "}
-                      {roiCiHigh > 0 ? "+" : ""}{roiCiHigh.toFixed(2)}% · priced at odds
-                      available when each pick was posted
-                    </span>
-                  )}
                 </>
               ) : (
-                <span className="text-neutral-300">Track record loading…</span>
+                <span className="text-neutral-300">Ledger loading…</span>
               )}
             </h1>
+            <p className="mx-auto max-w-xl text-balance text-sm leading-relaxed text-neutral-400">
+              <span className="font-semibold text-neutral-300">
+                We don&rsquo;t claim to beat the market.
+              </span>{" "}
+              Measured against the closing price on the same bets, our picks are not
+              statistically distinguishable from it. We publish the full record
+              anyway — including the losing runs — so you can judge it yourself
+              rather than take a number on trust.
+            </p>
             <p className="mx-auto max-w-xl text-balance text-base text-neutral-400 sm:text-lg">
               Football model. Pre-match only. Every pick logged before kickoff,
               every result settled against official scores, every closing line

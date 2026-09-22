@@ -100,52 +100,52 @@ export function PerformanceHero({
             simulated_bets, so it is structurally invisible here. Same rule as
             PICKS-SHOW-BOTH-BOTS: per-method statements, neither arm borrowing
             the other's record. */}
-        <p className="font-mono text-xs uppercase tracking-[0.2em] text-emerald-400">
-          Probability model · verified track record
+        <p className="font-mono text-xs uppercase tracking-[0.2em] text-neutral-400">
+          Probability model · open ledger
         </p>
         <h1 className="mt-3 text-balance text-4xl font-semibold tracking-tight sm:text-6xl">
           <span className="sr-only">Performance — </span>
-          <span
-            className={
-              calRoi == null
-                ? "text-muted-foreground"
-                : calRoi >= 0
-                  ? "text-emerald-400"
-                  : "text-red-400"
-            }
-          >
-            {fmtRoi(calRoi)} ROI
-          </span>
+          {calN.toLocaleString()} picks, logged before kickoff
         </h1>
         <p className="mt-2 text-lg text-neutral-400 sm:text-2xl">
-          across {calN.toLocaleString()} verified pre-match picks from our probability model
+          Every one recorded before the match and settled against official scores.
         </p>
         <p className="mt-2 text-xs text-neutral-500 sm:text-sm">
           Model engine only · 1X2 + OU 2.5 · BTTS retired Sep 2026 · since {fmtDate(calSince)}
         </p>
-        <p className="mx-auto mt-3 max-w-xl text-balance text-xs leading-relaxed text-neutral-500">
-          This is the record of our probability model, which now contributes about
-          one pick a day. Most picks published today come from the sharp-edge rule —
-          a separate method with its own record, shown above and tracked from zero
-          since 14 Sep. It does not borrow this number.
+        {/* PERF-CLAIM-NOTHING (2026-09-22, owner: "we should just fix it and
+            claim nothing").
+            
+            This led with "+8.17% ROI" under "verified track record". The
+            relabel of 2026-09-21 made that number honestly ATTRIBUTED — model
+            engine, not the sharp rule — but left it a performance CLAIM, and
+            the claim is the part that is not supported:
+            
+              * residual_test.py (1x2) and residual_test_ou.py (O/U), 2026-09-16:
+                alpha = 0.0000 on every arm and every line. Model AUC 0.5796
+                against the market's 0.6011 — worse than the price it is betting
+                into — and residual AUC 0.4429, i.e. below chance.
+              * V10-HAS-NO-EDGE concluded verbatim that this is "not a number to
+                correct, it is a number to retire".
+              * Measured 2026-09-22 against the market on the same bets: over 90
+                days the picks land 3.0pp above implied probability at z = +1.17,
+                which is not distinguishable from zero.
+            
+            So the headline is now a COUNT, which is a fact, and the ROI stays
+            below as ledger data rather than as the thing the page asserts. The
+            product here is auditability — an open ledger is worth publishing
+            even when, especially when, it does not show an edge. Removing the
+            numbers entirely would be the opposite of the pitch; removing the
+            claim is the point. */}
+        <p className="mx-auto mt-4 max-w-xl text-balance text-xs leading-relaxed text-neutral-400">
+          <span className="font-semibold text-neutral-300">We are not claiming an edge.</span>{" "}
+          Measured against the closing market on the same bets, this model&rsquo;s picks
+          are not statistically distinguishable from the price they were taken at.
+          The ledger below is published in full so you can check that yourself —
+          including the periods where it lost. Most picks published today come from
+          a separate sharp-edge rule, tracked from zero since 14 Sep, which makes no
+          claim either and does not borrow these numbers.
         </p>
-        {/* KAMBI-FEED-DIVERGENCE. CORRECTED 2026-09-21: the first version of
-            this line published the three-book Estonian-licensing figure
-            (+0.04%), which is an OWN constraint and not a reader's — readers
-            here can bet Marathonbet, Bet365 and 10Bet perfectly well. The
-            honest public caveat is narrower: exclude only prices NOBODY could
-            have taken. That is Unibet-Kambi, where 38% of stored quotes read
-            higher than the site offered (median +3.3%, max +23.5%). Worth
-            0.92pp: +8.17% all books vs +7.25% without it. Computed live. */}
-        {obtainableRoi != null && obtainableN > 0 && obtainableN < calN && (
-          <p className="mx-auto mt-2 max-w-xl text-balance text-xs leading-relaxed text-amber-400/80">
-            Priced at the best quote available when the pick was made. A small
-            number of those quotes came from a feed we later found was not
-            honoured by the bookmaker; excluding them the same picks return{" "}
-            <span className="font-mono font-semibold">{fmtRoi(obtainableRoi)}</span>{" "}
-            over {obtainableN.toLocaleString()} bets.
-          </p>
-        )}
       </section>
 
       {/* ── 4-tile metric strip (matches landing exactly) ────────────── */}
@@ -156,7 +156,7 @@ export function PerformanceHero({
             the number people should distrust. */}
         <div className="grid grid-cols-1 gap-px sm:grid-cols-3">
           <Metric
-            label="Model ROI · all-time"
+            label="Model ROI · all-time (not a claim)"
             value={fmtRoi(calRoi)}
             sub={`${calN.toLocaleString()} bets`}
             accent={calRoi != null && calRoi > 0 ? "positive" : null}
