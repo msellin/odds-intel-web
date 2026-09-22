@@ -427,8 +427,28 @@ function BotModal({
 
 export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredBotCount = 0 }: Props) {
   const [selected, setSelected] = useState<PublicBotStat | null>(null);
-  const [showUnderperforming, setShowUnderperforming] = useState(false);
-  const [showDeveloping, setShowDeveloping] = useState(false);
+  // SHOW-THE-LOSERS-BY-DEFAULT (2026-09-22, owner: "add the fix not to hide
+  // negative ones, be default show all").
+  //
+  // This defaulted to FALSE, so a reader's first view of /performance was the
+  // WINNERS ONLY and they had to click "N underperforming (negative ROI)" to see
+  // the rest. The count was honest and the collapse was one click — but the
+  // default is what most readers ever see, and a track record whose default view
+  // excludes the losing strategies is not a track record.
+  //
+  // It also cut directly against the point of V10-SPLIT-BY-MARKET ([[#040]]) two
+  // hours earlier: the whole reason for splitting `bot_v10_all` was to stop one
+  // market's +12.8% hiding another's -0.5%, and this toggle then hid the -0.5%
+  // half behind a chevron anyway.
+  //
+  // 👥 PICKS judges work on "whether the number survives scrutiny". A default
+  // that hides the unflattering rows fails that on its own terms.
+  //
+  // The toggle is KEPT (now a collapse, not a reveal) because the grouping is
+  // still useful — losers sort below winners and a reader can fold them away.
+  const [showUnderperforming, setShowUnderperforming] = useState(true);
+  // Same reasoning as above — "show all" includes the ones still accumulating.
+  const [showDeveloping, setShowDeveloping] = useState(true);
 
   // PERFORMANCE-PUBLIC-PREMATCH-ONLY (2026-06-24): the public leaderboard
   // hides in-play bots entirely — they have higher variance + the InplayBot
