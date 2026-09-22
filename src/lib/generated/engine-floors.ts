@@ -125,6 +125,12 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "oddsCap": null,
     "realMoney": false
   },
+  "bot_unified_gate_1x2_paper_v1": {
+    "edgeFloor": 0.1,
+    "oddsFloor": 2.8,
+    "oddsCap": null,
+    "realMoney": false
+  },
   "bot_v10_all": {
     "edgeFloor": null,
     "oddsFloor": null,
