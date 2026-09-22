@@ -16,7 +16,12 @@ export const BOT_SHORT_LABELS: Record<string, string> = {
   bot_trigger_1x2_sharp_v1: "1x2 sharp (all books)",
   bot_trigger_ou_sharp_v1: "O/U sharp (all books)",
   bot_trigger_1x2_sharp_tight_v1: "1x2 sharp TIGHT",
-  bot_v10_all: "v10 reference",
+  // V10-SPLIT-BY-MARKET (migration 375, 2026-09-22). One "v10 reference" became
+  // two, because the two markets measured on OPPOSITE sides of zero.
+  // These are the ADMIN short labels (compact, for a dense operator table);
+  // `bots.display_name` is the customer-facing name on /performance.
+  bot_v10_1x2: "v10 1x2",
+  bot_v10_ou: "v10 O/U",
   bot_high_roi_global_v2: "high-ROI global",
   bot_sharp_forward_test_v1: "PICKS forward test",
 };

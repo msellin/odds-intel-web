@@ -105,6 +105,7 @@ export interface PerformanceStats {
 
 interface BotDbRow {
   name: string;
+  displayName?: string | null;
   strategy?: string | null;
   description?: string | null;
   strategyDescription?: string | null;
@@ -281,7 +282,11 @@ export const isLiveBot = (botName: string): boolean => botName.startsWith("inpla
 // ── Public leaderboard aggregator ─────────────────────────────────────────────
 
 export interface PublicBotStatShape {
+  /** Identity / join key. Kept because the modal, the bet filter and every
+   *  ENGINE_BOT_FLOORS lookup key on it. */
   name: string;
+  /** What the reader sees. Null on bots created before migration 375. */
+  displayName: string | null;
   settled: number;
   won: number;
   lost: number;
@@ -389,6 +394,7 @@ export function buildPublicBotStats(
       : avgClv > 0 ? "positive" : "negative";
     return {
       name: dbBot.name,
+      displayName: dbBot.displayName ?? null,
       settled: settled.length,
       won: opts.isPro ? won : 0,
       lost: opts.isPro ? lost : 0,

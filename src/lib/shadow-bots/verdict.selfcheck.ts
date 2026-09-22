@@ -207,7 +207,7 @@ console.log("verdict.selfcheck: 2026-09-15 corrections asserted");
     { name: "bot_coolbet_ou_model_v1", stats: { n: 16, mean: -0.0249, sd: 0.078 } },
     { name: "bot_trigger_1x2_sharp_tight_v1", stats: { n: 45, mean: -0.0299, sd: 0.130 } },
     { name: "bot_coolbet_1x2_model_v1", stats: { n: 9, mean: -0.0359, sd: 0.053 } },
-    { name: "bot_v10_all", stats: { n: 155, mean: -0.0380, sd: 0.089 } },
+    { name: "bot_v10_1x2", stats: { n: 155, mean: -0.0380, sd: 0.089 } },
     { name: "bot_ou35_model_v1", stats: { n: 23, mean: -0.0469, sd: 0.040 } },
   ];
   const lead = leadBotName(board);
@@ -216,7 +216,7 @@ console.log("verdict.selfcheck: 2026-09-15 corrections asserted");
   const track = (n: string) => botTrack(board.find((b) => b.name === n)!.stats, n === lead);
   // Whole CI below zero — decided, not "slightly losing".
   for (const n of ["bot_coolbet_trigger_sharp_1x2_v1", "bot_coolbet_1x2_model_v1",
-                   "bot_v10_all", "bot_ou35_model_v1"]) {
+                   "bot_v10_1x2", "bot_ou35_model_v1"]) {
     assert.equal(track(n), "NEGATIVE", n + " CI is entirely below zero");
   }
   // Negative mean but the CI still spans zero — not ruled out.

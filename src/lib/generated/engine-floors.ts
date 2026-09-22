@@ -171,13 +171,21 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "anchor": "model",
     "market": "1x2"
   },
-  "bot_v10_all": {
+  "bot_v10_1x2": {
     "edgeFloor": null,
     "oddsFloor": null,
     "oddsCap": null,
     "realMoney": false,
     "anchor": "model",
-    "market": "mixed"
+    "market": "1x2"
+  },
+  "bot_v10_ou": {
+    "edgeFloor": null,
+    "oddsFloor": null,
+    "oddsCap": null,
+    "realMoney": false,
+    "anchor": "model",
+    "market": "O/U 2.5"
   }
 };
 

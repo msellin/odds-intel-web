@@ -24,8 +24,35 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ENGINE_BOT_FLOORS } from "@/lib/generated/engine-floors";
 
+/**
+ * What to print for a bot. BOT-NAMES-AND-LABELS (2026-09-22, [[#069]]).
+ *
+ * /performance is a CUSTOMER surface that was listing internal identifiers —
+ * `bot_v10_all`, `bot_high_roi_global_v2`, `bot_sharp_forward_test_v1`. The owner:
+ * *"the names should be user readable and intuitive"*.
+ *
+ * The fix is a `display_name` column that is NOT the primary key, so a bot can be
+ * renamed for readers without breaking attribution, joins or history — the
+ * failure mode that cost real rows in the 2026-09 audits. `name` is still shown,
+ * as small mono secondary text, because an operator reading this page must still
+ * be able to map a row to a query.
+ *
+ * The NAME says what the bot BETS, not what it prices against: the AnchorChip
+ * beside it already carries MODEL / SHARP LINE / CONSENSUS, and a name that
+ * repeats the chip spends the only line a reader reads on information already
+ * on screen.
+ */
+function botLabel(bot: Pick<PublicBotStat, "name" | "displayName">): string {
+  return bot.displayName?.trim() || bot.name;
+}
+
 export interface PublicBotStat {
+  /** Identity / join key — `bots.name`. The bet filter, ENGINE_BOT_FLOORS and
+   *  every ledger query key on this, so it is never renamed. */
   name: string;
+  /** BOT-NAMES-AND-LABELS (migration 375, [[#069]]). What a READER sees.
+   *  Null for rows that predate the column; `botLabel()` falls back to `name`. */
+  displayName?: string | null;
   settled: number;
   won: number;
   lost: number;
@@ -120,7 +147,7 @@ function AnchorChip({ bot }: { bot: string }) {
     : null;
   // 'none' NO LONGER MEANS "strategy" (corrected 2026-09-22, owner: "how is
   // strategy different from model?"). It wasn't: bot_high_roi_global_v2 runs the
-  // SAME model edge thresholds as bot_v10_all and then filters by league, side
+  // SAME model edge thresholds as bot_v10_1x2 and then filters by league, side
   // and odds band. A filter over model picks is still model-anchored, and
   // labelling it a separate METHOD on a customer page was telling readers it
   // priced against something it does not. Its registry anchor is now `model`.
@@ -238,7 +265,10 @@ function BotModal({
       <DialogContent className="w-[95vw] max-w-4xl sm:max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex flex-wrap items-center gap-3">
-            <span className="font-mono text-base">{bot.name}</span>
+            <span className="text-base font-semibold">{botLabel(bot)}</span>
+            {bot.displayName && (
+              <span className="font-mono text-xs text-muted-foreground">{bot.name}</span>
+            )}
             {bot.settled > 0 && bot.pnl != null && (
               <span className={`text-base font-semibold ${pnlColor(bot.pnl)}`}>
                 {fmt(bot.pnl)}€
@@ -540,8 +570,8 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="font-mono text-xs font-semibold truncate">
-                          {bot.name}
+                        <span className="text-xs font-semibold truncate">
+                          {botLabel(bot)}
                         </span>
                         {isLive && (
                           <Badge
@@ -554,6 +584,11 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
                         <MaturityChip label={bot.maturityLabel ?? "active"} />
                         <AnchorChip bot={bot.name} />
                       </div>
+                      {bot.displayName && (
+                        <p className="font-mono text-[10px] text-muted-foreground/60 truncate">
+                          {bot.name}
+                        </p>
+                      )}
                       <p className="mt-1 text-[11px] tabular-nums text-muted-foreground">
                         {isMaturing
                           ? bot.settled > 0
@@ -622,7 +657,7 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
                   >
                     <td className="sticky left-0 z-10 bg-background py-3 pl-5 pr-2">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono text-xs max-w-[110px] sm:max-w-none truncate">{bot.name}</span>
+                        <span className="text-xs font-medium max-w-[150px] sm:max-w-none truncate">{botLabel(bot)}</span>
                         {isLive && (
                           <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-amber-500/30 text-amber-400/70">
                             live
@@ -631,6 +666,9 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
                         <MaturityChip label={bot.maturityLabel ?? 'active'} />
                         <AnchorChip bot={bot.name} />
                       </div>
+                      {bot.displayName && (
+                        <p className="font-mono text-[10px] text-muted-foreground/60 mt-0.5">{bot.name}</p>
+                      )}
                       {isMaturing && (
                         <p className="text-[10px] text-muted-foreground mt-0.5">
                           {bot.settled > 0 ? `${bot.settled} settled — accumulating data` : "Active · no settled bets yet"}

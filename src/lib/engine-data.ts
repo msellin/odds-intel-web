@@ -1535,7 +1535,14 @@ export const getFreeDailyPick = unstable_cache(
 
 export interface BotRecord {
   id: string;
+  /** The IDENTITY. Join key for simulated_bets, shadow_bets, real_bets,
+   *  picks_public_all and ENGINE_BOT_FLOORS. Never rendered as the primary
+   *  label on a customer surface — see `displayName`. */
   name: string;
+  /** BOT-NAMES-AND-LABELS (migration 375, [[#069]]). Human-readable label for
+   *  /performance and /picks. DISPLAY ONLY — never join, filter or key on it.
+   *  Null for bots that predate the column; callers fall back to `name`. */
+  displayName: string | null;
   strategy: string | null;
   description: string | null;
   strategyDescription: string | null;
@@ -1553,7 +1560,7 @@ const _getAllBotsFromDBUncached = async (): Promise<BotRecord[]> => {
   const admin = createSupabaseAdmin();
   const { data, error } = await admin
     .from("bots")
-    .select("id, name, strategy, description, strategy_description, starting_bankroll, current_bankroll, is_active, retired_at, maturity_label")
+    .select("id, name, display_name, strategy, description, strategy_description, starting_bankroll, current_bankroll, is_active, retired_at, maturity_label")
     .order("name");
   if (error || !data) {
     console.error("[getAllBotsFromDB] query failed:", error?.message ?? "no data");
@@ -1562,6 +1569,7 @@ const _getAllBotsFromDBUncached = async (): Promise<BotRecord[]> => {
   return (data as Record<string, unknown>[]).map((r) => ({
     id: r.id as string,
     name: r.name as string,
+    displayName: (r.display_name as string | null) ?? null,
     strategy: r.strategy as string | null,
     description: r.description as string | null,
     strategyDescription: r.strategy_description as string | null,
@@ -1575,7 +1583,9 @@ const _getAllBotsFromDBUncached = async (): Promise<BotRecord[]> => {
 
 export const getAllBotsFromDB = unstable_cache(
   _getAllBotsFromDBUncached,
-  ["getAllBotsFromDB_v1"],
+  // v2: the row shape gained display_name (migration 375) — the key must
+  // change or 30 minutes of cached rows come back without it.
+  ["getAllBotsFromDB_v2"],
   { revalidate: 1800 }
 );
 

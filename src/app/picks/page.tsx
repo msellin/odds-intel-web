@@ -384,8 +384,14 @@ export default async function PicksPage() {
               bot_v10_all's picks landed on this page. A page-level claim about
               HOW a pick is made cannot survive two methods sharing the page;
               the claim now belongs per row, where EDGE_LABEL puts it. */}
+          {/* "Two bots, two methods" was already stale when the consensus arm
+              shipped (three methods, 2026-09-22) and V10-SPLIT-BY-MARKET
+              (migration 375) made the bot count wrong too. Counting either in
+              fixed copy is the bug — it goes stale on every change and nothing
+              fails when it does. Name the invariant instead: whatever the counts
+              are, every row carries its own method badge. */}
           <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-emerald-400">
-            Two bots, two methods — every pick says which
+            Three methods, one board — every pick says which
           </p>
           <h1 className="text-balance text-3xl font-semibold tracking-tight sm:text-5xl">
             {/* PICKS-HEADLINE-COUNT-2026-09-14, revised twice on 2026-09-15.

@@ -85,6 +85,7 @@ function buildCachedBotStats(
     const dbBot = botsDB?.find(db => db.name === b.name);
     return {
       name: b.name,
+      displayName: dbBot?.displayName ?? null,
       settled: b.settled,
       won: isPro ? b.won : 0,
       lost: isPro ? b.settled - b.won : 0,
@@ -385,8 +386,16 @@ export default async function PerformancePage() {
   const picksSummary = (await getPicksForwardTestSummary(arm))?.pooled ?? null;
   if (picksSummary && picksSummary.published > 0) {
     const mc = picksSummary.clvMarginCorrected;
+    // BOT-NAMES-AND-LABELS (migration 375, [[#069]]). Both the display name and
+    // the maturity label now come from the `bots` row rather than being written
+    // here. `maturityLabel: "testing"` used to be a literal on this line — which
+    // is how the page's own legend ended up documenting three tiers of which one
+    // had NO DATABASE FIELD: nothing could query for `testing`, and no test could
+    // check it. It is a legal `bots.maturity_label` value as of migration 375.
+    const armBot = botsDB?.find((db) => db.name === bot);
     cachedBots.push({
       name: bot,
+      displayName: armBot?.displayName ?? null,
       settled: picksSummary.settled,
       won: isPro ? picksSummary.won : 0,
       lost: isPro ? picksSummary.settled - picksSummary.won : 0,
@@ -438,7 +447,9 @@ export default async function PerformancePage() {
       // reads 0, ROI still reads null, and the TESTING chip still says "still
       // collecting" — which is the legend's own words for exactly this state.
       hasEnoughData: picksSummary.published > 0,
-      maturityLabel: "testing",   // legend: "TESTING (still collecting)"
+      // legend: "TESTING (still collecting)". Falls back to the literal only if
+      // the bot row is missing, so the page cannot render an empty chip.
+      maturityLabel: armBot?.maturityLabel ?? "testing",
     });
   }
   }
