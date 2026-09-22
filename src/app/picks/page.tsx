@@ -21,6 +21,7 @@
  */
 import Link from "next/link";
 import { Nav } from "@/components/nav";
+import { displayBook } from "@/lib/book-display";
 import {
   hasStarted,
   breakEvenFromFairProb,
@@ -314,7 +315,7 @@ function PickRow({ p }: { p: PublicPick }) {
               <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
                 Book
               </p>
-              <p className="text-xs text-neutral-300">{p.bookmaker}</p>
+              <p className="text-xs text-neutral-300">{displayBook(p.bookmaker)}</p>
             </div>
           )}
         </div>
@@ -580,7 +581,7 @@ export default async function PicksPage() {
                         {b.odds != null ? Number(b.odds).toFixed(2) : "—"}
                         {b.bookmaker && (
                           <div className="text-[10px] text-neutral-600">
-                            {b.bookmaker}
+                            {displayBook(b.bookmaker)}
                           </div>
                         )}
                       </td>
