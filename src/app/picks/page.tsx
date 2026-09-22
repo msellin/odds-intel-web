@@ -48,7 +48,7 @@ const EDGE_LABEL = {
 
 const EDGE_EXPLAINER = {
   sharp:
-    "How far this price beats the sharpest line in the market once the bookmaker's margin is stripped out. An expected return: +3% means 3% above break-even.",
+    "How far this price beats a fair line once the bookmaker's margin is stripped out — either the sharpest single line, or, where no single line is sharp enough to trust, the consensus of several bookmakers. An expected return: +3% means 3% above break-even.",
   model:
     "How far our own model's probability exceeds the price. Measured in probability points, NOT a return — at odds of 4.00, a 16-point edge is a much larger expected return than the number suggests. It is not comparable with the sharp edge above.",
 } as const;
@@ -63,7 +63,7 @@ export const dynamic = "force-dynamic";
 export const metadata = {
   title: "Sharp-line picks — OddsIntel",
   description:
-    "Football picks from two bots: one priced against the sharpest line in the market, one from our own probability model. Every pick says which, and is logged before kickoff.",
+    "Football picks from two bots: one priced against a margin-stripped fair line, one from our own probability model. Every pick says which, and is logged before kickoff.",
 };
 
 const START_DATE = "14 September 2026";
@@ -359,8 +359,7 @@ export default async function PicksPage() {
           )}
           <p className="mx-auto max-w-xl text-balance text-sm text-neutral-400 sm:text-base">
             <strong className="text-neutral-300">Sharp-edge</strong> picks beat
-            the sharpest line in the market, margin stripped out, by at least
-            3%. <strong className="text-neutral-300">Model</strong> picks come
+            a fair line — margin stripped out — by at least 3%. <strong className="text-neutral-300">Model</strong> picks come
             from our own probability model. Nothing is capped — a busy Saturday
             runs long, a thin Tuesday shows none.
           </p>
@@ -386,8 +385,10 @@ export default async function PicksPage() {
               </dt>
               <dd className="inline">
                 uses no prediction model at all. Each pick is priced directly
-                against the sharpest available line with the bookmaker&apos;s
-                margin removed. It starts at zero on {START_DATE} and{" "}
+                against the market with the bookmaker&apos;s margin removed —
+                against the sharpest single line where one is sharp enough to
+                trust, and otherwise against the consensus of several
+                bookmakers, which is stated on every pick. It starts at zero on {START_DATE} and{" "}
                 <strong className="text-neutral-300">
                   no past performance is claimed for it
                 </strong>

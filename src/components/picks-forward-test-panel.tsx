@@ -64,7 +64,7 @@ export default async function PicksForwardTestPanel() {
       <p className="mb-3 text-xs leading-relaxed text-neutral-400">
         These are the picks sent to the Telegram channel and shown on{" "}
         <Link href="/picks" className="text-sky-400 hover:underline">/picks</Link>.
-        They are priced against the sharpest line in the market rather than against our
+        They are priced against a margin-stripped fair line rather than against our
         own model. <strong className="text-neutral-300">No past performance is claimed
         for this method</strong> — it starts at zero on the date above, and the
         numbers below are the live result so far, win or lose.
