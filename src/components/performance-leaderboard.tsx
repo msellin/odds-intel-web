@@ -22,6 +22,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { Badge } from "@/components/ui/badge";
+import { ENGINE_BOT_FLOORS } from "@/lib/generated/engine-floors";
 
 export interface PublicBotStat {
   name: string;
@@ -96,6 +97,41 @@ function MaturityChip({ label }: { label: string }) {
   if (label === 'beta') return <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-400 border border-amber-500/25">beta</span>;
   if (label === 'testing') return <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-zinc-500/15 text-zinc-400 border border-zinc-500/25">testing</span>;
   return null; // 'active' shows no chip — it's the default
+}
+
+/** What the bot prices against — model, sharp line, or book consensus.
+ *
+ *  Added 2026-09-22 (owner: "we should have a label about what is used for
+ *  bot....model, anchor, mix"). The maturity chip says how much EVIDENCE backs a
+ *  bot; this says what the bot IS. Without it the table puts a model edge and a
+ *  sharp edge in one ROI column with no hint that they are measured against
+ *  different rulers — a 16% model edge and a 3% sharp edge are different
+ *  quantities, not a 5x difference.
+ *
+ *  Read from ENGINE_BOT_FLOORS, which is generated from the bot registry, so
+ *  this label cannot drift from what the bot actually does. */
+function AnchorChip({ bot }: { bot: string }) {
+  const anchor = ENGINE_BOT_FLOORS[bot]?.anchor;
+  const style =
+    anchor === "model"     ? "bg-sky-500/15 text-sky-400 border-sky-500/25"
+    : anchor === "sharp"     ? "bg-violet-500/15 text-violet-300 border-violet-500/25"
+    : anchor === "consensus" ? "bg-teal-500/15 text-teal-300 border-teal-500/25"
+    : null;
+  if (!style) return null;   // 'none' = internal strategy bot, nothing to claim
+  return (
+    <span
+      title={
+        anchor === "model"
+          ? "Fair value comes from our own probability model."
+          : anchor === "sharp"
+          ? "Fair value comes from the sharpest single line, margin removed. No model."
+          : "Fair value comes from a consensus of 5+ bookmakers, margin removed. No model."
+      }
+      className={`rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider border ${style}`}
+    >
+      {anchor}
+    </span>
+  );
 }
 
 function resultBadge(r: string) {
@@ -472,6 +508,7 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
                           </Badge>
                         )}
                         <MaturityChip label={bot.maturityLabel ?? "active"} />
+                        <AnchorChip bot={bot.name} />
                       </div>
                       <p className="mt-1 text-[11px] tabular-nums text-muted-foreground">
                         {isMaturing
@@ -548,6 +585,7 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
                           </Badge>
                         )}
                         <MaturityChip label={bot.maturityLabel ?? 'active'} />
+                        <AnchorChip bot={bot.name} />
                       </div>
                       {isMaturing && (
                         <p className="text-[10px] text-muted-foreground mt-0.5">

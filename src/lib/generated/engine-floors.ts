@@ -39,109 +39,145 @@ export const ENGINE_BOT_FLOORS: Record<string, {
   oddsFloor: number | null;
   oddsCap: number | null;
   realMoney: boolean;
+  anchor: string;
+  market: string;
 }> =
   {
   "bot_consensus_anchor_v1": {
     "edgeFloor": 0.03,
     "oddsFloor": null,
     "oddsCap": null,
-    "realMoney": false
+    "realMoney": false,
+    "anchor": "consensus",
+    "market": "1x2 + O/U 2.5"
   },
   "bot_coolbet_1x2_model_v1": {
     "edgeFloor": 0.1,
     "oddsFloor": 2.8,
     "oddsCap": null,
-    "realMoney": true
+    "realMoney": true,
+    "anchor": "model",
+    "market": "1x2"
   },
   "bot_coolbet_ou_model_v1": {
     "edgeFloor": 0.08,
     "oddsFloor": 1.8,
     "oddsCap": null,
-    "realMoney": true
+    "realMoney": true,
+    "anchor": "model",
+    "market": "O/U 2.5"
   },
   "bot_coolbet_trigger_sharp_1x2_v1": {
     "edgeFloor": 0.03,
     "oddsFloor": 1.01,
     "oddsCap": null,
-    "realMoney": false
+    "realMoney": false,
+    "anchor": "sharp",
+    "market": "1x2"
   },
   "bot_coolbet_trigger_sharp_ou_v1": {
     "edgeFloor": 0.03,
     "oddsFloor": 1.01,
     "oddsCap": null,
-    "realMoney": false
+    "realMoney": false,
+    "anchor": "sharp",
+    "market": "O/U 2.5"
   },
   "bot_high_roi_global_v2": {
     "edgeFloor": null,
     "oddsFloor": null,
     "oddsCap": null,
-    "realMoney": false
+    "realMoney": false,
+    "anchor": "none",
+    "market": "1x2"
   },
   "bot_inplay_slowstate_afctl_v1": {
     "edgeFloor": null,
     "oddsFloor": null,
     "oddsCap": null,
-    "realMoney": false
+    "realMoney": false,
+    "anchor": "none",
+    "market": "in-play O/U 2.5 + 1x2"
   },
   "bot_inplay_slowstate_v1": {
     "edgeFloor": null,
     "oddsFloor": null,
     "oddsCap": null,
-    "realMoney": false
+    "realMoney": false,
+    "anchor": "none",
+    "market": "in-play O/U 2.5 + 1x2"
   },
   "bot_ou35_model_v1": {
     "edgeFloor": 0.08,
     "oddsFloor": 1.8,
     "oddsCap": null,
-    "realMoney": false
+    "realMoney": false,
+    "anchor": "model",
+    "market": "O/U 3.5"
   },
   "bot_sharp_forward_test_v1": {
     "edgeFloor": 0.03,
     "oddsFloor": null,
     "oddsCap": null,
-    "realMoney": false
+    "realMoney": false,
+    "anchor": "sharp",
+    "market": "1x2 + O/U 2.5"
   },
   "bot_trigger_1x2_sharp_tight_v1": {
     "edgeFloor": 0.02,
     "oddsFloor": 1.01,
     "oddsCap": 2.5,
-    "realMoney": false
+    "realMoney": false,
+    "anchor": "sharp",
+    "market": "1x2"
   },
   "bot_trigger_1x2_sharp_v1": {
     "edgeFloor": 0.03,
     "oddsFloor": 1.01,
     "oddsCap": null,
-    "realMoney": false
+    "realMoney": false,
+    "anchor": "sharp",
+    "market": "1x2"
   },
   "bot_trigger_ou_sharp_v1": {
     "edgeFloor": 0.03,
     "oddsFloor": 1.01,
     "oddsCap": null,
-    "realMoney": false
+    "realMoney": false,
+    "anchor": "sharp",
+    "market": "O/U 2.5"
   },
   "bot_unibet_trigger_sharp_1x2_v1": {
     "edgeFloor": 0.03,
     "oddsFloor": 1.01,
     "oddsCap": null,
-    "realMoney": false
+    "realMoney": false,
+    "anchor": "sharp",
+    "market": "1x2"
   },
   "bot_unibet_trigger_sharp_ou_v1": {
     "edgeFloor": 0.03,
     "oddsFloor": 1.01,
     "oddsCap": null,
-    "realMoney": false
+    "realMoney": false,
+    "anchor": "sharp",
+    "market": "O/U 2.5"
   },
   "bot_unified_gate_1x2_paper_v1": {
     "edgeFloor": 0.1,
     "oddsFloor": 2.8,
     "oddsCap": null,
-    "realMoney": false
+    "realMoney": false,
+    "anchor": "model",
+    "market": "1x2"
   },
   "bot_v10_all": {
     "edgeFloor": null,
     "oddsFloor": null,
     "oddsCap": null,
-    "realMoney": false
+    "realMoney": false,
+    "anchor": "model",
+    "market": "mixed"
   }
 };
 

@@ -50,7 +50,6 @@ import {
 import type { LiveBet, ModelV2Stats, CalibratedHeadlineStats } from "@/lib/engine-data";
 import { PerformanceClient } from "@/components/performance-client";
 import type { PublicBotStat, SanitizedBotBet } from "@/components/performance-leaderboard";
-import PicksForwardTestPanel from "@/components/picks-forward-test-panel";
 import {
   getPicksForwardTestSummary,
   getPicksForwardTestBets,
@@ -369,11 +368,25 @@ export default async function PerformancePage() {
   // checkpoint early on a mixture of rules. `PicksForwardTestPanel` continues to
   // render the per-version breakdown. Two objects, two numbers, neither
   // pretending to be the other.
-  const picksSummary = (await getPicksForwardTestSummary())?.pooled ?? null;
+  //
+  // ONE ROW PER PUBLISHED ARM (2026-09-22, [[#068]]). This injected the sharp
+  // arm only. When the consensus arm shipped it published every pick of the day
+  // and appeared in the fleet table nowhere — the same "the table lists
+  // everything EXCEPT the strategy we publish" defect this block was written to
+  // fix, reintroduced by a second arm rather than by a second ledger.
+  //
+  // Looped over PUBLISHED_ARMS rather than copy-pasted: a third arm should
+  // appear by adding it to the list, not by remembering this file exists.
+  const PUBLISHED_ARM_BOTS: Array<{ arm: string; bot: string }> = [
+    { arm: "live", bot: "bot_sharp_forward_test_v1" },
+    { arm: "consensus_anchor", bot: "bot_consensus_anchor_v1" },
+  ];
+  for (const { arm, bot } of PUBLISHED_ARM_BOTS) {
+  const picksSummary = (await getPicksForwardTestSummary(arm))?.pooled ?? null;
   if (picksSummary && picksSummary.published > 0) {
     const mc = picksSummary.clvMarginCorrected;
     cachedBots.push({
-      name: "bot_sharp_forward_test_v1",
+      name: bot,
       settled: picksSummary.settled,
       won: isPro ? picksSummary.won : 0,
       lost: isPro ? picksSummary.settled - picksSummary.won : 0,
@@ -403,6 +416,7 @@ export default async function PerformancePage() {
       hasEnoughData: picksSummary.settled >= 5,
       maturityLabel: "testing",   // legend: "TESTING (still collecting)"
     });
+  }
   }
 
   // (retired_bot_breakdown filter removed with RetiredStrategiesSection)
@@ -438,11 +452,19 @@ export default async function PerformancePage() {
           pre-registration requires: the published set and the recorded set must
           be identical, so a tier-dependent cut would evaluate the stopping rules
           on a cohort no reader saw. */}
-      {/* One panel per PUBLISHED arm — if it is published, its record is
-          published ([[#068]]). Separate panels, never pooled: the arms are two
-          different rules and the 'live' one is a locked pre-registration. */}
-      <PicksForwardTestPanel arm="live" />
-      <PicksForwardTestPanel arm="consensus_anchor" />
+      {/* PANELS REMOVED 2026-09-22 (owner): "this page needs to be intuitive,
+          users who come here wanna see the graph, the numbers, not read some
+          text... texts and explanations should be hidden into detail view".
+          Two prose blocks sat above the leaderboard and pushed the chart below
+          the fold.
+
+          Nothing is lost from the RECORD — both published arms are rows in the
+          Bot Leaderboard (PUBLISHED_ARM_BOTS above), each with its own settled
+          count, ROI, CLV and bankroll, and each expanding to its own bets list.
+          That is the same treatment every other bot gets, which is what the
+          owner asked for: "i wanna see that bot here, as we always showed them".
+          The requirement that every published arm HAS a visible record is
+          unchanged and still pinned by PUBLISHED-ARM-HAS-A-RECORD. */}
       {isLoggedIn ? (
         <Suspense
           fallback={
