@@ -88,7 +88,7 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "oddsFloor": null,
     "oddsCap": null,
     "realMoney": false,
-    "anchor": "none",
+    "anchor": "model",
     "market": "1x2"
   },
   "bot_inplay_slowstate_afctl_v1": {

@@ -118,12 +118,17 @@ function AnchorChip({ bot }: { bot: string }) {
     : anchor === "consensus" ? "bg-teal-500/15 text-teal-300 border-teal-500/25"
     : anchor === "none"      ? "bg-zinc-500/15 text-zinc-400 border-zinc-500/25"
     : null;
-  // 'none' gets a chip too, reading STRATEGY. It used to render nothing, which
-  // left a bot that IS on this page (bot_high_roi_global_v2, +25.2%) as the only
-  // unlabelled row — and "no label" reads as "unknown", not as "different kind".
-  // These bots do not price against an anchor at all; they are a filter over the
-  // model's own picks (that one is 1x2 home/away in ES/AU/IS at odds 1.50-5.50),
-  // so their ROI is not comparable with an anchored bot's either.
+  // 'none' NO LONGER MEANS "strategy" (corrected 2026-09-22, owner: "how is
+  // strategy different from model?"). It wasn't: bot_high_roi_global_v2 runs the
+  // SAME model edge thresholds as bot_v10_all and then filters by league, side
+  // and odds band. A filter over model picks is still model-anchored, and
+  // labelling it a separate METHOD on a customer page was telling readers it
+  // priced against something it does not. Its registry anchor is now `model`.
+  //
+  // What is left on `none` is the in-play rig, which genuinely has no model or
+  // sharp reference — it prices off the BOOK's own de-vigged probability. In-play
+  // bots do not render on /performance, so this branch is a safety net, not a
+  // label anyone sees today.
   if (!style) return null;
   return (
     <span
@@ -134,11 +139,16 @@ function AnchorChip({ bot }: { bot: string }) {
           ? "Fair value comes from the sharpest single line, margin removed. No model."
           : anchor === "consensus"
           ? "Fair value comes from a consensus of 5+ bookmakers, margin removed. No model."
-          : "A filter over the model's own picks rather than a price comparison — no separate fair-value anchor."
+          : "Priced off the bookmaker's own de-vigged probability — no model and no sharp reference."
       }
-      className={`rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider border ${style}`}
+      // PILL, where the maturity chip is a square tag (owner: "those labels need
+      // to be explained and have maybe separate shape?"). Two chips of identical
+      // shape sitting side by side read as one two-part label; the different
+      // silhouette is what tells a reader they answer different questions —
+      // HOW MUCH EVIDENCE (maturity) vs WHAT IT PRICES AGAINST (method).
+      className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider border ${style}`}
     >
-      {anchor === "none" ? "strategy" : anchor}
+      {anchor === "none" ? "book" : anchor}
     </span>
   );
 }
@@ -471,6 +481,31 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
               (early live results),
               <span className="mx-1 rounded bg-zinc-500/15 px-1 py-0.5 text-[9px] font-bold uppercase text-zinc-400">testing</span>
               (still collecting).
+            </p>
+            {/* SECOND LEGEND, for the second chip (2026-09-22, owner: "those
+                labels need to be explained and have maybe separate shape?").
+                The square tag says how much EVIDENCE backs a bot; the pill says
+                WHAT IT PRICES AGAINST. Two different questions, so two different
+                shapes and two separate sentences.
+
+                Sharp and consensus are deliberately described as siblings rather
+                than a hierarchy — the owner asked "consensus is also based on
+                sharp then?" and the answer is that both price against the market
+                with the margin removed, differing only in how many books set the
+                fair price. Measured 2026-09-22 (n=11,419): a consensus EXCLUDING
+                our Pinnacle feed predicts as well as that feed alone, so the
+                consensus is an independent estimator, not a diluted sharp one. */}
+            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+              And by what sets its fair price —
+              <span className="mx-1 rounded-full border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-[9px] font-bold uppercase text-sky-300">model</span>
+              (our own probability model),
+              <span className="mx-1 rounded-full border border-violet-500/25 bg-violet-500/10 px-2 py-0.5 text-[9px] font-bold uppercase text-violet-300">sharp</span>
+              (the sharpest single line, margin removed),
+              <span className="mx-1 rounded-full border border-teal-500/25 bg-teal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase text-teal-300">consensus</span>
+              (several bookmakers agreeing, margin removed). The last two use no
+              model at all and differ only in how many books set the fair price;
+              they are tracked separately because they are different rules, not
+              different kinds of thing.
             </p>
           </div>
           {/* Pre-match / In-play tabs removed — in-play hidden from public,

@@ -393,7 +393,16 @@ export default async function PerformancePage() {
       pnl: isPro ? picksSummary.pnlUnits : null,
       roi: picksSummary.roi == null ? null : picksSummary.roi * 100,
       clvDirection: mc == null ? "neutral" : mc > 0 ? "positive" : "negative",
-      avgClv: isElite ? (mc == null ? null : mc * 100) : null,
+      // RAW FRACTION, not percent (fixed 2026-09-22). The leaderboard renders
+      // `avgClv * 100`, and every other row feeds it `b.avg_clv` raw — this one
+      // pre-multiplied, so the two scalings compounded and the page published
+      // **-876.0%** for the consensus arm and **-359.0%** for the sharp arm.
+      // The stored values are -0.0876 and -0.0359, i.e. -8.8% and -3.6%.
+      //
+      // A CLV of -876% is arithmetically impossible (the floor is -100%), which
+      // is what makes this the kind of number a reader spots before we do — the
+      // owner did.
+      avgClv: isElite ? mc : null,
       // Same basis as every other row: EUR 1000 start, EUR 10 flat. The rule
       // stakes 1 unit; showing 1.03 next to EUR 1,339 would make the newest
       // strategy look like a rounding error. Scaling changes no stored value

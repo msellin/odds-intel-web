@@ -416,7 +416,7 @@ export default async function PicksPage() {
             Every pick carries its method.{" "}
             <strong className="text-violet-300">Sharp line</strong> and{" "}
             <strong className="text-teal-300">consensus</strong> picks use no
-            model at all — they beat a fair price, margin stripped out, by at
+            prediction model at all — they beat a fair price, margin stripped out, by at
             least 3%; the difference is whether one sharp bookmaker sets that
             fair price or several agreeing ones do.{" "}
             <strong className="text-sky-300">Model</strong> picks come from our
