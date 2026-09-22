@@ -187,6 +187,21 @@ export interface PublicPick {
   edge_kind: "sharp" | "model";
   /** Which bot produced it — shown per row so the two families stay tellable apart. */
   bot: string;
+  /**
+   * WHICH SHARP ARM, when edge_kind is 'sharp'. NULL on model rows.
+   *
+   * Owner, 2026-09-22, looking at /picks: "we mention 2 different methods, each
+   * pick should have the method label attached i think, otherwise users read the
+   * methods part but still cant differentiate picks."
+   *
+   * Exactly right, and it was worse than one missing label: the page explained
+   * TWO methods while `edge_kind` can only express two values, so the consensus
+   * arm was rendering under the same "Edge vs sharp" heading as the single-line
+   * arm. A reader could not tell which of the three things they were looking at.
+   */
+  arm: string | null;
+  /** 'Pinnacle' or 'consensus:N' — the basis, so the badge can say how many books. */
+  anchor_bookmaker: string | null;
   match_id: string;
   market: string;
   selection: string;
@@ -241,7 +256,8 @@ export async function fetchPublicPicks(
     .select(
       `id, edge_kind, bot, match_id, market, selection, odds, bookmaker, edge,
        fair_prob, rule_version, alignment_gap_minutes, kickoff_utc, published_at,
-       league, country, home_team, away_team, outcome, clv`,
+       league, country, home_team, away_team, outcome, clv,
+       arm, anchor_bookmaker`,
     )
     .gte("kickoff_utc", new Date(now - hoursBack * 3600_000).toISOString())
     .lte("kickoff_utc", new Date(now + hoursForward * 3600_000).toISOString())

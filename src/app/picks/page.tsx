@@ -46,6 +46,56 @@ const EDGE_LABEL = {
   model: "Model edge",
 } as const;
 
+/** THE METHOD, ON EVERY PICK (2026-09-22, owner).
+ *
+ *  "we mention 2 different methods, each pick should have the method label
+ *   attached i think, otherwise users read the methods part but still cant
+ *   differentiate picks."
+ *
+ *  It was worse than one missing label. The page explains two methods, but there
+ *  are THREE things on it: a model pick, a pick priced off the sharpest single
+ *  line, and a pick priced off a consensus of books. `edge_kind` only has two
+ *  values, so the consensus arm rendered under the same "Edge vs sharp" heading
+ *  as the single-line arm — the intro told readers to distinguish things the
+ *  rows gave them no way to distinguish.
+ *
+ *  The badge sits ON the pick, not in the column header, because a header above
+ *  a number reads as a unit and not as provenance. Same three words as the
+ *  /performance chip, deliberately: a reader who learns them in one place should
+ *  not have to re-learn them in the other.
+ */
+function MethodBadge({ p }: { p: { edge_kind: "sharp" | "model"; arm: string | null; anchor_bookmaker: string | null } }) {
+  const books = p.anchor_bookmaker?.startsWith("consensus:")
+    ? p.anchor_bookmaker.split(":")[1]
+    : null;
+  const kind =
+    p.edge_kind === "model" ? "model"
+    : p.arm === "consensus_anchor" || books ? "consensus"
+    : "sharp";
+  const style =
+    kind === "model" ? "border-sky-500/25 bg-sky-500/10 text-sky-300"
+    : kind === "sharp" ? "border-violet-500/25 bg-violet-500/10 text-violet-300"
+    : "border-teal-500/25 bg-teal-500/10 text-teal-300";
+  const label =
+    kind === "model" ? "model"
+    : kind === "sharp" ? "sharp line"
+    : books ? `${books}-book consensus` : "consensus";
+  const title =
+    kind === "model"
+      ? "Priced against our own probability model. Its edge is in probability points and is NOT comparable with a sharp-edge percentage."
+      : kind === "sharp"
+      ? "Priced against the sharpest single line in the market with the bookmaker's margin removed. No model involved."
+      : `Priced against ${books ?? "several"} bookmakers agreeing, margin removed. Used where no single line is sharp enough to trust. No model involved.`;
+  return (
+    <span
+      title={title}
+      className={`rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider ${style}`}
+    >
+      {label}
+    </span>
+  );
+}
+
 const EDGE_EXPLAINER = {
   sharp:
     "How far this price beats a fair line once the bookmaker's margin is stripped out — either the sharpest single line, or, where no single line is sharp enough to trust, the consensus of several bookmakers. An expected return: +3% means 3% above break-even.",
@@ -201,6 +251,7 @@ function PickRow({ p }: { p: PublicPick }) {
           </p>
           <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-emerald-300">
             <span>Pick: {formatMarket(p.market, p.selection)}</span>
+            <MethodBadge p={p} />
             <OutcomeBadge outcome={p.outcome} kickoff={p.kickoff_utc} />
             {p.clv != null && (
               <span
@@ -358,10 +409,19 @@ export default async function PicksPage() {
             </p>
           )}
           <p className="mx-auto max-w-xl text-balance text-sm text-neutral-400 sm:text-base">
-            <strong className="text-neutral-300">Sharp-edge</strong> picks beat
-            a fair line — margin stripped out — by at least 3%. <strong className="text-neutral-300">Model</strong> picks come
-            from our own probability model. Nothing is capped — a busy Saturday
-            runs long, a thin Tuesday shows none.
+            {/* Names the THREE badges a reader will actually see on the rows
+                below, in the same words. The old copy named two methods while
+                the page rendered three things, so "sharp-edge" silently covered
+                both a single-line pick and a consensus pick. */}
+            Every pick carries its method.{" "}
+            <strong className="text-violet-300">Sharp line</strong> and{" "}
+            <strong className="text-teal-300">consensus</strong> picks use no
+            model at all — they beat a fair price, margin stripped out, by at
+            least 3%; the difference is whether one sharp bookmaker sets that
+            fair price or several agreeing ones do.{" "}
+            <strong className="text-sky-300">Model</strong> picks come from our
+            own probability model. Nothing is capped — a busy Saturday runs long,
+            a thin Tuesday shows none.
           </p>
         </div>
 
