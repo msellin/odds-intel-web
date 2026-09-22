@@ -210,9 +210,21 @@ async function LoggedInPerformanceSection({
   // array the chart and expandable bet list already read. Without this the row
   // would open to an empty chart — present but inert, which is worse than
   // absent because it reads as "this strategy has done nothing".
-  const picksBets = (await getPicksForwardTestBets()).map((b) => ({
-    ...b, bot: "bot_sharp_forward_test_v1",
-  })) as unknown as SanitizedBotBet[];
+  //
+  // ARM-SCOPED (2026-09-22, [[#068]]). Each PUBLISHED arm is tagged with its own
+  // bot so the leaderboard row a reader expands shows ONE rule's picks and one
+  // rule's ROI. Before this both arms were labelled bot_sharp_forward_test_v1
+  // and their results averaged — two different anchors in one number, which
+  // describes neither, and is the exact confusion the 14 Sep reset existed to
+  // prevent. The bot names match migration 372's CASE on `arm`.
+  const picksBets = (
+    await Promise.all([
+      getPicksForwardTestBets("live").then((rows) =>
+        rows.map((b) => ({ ...b, bot: "bot_sharp_forward_test_v1" }))),
+      getPicksForwardTestBets("consensus_anchor").then((rows) =>
+        rows.map((b) => ({ ...b, bot: "bot_consensus_anchor_v1" }))),
+    ])
+  ).flat() as unknown as SanitizedBotBet[];
   sanitizedBets.push(...picksBets);
 
   // PERF-HISTORY-COHORT-MATCH (2026-08-21): the "+X% n=Y" ROI headline is
@@ -426,7 +438,11 @@ export default async function PerformancePage() {
           pre-registration requires: the published set and the recorded set must
           be identical, so a tier-dependent cut would evaluate the stopping rules
           on a cohort no reader saw. */}
-      <PicksForwardTestPanel />
+      {/* One panel per PUBLISHED arm — if it is published, its record is
+          published ([[#068]]). Separate panels, never pooled: the arms are two
+          different rules and the 'live' one is a locked pre-registration. */}
+      <PicksForwardTestPanel arm="live" />
+      <PicksForwardTestPanel arm="consensus_anchor" />
       {isLoggedIn ? (
         <Suspense
           fallback={

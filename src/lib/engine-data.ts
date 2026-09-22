@@ -6266,7 +6266,18 @@ function mapForwardTestRow(r: Record<string, unknown>): PicksForwardTestSummary 
  * Null when the view is unreachable — callers show nothing rather than a zero,
  * because "0.0%" and "we don't know" are different facts.
  */
-export async function getPicksForwardTestSummary(): Promise<{
+// ARM-SCOPED (2026-09-22, [[#068]]). `picks_forward_test_summary` used to be
+// the live arm by definition; migration 371 made it carry every PUBLISHED arm so
+// /performance can show a record for each one a reader actually receives.
+//
+// The parameter defaults to "live" so every existing caller is unchanged, and it
+// is applied as a FILTER rather than a grouping on purpose: `pooled` below sums
+// the rows it is given, so an unfiltered call would silently pool two different
+// RULES into one track record. That is precisely what building a second arm was
+// meant to prevent — the live arm's record is of one locked, pre-registered rule.
+export async function getPicksForwardTestSummary(
+  arm: string = "live",
+): Promise<{
   current: PicksForwardTestSummary;
   closed: PicksForwardTestSummary[];
   pooled: PicksForwardTestSummary;
@@ -6275,6 +6286,7 @@ export async function getPicksForwardTestSummary(): Promise<{
   const { data, error } = await supabase
     .from("picks_forward_test_summary")
     .select("*")
+    .eq("arm", arm)
     .order("started_at", { ascending: false });
   if (error || !data || data.length === 0) return null;
   const rows = (data as Record<string, unknown>[]).map(mapForwardTestRow);
@@ -6340,7 +6352,12 @@ export async function getPicksForwardTestSummary(): Promise<{
 export const PICKS_FORWARD_TEST_STAKE_EUR = 10;
 export const PICKS_FORWARD_TEST_START_BANKROLL = 1000;
 
-export async function getPicksForwardTestBets(): Promise<Array<{
+// ARM-SCOPED (2026-09-22, [[#068]]) — see getPicksForwardTestSummary. The
+// running bankroll below is cumulative, so mixing arms here would draw one
+// equity curve out of two different rules' picks.
+export async function getPicksForwardTestBets(
+  arm: string = "live",
+): Promise<Array<{
   id: string; match: string; league: string; placedAt: string; market: string;
   selection: string; odds: number; stake: number | null; result: string;
   pnl: number; bankrollAfter: number | null; modelProb: number;
@@ -6350,6 +6367,7 @@ export async function getPicksForwardTestBets(): Promise<Array<{
   const { data, error } = await supabase
     .from("picks_forward_test_public")
     .select("*")
+    .eq("arm", arm)
     .order("published_at", { ascending: true });
   if (error || !data) return [];
 

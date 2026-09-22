@@ -31,9 +31,35 @@ function shortVersion(ruleVersion: string): string {
   return m ? `v${m[1]}` : ruleVersion;
 }
 
-export default async function PicksForwardTestPanel() {
-  const summary = await getPicksForwardTestSummary();
+/** ONE PANEL PER PUBLISHED ARM (2026-09-22, [[#068]]).
+ *
+ *  Before this, /performance showed the 'live' arm only. When the consensus arm
+ *  shipped, 20 picks went to Telegram and /picks with NO track record anywhere —
+ *  PICKS-SHOW-BOTH-BOTS in mirror image. The rule now is: if it is published,
+ *  its record is published.
+ *
+ *  Rendered as separate panels rather than one pooled figure, deliberately. The
+ *  two arms are two different RULES: 'live' is a locked pre-registration and
+ *  mixing a second rule into its n would forfeit exactly what the second arm was
+ *  created to protect. */
+const ARM_LABEL: Record<string, { title: string; basis: string }> = {
+  live: {
+    title: "Published picks — sharp line",
+    basis: "priced against the sharpest single line, margin removed",
+  },
+  consensus_anchor: {
+    title: "Published picks — bookmaker consensus",
+    basis:
+      "priced against a consensus of 5+ bookmakers, margin removed — used when no single line is sharp enough to trust",
+  },
+};
+
+export default async function PicksForwardTestPanel({
+  arm = "live",
+}: { arm?: string } = {}) {
+  const summary = await getPicksForwardTestSummary(arm);
   if (!summary || summary.current.published === 0) return null;
+  const label = ARM_LABEL[arm] ?? ARM_LABEL.live;
   const s = summary.current;
   const closed = summary.closed.filter((c) => c.published > 0);
 
@@ -55,7 +81,7 @@ export default async function PicksForwardTestPanel() {
   return (
     <section className="mb-6 rounded-lg border border-sky-500/20 bg-sky-500/[0.03] px-4 py-3">
       <div className="mb-1 flex flex-wrap items-baseline gap-2">
-        <h2 className="text-sm font-semibold text-neutral-100">Published picks</h2>
+        <h2 className="text-sm font-semibold text-neutral-100">{label.title}</h2>
         <span className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wider text-sky-300">
           rule {shortVersion(s.ruleVersion)} · tracking from {started}
         </span>
@@ -64,8 +90,8 @@ export default async function PicksForwardTestPanel() {
       <p className="mb-3 text-xs leading-relaxed text-neutral-400">
         These are the picks sent to the Telegram channel and shown on{" "}
         <Link href="/picks" className="text-sky-400 hover:underline">/picks</Link>.
-        They are priced against a margin-stripped fair line rather than against our
-        own model. <strong className="text-neutral-300">No past performance is claimed
+        They are {label.basis}, not against our own model.{" "}
+        <strong className="text-neutral-300">No past performance is claimed
         for this method</strong> — it starts at zero on the date above, and the
         numbers below are the live result so far, win or lose.
       </p>

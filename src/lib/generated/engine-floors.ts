@@ -41,6 +41,12 @@ export const ENGINE_BOT_FLOORS: Record<string, {
   realMoney: boolean;
 }> =
   {
+  "bot_consensus_anchor_v1": {
+    "edgeFloor": 0.03,
+    "oddsFloor": null,
+    "oddsCap": null,
+    "realMoney": false
+  },
   "bot_coolbet_1x2_model_v1": {
     "edgeFloor": 0.1,
     "oddsFloor": 2.8,
