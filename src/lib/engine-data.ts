@@ -6416,3 +6416,72 @@ export async function getPicksForwardTestBets(
     };
   });
 }
+
+// ── FEEDS-DASHBOARD (#107, 2026-09-23) ─────────────────────────────────────────
+// feed_status / feed_book_stats are written every 5 min by the engine's
+// workers/jobs/feed_health.py from workers/registry/feed_registry.py. Health is
+// judged on DATA WRITTEN, not on the job's own verdict — the first read of this
+// data found Coolbet silent for 4 h while every run said "completed" (#108).
+export interface FeedStatus {
+  feed_id: string;
+  label: string;
+  book: string | null;
+  category: "book" | "af" | "infra";
+  kind: string | null;
+  schedule: string | null;
+  interval_min: number | null;
+  stale_after_min: number | null;
+  health_basis: "data" | "runs" | "service";
+  status: "ok" | "warn" | "fail" | "unknown";
+  status_reason: string | null;
+  last_run_at: string | null;
+  last_run_status: string | null;
+  last_run_seconds: number | null;
+  last_success_at: string | null;
+  last_error: string | null;
+  runs_24h: number | null;
+  failures_24h: number | null;
+  fail_streak: number | null;
+  last_data_at: string | null;
+  rows_1h: number | null;
+  rows_24h: number | null;
+  service_state: Record<string, string> | null;
+  runbook: string | null;
+  updated_at: string;
+}
+
+export interface FeedBookStats {
+  book: string;
+  fixtures_today: number | null;
+  priced_today: number | null;
+  fixtures_yesterday: number | null;
+  priced_yesterday: number | null;
+  rows_today: number | null;
+  market_families: number | null;
+  last_row_at: string | null;
+  updated_at: string;
+}
+
+export async function getFeedStatus(): Promise<FeedStatus[]> {
+  const admin = createSupabaseAdmin();
+  const { data } = await admin.from("feed_status").select("*");
+  return (data ?? []) as FeedStatus[];
+}
+
+export async function getFeedBookStats(): Promise<FeedBookStats[]> {
+  const admin = createSupabaseAdmin();
+  const { data } = await admin.from("feed_book_stats").select("*");
+  return (data ?? []) as FeedBookStats[];
+}
+
+/** Everything /admin/feeds needs, plus the render clock. The clock is read HERE,
+ *  in the data layer, not in the component (react-hooks/purity) — same
+ *  convention as forward-test-picks.ts. */
+export async function getFeedDashboard(): Promise<{
+  feeds: FeedStatus[];
+  books: FeedBookStats[];
+  now: number;
+}> {
+  const [feeds, books] = await Promise.all([getFeedStatus(), getFeedBookStats()]);
+  return { feeds, books, now: Date.now() };
+}
