@@ -226,6 +226,9 @@ async function LoggedInPerformanceSection({
         rows.map((b) => ({ ...b, bot: "bot_consensus_b_v1" }))),
       getPicksForwardTestBets("consensus_anchor", "C").then((rows) =>
         rows.map((b) => ({ ...b, bot: "bot_consensus_c_v1" }))),
+      // [[#098]] grade D = weak, no longer published; its earlier (published) picks stay visible.
+      getPicksForwardTestBets("consensus_anchor", "D").then((rows) =>
+        rows.map((b) => ({ ...b, bot: "bot_consensus_d_v1" }))),
     ])
   ).flat() as unknown as SanitizedBotBet[];
   sanitizedBets.push(...picksBets);
@@ -386,10 +389,11 @@ export default async function PerformancePage() {
   // appear by adding it to the list, not by remembering this file exists.
   // [[#095]] 2026-09-23: the consensus arm is split into one bot per grade —
   // same ledger arm, different `grade`, so each reads its own record.
-  const PUBLISHED_ARM_BOTS: Array<{ arm: string; bot: string; grade?: "B" | "C" }> = [
+  const PUBLISHED_ARM_BOTS: Array<{ arm: string; bot: string; grade?: "B" | "C" | "D" }> = [
     { arm: "live", bot: "bot_sharp_forward_test_v1" },
     { arm: "consensus_anchor", grade: "B", bot: "bot_consensus_b_v1" },
     { arm: "consensus_anchor", grade: "C", bot: "bot_consensus_c_v1" },
+    { arm: "consensus_anchor", grade: "D", bot: "bot_consensus_d_v1" },
   ];
   for (const { arm, bot, grade } of PUBLISHED_ARM_BOTS) {
   const picksSummary = (await getPicksForwardTestSummary(arm, grade))?.pooled ?? null;

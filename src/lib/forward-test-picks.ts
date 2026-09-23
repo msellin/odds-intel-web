@@ -203,11 +203,12 @@ export interface PublicPick {
   /** 'Pinnacle' or 'consensus:N' — the basis, so the badge can say how many books. */
   anchor_bookmaker: string | null;
   /**
-   * Consensus picks only: 'B' (standard, bot_consensus_b_v1 — beta) or 'C'
-   * (weaker, bot_consensus_c_v1 — testing). NULL on every other row. Since
-   * [[#095]] each grade is its own tracked bot; the badge says which.
+   * Consensus picks only. Re-tiered 2026-09-23 ([[#098]]): 'B' strongest
+   * (bot_consensus_b_v1, beta), 'C' standard (bot_consensus_c_v1, testing), 'D'
+   * weak — no longer published; a D row appears only if it was sent (as 'C')
+   * before the re-tier. Grade A is reserved for model picks. NULL elsewhere.
    */
-  grade: "B" | "C" | null;
+  grade: "B" | "C" | "D" | null;
   match_id: string;
   market: string;
   selection: string;

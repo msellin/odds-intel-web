@@ -362,6 +362,7 @@ export const LEDGER_BACKED_BOTS: ReadonlySet<string> = new Set([
   "bot_sharp_forward_test_v1",
   "bot_consensus_b_v1",
   "bot_consensus_c_v1",
+  "bot_consensus_d_v1",
 ]);
 
 /** Whether a bot's maturity label earns it a place on the public leaderboard. */

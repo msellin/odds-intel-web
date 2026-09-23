@@ -101,23 +101,25 @@ function MethodBadge({ p }: { p: { edge_kind: "sharp" | "model"; arm: string | n
  *  tracked bot on /performance: B is `beta` (not yet proven), C is `testing`
  *  (weaker picks, published and scored in the open so they can be retired on
  *  their own record). Same words as the Telegram post. */
-function GradeBadge({ grade }: { grade: "B" | "C" | null }) {
+function GradeBadge({ grade }: { grade: "B" | "C" | "D" | null }) {
+  // Re-tiered 2026-09-23 ([[#098]]): B strongest, C standard, D weak (no longer
+  // published — only shown for picks sent before the change). Grade A is kept
+  // for model picks.
   if (!grade) return null;
-  const b = grade === "B";
+  const spec = {
+    B: { label: "Grade B · strongest", style: "border-emerald-500/25 bg-emerald-500/10 text-emerald-300",
+         title: "Grade B — our strongest consensus picks: every check passes and the odds are 1.20–1.60. Tracked as its own bot (beta): not yet proven live." },
+    C: { label: "Grade C · standard", style: "border-sky-500/25 bg-sky-500/10 text-sky-300",
+         title: "Grade C — standard consensus pick: every check passes, other odds. Tracked as its own bot (testing): not yet proven." },
+    D: { label: "weak · no longer published", style: "border-neutral-500/25 bg-neutral-500/10 text-neutral-400",
+         title: "A weak pick type (lower-profile league, a second sharp book disagrees, or an edge that looks too big to be real). We stopped publishing these on 23 Sep; earlier ones stay visible with their results." },
+  }[grade];
   return (
     <span
-      title={
-        b
-          ? "Grade B — standard consensus pick. Tracked as its own bot (beta): not yet proven profitable."
-          : "Grade C — weaker consensus pick (lower-profile league, a second sharp book disagrees, or an edge that looks too big to be real). Tracked as its own bot (testing)."
-      }
-      className={`rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider ${
-        b
-          ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-300"
-          : "border-amber-500/25 bg-amber-500/10 text-amber-300"
-      }`}
+      title={spec.title}
+      className={`rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider ${spec.style}`}
     >
-      Grade {grade} · {b ? "beta" : "testing"}
+      {spec.label}
     </span>
   );
 }

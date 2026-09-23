@@ -6289,7 +6289,7 @@ export async function getPicksForwardTestSummary(
   arm: string = "live",
   // [[#095]] the consensus arm is TWO bots, one per grade — pass the grade to
   // get one bot's record. Omitted = the whole arm (the live arm has no grade).
-  grade?: "B" | "C",
+  grade?: "B" | "C" | "D",
 ): Promise<{
   current: PicksForwardTestSummary;
   closed: PicksForwardTestSummary[];
@@ -6373,7 +6373,7 @@ export async function getPicksForwardTestBets(
   arm: string = "live",
   // [[#095]] the consensus arm is TWO bots, one per grade — pass the grade to
   // get one bot's record. Omitted = the whole arm (the live arm has no grade).
-  grade?: "B" | "C",
+  grade?: "B" | "C" | "D",
 ): Promise<Array<{
   id: string; match: string; league: string; placedAt: string; market: string;
   selection: string; odds: number; stake: number | null; result: string;
