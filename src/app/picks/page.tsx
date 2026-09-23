@@ -97,6 +97,31 @@ function MethodBadge({ p }: { p: { edge_kind: "sharp" | "model"; arm: string | n
   );
 }
 
+/** [[#095]] — the consensus grade, shown ON the pick. Each grade is its own
+ *  tracked bot on /performance: B is `beta` (not yet proven), C is `testing`
+ *  (weaker picks, published and scored in the open so they can be retired on
+ *  their own record). Same words as the Telegram post. */
+function GradeBadge({ grade }: { grade: "B" | "C" | null }) {
+  if (!grade) return null;
+  const b = grade === "B";
+  return (
+    <span
+      title={
+        b
+          ? "Grade B — standard consensus pick. Tracked as its own bot (beta): not yet proven profitable."
+          : "Grade C — weaker consensus pick (lower-profile league, a second sharp book disagrees, or an edge that looks too big to be real). Tracked as its own bot (testing)."
+      }
+      className={`rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider ${
+        b
+          ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-300"
+          : "border-amber-500/25 bg-amber-500/10 text-amber-300"
+      }`}
+    >
+      Grade {grade} · {b ? "beta" : "testing"}
+    </span>
+  );
+}
+
 const EDGE_EXPLAINER = {
   sharp:
     "How far this price beats a fair line once the bookmaker's margin is stripped out — either the sharpest single line, or, where no single line is sharp enough to trust, the consensus of several bookmakers. An expected return: +3% means 3% above break-even.",
@@ -253,6 +278,7 @@ function PickRow({ p }: { p: PublicPick }) {
           <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-emerald-300">
             <span>Pick: {formatMarket(p.market, p.selection)}</span>
             <MethodBadge p={p} />
+            <GradeBadge grade={p.grade} />
             <OutcomeBadge outcome={p.outcome} kickoff={p.kickoff_utc} />
             {p.clv != null && (
               <span

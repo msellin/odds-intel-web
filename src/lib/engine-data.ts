@@ -6287,6 +6287,9 @@ function mapForwardTestRow(r: Record<string, unknown>): PicksForwardTestSummary 
 // meant to prevent — the live arm's record is of one locked, pre-registered rule.
 export async function getPicksForwardTestSummary(
   arm: string = "live",
+  // [[#095]] the consensus arm is TWO bots, one per grade — pass the grade to
+  // get one bot's record. Omitted = the whole arm (the live arm has no grade).
+  grade?: "B" | "C",
 ): Promise<{
   current: PicksForwardTestSummary;
   closed: PicksForwardTestSummary[];
@@ -6297,6 +6300,7 @@ export async function getPicksForwardTestSummary(
     .from("picks_forward_test_summary")
     .select("*")
     .eq("arm", arm)
+    .match(grade ? { grade } : {})
     .order("started_at", { ascending: false });
   if (error || !data || data.length === 0) return null;
   const rows = (data as Record<string, unknown>[]).map(mapForwardTestRow);
@@ -6367,6 +6371,9 @@ export const PICKS_FORWARD_TEST_START_BANKROLL = 1000;
 // equity curve out of two different rules' picks.
 export async function getPicksForwardTestBets(
   arm: string = "live",
+  // [[#095]] the consensus arm is TWO bots, one per grade — pass the grade to
+  // get one bot's record. Omitted = the whole arm (the live arm has no grade).
+  grade?: "B" | "C",
 ): Promise<Array<{
   id: string; match: string; league: string; placedAt: string; market: string;
   selection: string; odds: number; stake: number | null; result: string;
@@ -6378,6 +6385,7 @@ export async function getPicksForwardTestBets(
     .from("picks_forward_test_public")
     .select("*")
     .eq("arm", arm)
+    .match(grade ? { grade } : {})
     .order("published_at", { ascending: true });
   if (error || !data) return [];
 

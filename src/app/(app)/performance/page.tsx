@@ -221,8 +221,11 @@ async function LoggedInPerformanceSection({
     await Promise.all([
       getPicksForwardTestBets("live").then((rows) =>
         rows.map((b) => ({ ...b, bot: "bot_sharp_forward_test_v1" }))),
-      getPicksForwardTestBets("consensus_anchor").then((rows) =>
-        rows.map((b) => ({ ...b, bot: "bot_consensus_anchor_v1" }))),
+      // [[#095]] split by grade — B (beta) and C (testing) are separate bots.
+      getPicksForwardTestBets("consensus_anchor", "B").then((rows) =>
+        rows.map((b) => ({ ...b, bot: "bot_consensus_b_v1" }))),
+      getPicksForwardTestBets("consensus_anchor", "C").then((rows) =>
+        rows.map((b) => ({ ...b, bot: "bot_consensus_c_v1" }))),
     ])
   ).flat() as unknown as SanitizedBotBet[];
   sanitizedBets.push(...picksBets);
@@ -378,12 +381,15 @@ export default async function PerformancePage() {
   //
   // Looped over PUBLISHED_ARMS rather than copy-pasted: a third arm should
   // appear by adding it to the list, not by remembering this file exists.
-  const PUBLISHED_ARM_BOTS: Array<{ arm: string; bot: string }> = [
+  // [[#095]] 2026-09-23: the consensus arm is split into one bot per grade —
+  // same ledger arm, different `grade`, so each reads its own record.
+  const PUBLISHED_ARM_BOTS: Array<{ arm: string; bot: string; grade?: "B" | "C" }> = [
     { arm: "live", bot: "bot_sharp_forward_test_v1" },
-    { arm: "consensus_anchor", bot: "bot_consensus_anchor_v1" },
+    { arm: "consensus_anchor", grade: "B", bot: "bot_consensus_b_v1" },
+    { arm: "consensus_anchor", grade: "C", bot: "bot_consensus_c_v1" },
   ];
-  for (const { arm, bot } of PUBLISHED_ARM_BOTS) {
-  const picksSummary = (await getPicksForwardTestSummary(arm))?.pooled ?? null;
+  for (const { arm, bot, grade } of PUBLISHED_ARM_BOTS) {
+  const picksSummary = (await getPicksForwardTestSummary(arm, grade))?.pooled ?? null;
   if (picksSummary && picksSummary.published > 0) {
     const mc = picksSummary.clvMarginCorrected;
     // BOT-NAMES-AND-LABELS (migration 375, [[#069]]). Both the display name and

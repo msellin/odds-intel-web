@@ -202,6 +202,12 @@ export interface PublicPick {
   arm: string | null;
   /** 'Pinnacle' or 'consensus:N' — the basis, so the badge can say how many books. */
   anchor_bookmaker: string | null;
+  /**
+   * Consensus picks only: 'B' (standard, bot_consensus_b_v1 — beta) or 'C'
+   * (weaker, bot_consensus_c_v1 — testing). NULL on every other row. Since
+   * [[#095]] each grade is its own tracked bot; the badge says which.
+   */
+  grade: "B" | "C" | null;
   match_id: string;
   market: string;
   selection: string;
@@ -257,7 +263,7 @@ export async function fetchPublicPicks(
       `id, edge_kind, bot, match_id, market, selection, odds, bookmaker, edge,
        fair_prob, rule_version, alignment_gap_minutes, kickoff_utc, published_at,
        league, country, home_team, away_team, outcome, clv,
-       arm, anchor_bookmaker`,
+       arm, anchor_bookmaker, grade`,
     )
     .gte("kickoff_utc", new Date(now - hoursBack * 3600_000).toISOString())
     .lte("kickoff_utc", new Date(now + hoursForward * 3600_000).toISOString())
