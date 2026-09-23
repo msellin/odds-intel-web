@@ -38,8 +38,9 @@ const OTHERS: BlockDef[] = [
     statsBook: "Pinnacle", note: "Bulk feed of 9 books. Pinnacle — our benchmark line — comes from here; we do not collect it ourselves." },
   { key: "closing", title: "Closing prices", main: "direct_close", extra: [], deps: [],
     note: "Runs every 5 min, but only captures when one of our paired matches kicks off within the next 15 min — so a gap between kickoff waves is normal. Colour follows the job's health, not the age of the last capture." },
-  { key: "infra", title: "Infrastructure", extra: ["zone_egress", "unibet_chrome", "flaresolverr", "scheduler"], deps: [],
-    note: "Services the sweepers run on." },
+  { key: "infra", title: "Infrastructure",
+    extra: ["zone_egress", "unibet_chrome", "flaresolverr", "scheduler", "database", "data_api", "website", "disk", "memory"],
+    deps: [], note: "Everything the sweepers and the website run on, on the VPS." },
 ];
 
 const SHORT: Record<string, string> = {
@@ -48,6 +49,7 @@ const SHORT: Record<string, string> = {
   epicbet_inplay: "In-play odds", af_odds: "Bulk odds", af_closing: "Closing snapshots", af_live: "Live scores",
   af_fixtures: "Fixtures", direct_close: "Closing prices", zone_egress: "Estonian exit",
   unibet_chrome: "Unibet Chrome", flaresolverr: "FlareSolverr", scheduler: "Engine scheduler",
+  database: "Database", data_api: "Data API (PostgREST)", website: "Website", disk: "Disk space", memory: "Memory",
 };
 
 const TONE_TEXT: Record<Tone, string> = {
@@ -152,8 +154,11 @@ export function FeedsBoard({ feeds, books, now }: { feeds: FeedStatus[]; books: 
           </div>
         ) : (
           <div className={`text-lg font-bold ${TONE_TEXT[headTone]}`}>
-            {extras.filter((e) => e.status === "ok").length}/{extras.length} up
+            {extras.filter((e) => e.status === "ok").length}/{extras.length} OK
           </div>
+        )}
+        {!b.main && extras[0] && (
+          <div className="text-xs text-muted-foreground mt-0.5">checked {ago(extras[0].updated_at, now)}</div>
         )}
         <div className="text-xs text-muted-foreground mt-0.5">
           {b.main && <>{main?.kind === "close" ? "last capture" : "last odds"} {clock(main?.last_data_at ?? null)}</>}
@@ -241,6 +246,11 @@ function SubFeed({ f, now }: { f: FeedStatus; now: number }) {
         </div>
         <span className={`text-xs ${TONE_TEXT[tone]}`}>{f.status === "ok" ? "OK" : f.status_reason}</span>
       </div>
+      {(f.kind === "service" || f.kind === "host") && f.service_state && (
+        <div className="text-xs text-muted-foreground mt-1">
+          {Object.values(f.service_state).join(" · ")} · checked {ago(f.updated_at, now)}
+        </div>
+      )}
       <div className="text-xs text-muted-foreground mt-1 flex flex-wrap gap-x-4 gap-y-0.5">
         {f.last_data_at !== null && <span>Last data: {ago(f.last_data_at, now)}</span>}
         {f.last_run_at && (
