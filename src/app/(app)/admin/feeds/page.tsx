@@ -2,13 +2,15 @@ export const dynamic = 'force-dynamic';
 
 import Link from "next/link";
 import { AutoRefresh } from "../ops/auto-refresh";
+import { FeedControls } from "./feed-controls";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
 import { getFeedDashboard, type FeedStatus, type FeedBookStats } from "@/lib/engine-data";
 
 // FEEDS-DASHBOARD (#107, 2026-09-23) — every sweeper and feed we run, from
 // feed_status / feed_book_stats (engine: workers/jobs/feed_health.py, every 5 min,
-// registry workers/registry/feed_registry.py). Read-only in phase A; pause / run
-// now / restart arrive in phases B and C.
+// registry workers/registry/feed_registry.py). Phase B: pause / resume / run now
+// per feed (FeedControls → /api/admin/feed-control, enforced by the engine).
+// Service restarts arrive in phase C.
 //
 // Status is judged on DATA WRITTEN for book sweeps — not on the job's own
 // "completed" — because that is what hid a 4-hour Coolbet outage (#108).
@@ -18,12 +20,14 @@ const DOT: Record<FeedStatus["status"], string> = {
   warn: "bg-amber-500",
   fail: "bg-red-500",
   unknown: "bg-zinc-500",
+  paused: "bg-sky-500",
 };
 const BORDER: Record<FeedStatus["status"], string> = {
   ok: "border-emerald-500/25",
   warn: "border-amber-500/40",
   fail: "border-red-500/50",
   unknown: "border-border",
+  paused: "border-sky-500/40",
 };
 const GROUPS: { key: FeedStatus["category"]; title: string; note: string }[] = [
   { key: "book", title: "Our bookmaker sweepers", note: "Collected by us — the prices we bet and publish." },
@@ -69,7 +73,7 @@ export default async function FeedsPage() {
   const { feeds, books, now } = await getFeedDashboard();
   const updated = feeds.reduce<string | null>((a, f) => (!a || f.updated_at > a ? f.updated_at : a), null);
   const count = (s: FeedStatus["status"]) => feeds.filter((f) => f.status === s).length;
-  const order = { fail: 0, warn: 1, unknown: 2, ok: 3 } as const;
+  const order = { fail: 0, warn: 1, paused: 2, unknown: 3, ok: 4 } as const;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 space-y-8">
@@ -85,6 +89,7 @@ export default async function FeedsPage() {
               <span className="text-emerald-500">{count("ok")} ok</span>
               {" · "}<span className="text-amber-500">{count("warn")} warn</span>
               {" · "}<span className="text-red-500">{count("fail")} fail</span>
+              {count("paused") > 0 && <>{" · "}<span className="text-sky-500">{count("paused")} paused</span></>}
               {count("unknown") > 0 && <>{" · "}<span>{count("unknown")} unknown</span></>}
               {" · "}status {ago(updated, now)} (every 5 min)
             </>
@@ -154,7 +159,7 @@ export default async function FeedsPage() {
                     <span className="text-xs text-muted-foreground shrink-0">{f.schedule}</span>
                   </div>
                   {f.status_reason && (
-                    <div className={`text-xs mt-1 ${f.status === "fail" ? "text-red-500" : f.status === "warn" ? "text-amber-500" : "text-muted-foreground"}`}>
+                    <div className={`text-xs mt-1 ${f.status === "fail" ? "text-red-500" : f.status === "warn" ? "text-amber-500" : f.status === "paused" ? "text-sky-500" : "text-muted-foreground"}`}>
                       {f.status_reason}
                     </div>
                   )}
@@ -210,6 +215,13 @@ export default async function FeedsPage() {
                       ))}
                     </div>
                   )}
+                  <FeedControls
+                    feedId={f.feed_id}
+                    label={f.label}
+                    controls={f.controls ?? []}
+                    paused={f.paused}
+                    runNowPending={f.run_now_pending}
+                  />
                   {f.last_error && (
                     <details className="mt-2">
                       <summary className="text-xs text-muted-foreground cursor-pointer">Last error</summary>

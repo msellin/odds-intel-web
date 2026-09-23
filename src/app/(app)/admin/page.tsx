@@ -31,6 +31,7 @@ const DOT: Record<FeedStatus["status"], string> = {
   warn: "bg-amber-500",
   fail: "bg-red-500",
   unknown: "bg-zinc-500",
+  paused: "bg-sky-500",
 };
 
 export default async function AdminIndexPage() {

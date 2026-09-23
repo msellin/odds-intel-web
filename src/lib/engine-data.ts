@@ -6432,7 +6432,7 @@ export interface FeedStatus {
   interval_min: number | null;
   stale_after_min: number | null;
   health_basis: "data" | "runs" | "service";
-  status: "ok" | "warn" | "fail" | "unknown";
+  status: "ok" | "warn" | "fail" | "unknown" | "paused";
   status_reason: string | null;
   last_run_at: string | null;
   last_run_status: string | null;
@@ -6447,6 +6447,13 @@ export interface FeedStatus {
   rows_24h: number | null;
   service_state: Record<string, string> | null;
   runbook: string | null;
+  // phase B (migration 389): controls + operator state
+  controls: string[] | null;
+  paused: boolean;
+  paused_reason: string | null;
+  paused_by: string | null;
+  paused_at: string | null;
+  run_now_pending: boolean;
   updated_at: string;
 }
 
