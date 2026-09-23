@@ -659,7 +659,11 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
                 <th scope="col" className="py-2.5 px-2 text-right">ROI</th>
                 {isPro && <th scope="col" className="py-2.5 px-2 text-right">P&L (€)</th>}
                 {isElite && <th scope="col" className="py-2.5 px-2 text-right">Avg CLV</th>}
-                {isElite && <th scope="col" className="py-2.5 px-2 text-right">Bankroll</th>}
+                {/* [[#074]] 2026-09-23: no Bankroll column. bots.current_bankroll is on the
+                    stored-pnl (high-water odds) basis while P&L / ROI beside it are on the
+                    executable basis, so one row showed two contradictory totals (€1,360 vs
+                    +€206). It is a live staking input, so its basis is not changed here —
+                    the operator sees it on /admin/bots; readers get the honest columns. */}
                 <th scope="col" className="py-2.5 px-2 text-center">CLV</th>
                 {isPro && <th scope="col" className="py-2.5 pr-4 w-6" />}
               </tr>
@@ -733,11 +737,6 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
                         bot.avgClv > 0 ? "text-emerald-400" : "text-red-400"
                       }`}>
                         {isMaturing || bot.avgClv == null ? "—" : (bot.avgClv >= 0 ? "+" : "") + (bot.avgClv * 100).toFixed(1) + "%"}
-                      </td>
-                    )}
-                    {isElite && (
-                      <td className="py-3 px-2 text-right text-sm tabular-nums text-muted-foreground">
-                        {bot.currentBankroll != null ? `€${bot.currentBankroll.toFixed(0)}` : "—"}
                       </td>
                     )}
                     <td className="py-3 px-2 text-center">
