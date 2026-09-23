@@ -7,8 +7,9 @@
 // services it depends on, today's stats). API-Football (incl. the Pinnacle
 // benchmark), closing prices and infrastructure sit in a smaller row below.
 //
-// Open blocks live in client state (so the 60 s auto-refresh never snaps them
-// shut) and in the URL hash (#coolbet), so an alert can link straight to a book.
+// The selected block lives in client state (so the 60 s auto-refresh never closes
+// it) and in the URL hash (#coolbet), so an alert can link straight to a book.
+// Blocks never resize; details open in one panel under the selected block's row.
 
 import { useEffect, useState } from "react";
 import type { FeedStatus, FeedBookStats } from "@/lib/engine-data";
@@ -104,118 +105,126 @@ function worst(tones: Tone[]): Tone {
 export function FeedsBoard({ feeds, books, now }: { feeds: FeedStatus[]; books: FeedBookStats[]; now: number }) {
   const byId = new Map(feeds.map((f) => [f.feed_id, f]));
   const stats = new Map(books.map((b) => [b.book, b]));
-  const [open, setOpen] = useState<Set<string>>(new Set());
+  // ONE selected block at a time. Blocks never change size or position (the first
+  // version stretched the opened block to full width and reflowed the grid); the
+  // details open in a single panel directly under the selected block's row.
+  const [selected, setSelected] = useState<string | null>(null);
 
   useEffect(() => {
     const h = window.location.hash.replace("#", "");
-    if (h) setOpen(new Set(h.split(",").filter(Boolean)));
+    if (h) setSelected(h);
   }, []);
 
-  function toggle(key: string) {
-    setOpen((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      const hash = [...next].join(",");
-      window.history.replaceState(null, "", hash ? `#${hash}` : window.location.pathname);
+  function select(key: string) {
+    setSelected((prev) => {
+      const next = prev === key ? null : key;
+      window.history.replaceState(null, "", next ? `#${next}` : window.location.pathname);
       return next;
     });
   }
 
-  const block = (b: BlockDef, big: boolean) => {
+  const view = (b: BlockDef) => {
     const main = b.main ? byId.get(b.main) : undefined;
     const extras = b.extra.map((id) => byId.get(id)).filter(Boolean) as FeedStatus[];
     const headTone = b.main ? ageTone(main, now) : worst(extras.map(statusTone));
     const tone = worst([headTone, ...extras.map(statusTone)]);
     const st = b.statsBook ? stats.get(b.statsBook) : undefined;
-    const isOpen = open.has(b.key);
     const deps = b.deps.map((id) => byId.get(id)).filter(Boolean) as FeedStatus[];
+    return { main, extras, headTone, tone, st, deps };
+  };
 
+  const card = (b: BlockDef, big: boolean) => {
+    const { main, extras, headTone, tone, st } = view(b);
+    const isSel = selected === b.key;
+    const problem = main && main.status !== "ok" && main.status !== "paused"
+      ? main.status_reason
+      : extras.find((e) => e.status === "fail" || e.status === "warn")?.status_reason;
     return (
-      <div key={b.key} id={b.key}
-        className={`rounded-lg border-2 ${TONE_BORDER[tone]} bg-card ${isOpen ? "col-span-full" : ""}`}>
-        <button onClick={() => toggle(b.key)} className="w-full text-left px-4 py-3" aria-expanded={isOpen}>
-          <div className="flex items-center justify-between gap-2">
-            <span className={`font-semibold ${big ? "text-lg" : ""}`}>{b.title}</span>
-            <span className="text-xs text-muted-foreground">{isOpen ? "▾" : "▸"}</span>
+      <button key={b.key} id={b.key} onClick={() => select(b.key)} aria-expanded={isSel}
+        className={`text-left rounded-lg border-2 ${TONE_BORDER[tone]} bg-card px-4 py-3 transition-colors hover:bg-accent/40 ${isSel ? "ring-2 ring-foreground/60 ring-offset-2 ring-offset-background" : ""}`}>
+        <div className="flex items-center justify-between gap-2">
+          <span className={`font-semibold ${big ? "text-lg" : ""}`}>{b.title}</span>
+          <span className="text-xs text-muted-foreground">{isSel ? "▴" : "▾"}</span>
+        </div>
+        {b.main ? (
+          <div className={`${big ? "text-2xl" : "text-lg"} font-bold tabular-nums ${TONE_TEXT[headTone]}`}>
+            {main?.paused ? "paused" : ago(main?.last_data_at ?? null, now)}
           </div>
-          {b.main ? (
-            <div className={`${big ? "text-2xl" : "text-lg"} font-bold tabular-nums ${TONE_TEXT[headTone]}`}>
-              {main?.paused ? "paused" : ago(main?.last_data_at ?? null, now)}
-            </div>
-          ) : (
-            <div className={`text-lg font-bold ${TONE_TEXT[headTone]}`}>
-              {extras.filter((e) => e.status === "ok").length}/{extras.length} up
-            </div>
-          )}
-          <div className="text-xs text-muted-foreground mt-0.5">
-            {b.main && <>{main?.kind === "close" ? "last capture" : "last odds"} {clock(main?.last_data_at ?? null)}</>}
-            {st && st.fixtures_today ? (
-              <> · {st.priced_today}/{st.fixtures_today} fixtures today</>
-            ) : null}
+        ) : (
+          <div className={`text-lg font-bold ${TONE_TEXT[headTone]}`}>
+            {extras.filter((e) => e.status === "ok").length}/{extras.length} up
           </div>
-          {extras.length > 0 && b.main && (
-            <div className="flex flex-wrap gap-2 mt-1.5">
-              {extras.map((e) => (
-                <span key={e.feed_id} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                  <span className={`h-1.5 w-1.5 rounded-full ${TONE_DOT[statusTone(e)]}`} />
-                  {SHORT[e.feed_id] ?? e.label}
-                </span>
-              ))}
-            </div>
-          )}
-          {tone !== "green" && (main?.status_reason || extras.find((e) => e.status !== "ok")?.status_reason) && (
-            <div className={`text-xs mt-1.5 ${TONE_TEXT[tone]}`}>
-              {main && main.status !== "ok" ? main.status_reason : extras.find((e) => e.status !== "ok")?.status_reason}
-            </div>
-          )}
-        </button>
-
-        {isOpen && (
-          <div className="border-t border-border px-4 py-3 space-y-3">
-            {b.note && <p className="text-xs text-muted-foreground">{b.note}</p>}
-            {st && (
-              <div className="text-xs text-muted-foreground">
-                Today: <span className="text-foreground">{st.priced_today}/{st.fixtures_today}</span> fixtures priced
-                {st.fixtures_today ? ` (${Math.round((100 * (st.priced_today ?? 0)) / st.fixtures_today)}%)` : ""}
-                {" · "}yesterday {st.priced_yesterday}/{st.fixtures_yesterday}
-                {st.fixtures_yesterday ? ` (${Math.round((100 * (st.priced_yesterday ?? 0)) / st.fixtures_yesterday)}%)` : ""}
-                {" · "}{(st.rows_today ?? 0).toLocaleString("en-US")} prices stored today
-                {" · "}{st.market_families} market types
-              </div>
-            )}
-            {[main, ...extras].filter(Boolean).map((f) => (
-              <SubFeed key={(f as FeedStatus).feed_id} f={f as FeedStatus} now={now} />
+        )}
+        <div className="text-xs text-muted-foreground mt-0.5">
+          {b.main && <>{main?.kind === "close" ? "last capture" : "last odds"} {clock(main?.last_data_at ?? null)}</>}
+          {st && st.fixtures_today ? <> · {st.priced_today}/{st.fixtures_today} fixtures today</> : null}
+        </div>
+        {extras.length > 0 && b.main && (
+          <div className="flex flex-wrap gap-2 mt-1.5">
+            {extras.map((e) => (
+              <span key={e.feed_id} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                <span className={`h-1.5 w-1.5 rounded-full ${TONE_DOT[statusTone(e)]}`} />
+                {SHORT[e.feed_id] ?? e.label}
+              </span>
             ))}
-            {deps.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="text-muted-foreground">Depends on:</span>
-                {deps.map((d) => (
-                  <span key={d.feed_id} className="inline-flex items-center gap-1">
-                    <span className={`h-1.5 w-1.5 rounded-full ${TONE_DOT[statusTone(d)]}`} />
-                    {SHORT[d.feed_id] ?? d.label}
-                  </span>
-                ))}
-              </div>
-            )}
+          </div>
+        )}
+        {problem && tone !== "green" && <div className={`text-xs mt-1.5 line-clamp-2 ${TONE_TEXT[tone]}`}>{problem}</div>}
+      </button>
+    );
+  };
+
+  const panel = (b: BlockDef) => {
+    const { main, extras, st, deps } = view(b);
+    return (
+      <div className="rounded-lg border border-border bg-card/60 px-4 py-3 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-semibold">{b.title} — details</span>
+          <button onClick={() => select(b.key)} className="text-xs text-muted-foreground hover:underline">Close ✕</button>
+        </div>
+        {b.note && <p className="text-xs text-muted-foreground">{b.note}</p>}
+        {st && (
+          <div className="text-xs text-muted-foreground">
+            Today: <span className="text-foreground">{st.priced_today}/{st.fixtures_today}</span> fixtures priced
+            {st.fixtures_today ? ` (${Math.round((100 * (st.priced_today ?? 0)) / st.fixtures_today)}%)` : ""}
+            {" · "}yesterday {st.priced_yesterday}/{st.fixtures_yesterday}
+            {st.fixtures_yesterday ? ` (${Math.round((100 * (st.priced_yesterday ?? 0)) / st.fixtures_yesterday)}%)` : ""}
+            {" · "}{(st.rows_today ?? 0).toLocaleString("en-US")} prices stored today
+            {" · "}{st.market_families} market types
+          </div>
+        )}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          {[main, ...extras].filter(Boolean).map((f) => (
+            <SubFeed key={(f as FeedStatus).feed_id} f={f as FeedStatus} now={now} />
+          ))}
+        </div>
+        {deps.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-muted-foreground">Depends on:</span>
+            {deps.map((d) => (
+              <span key={d.feed_id} className="inline-flex items-center gap-1">
+                <span className={`h-1.5 w-1.5 rounded-full ${TONE_DOT[statusTone(d)]}`} />
+                {SHORT[d.feed_id] ?? d.label}
+              </span>
+            ))}
           </div>
         )}
       </div>
     );
   };
 
-  const sortedBooks = [...BOOKS].sort((a, c) => {
-    const ta = worst([ageTone(a.main ? byId.get(a.main) : undefined, now), ...a.extra.map((id) => statusTone(byId.get(id)))]);
-    const tc = worst([ageTone(c.main ? byId.get(c.main) : undefined, now), ...c.extra.map((id) => statusTone(byId.get(id)))]);
-    return RANK[ta] - RANK[tc];
-  });
+  const sortedBooks = [...BOOKS].sort((a, c) => RANK[view(a).tone] - RANK[view(c).tone]);
+  const selBook = sortedBooks.find((b) => b.key === selected);
+  const selOther = OTHERS.find((b) => b.key === selected);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {sortedBooks.map((b) => block(b, true))}
+        {sortedBooks.map((b) => card(b, true))}
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">{OTHERS.map((b) => block(b, false))}</div>
+      {selBook && panel(selBook)}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3">{OTHERS.map((b) => card(b, false))}</div>
+      {selOther && panel(selOther)}
     </div>
   );
 }
