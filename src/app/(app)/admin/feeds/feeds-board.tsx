@@ -198,6 +198,18 @@ export function FeedsBoard({ feeds, books, now }: { feeds: FeedStatus[]; books: 
             {" · "}{st.market_families} market types
           </div>
         )}
+        {st && st.requests_24h != null && (
+          <div className="text-xs text-muted-foreground" title="Every request we send this book, counted across all our processes. Over budget, requests are refused before they are sent — so one book's exit IP never gets flagged again (#110).">
+            Requests this hour:{" "}
+            <span className={st.budget_1h && (st.requests_1h ?? 0) >= 0.8 * st.budget_1h ? "text-amber-400" : "text-foreground"}>
+              {st.requests_1h ?? 0}{st.budget_1h ? ` / ${st.budget_1h}` : ""}
+            </span>
+            {st.budget_1h ? " budget" : ""}
+            {" · "}bot-checks {st.challenges_1h ?? 0}
+            {" · "}errors {st.errors_1h ?? 0}
+            {" · "}{(st.requests_24h ?? 0).toLocaleString("en-US")} in 24 h
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
           {[main, ...extras].filter(Boolean).map((f) => (
             <SubFeed key={(f as FeedStatus).feed_id} f={f as FeedStatus} now={now} />

@@ -6466,6 +6466,12 @@ export interface FeedBookStats {
   rows_today: number | null;
   market_families: number | null;
   last_row_at: string | null;
+  // BOOK-FOOTPRINT (#110): requests we sent this clock hour vs the book's budget
+  requests_1h: number | null;
+  budget_1h: number | null;
+  challenges_1h: number | null;
+  errors_1h: number | null;
+  requests_24h: number | null;
   updated_at: string;
 }
 
