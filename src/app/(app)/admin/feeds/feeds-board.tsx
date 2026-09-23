@@ -36,7 +36,7 @@ const OTHERS: BlockDef[] = [
   { key: "api-football", title: "API-Football", main: "af_odds", extra: ["af_closing", "af_live", "af_fixtures"], deps: [],
     statsBook: "Pinnacle", note: "Bulk feed of 9 books. Pinnacle — our benchmark line — comes from here; we do not collect it ourselves." },
   { key: "closing", title: "Closing prices", main: "direct_close", extra: [], deps: [],
-    note: "Snapshot of our own books' prices in the last 15 min before kickoff." },
+    note: "Runs every 5 min, but only captures when one of our paired matches kicks off within the next 15 min — so a gap between kickoff waves is normal. Colour follows the job's health, not the age of the last capture." },
   { key: "infra", title: "Infrastructure", extra: ["zone_egress", "unibet_chrome", "flaresolverr", "scheduler"], deps: [],
     note: "Services the sweepers run on." },
 ];
@@ -69,6 +69,10 @@ function statusTone(f?: FeedStatus): Tone {
 function ageTone(f: FeedStatus | undefined, now: number): Tone {
   if (!f) return "grey";
   if (f.paused) return "blue";
+  // Closing capture only writes when a paired match kicks off within 15 min, so
+  // "34 min since last data" between kickoff waves is normal — colour it by the
+  // job's own health instead (owner asked about exactly this, 2026-09-23).
+  if (f.kind === "close") return statusTone(f);
   if (!f.last_data_at) return f.health_basis === "data" ? "red" : statusTone(f);
   const m = (now - new Date(f.last_data_at).getTime()) / 60000;
   const interval = f.interval_min ?? 30;
@@ -145,7 +149,7 @@ export function FeedsBoard({ feeds, books, now }: { feeds: FeedStatus[]; books: 
             </div>
           )}
           <div className="text-xs text-muted-foreground mt-0.5">
-            {b.main && <>last odds {clock(main?.last_data_at ?? null)}</>}
+            {b.main && <>{main?.kind === "close" ? "last capture" : "last odds"} {clock(main?.last_data_at ?? null)}</>}
             {st && st.fixtures_today ? (
               <> · {st.priced_today}/{st.fixtures_today} fixtures today</>
             ) : null}
