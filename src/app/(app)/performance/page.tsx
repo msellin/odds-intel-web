@@ -56,7 +56,7 @@ import {
   PICKS_FORWARD_TEST_STAKE_EUR,
   PICKS_FORWARD_TEST_START_BANKROLL,
 } from "@/lib/engine-data";
-import { isPublicBot } from "@/lib/bot-aggregates";
+import { isPublicBot, LEDGER_BACKED_BOTS } from "@/lib/bot-aggregates";
 import { PerformanceHistory } from "@/components/performance-history";
 import type { FullBetItem } from "@/components/performance-history";
 import { PerformanceExtras } from "@/components/performance-extras";
@@ -332,7 +332,10 @@ export default async function PerformancePage() {
   // of its maturity label.
   const cachedBots = buildCachedBotStats(cache, botsDB, isPro, isElite)
     .filter(b => isPublicBot(b.maturityLabel))
-    .filter(b => !liveRetiredNames.has(b.name));
+    .filter(b => !liveRetiredNames.has(b.name))
+    // Ledger-backed bots are pushed below from picks_forward_test; a beta one
+    // (grade B) would otherwise ALSO arrive here from dashboard_cache with 0 bets.
+    .filter(b => !LEDGER_BACKED_BOTS.has(b.name));
 
   // PICKS-BOT-IN-LEADERBOARD-2026-09-14. bot_sharp_forward_test_v1 is the bot
   // that actually produces the picks readers receive, and it was missing from

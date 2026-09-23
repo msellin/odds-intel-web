@@ -350,6 +350,20 @@ export const PUBLIC_MATURITY_LABELS: ReadonlySet<string> = new Set([
   "beta",
 ]);
 
+/**
+ * Bots whose record lives in `picks_forward_test`, NOT `simulated_bets`. They
+ * are injected into the leaderboard from their own ledger (PUBLISHED_ARM_BOTS in
+ * /performance/page.tsx), so every simulated_bets-derived list must SKIP them —
+ * otherwise a `beta` one appears twice, the second time as "no settled bets
+ * yet". That is exactly what grade B did the hour it became its own bot
+ * ([[#095]], 2026-09-23): 16 settled in one row, zero in its duplicate.
+ */
+export const LEDGER_BACKED_BOTS: ReadonlySet<string> = new Set([
+  "bot_sharp_forward_test_v1",
+  "bot_consensus_b_v1",
+  "bot_consensus_c_v1",
+]);
+
 /** Whether a bot's maturity label earns it a place on the public leaderboard. */
 export function isPublicBot(maturityLabel?: string | null): boolean {
   return PUBLIC_MATURITY_LABELS.has(maturityLabel ?? "");
@@ -375,7 +389,8 @@ export function buildPublicBotStats(
   // aggregateBets toggle would otherwise resurrect them from raw bets data.
   // PERF-PUBLIC-IS-CALIBRATED-OR-BETA: and the shadow fleet never appears here
   // at all — see PUBLIC_MATURITY_LABELS above for why.
-  const activeBots = botsDB.filter((b) => !b.retiredAt && isPublicBot(b.maturityLabel));
+  const activeBots = botsDB.filter((b) =>
+    !b.retiredAt && isPublicBot(b.maturityLabel) && !LEDGER_BACKED_BOTS.has(b.name));
   const rows: PublicBotStatShape[] = activeBots.map((dbBot): PublicBotStatShape => {
     const botBets = betsByBot[dbBot.name] || [];
     const settled = botBets.filter((b) => b.result !== "pending" && b.result !== "void");
