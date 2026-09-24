@@ -58,8 +58,9 @@ export function PlaceAction({
   const [pending, start] = useTransition();
   const [oddsIn, setOddsIn] = useState(odds.toFixed(2));
   const [stakeIn, setStakeIn] = useState(String(stake));
-  const takenOdds = Number(oddsIn);
-  const takenStake = Number(stakeIn);
+  // accept a comma decimal ("2,10") — an Estonian keyboard types one (review 2026-09-24)
+  const takenOdds = Number(oddsIn.replace(",", "."));
+  const takenStake = Number(stakeIn.replace(",", "."));
   const inputsOk = Number.isFinite(takenOdds) && takenOdds > 1 && Number.isFinite(takenStake) && takenStake > 0;
 
   function commit() {
