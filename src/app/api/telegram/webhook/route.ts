@@ -641,13 +641,20 @@ export async function POST(req: NextRequest) {
     return new NextResponse("OK", { status: 200 });
   }
 
+  // #055 (2026-09-24): the personal-alert connect flow below is a leftover of the paid tiers
+  // (deprecated; no checkout, no "Connect Telegram" button on /profile). Anyone who reaches a
+  // dead end here is pointed at where picks actually live instead of at a page that cannot
+  // do what the message says. The pro/elite connect path itself is kept for existing links.
+  const PICKS_POINTER =
+    "Picks are published free on our public channel: https://t.me/oddsintelpicks — and at https://oddsintel.app/picks.";
+
   if (text.startsWith("/start")) {
     // /start <user_uuid>  — links this Telegram chat to the OddsIntel profile
     const parts = text.split(" ");
     const uuid = parts[1]?.trim();
 
     if (!uuid || !UUID_RE.test(uuid)) {
-      await sendReply(chatId, "❌ Invalid link. Go to your OddsIntel profile page and click 'Connect Telegram' to get a fresh link.");
+      await sendReply(chatId, `👋 This bot no longer sends personal alerts. ${PICKS_POINTER}`);
       return new NextResponse("OK", { status: 200 });
     }
 
@@ -658,12 +665,12 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     if (error || !profile) {
-      await sendReply(chatId, "❌ Account not found. Make sure you're using the link from your own OddsIntel profile page.");
+      await sendReply(chatId, `👋 This link doesn't match an account. ${PICKS_POINTER}`);
       return new NextResponse("OK", { status: 200 });
     }
 
     if (!["pro", "elite"].includes(profile.tier)) {
-      await sendReply(chatId, "ℹ️ Telegram alerts are available on Pro and Elite plans. Upgrade at oddsintel.app/profile.");
+      await sendReply(chatId, `👋 Personal alerts are no longer offered. ${PICKS_POINTER}`);
       return new NextResponse("OK", { status: 200 });
     }
 
