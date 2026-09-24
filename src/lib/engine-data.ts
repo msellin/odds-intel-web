@@ -61,6 +61,10 @@ export interface OpsSnapshot {
   odds_snapshots_today: number | null;
   distinct_bookmakers: number | null;
   matches_without_pinnacle: number | null;
+  // #119 — sharp anchor = Pinnacle OR a liquid Betfair Exchange market (null before migration 397)
+  matches_with_exchange_liquid?: number | null;
+  matches_with_sharp?: number | null;
+  matches_without_sharp?: number | null;
   odds_market_match_winner: number | null;
   odds_market_goals_ou: number | null;
   odds_market_btts: number | null;

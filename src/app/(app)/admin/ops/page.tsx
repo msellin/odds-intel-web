@@ -93,8 +93,8 @@ export default async function OpsDashboardPage() {
         <Grid>
           <Stat label="Have odds" value={snapshot?.matches_with_odds} total={snapshot?.matches_today}
             note="≥1 bookmaker is pricing this — required for value bet calculation" />
-          <Stat label="Have Pinnacle" value={snapshot?.matches_with_pinnacle} total={snapshot?.matches_today}
-            note="Pinnacle = sharpest line for edge calc. No Pinnacle = no value bet." />
+          <Stat label="Have sharp anchor" value={snapshot?.matches_with_sharp ?? snapshot?.matches_with_pinnacle} total={snapshot?.matches_today}
+            note={`Pinnacle ${snapshot?.matches_with_pinnacle ?? "–"} · liquid Betfair Exchange ${snapshot?.matches_with_exchange_liquid ?? "–"} (≤5% spread, ≥€1k matched). Either one is a sharp price for edge calc.`} />
           <Stat label="Have AF predictions" value={snapshot?.matches_with_predictions} total={snapshot?.matches_today}
             note="API-Football's 1X2 probability — one of the model inputs" />
           <Stat label="Have any signals" value={snapshot?.matches_with_signals} total={snapshot?.matches_today}
@@ -116,8 +116,8 @@ export default async function OpsDashboardPage() {
             note="League position, points-to-title, points-to-relegation" />
           <Stat label="Postponed" value={snapshot?.matches_postponed_today} warn={v => v > 0}
             note="Won't settle — void any pending bets on these" />
-          <Stat label="Missing Pinnacle" value={snapshot?.matches_without_pinnacle} warn={v => v > 5}
-            note="Have odds but not from Pinnacle — lower confidence" />
+          <Stat label="Missing sharp anchor" value={snapshot?.matches_without_sharp ?? snapshot?.matches_without_pinnacle} warn={v => v > 5}
+            note="Have odds but neither Pinnacle nor a liquid exchange market — only a multi-book consensus, lower confidence" />
           <Stat label="ML vectors (finished)" value={snapshot?.matches_with_fvectors} total={snapshot?.matches_today}
             note="Post-settlement only — 0 is normal for today's upcoming games" />
         </Grid>
