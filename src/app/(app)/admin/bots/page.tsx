@@ -16,7 +16,9 @@ import { BotsBoard } from "./bots-board";
 // Replaces the old simulated_bets-only dashboard, which showed 2 of 20 active
 // bots, headline cards dominated by retired bots, raw (non-de-vigged) CLV, a
 // Bankroll column on a different basis from P&L, and May-dated cohort splits —
-// see docs/BOTS_AUDIT_2026_09_24.md sections A and D4.
+// see docs/BOTS_AUDIT_2026_09_24.md sections A and D4. Visual redesign 2026-09-24 per
+// odds-intel-engine dev/active/bots-board-ux-spec.md (fleet strip, forest bars, 12-week
+// strip from bot_weekly — migration 411, optional until deployed).
 
 export default async function BotsPage() {
   if (!isBotBoardDevPreview()) {
@@ -44,17 +46,10 @@ async function superadminDenial() {
 }
 
 function renderBoard(data: Awaited<ReturnType<typeof loadBotBoard>>) {
+  // Title row, "How to read this" and the data timestamp live in BotsBoard (client state).
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 space-y-6">
-      <div>
-        <Link href="/admin" className="text-xs text-muted-foreground hover:underline">← Admin</Link>
-        <h1 className="text-2xl font-bold mt-1">Bots</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Every active bot — model, shadow, sharp, in-play, forward test and control — on one ledger. ROI is a flat
-          1-unit stake per pick; the verdict reads only the metric that is admissible for the bot&apos;s family.
-          Click a row for its full configuration and recent picks.
-        </p>
-      </div>
+    <div className="mx-auto max-w-7xl space-y-3 px-2 py-6 sm:px-4">
+      <Link href="/admin" className="text-sm text-muted-foreground hover:underline">← Admin</Link>
       <BotsBoard data={data} />
     </div>
   );

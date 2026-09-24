@@ -1,0 +1,373 @@
+// /admin/bots — view model (#139, bots-board-ux-spec §2–§4, §10, §13).
+//
+// Turns the four unified reads (bot_scoreboard / bot_config / bot_capabilities / bot_weekly)
+// into one BotView per bot: its family, the ONE admissible metric for that family, a
+// five-state verdict, the forward-test comparison against the junk control, and the
+// "needs a look" issues. Pure functions — the components only render what this returns.
+//
+// Units: CLV means / se / ROI are FRACTIONS (0.025 = +2.5%), as in the source ledgers.
+
+import type {
+  BotCapabilitiesRow,
+  BotConfigRow,
+  BotScoreboardRow,
+  BotMarketStatsRow,
+  BotWeeklyRow,
+  RetiredInfo,
+} from "@/lib/bot-board";
+import { fmtRuleVersion, identityLine, prettyDisplayName, relTime } from "./bot-board-format";
+
+export type Metric = "clv_mc" | "clv_pinnacle" | "lift";
+
+export const MIN_N = 30;
+export const CONTROL_BOT = "control_junk_anchor";
+
+// Control is NOT a section: it is the reference strip on top of the forward test (§2.1).
+export const FAMILY_ORDER = [
+  "forward_test",
+  "sharp_trigger",
+  "sharp_generator",
+  "model_shadow",
+  "model_sim",
+  "inplay",
+  "unknown",
+] as const;
+
+export type Accent = "teal" | "violet" | "sky" | "amber" | "amberStrong";
+
+export interface FamilyInfo {
+  title: string;
+  subtitle: string;
+  metric: Metric;
+  accent: Accent;
+  icon: "flask" | "crosshair" | "radar" | "brain" | "timer" | "alert" | "control";
+}
+
+export const FAMILY_INFO: Record<string, FamilyInfo> = {
+  forward_test: { title: "Forward test", subtitle: "Pre-registered, public on /picks. Never re-scored.", metric: "clv_mc", accent: "teal", icon: "flask" },
+  sharp_trigger: { title: "Sharp triggers", subtitle: "One per book — fire when the book beats Pinnacle.", metric: "clv_mc", accent: "violet", icon: "crosshair" },
+  sharp_generator: { title: "Sharp generators", subtitle: "Any placeable book above the de-vigged Pinnacle line.", metric: "clv_mc", accent: "violet", icon: "radar" },
+  model_shadow: { title: "Model · paper", subtitle: "Our model, priced at books we can bet.", metric: "clv_mc", accent: "sky", icon: "brain" },
+  model_sim: { title: "Model · simulated", subtitle: "Our model, best accessible price (behind /performance).", metric: "clv_pinnacle", accent: "sky", icon: "brain" },
+  inplay: { title: "In-play", subtitle: "Picks during the match. No closing line → no CLV.", metric: "lift", accent: "amber", icon: "timer" },
+  control: { title: "Junk control", subtitle: "A deliberately junk-anchored arm — the forward test's noise floor.", metric: "clv_mc", accent: "amber", icon: "control" },
+  unknown: { title: "Unresolved config", subtitle: "The export could not describe these — fix export_bot_config.py.", metric: "clv_mc", accent: "amberStrong", icon: "alert" },
+};
+
+export const METRIC_LABEL: Record<Metric, string> = {
+  clv_mc: "mc-CLV — margin-corrected CLV against the bet book's own close",
+  clv_pinnacle: "Pinnacle CLV — against the de-vigged Pinnacle close",
+  lift: "lift — hit rate minus de-vigged implied probability (not computed yet)",
+};
+export const METRIC_PILL: Record<Metric, string> = { clv_mc: "MC-CLV", clv_pinnacle: "PIN-CLV", lift: "NO CLV" };
+export const METRIC_SHORT: Record<Metric, string> = { clv_mc: "mc-CLV", clv_pinnacle: "Pin-CLV", lift: "lift" };
+
+export function familyOf(sb: BotScoreboardRow | undefined, cfg: BotConfigRow | undefined): string {
+  const f = sb?.family && sb.family !== "unknown" ? sb.family : cfg?.family ?? sb?.family ?? "unknown";
+  return FAMILY_INFO[f] ? f : "unknown";
+}
+
+export function metricOf(family: string, cfg: BotConfigRow | undefined): Metric {
+  if (family === "inplay") return "lift";
+  const m = cfg?.admissible_metric;
+  if (m === "clv_mc" || m === "clv_pinnacle" || m === "lift") return m;
+  return FAMILY_INFO[family]?.metric ?? "clv_mc";
+}
+
+export interface MetricValue {
+  metric: Metric;
+  n: number | null;
+  mean: number | null;
+  se: number | null;
+  t: number | null;
+}
+
+export function metricValue(sb: BotScoreboardRow | undefined, metric: Metric): MetricValue {
+  if (!sb || metric === "lift") return { metric, n: null, mean: null, se: null, t: null };
+  if (metric === "clv_pinnacle") return { metric, n: sb.clv_pin_n, mean: sb.clv_pin_mean, se: sb.clv_pin_se, t: sb.clv_pin_t };
+  return { metric, n: sb.clv_mc_n, mean: sb.clv_mc_mean, se: sb.clv_mc_se, t: sb.clv_mc_t };
+}
+
+/** The non-admissible CLV, for the drawer's collapsed "Other metrics" block only. */
+export function otherMetric(sb: BotScoreboardRow | undefined, metric: Metric): MetricValue | null {
+  if (!sb || metric === "lift") return null;
+  return metricValue(sb, metric === "clv_mc" ? "clv_pinnacle" : "clv_mc");
+}
+
+export type Verdict = "beats" | "loses" | "inconclusive" | "early" | "noclv";
+
+/** Honesty rule 1: nothing but "early" below n = 30. */
+export function verdictOf(m: MetricValue): Verdict {
+  if (m.metric === "lift") return "noclv";
+  if (m.t == null || m.n == null || m.n < MIN_N) return "early";
+  if (m.t >= 2) return "beats";
+  if (m.t <= -2) return "loses";
+  return "inconclusive";
+}
+
+export const VERDICT_ORDER: Verdict[] = ["beats", "loses", "inconclusive", "early", "noclv"];
+
+/** The junk-anchored control (pooled over all its markets) plus its per-market split. */
+export interface ControlRef {
+  mean: number;
+  se: number | null;
+  n: number | null;
+  ruleVersion: string | null;
+  /** From bot_market_stats (411); null while the view is not available. */
+  byMarket: Map<string, { n: number; mean: number; se: number | null }> | null;
+}
+
+/** The reference a bot is drawn and compared against: the control on the bot's OWN market mix. */
+export interface ControlLineRef {
+  mean: number;
+  se: number | null;
+  /** false = pooled control (the bot's markets are not all covered, or no per-market data). */
+  sameMarket: boolean;
+}
+
+export type ControlCmp = "equal" | "above" | "below";
+
+export interface ControlComparison {
+  cmp: ControlCmp;
+  t: number;
+  /** Anything that makes the comparison weaker than it looks — shown next to it, never dropped. */
+  caveats: string[];
+}
+
+type MarketRows = BotMarketStatsRow[] | undefined;
+
+/**
+ * The control's mean on the bot's market mix: Σ w_m · μ_control,m with w_m = the bot's share
+ * of measured picks in market m (se combined the same way). The control is 1x2 + O/U, so
+ * comparing an O/U-only arm to the pooled control mean would compare different markets.
+ * Falls back to the pooled control (sameMarket=false) when the split is unavailable or the
+ * control has fewer than MIN_N measured picks on one of the bot's markets.
+ */
+export function controlLineFor(botMarkets: MarketRows, c: ControlRef | null): ControlLineRef | null {
+  if (!c) return null;
+  const pooled: ControlLineRef = { mean: c.mean, se: c.se, sameMarket: false };
+  const rows = (botMarkets ?? []).filter((r) => r.market && (r.clv_mc_n ?? 0) > 0);
+  const total = rows.reduce((s, r) => s + Number(r.clv_mc_n), 0);
+  if (!c.byMarket || total === 0) return pooled;
+  let mean = 0;
+  let var_ = 0;
+  for (const r of rows) {
+    const cm = c.byMarket.get(r.market as string);
+    if (!cm || cm.n < MIN_N || cm.se == null) return pooled;
+    const w = Number(r.clv_mc_n) / total;
+    mean += w * cm.mean;
+    var_ += w * w * cm.se * cm.se;
+  }
+  return { mean, se: Math.sqrt(var_), sameMarket: true };
+}
+
+/** Forward-test only (§4.2): Δ vs the junk control, t_Δ = Δ / √(se² + se_c²). */
+export function controlCompare(
+  v: { family: string; metric: MetricValue; sb?: BotScoreboardRow },
+  c: ControlRef | null,
+  line: ControlLineRef | null,
+): ControlComparison | null {
+  if (!c || !line || v.family !== "forward_test") return null;
+  // No comparison against a control that is itself too thin to read.
+  if (c.se == null || line.se == null || (c.n ?? 0) < MIN_N) return null;
+  const m = v.metric;
+  if (m.metric !== "clv_mc" || m.mean == null || m.se == null || m.n == null || m.n < MIN_N) return null;
+  const se = Math.sqrt(m.se * m.se + line.se * line.se);
+  if (!(se > 0)) return null;
+  const t = (m.mean - line.mean) / se;
+  const caveats: string[] = [];
+  const rv = v.sb?.scored_rule_version ?? null;
+  if (rv !== c.ruleVersion) {
+    caveats.push(`different rule version (control: ${fmtRuleVersion(c.ruleVersion) ?? "none"}, this arm: ${fmtRuleVersion(rv) ?? "none"})`);
+  }
+  if (!line.sameMarket) caveats.push("control pooled across markets — not the same market mix");
+  return { cmp: t >= 2 ? "above" : t <= -2 ? "below" : "equal", t, caveats };
+}
+
+// ─── weekly ──────────────────────────────────────────────────────────────────
+
+export interface WeekBucket {
+  start: number; // ms, Monday 00:00 UTC
+  picks: number;
+  clvN: number;
+  clvMean: number | null;
+}
+
+/** Monday 00:00 UTC of the week containing `t` (Postgres date_trunc('week')). */
+export function weekStart(t: number): number {
+  const d = new Date(t);
+  const day = (d.getUTCDay() + 6) % 7;
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - day);
+}
+
+/** 12 buckets, oldest first; the family's admissible metric decides the colour. */
+export function weekBuckets(rows: BotWeeklyRow[] | undefined, metric: Metric, now: number): WeekBucket[] {
+  const cur = weekStart(now);
+  const byWeek = new Map<number, BotWeeklyRow>();
+  for (const r of rows ?? []) byWeek.set(weekStart(new Date(r.week).getTime()), r);
+  const out: WeekBucket[] = [];
+  for (let i = 11; i >= 0; i--) {
+    const start = cur - i * 7 * 86400000;
+    const r = byWeek.get(start);
+    const pin = metric === "clv_pinnacle";
+    out.push({
+      start,
+      picks: Number(r?.picks ?? 0),
+      clvN: metric === "lift" ? 0 : Number((pin ? r?.clv_pin_n : r?.clv_mc_n) ?? 0),
+      clvMean: metric === "lift" ? null : (pin ? r?.clv_pin_mean : r?.clv_mc_mean) ?? null,
+    });
+  }
+  return out;
+}
+
+// ─── bot view ────────────────────────────────────────────────────────────────
+
+export interface BotView {
+  name: string;
+  displayName: string;
+  identity: string;
+  family: string;
+  sb?: BotScoreboardRow;
+  cfg?: BotConfigRow;
+  caps?: BotCapabilitiesRow;
+  metric: MetricValue;
+  verdict: Verdict;
+  /** Active bot with no pick in 7 days. */
+  silent: boolean;
+  control: ControlComparison | null;
+  /** The junk-control reference drawn on this bot's mc-CLV bar (same market mix when possible). */
+  controlLine: ControlLineRef | null;
+  weeks: WeekBucket[] | null;
+  /** Mean 1/odds over settled picks — the hit rate needed to break even (bot_market_stats). */
+  breakEven: number | null;
+  /** rule_version gate in bot_config, when it differs from the version being scored. */
+  configRuleVersion: string | null;
+}
+
+export function isActive(sb: BotScoreboardRow): boolean {
+  if (sb.retired_at) return false;
+  if (sb.is_active) return true;
+  // Forward-test arms and the control have no `bots` row, so is_active is NULL.
+  return sb.source === "forward_test" || sb.family === "forward_test" || sb.family === "control";
+}
+
+export function buildView(
+  name: string,
+  sb: BotScoreboardRow | undefined,
+  cfg: BotConfigRow | undefined,
+  caps: BotCapabilitiesRow | undefined,
+  opts: {
+    control: ControlRef | null;
+    weekly: Map<string, BotWeeklyRow[]> | null;
+    markets: Map<string, BotMarketStatsRow[]> | null;
+    now: number;
+    active: boolean;
+  },
+): BotView {
+  const family = name === CONTROL_BOT ? "control" : familyOf(sb, cfg);
+  const metric = metricValue(sb, metricOf(family, cfg));
+  const silentByCaps = caps?.writing_7d === false;
+  const silentByTime = !caps && sb?.last_pick_at != null && opts.now - new Date(sb.last_pick_at).getTime() > 7 * 86400000;
+  const base = {
+    name,
+    displayName: prettyDisplayName(sb?.display_name, name),
+    identity: identityLine(cfg),
+    family,
+    sb,
+    cfg,
+    caps,
+    metric,
+    verdict: verdictOf(metric),
+    silent: opts.active && (silentByCaps || silentByTime),
+    weeks: opts.weekly ? weekBuckets(opts.weekly.get(name), metric.metric, opts.now) : null,
+  };
+  const botMarkets = opts.markets?.get(name);
+  const controlLine = metric.metric === "clv_mc" && name !== CONTROL_BOT ? controlLineFor(botMarkets, opts.control) : null;
+  const gateRv = (cfg?.gates ?? []).find((g) => g.name === "rule_version")?.value;
+  const configRuleVersion =
+    typeof gateRv === "string" && sb?.scored_rule_version && gateRv !== sb.scored_rule_version ? gateRv : null;
+  return {
+    ...base,
+    controlLine,
+    control: controlCompare(base, opts.control, controlLine),
+    breakEven: breakEvenOf(botMarkets),
+    configRuleVersion,
+  };
+}
+
+function breakEvenOf(rows: MarketRows): number | null {
+  let inv = 0;
+  let n = 0;
+  for (const r of rows ?? []) {
+    inv += Number(r.sum_inv_odds ?? 0);
+    n += Number(r.odds_n ?? 0);
+  }
+  return n > 0 ? inv / n : null;
+}
+
+export function controlRef(sb: BotScoreboardRow | undefined, markets: BotMarketStatsRow[] | undefined | null): ControlRef | null {
+  if (!sb || sb.clv_mc_mean == null) return null;
+  let byMarket: ControlRef["byMarket"] = null;
+  if (markets) {
+    byMarket = new Map();
+    for (const r of markets) {
+      if (!r.market || r.clv_mc_mean == null || !r.clv_mc_n) continue;
+      const se = r.clv_mc_sd != null && r.clv_mc_n >= 2 ? r.clv_mc_sd / Math.sqrt(r.clv_mc_n) : null;
+      byMarket.set(r.market, { n: r.clv_mc_n, mean: r.clv_mc_mean, se });
+    }
+  }
+  return { mean: sb.clv_mc_mean, se: sb.clv_mc_se, n: sb.clv_mc_n, ruleVersion: sb.scored_rule_version, byMarket };
+}
+
+/** Within a family: Beats → Loses → Inconclusive → Too early → No CLV, silent last; |t| desc. */
+export function sortBots(a: BotView, b: BotView): number {
+  if (a.silent !== b.silent) return a.silent ? 1 : -1;
+  const va = VERDICT_ORDER.indexOf(a.verdict);
+  const vb = VERDICT_ORDER.indexOf(b.verdict);
+  if (va !== vb) return va - vb;
+  const ta = Math.abs(a.metric.t ?? 0);
+  const tb = Math.abs(b.metric.t ?? 0);
+  if (ta !== tb) return tb - ta;
+  return (b.metric.n ?? b.sb?.picks_total ?? 0) - (a.metric.n ?? a.sb?.picks_total ?? 0);
+}
+
+// ─── needs a look (§3) ───────────────────────────────────────────────────────
+
+export interface Issue {
+  bot?: string;
+  text: string;
+  severity: "warn" | "danger";
+}
+
+export function needsALook(
+  active: BotView[],
+  fleet: BotCapabilitiesRow | undefined,
+  errors: { view: string; error: string | null }[],
+  now: number,
+): Issue[] {
+  const out: Issue[] = [];
+  for (const e of errors) if (e.error) out.push({ text: `${e.view} unreadable`, severity: "warn" });
+  for (const v of active) {
+    if (v.caps?.place_enabled && fleet?.fleet_placement_paused === false && v.verdict !== "beats") {
+      out.push({ bot: v.name, text: `${v.displayName} stakes real money without a positive verdict`, severity: "danger" });
+    }
+  }
+  for (const v of active) {
+    if (!v.silent) continue;
+    const r = relTime(v.sb?.last_pick_at, now);
+    out.push({ bot: v.name, text: `${v.displayName} silent · last pick ${/\d (min|h|d)$/.test(r) ? `${r} ago` : r}`, severity: "warn" });
+  }
+  for (const v of active) {
+    if (v.family === "unknown") out.push({ bot: v.name, text: `${v.name} has no resolvable config`, severity: "warn" });
+  }
+  return out;
+}
+
+// ─── retired ─────────────────────────────────────────────────────────────────
+
+export interface RetiredView {
+  view: BotView;
+  info?: RetiredInfo;
+  retiredAt: string | null;
+  hadPicks: boolean;
+}

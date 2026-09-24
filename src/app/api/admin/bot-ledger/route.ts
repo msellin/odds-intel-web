@@ -5,7 +5,9 @@ import { isBotBoardDevPreview, loadBotLedger } from "@/lib/bot-board";
 /** GET ?bot=<bot_name> -> { rows: BotLedgerRow[], error: string | null }
  *
  *  The 30 most recent `bot_ledger` picks for one bot, for the /admin/bots
- *  detail drawer (#139 phase 1). Fetched on demand so the page load does not
+ *  detail drawer (#139 phase 1). Read from `bot_ledger_display` (bot_ledger +
+ *  home/away team names, migration 411) with a fallback to plain `bot_ledger`
+ *  while 411 is not deployed; in-play rows arrive with CLV nulled (spec §13). Fetched on demand so the page load does not
  *  scan the ledger for every bot. Superadmin only (bot_ledger is not anon-readable).
  */
 export async function GET(req: Request) {

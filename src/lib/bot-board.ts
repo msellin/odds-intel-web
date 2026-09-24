@@ -12,6 +12,17 @@
  * admin-only (not anon-readable, #072). Server-only — never import from a
  * client component.
  *
+ * Migration 411 adds three display views: `bot_weekly` (the 12-week strip),
+ * `bot_market_stats` (per-market stats: the same-market junk-control comparison
+ * and the in-play break-even hit rate) and `bot_ledger_display` (bot_ledger +
+ * home/away team names). All are optional here — before 411 deploys, the strip
+ * falls back to text, the control comparison uses the pooled control with a
+ * caveat, and the drawer reads plain `bot_ledger`.
+ *
+ * HONESTY (spec §13 rule 2): in-play bots have no closing line, so any CLV the
+ * ledger carries for them is meaningless. It is nulled HERE, in the data layer,
+ * so it never reaches the client payload at all — not just hidden in the UI.
+ *
  * Tolerance: while migration 410 is not deployed the views do not exist and
  * PostgREST answers with an error. Each read returns `{ rows, error }` instead
  * of throwing, so the page can show "unified views not deployed yet" rather
@@ -127,6 +138,36 @@ export interface BotLedgerRow {
   is_inplay: boolean | null;
   model_version?: string | null;
   rule_version?: string | null;
+  /** From bot_ledger_display (migration 411); absent when reading plain bot_ledger. */
+  home_team?: string | null;
+  away_team?: string | null;
+}
+
+/** One ISO week of one bot (view bot_weekly, migration 411). CLV means are fractions. */
+export interface BotWeeklyRow {
+  bot_name: string;
+  week: string;
+  picks: number | null;
+  settled: number | null;
+  clv_mc_n: number | null;
+  clv_mc_mean: number | null;
+  clv_pin_n: number | null;
+  clv_pin_mean: number | null;
+  pnl_unit: number | null;
+}
+
+/** One (bot, market) of view bot_market_stats (migration 411). */
+export interface BotMarketStatsRow {
+  bot_name: string;
+  market: string | null;
+  settled: number | null;
+  won: number | null;
+  odds_n: number | null;
+  /** Σ 1/odds over settled picks; / odds_n = break-even hit rate. */
+  sum_inv_odds: number | null;
+  clv_mc_n: number | null;
+  clv_mc_mean: number | null;
+  clv_mc_sd: number | null;
 }
 
 export interface RetiredInfo {
@@ -146,6 +187,10 @@ export interface BotBoardData {
   config: Read<BotConfigRow>;
   capabilities: Read<BotCapabilitiesRow>;
   retired: Read<RetiredInfo>;
+  /** Optional (migration 411) — `error` set while the view does not exist. */
+  weekly: Read<BotWeeklyRow>;
+  /** Optional (migration 411). */
+  marketStats: Read<BotMarketStatsRow>;
   /** Render clock, read in the data layer (react-hooks/purity convention). */
   now: number;
 }
@@ -174,6 +219,8 @@ interface BotBoardFixture {
   capabilities: BotCapabilitiesRow[];
   retired: RetiredInfo[];
   ledger: Record<string, BotLedgerRow[]>;
+  weekly?: Record<string, BotWeeklyRow[]>;
+  market_stats?: BotMarketStatsRow[];
 }
 
 export function isBotBoardDevPreview(): boolean {
@@ -190,19 +237,61 @@ export async function loadBotBoard(): Promise<BotBoardData> {
   if (isBotBoardDevPreview()) {
     const f = await readFixture();
     const ok = <T,>(rows: T[]): Read<T> => ({ rows, error: null });
-    return { scoreboard: ok(f.scoreboard), config: ok(f.config), capabilities: ok(f.capabilities),
-             retired: ok(f.retired), now: Date.now() };
+    const weekly: Read<BotWeeklyRow> = f.weekly
+      ? ok(Object.values(f.weekly).flat())
+      : { rows: [], error: "bot_weekly: not in fixture" };
+    const marketStats: Read<BotMarketStatsRow> = f.market_stats
+      ? ok(f.market_stats)
+      : { rows: [], error: "bot_market_stats: not in fixture" };
+    return redactInplay({ scoreboard: ok(f.scoreboard), config: ok(f.config), capabilities: ok(f.capabilities),
+             retired: ok(f.retired), weekly, marketStats, now: Date.now() });
   }
-  const [scoreboard, config, capabilities, retired] = await Promise.all([
+  const [scoreboard, config, capabilities, retired, weekly, marketStats] = await Promise.all([
     readAll<BotScoreboardRow>("bot_scoreboard"),
     readAll<BotConfigRow>("bot_config"),
     readAll<BotCapabilitiesRow>("bot_capabilities"),
     // `bots` exists today; only the reason text is taken from it (the contract's
     // scoreboard carries retired_at but not the reason).
     readRetired(),
+    // 12 weeks × ~90 bots stays far under the 5000-row cap.
+    readAll<BotWeeklyRow>("bot_weekly"),
+    readAll<BotMarketStatsRow>("bot_market_stats"),
   ]);
-  return { scoreboard, config, capabilities, retired, now: Date.now() };
+  return redactInplay({ scoreboard, config, capabilities, retired, weekly, marketStats, now: Date.now() });
 }
+
+/** In-play bots are judged on lift, never CLV — drop their CLV before it leaves the server. */
+function redactInplay(d: BotBoardData): BotBoardData {
+  const inplay = new Set<string>();
+  for (const r of d.scoreboard.rows) if (r.family === "inplay") inplay.add(r.bot_name);
+  for (const r of d.config.rows) if (r.family === "inplay") inplay.add(r.bot_name);
+  if (inplay.size === 0) return d;
+  const scoreboard = {
+    ...d.scoreboard,
+    rows: d.scoreboard.rows.map((r) =>
+      inplay.has(r.bot_name)
+        ? { ...r, clv_mc_n: null, clv_mc_mean: null, clv_mc_se: null, clv_mc_t: null,
+            clv_pin_n: null, clv_pin_mean: null, clv_pin_se: null, clv_pin_t: null, clv_outlier_n: null }
+        : r,
+    ),
+  };
+  const weekly = {
+    ...d.weekly,
+    rows: d.weekly.rows.map((r) =>
+      inplay.has(r.bot_name) ? { ...r, clv_mc_n: null, clv_mc_mean: null, clv_pin_n: null, clv_pin_mean: null } : r,
+    ),
+  };
+  const marketStats = {
+    ...d.marketStats,
+    rows: d.marketStats.rows.map((r) =>
+      inplay.has(r.bot_name) ? { ...r, clv_mc_n: null, clv_mc_mean: null, clv_mc_sd: null } : r,
+    ),
+  };
+  return { ...d, scoreboard, weekly, marketStats };
+}
+
+const redactLedgerRow = (r: BotLedgerRow): BotLedgerRow =>
+  r.is_inplay || r.bot_name.startsWith("bot_inplay_") ? { ...r, clv_raw: null, clv_mc: null, clv_pinnacle: null } : r;
 
 async function readRetired(): Promise<Read<RetiredInfo>> {
   try {
@@ -219,25 +308,33 @@ async function readRetired(): Promise<Read<RetiredInfo>> {
   }
 }
 
-/** One bot's most recent picks from `bot_ledger` (newest pick first). */
+/** One bot's most recent picks (newest pick first), with team names when migration 411 is live. */
 export async function loadBotLedger(botName: string, limit = 30): Promise<Read<BotLedgerRow>> {
   if (isBotBoardDevPreview()) {
     const f = await readFixture();
-    return { rows: (f.ledger[botName] ?? []).slice(0, limit), error: null };
+    return { rows: (f.ledger[botName] ?? []).slice(0, limit).map(redactLedgerRow), error: null };
   }
+  // bot_ledger_display = bot_ledger + home_team / away_team (411). Before 411 deploys the
+  // view does not exist — fall back to the bare ledger (the drawer shows a match-id stub).
+  const display = await readLedger("bot_ledger_display", botName, limit);
+  if (!display.error) return display;
+  return readLedger("bot_ledger", botName, limit);
+}
+
+async function readLedger(relation: string, botName: string, limit: number): Promise<Read<BotLedgerRow>> {
   try {
     const db = createServerServiceClient();
     const { data, error } = await db
-      .from("bot_ledger")
+      .from(relation)
       // "*" rather than a column list: the contract leaves model_version /
       // rule_version as "whichever the source carries", so do not pin names.
       .select("*")
       .eq("bot_name", botName)
       .order("pick_time", { ascending: false, nullsFirst: false })
       .limit(limit);
-    if (error) return { rows: [], error: `bot_ledger: ${error.message}` };
-    return { rows: (data ?? []) as BotLedgerRow[], error: null };
+    if (error) return { rows: [], error: `${relation}: ${error.message}` };
+    return { rows: ((data ?? []) as BotLedgerRow[]).map(redactLedgerRow), error: null };
   } catch (e) {
-    return { rows: [], error: `bot_ledger: ${e instanceof Error ? e.message : String(e)}` };
+    return { rows: [], error: `${relation}: ${e instanceof Error ? e.message : String(e)}` };
   }
 }
