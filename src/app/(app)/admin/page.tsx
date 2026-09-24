@@ -12,7 +12,7 @@ const SECTIONS: { href: string; title: string; blurb: string }[] = [
   {
     href: "/admin/bots",
     title: "Bot dashboard",
-    blurb: "All bots — fires, ROI, CLV, maturity, market mix.",
+    blurb: "Every active bot on one ledger — config, capabilities, flat ROI and the family's admissible CLV verdict.",
   },
   {
     href: "/admin/shadow-bots",
