@@ -1,12 +1,14 @@
 "use client";
 
-// /admin/bots — detail drawer (#139, bots-board-ux-spec §8). Leads with the evidence
+// /admin/bots — detail panels (#139, bots-board-ux-spec §8). Since control-panel phase A these
+// pieces render inside the right-hand Sheet with tabs (bot-sheet.tsx); the hand-rolled drawer
+// shell is gone (Sheet brings focus trap, Esc and return focus). Leads with the evidence
 // (verdict, metric, ROI tiles + the forest bar and 12-week strip), then what the bot bets
 // as three fact cards, with the raw gates and sources collapsed. Recent picks show team
 // names (migration 411's bot_ledger_display) and ONLY the family's admissible CLV — none
 // at all for in-play (honesty rules 2 and 4). Focus is trapped; Esc closes.
 
-import { useEffect, useRef, type KeyboardEvent, type ReactNode, type RefObject } from "react";
+import { type ReactNode, type RefObject } from "react";
 import { Check, Circle, Dot, X } from "lucide-react";
 import type { BotLedgerRow } from "@/lib/bot-board";
 import {
@@ -37,6 +39,8 @@ import {
   tStat,
   utcStamp,
 } from "./bot-board-format";
+import { placementPathReason } from "@/lib/bot-controls/placement-path";
+import { useControls } from "./controls-context";
 import { ControlLine, LastPick, MetricPill, ROI_COLOUR_MIN, VerdictChip, capList, roiTone } from "./bot-row";
 import { ForestAxis, ForestBar, WeeklyStrip } from "./bot-viz";
 
@@ -169,7 +173,7 @@ function matchLabel(r: BotLedgerRow): ReactNode {
   return <span className="font-mono text-muted-foreground" title={r.match_id ?? undefined}>match {r.match_id ? r.match_id.slice(0, 8) : "—"}</span>;
 }
 
-function RecentPicks({ v, ledger }: { v: BotView; ledger: LedgerState | undefined }) {
+export function RecentPicks({ v, ledger }: { v: BotView; ledger: LedgerState | undefined }) {
   const metric = v.metric.metric;
   const metricCol = metric === "lift" ? null : metric;
   const scored = v.sb?.scored_rule_version ?? null;
@@ -250,7 +254,22 @@ function RecentPicks({ v, ledger }: { v: BotView; ledger: LedgerState | undefine
   );
 }
 
-function DrawerHeader({ v, fleetPaused, pulse, closeBtn, onClose }: {
+/** The header's real-money word, from the SAME sources as the € switch (#139 review item 7):
+ *  the placement-path rule + the eligibility row — never the older bot_capabilities flags. */
+function MoneyWord({ v }: { v: BotView }) {
+  const ctl = useControls();
+  const why = placementPathReason(v.cfg?.family ?? v.family, v.cfg?.ledger, v.cfg?.books);
+  const row = ctl.placerBy.get(v.name);
+  const on = ctl.current("placer_enabled", v.name);
+  if (ctl.state.placers.error) return <span className="text-amber-300">Real money: unknown</span>;
+  if (row?.locked_reason) return <span className="text-muted-foreground">Real money: locked off</span>;
+  if (row && on) return <span className="font-medium text-red-400">Real money: selected (ON)</span>;
+  if (row) return <span className="text-amber-300">Real money: can be selected — OFF</span>;
+  if (!why) return <span className="text-muted-foreground">Real money: placeable, no switch yet</span>;
+  return <span className="text-muted-foreground">Real money: not placeable</span>;
+}
+
+export function DrawerHeader({ v, fleetPaused, pulse, closeBtn, onClose }: {
   v: BotView;
   fleetPaused: boolean | null;
   pulse: boolean;
@@ -297,14 +316,8 @@ function DrawerHeader({ v, fleetPaused, pulse, closeBtn, onClose }: {
                 {c.word}
               </span>
             ))}
-            {caps.place_enabled ? (
-              <span className="font-medium text-red-400">Real money: ON</span>
-            ) : caps.place_capable ? (
-              <span className="text-amber-300">Real money: capable, OFF</span>
-            ) : (
-              <span className="text-muted-foreground">Real money: not capable</span>
-            )}
-            {fleetPaused === true && <span className="text-muted-foreground">· fleet paused</span>}
+            <MoneyWord v={v} />
+            {fleetPaused === true && <span className="text-muted-foreground">· placement paused</span>}
             {caps.collect === false && <span className="text-red-400">Not collecting</span>}
             {capWords.length === 0 && caps.collect !== false && <span className="text-muted-foreground">Collecting only (paper)</span>}
           </>
@@ -314,7 +327,7 @@ function DrawerHeader({ v, fleetPaused, pulse, closeBtn, onClose }: {
   );
 }
 
-function Evidence({ v, now }: { v: BotView; now: number }) {
+export function Evidence({ v, now, withOther = true }: { v: BotView; now: number; withOther?: boolean }) {
   const { sb } = v;
   const m = v.metric;
   const other = otherMetric(sb, m.metric);
@@ -406,7 +419,7 @@ function Evidence({ v, now }: { v: BotView; now: number }) {
         <p className="text-sm text-muted-foreground">No scoreboard row — this bot has no picks in bot_ledger.</p>
       )}
 
-      {other && other.n != null && other.n > 0 && (
+      {withOther && other && other.n != null && other.n > 0 && (
         <details className="rounded-lg border border-border px-3 py-2 text-sm">
           <summary className="cursor-pointer text-muted-foreground">Other metrics</summary>
           <div className="mt-2 space-y-1">
@@ -424,7 +437,7 @@ function Evidence({ v, now }: { v: BotView; now: number }) {
   );
 }
 
-function WhatItBets({ v, now }: { v: BotView; now: number }) {
+export function WhatItBets({ v, now }: { v: BotView; now: number }) {
   const { cfg } = v;
   const m = v.metric;
   const books = fmtBooksLong(cfg);
@@ -495,69 +508,5 @@ function WhatItBets({ v, now }: { v: BotView; now: number }) {
       )}
     </section>
 
-  );
-}
-
-export function BotDrawer({
-  v,
-  now,
-  ledger,
-  fleetPaused,
-  pulse,
-  onClose,
-}: {
-  v: BotView;
-  now: number;
-  ledger: LedgerState | undefined;
-  fleetPaused: boolean | null;
-  pulse: boolean;
-  onClose: () => void;
-}) {
-  const panel = useRef<HTMLDivElement>(null);
-  const closeBtn = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    closeBtn.current?.focus();
-  }, [v.name]);
-
-  function onKeyDown(e: KeyboardEvent) {
-    if (e.key === "Escape") {
-      e.stopPropagation();
-      onClose();
-      return;
-    }
-    if (e.key !== "Tab" || !panel.current) return;
-    const f = panel.current.querySelectorAll<HTMLElement>('button, [href], summary, [tabindex]:not([tabindex="-1"])');
-    if (f.length === 0) return;
-    const first = f[0];
-    const last = f[f.length - 1];
-    if (e.shiftKey && document.activeElement === first) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
-      e.preventDefault();
-      first.focus();
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-end sm:items-stretch" role="dialog" aria-modal="true" aria-label={`${v.displayName} details`} onKeyDown={onKeyDown}>
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} aria-hidden="true" />
-      <div
-        ref={panel}
-        className="relative flex h-[100dvh] w-full flex-col overflow-y-auto rounded-t-2xl border-border bg-background sm:max-w-2xl sm:rounded-none sm:border-l"
-      >
-        <DrawerHeader v={v} fleetPaused={fleetPaused} pulse={pulse} closeBtn={closeBtn} onClose={onClose} />
-
-        <div className="space-y-6 px-4 py-4 sm:px-5">
-          <Evidence v={v} now={now} />
-          <WhatItBets v={v} now={now} />
-          {/* recent picks */}
-          <section className="space-y-2">
-            <h3 className={LABEL}>Recent picks{ledger && !ledger.loading && !ledger.error ? ` (${ledger.rows.length})` : ""}</h3>
-            <RecentPicks v={v} ledger={ledger} />
-          </section>
-        </div>
-      </div>
-    </div>
   );
 }

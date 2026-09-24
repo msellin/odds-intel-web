@@ -18,18 +18,45 @@ import {
 import type { BotCapabilitiesRow } from "@/lib/bot-board";
 import type { BotView, Issue, Verdict } from "./bot-board-model";
 import { count } from "./bot-board-format";
+import { useControls } from "./controls-context";
 import { VERDICT_BG, VerdictStackBar } from "./bot-viz";
 
 const LABEL = "font-mono text-xs uppercase tracking-wider text-muted-foreground";
 
-function Tile({ label, children, sub, className = "" }: { label: string; children: ReactNode; sub?: ReactNode; className?: string }) {
-  return (
-    <div className={`bg-card px-4 py-3 ${className}`}>
+function Tile({
+  label,
+  children,
+  sub,
+  className = "",
+  onClick,
+}: {
+  label: string;
+  children: ReactNode;
+  sub?: ReactNode;
+  className?: string;
+  /** #139 phase A: the Placement / Real money tiles jump to the Real money card — they never toggle anything. */
+  onClick?: () => void;
+}) {
+  const body = (
+    <>
       <div className={LABEL}>{label}</div>
       <div className="mt-1 flex items-center gap-1.5 text-2xl font-semibold tabular-nums">{children}</div>
       {sub != null && <div className="mt-1 text-xs text-muted-foreground">{sub}</div>}
-    </div>
+    </>
   );
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        title="Show the controls for this — nothing is toggled"
+        className={`bg-card px-4 py-3 text-left outline-none hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${className}`}
+      >
+        {body}
+      </button>
+    );
+  }
+  return <div className={`bg-card px-4 py-3 ${className}`}>{body}</div>;
 }
 
 const VERDICT_WORD: Record<Verdict, string> = {
@@ -48,6 +75,7 @@ export function FleetStrip({
   issues,
   capsMissing,
   onOpenBot,
+  onJump,
 }: {
   fleet: BotCapabilitiesRow | undefined;
   caps: BotCapabilitiesRow[];
@@ -57,11 +85,18 @@ export function FleetStrip({
   issues: Issue[];
   capsMissing: boolean;
   onOpenBot: (name: string) => void;
+  onJump?: () => void;
 }) {
   const [showIssues, setShowIssues] = useState(false);
   const known = !capsMissing && !!fleet;
-  const paused = known ? fleet.fleet_placement_paused : null;
-  const armed = known ? fleet.fleet_real_money_armed : null;
+  // #139 review item 9: pause / arm come from ONE source everywhere — the control state the page
+  // read from coolbet_session_state (via the controls provider), not the older bot_capabilities.
+  const ctl = useControls();
+  const paused = ctl.current("placement_paused", null);
+  const armed = ctl.current("real_money_disarm", null);
+  const exec = ctl.ladder.layers.find((l) => l.key === "executors");
+  const elig = ctl.ladder.layers.find((l) => l.key === "eligible");
+  const placerWord = !exec ? "" : exec.state === "unknown" ? `placer: ${exec.value.toLowerCase()}` : exec.state === "open" ? "placer alive" : `placer ${exec.value.toLowerCase().startsWith("stale") ? "stale" : "dry-run only"}`;
   const activeNames = new Set(active.map((v) => v.name));
   const activeCaps = caps.filter((c) => activeNames.has(c.bot_name));
   const n = (k: keyof BotCapabilitiesRow) => activeCaps.filter((c) => c[k] === true).length;
@@ -86,7 +121,7 @@ export function FleetStrip({
   return (
     <section className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.08]">
       <div className="grid grid-cols-2 gap-px md:grid-cols-3 xl:grid-cols-6">
-        <Tile label="Placement" sub={paused == null ? "state unreadable" : paused ? "placer idle" : "placer live"}>
+        <Tile label="Placement" onClick={onJump} sub={paused == null ? "state unreadable" : placerWord}>
           {paused == null ? (
             <span className="inline-flex items-center gap-1.5 text-muted-foreground"><HelpCircle size={20} aria-hidden="true" />Unknown</span>
           ) : paused ? (
@@ -97,8 +132,9 @@ export function FleetStrip({
         </Tile>
         <Tile
           label="Real money"
+          onClick={onJump}
           className={armed ? "bg-red-500/10 ring-1 ring-inset ring-red-500/50" : ""}
-          sub={known ? `${n("place_enabled")} enabled · ${n("place_capable")} capable` : "capabilities unreadable"}
+          sub={elig ? (elig.state === "unknown" ? "selection unreadable" : `${elig.value} for real money`) : "—"}
         >
           {armed == null ? (
             <span className="inline-flex items-center gap-1.5 text-muted-foreground"><HelpCircle size={20} aria-hidden="true" />Unknown</span>

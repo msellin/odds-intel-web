@@ -187,48 +187,77 @@ async function handleTodayCommand(
   await sendReply(chatId, lines.join("\n"));
 }
 
+// #139 phase A (owner decision 3, 2026-09-24): /admin/bots is THE control surface for our own
+// real money; Telegram is notifications only. /pause stays as a STOP-ONLY emergency command
+// (stopping is always safe, from anywhere). /resume and every other real-money START command
+// are refused here with a pointer to the page, where resuming needs a typed confirmation and a
+// reason. The pause goes through the audited DB function (engine migration 413,
+// admin_set_control, source 'telegram'), so it lands in the control_changes log. If that
+// function is unavailable (e.g. the migration has not deployed yet) the STOP falls back to the
+// plain update — an emergency stop must never depend on the audit table.
+const BOTS_PAGE = "https://oddsintel.app/admin/bots";
+const START_REFUSAL =
+  `⛔ Real-money START commands are not taken from Telegram (owner decision, 2026-09-24).\n` +
+  `Resume placement, arm real money, or switch a bot on at ${BOTS_PAGE} — typed confirmation + reason, audited.\n` +
+  `Stopping still works here: /pause <reason>.`;
+
+async function pausePlacementAudited(
+  admin: ReturnType<typeof createAdmin>,
+  actor: string,
+  reason: string,
+): Promise<string | null> {
+  const { data, error } = await admin.rpc("admin_set_control", {
+    p_control: "placement_paused",
+    p_bot: null,
+    p_value: true,
+    p_reason: reason || null,
+    p_confirm: null,
+    p_actor: actor,
+    p_actor_user_id: null,
+    p_source: "telegram",
+    p_expected: null,
+    p_request_id: null,
+  });
+  if (!error) {
+    const outcome = (data as { outcome?: string } | null)?.outcome;
+    return outcome === "applied" || outcome === "noop" ? null : `admin_set_control: ${outcome ?? "no outcome"}`;
+  }
+  console.error("admin_set_control (telegram pause) failed — applying the STOP without its audit row", error);
+  // STOP-direction fallback only: never used for anything that starts money.
+  const { error: e2 } = await admin
+    .from("coolbet_session_state")
+    .update({
+      placement_paused: true,
+      placement_paused_at: new Date().toISOString(),
+      placement_paused_reason: reason || `${actor} /pause`,
+    })
+    .eq("id", 1)
+    // a re-pause never rewrites a standing (e.g. strategic) reason; the DB trigger enforces it too
+    .eq("placement_paused", false);
+  return e2 ? e2.message : null;
+}
+
 async function handlePauseCommand(
   chatId: number,
   admin: ReturnType<typeof createAdmin>,
   reason: string,
 ): Promise<void> {
-  const { error } = await admin
-    .from("coolbet_session_state")
-    .update({
-      placement_paused: true,
-      placement_paused_at: new Date().toISOString(),
-      placement_paused_reason: reason || "operator /pause",
-    })
-    .eq("id", 1);
-  if (error) {
-    await sendReply(chatId, `❌ Could not set placement_paused: ${error.message}`);
+  const err = await pausePlacementAudited(admin, `telegram:${chatId}`, reason || "operator /pause");
+  if (err) {
+    await sendReply(chatId, `❌ Could not set placement_paused: ${err}`);
     return;
   }
   await sendReply(
     chatId,
-    `🛑 Auto-placer PAUSED. Next pipeline tick will skip placements until /resume.\n` +
+    `🛑 Auto-placer PAUSED. Every placer refuses at its next check.\n` +
     `Pick publishing is NOT affected — use /pausepicks for that.\n` +
+    `Resuming is done on ${BOTS_PAGE} (typed confirmation + reason) — not from Telegram.\n` +
     `Reason logged: ${reason || "(none)"}`,
   );
 }
 
-async function handleResumeCommand(
-  chatId: number,
-  admin: ReturnType<typeof createAdmin>,
-): Promise<void> {
-  const { error } = await admin
-    .from("coolbet_session_state")
-    .update({
-      placement_paused: false,
-      placement_paused_at: null,
-      placement_paused_reason: null,
-    })
-    .eq("id", 1);
-  if (error) {
-    await sendReply(chatId, `❌ Could not clear placement_paused: ${error.message}`);
-    return;
-  }
-  await sendReply(chatId, "▶️  Auto-placer RESUMED. Next pipeline tick will place qualifying bets again.");
+async function handleResumeCommand(chatId: number): Promise<void> {
+  await sendReply(chatId, START_REFUSAL);
 }
 
 // PICKS-PUBLISH-DECOUPLED-FROM-OWN-PAUSE (2026-09-15) — the customer feed's
@@ -292,8 +321,8 @@ async function handleHelpCommand(chatId: number): Promise<void> {
       "",
       "/status        — session health, JWT TTL, last heartbeat, errors",
       "/today         — real_bets placed in last 24h + stake + PnL",
-      "/pause <reason>— halt REAL-MONEY placement until /resume (does not touch picks)",
-      "/resume        — re-enable real-money placement",
+      "/pause <reason>— halt REAL-MONEY placement (stop-only; does not touch picks)",
+      "               resume / arm / switch bots on at oddsintel.app/admin/bots",
       "/pausepicks <reason> — stop SENDING picks to @oddsintelpicks (recording continues)",
       "/resumepicks   — resume posting picks to @oddsintelpicks",
       "/help          — this message",
@@ -417,12 +446,13 @@ async function handleCallbackQuery(
   //   coolbet-heal:   → INSERT a row into coolbet_daemon_commands. The Mac
   //                     daemon polls that table every ~30s and runs
   //                     auto_self_heal, sends confirmation Telegram.
-  //   coolbet-pause:  → DIRECT UPDATE on coolbet_session_state.placement_paused
-  //                     = true with reason "operator via Telegram".
+  //   coolbet-pause:  → placement_paused = true via the audited admin_set_control
+  //                     (#139; plain-update fallback for the STOP only).
   //                     placement_paused gates the placer + the daily-summary
   //                     glyph, so the effect is immediate (no daemon round-trip
   //                     needed).
-  //   coolbet-resume: → DIRECT UPDATE clearing placement_paused. Mirror of pause.
+  //   coolbet-resume: → REFUSED since #139 phase A (owner decision 3): resume is
+  //                     done on /admin/bots with a typed confirmation + reason.
   //
   // All three edit the original Telegram message to append a status footer
   // (same UX pattern as sigplaced/sigskip) so the operator sees confirmation
@@ -451,38 +481,20 @@ async function handleCallbackQuery(
       footer = `\n— 🔄 Heal requested @ ${stamp} (daemon will run on next poll)`;
       toastText = "🔄 Heal requested";
     } else if (data === "coolbet-pause:") {
-      const { error: pauseErr } = await admin
-        .from("coolbet_session_state")
-        .update({
-          placement_paused: true,
-          placement_paused_at: new Date().toISOString(),
-          placement_paused_reason: `operator via Telegram (user ${fromId})`,
-        })
-        .eq("id", 1);
+      const pauseErr = await pausePlacementAudited(admin, `telegram:${fromId}`, `operator via Telegram (user ${fromId})`);
       if (pauseErr) {
-        console.error("placement_paused=true update failed", pauseErr);
+        console.error("placement_paused=true failed", pauseErr);
         await answerCallbackQuery(cqId, "❌ Pause failed", true);
         return;
       }
       footer = `\n— ⏸ Paused @ ${stamp}`;
       toastText = "⏸ Placement paused";
     } else {
-      // coolbet-resume:
-      const { error: resumeErr } = await admin
-        .from("coolbet_session_state")
-        .update({
-          placement_paused: false,
-          placement_paused_at: null,
-          placement_paused_reason: null,
-        })
-        .eq("id", 1);
-      if (resumeErr) {
-        console.error("placement_paused=false update failed", resumeErr);
-        await answerCallbackQuery(cqId, "❌ Resume failed", true);
-        return;
-      }
-      footer = `\n— ▶ Resumed @ ${stamp}`;
-      toastText = "▶ Placement resumed";
+      // coolbet-resume: REFUSED (owner decision 3, 2026-09-24) — resuming real-money placement is
+      // done on /admin/bots with a typed confirmation and a reason. The button stays harmless for
+      // old messages that still carry it.
+      await answerCallbackQuery(cqId, `Resume is done on ${BOTS_PAGE} (typed confirm + reason). Telegram is stop-only.`, true);
+      return;
     }
 
     // Edit the original message: append the footer so the operator sees
@@ -633,8 +645,13 @@ export async function POST(req: NextRequest) {
     await handlePauseCommand(chatId, admin, reason);
     return new NextResponse("OK", { status: 200 });
   }
+  // #139 (owner decision 3): real-money START commands are refused with a pointer to the page.
   if (text === "/resume" && isOperator(chatId)) {
-    await handleResumeCommand(chatId, admin);
+    await handleResumeCommand(chatId);
+    return new NextResponse("OK", { status: 200 });
+  }
+  if (/^\/(resume|arm|unpause)(\s|$)/.test(text) && isOperator(chatId)) {
+    await handleResumeCommand(chatId);
     return new NextResponse("OK", { status: 200 });
   }
   if (text === "/help" && isOperator(chatId)) {

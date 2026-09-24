@@ -2,7 +2,9 @@
 
 // /admin/bots board — #139 UNIFIED-BOT-MODEL phase 1, redesigned 2026-09-24 per
 // odds-intel-engine dev/active/bots-board-ux-spec.md (owner: the old table read "like a
-// book with no images and just small text").
+// book with no images and just small text"), and turned into the control panel in phase A
+// (dev/active/bots-control-panel-spec.md; owner: "control all the stuff via the bots page …
+// more like a real admin dashboard").
 //
 // One row per ACTIVE bot, whatever ledger it writes, grouped by family. Each family is
 // judged on ONE admissible metric; the verdict reads that metric only, in five states
@@ -10,13 +12,31 @@
 // peer section — it is the dashed reference line on every mc-CLV plot and a reference strip
 // on top of the forward test, because a bot sitting on that line is showing no skill.
 //
+// Phase A layout: admin shell (sidebar + status + armed bar) → header with actions → KPI strip
+// → Controls card (customers / collection) → Real money card (the layer ladder + CAN STAKE,
+// deliberately a DIFFERENT card, I10) → filter bar → table with inline switches and a row ⋯
+// menu → right-hand detail Sheet with tabs. Filters, search and the open bot live in the URL.
+//
 // Files: bot-board-format.ts (text), bot-board-model.ts (verdicts, sorting, issues),
 // bot-viz.tsx (forest bar, 12-week strip), bot-row.tsx (sections/rows), fleet-strip.tsx,
-// bot-drawer.tsx, retired-list.tsx.
+// bot-drawer.tsx + bot-sheet.tsx (detail), retired-list.tsx, and the control panel:
+// controls-context.tsx, control-switch.tsx, bot-controls-cell.tsx, fleet-controls-card.tsx,
+// real-money-card.tsx, ladder-list.tsx, confirm-control-dialog.tsx, arm-dialog.tsx,
+// activity-timeline.tsx, admin-shell.tsx, toast.tsx.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Banknote, Globe, Info, Send, Wallet } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { AlertTriangle, Copy, History, Info, MoreHorizontal, Search, ArrowUpRight } from "lucide-react";
 import type { BotBoardData, BotLedgerRow, BotMarketStatsRow, BotWeeklyRow, RetiredInfo } from "@/lib/bot-board";
+import type { ControlState } from "@/lib/bot-controls/types";
+import { placementPathReason } from "@/lib/bot-controls/placement-path";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   CONTROL_BOT,
   FAMILY_ORDER,
@@ -26,32 +46,100 @@ import {
   needsALook,
   sortBots,
   type BotView,
+  type Issue,
   type RetiredView,
 } from "./bot-board-model";
 import { hhmmUtc, relTime, utcStamp } from "./bot-board-format";
 import { FamilySection, type RowCtx } from "./bot-row";
 import { FleetStrip } from "./fleet-strip";
-import { BotDrawer, type LedgerState } from "./bot-drawer";
+import { type LedgerState } from "./bot-drawer";
+import { BotSheet, SHEET_TABS, type SheetTab } from "./bot-sheet";
 import { RetiredList } from "./retired-list";
+import { ControlsProvider, useControls } from "./controls-context";
+import { AdminShell } from "./admin-shell";
+import { FleetControlsCard } from "./fleet-controls-card";
+import { RealMoneyCard } from "./real-money-card";
+import { ActivitySheet } from "./activity-timeline";
+import { useToast } from "./toast";
+import { HowToRead } from "./how-to-read";
+import { picksTelegramMismatch } from "./bot-controls-cell";
 
-type Filter = "all" | "published" | "capable";
-
-const HOW_TO_READ = [
-  "Each bot is judged on one number for its family — mc-CLV, Pinnacle CLV, or (in-play) nothing yet.",
-  "The bar is the 95% range on a shared −8% … +8% scale (arrowheads = runs past it). Left of zero = we priced worse than the close.",
-  "Dashed amber line = a deliberately junk-anchored bot on the same markets. A bot that cannot be told apart from it is not showing skill.",
-  "No verdict below 30 measured picks. ROI is a flat 1-unit stake, for comparison only — uncoloured below 300 settled.",
-  "Pre-registered bots are scored on their current rule version only.",
+type Filter = "all" | "published" | "capable" | "silent" | "look";
+const FILTERS: [Filter, string][] = [
+  ["all", "All"],
+  ["published", "Published"],
+  ["capable", "Real-money capable"],
+  ["silent", "Silent"],
+  ["look", "Needs a look"],
 ];
 
-export function BotsBoard({ data }: { data: BotBoardData }) {
+
+export function BotsBoard({ data, controls }: { data: BotBoardData; controls: ControlState }) {
+  const { scoreboard, config, capabilities, now } = data;
+  const cfgBy = useMemo(() => new Map(config.rows.map((c) => [c.bot_name, c])), [config.rows]);
+  const activeNames = useMemo(() => new Set(scoreboard.rows.filter(isActive).map((s) => s.bot_name)), [scoreboard.rows]);
+  // Active bots with a placement path — the same rule the engine gate applies (placement-path.ts).
+  const capable = useMemo(
+    () =>
+      config.error
+        ? null
+        : config.rows
+            .filter((c) => activeNames.has(c.bot_name) && placementPathReason(c.family, c.ledger, c.books) == null)
+            .map((c) => c.bot_name),
+    [config, activeNames],
+  );
+  const views = useMemo(
+    () => scoreboard.rows.map((sb) => buildView(sb.bot_name, sb, cfgBy.get(sb.bot_name), capabilities.rows.find((c) => c.bot_name === sb.bot_name), { control: null, weekly: null, markets: null, now, active: isActive(sb) })),
+    [scoreboard.rows, cfgBy, capabilities.rows, now],
+  );
+  return (
+    <ControlsProvider state={controls} views={views} capable={capable} now={now}>
+      <AdminShell active="/admin/bots">
+        <Board data={data} />
+      </AdminShell>
+    </ControlsProvider>
+  );
+}
+
+function Board({ data }: { data: BotBoardData }) {
   const { scoreboard, config, capabilities, retired, weekly, marketStats, now } = data;
-  const [tab, setTab] = useState<"active" | "retired">("active");
-  const [filter, setFilter] = useState<Filter>("all");
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const ctl = useControls();
+  const toast = useToast();
+
+  const tab = params.get("view") === "retired" ? "retired" : "active";
+  const filter = (FILTERS.some(([k]) => k === params.get("f")) ? params.get("f") : "all") as Filter;
+  const q = params.get("q") ?? "";
+  const selected = params.get("bot");
+  const sheetTab = (SHEET_TABS as readonly string[]).includes(params.get("tab") ?? "") ? (params.get("tab") as SheetTab) : "overview";
+
   const [help, setHelp] = useState(false);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [activityOpen, setActivityOpen] = useState(false);
+  const [highlight, setHighlight] = useState(false);
   const [ledgers, setLedgers] = useState<Record<string, LedgerState>>({});
-  const opener = useRef<HTMLElement | null>(null);
+  const [search, setSearch] = useState(q);
+
+  const setParams = useCallback(
+    (patch: Record<string, string | null>) => {
+      const next = new URLSearchParams(params.toString());
+      for (const [k, v] of Object.entries(patch)) {
+        if (v == null || v === "" || (k === "f" && v === "all") || (k === "view" && v === "active")) next.delete(k);
+        else next.set(k, v);
+      }
+      const s = next.toString();
+      router.replace(s ? `${pathname}?${s}` : pathname, { scroll: false });
+    },
+    [params, pathname, router],
+  );
+
+  // Debounced search → URL.
+  useEffect(() => {
+    if (search === q) return;
+    const t = setTimeout(() => setParams({ q: search || null }), 250);
+    return () => clearTimeout(t);
+  }, [search, q, setParams]);
 
   const cfgBy = useMemo(() => new Map(config.rows.map((c) => [c.bot_name, c])), [config.rows]);
   const capsBy = useMemo(() => new Map(capabilities.rows.map((c) => [c.bot_name, c])), [capabilities.rows]);
@@ -98,49 +186,73 @@ export function BotsBoard({ data }: { data: BotBoardData }) {
       .sort((a, b) => (b.retiredAt ?? "").localeCompare(a.retiredAt ?? ""));
   }, [retired.rows, scoreboard.rows, sbBy, cfgBy, capsBy, control, weeklyBy, marketsBy, now]);
 
-  const filtered = useMemo(
-    () =>
-      active.filter((v) =>
-        filter === "published" ? v.caps?.publish === true : filter === "capable" ? v.caps?.place_capable === true || v.caps?.place_enabled === true : true,
-      ),
-    [active, filter],
+  // ONE source for pause / arm (#139 review item 9): the control state, not bot_capabilities.
+  const livePaused = ctl.current("placement_paused", null);
+  const liveArmed = ctl.current("real_money_disarm", null);
+  const fleetCaps = capabilities.rows[0];
+  const fleet = useMemo(
+    () => (fleetCaps ? { ...fleetCaps, fleet_placement_paused: livePaused, fleet_real_money_armed: liveArmed } : undefined),
+    [fleetCaps, livePaused, liveArmed],
   );
+  const pulse = liveArmed === true && livePaused === false;
+  const issues: Issue[] = useMemo(() => {
+    const base = needsALook(
+      active,
+      fleet,
+      [
+        { view: "bot_scoreboard", error: scoreboard.error },
+        { view: "bot_config", error: config.error },
+        { view: "bot_capabilities", error: capabilities.error },
+      ],
+      now,
+    );
+    // The Ludogorets shape (mig 356, I14): /picks and Telegram disagree for a bot.
+    for (const v of active) {
+      if (picksTelegramMismatch(v, ctl.current("show_on_picks", v.name))) {
+        base.push({ bot: v.name, text: `${v.displayName}: /picks ≠ Telegram`, severity: "warn" });
+      }
+    }
+    return base;
+  }, [active, fleet, scoreboard.error, config.error, capabilities.error, now, ctl]);
+  const lookBots = useMemo(() => new Set(issues.map((i) => i.bot).filter(Boolean) as string[]), [issues]);
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return active.filter((v) => {
+      if (needle && !v.name.toLowerCase().includes(needle) && !v.displayName.toLowerCase().includes(needle)) return false;
+      switch (filter) {
+        case "published":
+          return v.caps?.publish === true;
+        case "capable":
+          return ctl.capable?.has(v.name) === true || v.caps?.place_enabled === true;
+        case "silent":
+          return v.silent;
+        case "look":
+          return lookBots.has(v.name);
+        default:
+          return true;
+      }
+    });
+  }, [active, filter, q, ctl.capable, lookBots]);
 
   const groups = useMemo(() => {
     const m = new Map<string, BotView[]>();
     for (const v of filtered) m.set(v.family, [...(m.get(v.family) ?? []), v]);
-    return FAMILY_ORDER.filter((f) => m.has(f) || (f === "forward_test" && controlView && filter === "all")).map((f) => ({
+    const showControl = !!controlView && filter === "all" && !q;
+    return FAMILY_ORDER.filter((f) => m.has(f) || (f === "forward_test" && showControl)).map((f) => ({
       family: f,
       bots: (m.get(f) ?? []).sort(sortBots),
     }));
-  }, [filtered, controlView, filter]);
-
-  const fleet = capabilities.rows[0];
-  const pulse = fleet?.fleet_real_money_armed === true && fleet?.fleet_placement_paused === false;
-  const issues = useMemo(
-    () =>
-      needsALook(
-        active,
-        fleet,
-        [
-          { view: "bot_scoreboard", error: scoreboard.error },
-          { view: "bot_config", error: config.error },
-          { view: "bot_capabilities", error: capabilities.error },
-        ],
-        now,
-      ),
-    [active, fleet, scoreboard.error, config.error, capabilities.error, now],
-  );
+  }, [filtered, controlView, filter, q]);
 
   const exportedAt = useMemo(
     () => config.rows.reduce<string | null>((mx, c) => (c.exported_at && (!mx || c.exported_at > mx) ? c.exported_at : mx), null),
     [config.rows],
   );
+  const configStale = !!exportedAt && now - new Date(exportedAt).getTime() > 36 * 3600_000;
 
-  const open = useCallback(
+  const loadLedger = useCallback(
     (name: string) => {
-      opener.current = (document.activeElement as HTMLElement | null) ?? null;
-      setSelected(name);
       const cur = ledgers[name];
       if (cur && (cur.loading || !cur.error)) return; // cached (refetch only after an error)
       setLedgers((prev) => ({ ...prev, [name]: { loading: true } }));
@@ -159,30 +271,64 @@ export function BotsBoard({ data }: { data: BotBoardData }) {
     [ledgers],
   );
 
-  const close = useCallback(() => setSelected(null), []);
-
-  // Return focus to the row that opened the drawer once the drawer has unmounted (§12).
-  // An effect rather than requestAnimationFrame: rAF does not fire in a hidden tab.
+  // The open bot lives in the URL (?bot=&tab=), so a deep link from Telegram opens it.
   useEffect(() => {
-    if (selected || !opener.current) return;
-    const el = opener.current;
-    opener.current = null;
-    if (document.contains(el)) el.focus();
-  }, [selected]);
+    if (selected) loadLedger(selected);
+  }, [selected, loadLedger]);
 
-  useEffect(() => {
-    if (!selected) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [selected]);
+  const open = useCallback((name: string, t?: string) => setParams({ bot: name, tab: t && t !== "overview" ? t : null }), [setParams]);
+  const close = useCallback(() => setParams({ bot: null, tab: null }), [setParams]);
 
   const selectedView = useMemo(() => {
     if (!selected) return null;
     return allActive.find((v) => v.name === selected) ?? retiredViews.find((r) => r.view.name === selected)?.view ?? null;
   }, [selected, allActive, retiredViews]);
+
+  // Linear-style keyboard: j/k move the row focus, Enter opens (row handler), Esc closes (Sheet).
+  // No keyboard shortcut starts anything money-related.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (selected || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.closest("input, textarea, select, [contenteditable], [role=dialog], [role=menu]"))) return;
+      if (e.key !== "j" && e.key !== "k") return;
+      const rows = [...document.querySelectorAll<HTMLElement>("[data-bot-row]")].filter((el) => el.offsetParent !== null);
+      if (rows.length === 0) return;
+      const i = rows.findIndex((el) => el === document.activeElement);
+      const next = e.key === "j" ? Math.min(rows.length - 1, i + 1) : Math.max(0, i === -1 ? 0 : i - 1);
+      rows[next].focus();
+      rows[next].scrollIntoView({ block: "nearest" });
+      e.preventDefault();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [selected]);
+
+  const jump = useCallback(() => {
+    document.getElementById("real-money")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setHighlight(true);
+    setTimeout(() => setHighlight(false), 1600);
+  }, []);
+
+  const copyState = useCallback(() => {
+    const s = ctl.state;
+    const json = JSON.stringify(
+      {
+        at: new Date(now).toISOString(),
+        fleet: s.fleet.row,
+        can_stake: ctl.ladder.canStake,
+        blocked_at: ctl.ladder.blockedAt,
+        eligibility: s.placers.rows.map((p) => ({ bot: p.bot_name, on: p.ui_place_enabled, locked: !!p.locked_reason })),
+        executors: s.heartbeats.rows.map((h) => ({ placer: h.placer, last_seen_at: h.last_seen_at, execute: h.execute_requested })),
+      },
+      null,
+      2,
+    );
+    navigator.clipboard?.writeText(json).then(
+      () => toast({ tone: "info", title: "Page state copied as JSON" }),
+      () => toast({ tone: "error", title: "Could not copy" }),
+    );
+  }, [ctl, now, toast]);
 
   const ctx: RowCtx = { now, control, pulse, configError: config.error !== null, onOpen: open };
   const viewsMissing = scoreboard.error !== null;
@@ -190,44 +336,54 @@ export function BotsBoard({ data }: { data: BotBoardData }) {
   const tabCls = (on: boolean) =>
     `min-h-10 -mb-px border-b-2 px-3 py-2 text-sm ${on ? "border-foreground font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`;
   const pillCls = (on: boolean) =>
-    `min-h-10 rounded-full border px-3 py-1.5 text-sm ${on ? "border-foreground/40 bg-accent text-foreground" : "border-border text-muted-foreground hover:text-foreground"}`;
+    `min-h-9 rounded-full border px-3 py-1 text-sm ${on ? "border-foreground/40 bg-accent text-foreground" : "border-border text-muted-foreground hover:text-foreground"}`;
 
   return (
     <div className="space-y-5">
-      {/* title row */}
+      {/* header */}
       <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
-        <h1 className="text-2xl font-bold">Bots</h1>
-        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+        <div>
+          <h1 className="text-2xl font-semibold">Bots</h1>
+          <p className="text-sm text-muted-foreground tabular-nums">
+            {active.length} active{controlView ? " · 1 control" : ""}
+            {exportedAt && (
+              <span title={`config exported ${utcStamp(exportedAt)} (${relTime(exportedAt, now)} ago)`}> · data {hhmmUtc(exportedAt)}</span>
+            )}
+            {ctl.readOnly && <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-xs text-amber-300">Design preview · controls read-only</span>}
+          </p>
+        </div>
+        <div className="flex items-center gap-1 text-sm text-muted-foreground">
+          <button type="button" onClick={() => setActivityOpen(true)} className="inline-flex min-h-9 items-center gap-1.5 rounded-md px-2 hover:bg-accent hover:text-foreground">
+            <History size={16} aria-hidden="true" /> Activity
+          </button>
           <button
             type="button"
             onClick={() => setHelp((h) => !h)}
             aria-expanded={help}
-            className="inline-flex min-h-10 items-center gap-1.5 rounded-md px-2 hover:bg-accent hover:text-foreground"
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-md px-2 hover:bg-accent hover:text-foreground"
           >
             <Info size={16} aria-hidden="true" /> How to read this
           </button>
-          {exportedAt && (
-            <span className="tabular-nums" title={`config exported ${utcStamp(exportedAt)} (${relTime(exportedAt, now)} ago)`}>
-              data {hhmmUtc(exportedAt)}
-            </span>
-          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger aria-label="More" className="inline-flex h-9 w-9 items-center justify-center rounded-md hover:bg-accent hover:text-foreground">
+              <MoreHorizontal size={16} />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-60">
+              <DropdownMenuItem onClick={copyState}>
+                <Copy /> Copy page state as JSON
+              </DropdownMenuItem>
+              <DropdownMenuItem render={<Link href="/admin/feeds" />}>
+                <ArrowUpRight /> Open /admin/feeds
+              </DropdownMenuItem>
+              <DropdownMenuItem render={<Link href="/admin/shadow-bots" />}>
+                <ArrowUpRight /> Open /admin/shadow-bots
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
-      {help && (
-        <div className="space-y-3 rounded-lg border border-border bg-card px-4 py-3 text-sm">
-          <ul className="list-disc space-y-1 pl-4">
-            {HOW_TO_READ.map((l) => <li key={l}>{l}</li>)}
-          </ul>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            <span className="text-foreground">Capability icons:</span>
-            <span className="inline-flex items-center gap-1.5"><Legend cls="bg-teal-500/15 text-teal-300 ring-1 ring-teal-500/30"><Globe size={12} /></Legend>Published</span>
-            <span className="inline-flex items-center gap-1.5"><Legend cls="bg-sky-500/15 text-sky-300 ring-1 ring-sky-500/30"><Send size={12} /></Legend>Telegram</span>
-            <span className="inline-flex items-center gap-1.5"><Legend cls="bg-amber-500/10 text-amber-300 ring-1 ring-amber-500/30"><Wallet size={12} /></Legend>Real-money capable</span>
-            <span className="inline-flex items-center gap-1.5"><Legend cls="bg-red-500/20 text-red-300 ring-2 ring-red-500/60"><Banknote size={12} /></Legend>Real money ON</span>
-            <span>– = collecting only (paper)</span>
-          </div>
-        </div>
-      )}
+
+      {help && <HowToRead />}
 
       {viewsMissing && (
         <div className="flex gap-3 rounded-xl border border-amber-500/50 bg-amber-500/5 px-4 py-3">
@@ -244,6 +400,12 @@ export function BotsBoard({ data }: { data: BotBoardData }) {
               ))}
             </ul>
           </div>
+        </div>
+      )}
+      {configStale && (
+        <div className="flex gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm text-amber-200">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+          Config export stale ({relTime(exportedAt, now)} old). Real-money ON and /picks ON are disabled until export_bot_config runs — they depend on it.
         </div>
       )}
 
@@ -266,43 +428,56 @@ export function BotsBoard({ data }: { data: BotBoardData }) {
           hasControl={!!controlView}
           issues={issues}
           capsMissing={capabilities.error !== null}
-          onOpenBot={open}
+          onOpenBot={(n) => open(n)}
+          onJump={jump}
         />
       )}
+
+      {/* Publishing and placement are in DIFFERENT cards on purpose (I10). */}
+      <div className="grid gap-4 2xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+        <FleetControlsCard />
+        <RealMoneyCard highlight={highlight} />
+      </div>
 
       {/* tabs + filters */}
       <div className="space-y-2">
         <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 border-b border-border">
           <div className="flex gap-1" role="tablist">
-            <button type="button" role="tab" aria-selected={tab === "active"} onClick={() => setTab("active")} className={tabCls(tab === "active")}>
+            <button type="button" role="tab" aria-selected={tab === "active"} onClick={() => setParams({ view: "active" })} className={tabCls(tab === "active")}>
               Active <span className="tabular-nums text-muted-foreground">{active.length + (controlView ? 1 : 0)}</span>
             </button>
-            <button type="button" role="tab" aria-selected={tab === "retired"} onClick={() => setTab("retired")} className={tabCls(tab === "retired")}>
+            <button type="button" role="tab" aria-selected={tab === "retired"} onClick={() => setParams({ view: "retired" })} className={tabCls(tab === "retired")}>
               Retired <span className="tabular-nums text-muted-foreground">{retiredViews.length}</span>
             </button>
           </div>
-          {tab === "active" && (
-            <div className="flex flex-wrap gap-2 pb-2">
-              {(
-                [
-                  ["all", "All"],
-                  ["published", "Published"],
-                  ["capable", "Real-money capable"],
-                ] as [Filter, string][]
-              ).map(([k, l]) => (
-                <button key={k} type="button" onClick={() => setFilter(k)} aria-pressed={filter === k} className={pillCls(filter === k)}>
-                  {l}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
+        {tab === "active" && (
+          <div className="flex flex-wrap items-center gap-2">
+            {FILTERS.map(([k, l]) => (
+              <button key={k} type="button" onClick={() => setParams({ f: k })} aria-pressed={filter === k} className={pillCls(filter === k)}>
+                {l}
+                {k === "look" && issues.length > 0 && <span className="ml-1 tabular-nums text-amber-300">{lookBots.size}</span>}
+              </button>
+            ))}
+            <label className="relative ml-auto w-full sm:w-64">
+              <span className="sr-only">Search bots</span>
+              <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search name…"
+                className="h-9 w-full rounded-lg border border-input bg-transparent pl-8 pr-2.5 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              />
+            </label>
+          </div>
+        )}
       </div>
 
       {tab === "active" ? (
         groups.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            {viewsMissing ? "No bots to show until the views are deployed." : filter === "all" ? "bot_scoreboard has no active bots." : "No active bot matches this filter."}
+            {viewsMissing ? "No bots to show until the views are deployed." : filter === "all" && !q ? "bot_scoreboard has no active bots." : "No active bot matches this filter."}
           </p>
         ) : (
           <div className="space-y-6">
@@ -312,7 +487,7 @@ export function BotsBoard({ data }: { data: BotBoardData }) {
                 family={g.family}
                 bots={g.bots}
                 ctx={ctx}
-                controlBot={g.family === "forward_test" && filter === "all" ? controlView : undefined}
+                controlBot={g.family === "forward_test" && filter === "all" && !q ? controlView : undefined}
               />
             ))}
           </div>
@@ -321,20 +496,18 @@ export function BotsBoard({ data }: { data: BotBoardData }) {
         <RetiredList rows={retiredViews} ctx={ctx} error={retired.error} />
       )}
 
-      {selectedView && (
-        <BotDrawer
-          v={selectedView}
-          now={now}
-          ledger={ledgers[selectedView.name]}
-          fleetPaused={fleet?.fleet_placement_paused ?? null}
-          pulse={pulse}
-          onClose={close}
-        />
-      )}
+      <BotSheet
+        v={selectedView}
+        tab={sheetTab}
+        onTab={(t) => setParams({ tab: t === "overview" ? null : t })}
+        now={now}
+        ledger={selectedView ? ledgers[selectedView.name] : undefined}
+        markets={selectedView && marketsBy ? marketsBy.get(selectedView.name) ?? [] : null}
+        fleetPaused={livePaused}
+        pulse={pulse}
+        onClose={close}
+      />
+      <ActivitySheet open={activityOpen} onClose={() => setActivityOpen(false)} now={now} />
     </div>
   );
-}
-
-function Legend({ cls, children }: { cls: string; children: React.ReactNode }) {
-  return <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full ${cls}`} aria-hidden="true">{children}</span>;
 }

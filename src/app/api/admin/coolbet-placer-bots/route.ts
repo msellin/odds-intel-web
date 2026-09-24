@@ -1,26 +1,19 @@
 /**
- * /api/admin/coolbet-placer-bots — superadmin control for real-money Coolbet UI
- * placement (COOLBET-PLACER-CONTROL-2026-09-08).
- *
- * Backs the "Coolbet UI Placer — Control" panel on /admin/shadow-bots. Toggles
- * `coolbet_placer_bots.ui_place_enabled` per bot at runtime — WITHOUT touching
- * pick generation. The engine placer (scripts/place_coolbet_ui.py) reads this
- * table each run and intersects it with a code-level hard whitelist
- * (PLACEABLE_BOTS), so this endpoint can only ever REDUCE what places or
- * re-enable a bot the code already trusts — it can never make an arbitrary bot
- * stake real money.
+ * /api/admin/coolbet-placer-bots — the pre-#139 per-bot real-money toggle behind
+ * /admin/shadow-bots (COOLBET-PLACER-CONTROL-2026-09-08). OFF-ONLY since #139 phase A.
  *
  *   GET  → { bots: [{ bot_name, ui_place_enabled, note, updated_at }] }
- *   POST → { bot_name: string, ui_place_enabled: boolean }
+ *   POST → { bot_name: string, ui_place_enabled: false }   (true → 403 with a pointer)
  *
- * SAFETY:
- *   - Superadmin only (mirrors the shadow-bots page gate).
- *   - POST is an UPDATE of an EXISTING row only — it never inserts. A bot name
- *     with no seeded row is rejected (404). New placeable bots are added by a
- *     reviewed migration, not by this API, so the surface cannot enable a bot
- *     the operator never registered.
- *   - Writes go through the service client (bypasses RLS) which is never
- *     exposed to the browser.
+ * Switching a bot ON for real money is done ONLY on /admin/bots, through the audited DB
+ * function `admin_set_control` (typed bot name + reason, engine migration 413). This route can
+ * still switch a bot OFF (the safe direction). A request to switch ON is refused here with a
+ * clean 403; a table trigger would refuse it in the DB anyway. The old claim that a code-level
+ * PLACEABLE_BOTS set protected this route is obsolete: that hand-listed set was replaced by the
+ * placement-path rule (owner decision 4), and the protection is the trigger + the audited function.
+ *
+ * SAFETY: superadmin only; UPDATE of an existing row only (never inserts); service client
+ * server-side only.
  */
 import { NextResponse } from "next/server";
 import {
@@ -82,9 +75,18 @@ export async function POST(req: Request) {
     );
   }
 
-  // UPDATE only — never insert. The engine's PLACEABLE_BOTS whitelist is the
-  // real guard, but restricting this surface to seeded rows means it cannot even
-  // create an enabled row for an unknown bot.
+  if (enabled) {
+    return NextResponse.json(
+      {
+        error:
+          "Switching a bot ON for real money is done on /admin/bots (typed bot name + reason, audited). This legacy toggle can only switch OFF.",
+        pointer: "/admin/bots",
+      },
+      { status: 403 },
+    );
+  }
+
+  // UPDATE only — never insert, and only ever to OFF (above).
   const { data, error } = await gate.db
     .from("coolbet_placer_bots")
     .update({ ui_place_enabled: enabled, updated_at: new Date().toISOString() })

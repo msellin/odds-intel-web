@@ -42,6 +42,8 @@ import {
 } from "./bot-board-model";
 import { ciHalf, count, fmtRuleVersion, minutesAgo, pct, relTime, tStat, utcStamp } from "./bot-board-format";
 import { ForestAxis, ForestBar, WeeklyStrip } from "./bot-viz";
+import { ControlsCell } from "./bot-controls-cell";
+import { ControlStrip } from "./control-strip";
 
 // ─── tokens ──────────────────────────────────────────────────────────────────
 
@@ -272,7 +274,9 @@ export function CapsCell({ caps, pulse }: { caps: BotCapabilitiesRow | undefined
       </span>
     );
   }
-  const list = capList(caps, pulse);
+  // Money state is shown by the € switch (placement-path rule + eligibility row), so the icon
+  // row keeps only publish / Telegram — the older bot_capabilities money flags could disagree.
+  const list = capList(caps, pulse).filter((c) => c.key === "publish" || c.key === "telegram");
   return (
     <div className="flex flex-wrap items-center gap-1">
       {caps.collect === false && (
@@ -340,15 +344,18 @@ function NameLine({ v }: { v: BotView }) {
 
 // The table layout only from `xl` (≥1280 px): at 1024 the fixed columns clipped Caps and the
 // axis ticks collided. Below xl every row is a card.
+// #139 phase A (control-panel spec §3.5): the 80 px Caps column became the ~168 px Controls
+// column — the /picks and € switches, the read-only Telegram / performance icons and the row ⋯
+// menu. The capability icons still appear in the detail sheet header.
 export const ROW_GRID =
-  "xl:grid xl:grid-cols-[minmax(200px,1.35fr)_140px_minmax(240px,1.6fr)_112px_104px_64px_80px] xl:items-center xl:gap-x-4";
+  "xl:grid xl:grid-cols-[minmax(170px,1.3fr)_128px_minmax(200px,1.6fr)_104px_92px_56px_236px] xl:items-center xl:gap-x-4";
 
 export interface RowCtx {
   now: number;
   control: ControlRef | null;
   pulse: boolean;
   configError: boolean;
-  onOpen: (name: string) => void;
+  onOpen: (name: string, tab?: string) => void;
 }
 
 export function onKeyOpen(e: KeyboardEvent, open: () => void) {
@@ -360,15 +367,20 @@ export function onKeyOpen(e: KeyboardEvent, open: () => void) {
 
 export function BotRow({ v, ctx, active = true }: { v: BotView; ctx: RowCtx; active?: boolean }) {
   const open = () => ctx.onOpen(v.name);
+  const openTab = (tab?: string) => ctx.onOpen(v.name, tab);
   return (
     <div
       role="button"
       tabIndex={0}
+      data-bot-row={v.name}
       onClick={open}
-      onKeyDown={(e) => onKeyOpen(e, open)}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return; // keys inside a switch / menu are theirs
+        onKeyOpen(e, open);
+      }}
       title={v.name}
       aria-label={`${v.displayName} — open details`}
-      className="cursor-pointer rounded-lg border border-border bg-card p-3 outline-none transition-colors hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring xl:rounded-none xl:border-0 xl:border-t xl:bg-transparent xl:px-4 xl:py-3"
+      className="group cursor-pointer rounded-lg border border-border bg-card p-3 outline-none transition-colors hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring xl:rounded-none xl:border-0 xl:border-t xl:bg-transparent xl:px-4 xl:py-3"
     >
       {/* desktop */}
       <div className={`hidden ${ROW_GRID}`}>
@@ -382,7 +394,7 @@ export function BotRow({ v, ctx, active = true }: { v: BotView; ctx: RowCtx; act
         <StripCell v={v} />
         <NRoiCell v={v} />
         <LastPick iso={v.sb?.last_pick_at} now={ctx.now} active={active} />
-        <CapsCell caps={v.caps} pulse={ctx.pulse} />
+        <ControlsCell v={v} now={ctx.now} onOpen={openTab} />
       </div>
       {/* card (below xl) */}
       <div className="space-y-2 xl:hidden">
@@ -410,6 +422,9 @@ export function BotRow({ v, ctx, active = true }: { v: BotView; ctx: RowCtx; act
         <div className="flex items-end justify-between gap-3">
           <div className="min-w-0 flex-1"><StripCell v={v} /></div>
           <NRoiCell v={v} />
+        </div>
+        <div className="border-t border-border/60 pt-2">
+          <ControlsCell v={v} now={ctx.now} onOpen={openTab} />
         </div>
       </div>
     </div>
@@ -451,7 +466,11 @@ function ColumnHeader({ metric, hasControl }: { metric: Metric; hasControl: bool
       <div className={HEAD}>Weeks</div>
       <div className={HEAD} title={ROI_TITLE}>Settled · ROI</div>
       <div className={HEAD}>Last</div>
-      <div className={HEAD}>Caps</div>
+      <div className={`flex items-center gap-2 ${HEAD}`} title="/picks switch · real-money (€) switch · Telegram · /performance">
+        <span className="min-w-9 text-center">/picks</span>
+        <span className="min-w-9 text-center">€</span>
+        <span>TG · Perf</span>
+      </div>
     </div>
   );
 }
@@ -490,42 +509,5 @@ export function FamilySection({
         ))}
       </div>
     </section>
-  );
-}
-
-const MARKET_NAME: Record<string, string> = { "1x2": "1×2", over_under_25: "O/U 2.5" };
-
-function ControlStrip({ v, ctx }: { v: BotView; ctx: RowCtx }) {
-  const open = () => ctx.onOpen(v.name);
-  const m = v.metric;
-  const split = ctx.control?.byMarket ? [...ctx.control.byMarket.entries()] : [];
-  return (
-    <div className="xl:px-4 xl:pb-3">
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={open}
-        onKeyDown={(e) => onKeyOpen(e, open)}
-        title={v.name}
-        aria-label="Junk control — open details"
-        className="flex cursor-pointer flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-dashed border-amber-400/40 bg-amber-400/5 px-3 py-2 outline-none hover:bg-amber-400/10 focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <span className="font-mono text-xs uppercase tracking-wider text-amber-300">Reference</span>
-        <span className="text-sm font-medium">Junk control</span>
-        <span className="text-sm tabular-nums text-amber-300">
-          {pct(m.mean)} <span className="text-xs text-muted-foreground">{ciHalf(m.se)}</span>
-        </span>
-        <span className="text-xs tabular-nums text-muted-foreground">n {count(m.n)}</span>
-        {split.map(([mk, x]) => (
-          <span key={mk} className="text-xs tabular-nums text-muted-foreground">
-            {MARKET_NAME[mk] ?? mk} <span className="text-amber-300/90">{pct(x.mean)}</span> (n {count(x.n)})
-          </span>
-        ))}
-        <RulePill v={v} />
-        <span className="basis-full text-xs text-muted-foreground">
-          A deliberately junk-anchored arm. Each mc-CLV bar draws it as a dashed line on that bot&apos;s own market mix — a bot that cannot be told apart from it is not showing skill.
-        </span>
-      </div>
-    </div>
   );
 }
