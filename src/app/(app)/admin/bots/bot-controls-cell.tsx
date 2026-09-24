@@ -14,6 +14,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { placementPathReason } from "@/lib/bot-controls/placement-path";
+import type { BotControlRow } from "@/lib/bot-controls/types";
+import { channelLines } from "./channel-reasons";
 import { picksTelegramMismatch, picksUnavailable, type BotView } from "./bot-board-model";
 
 // Moved to the pure view model 2026-09-24 so /admin (the attention inbox) uses the same rule.
@@ -23,7 +25,6 @@ import { useControls } from "./controls-context";
 import { useToast } from "./toast";
 
 const STALE_H = 36;
-const PUBLIC_LABELS = new Set(["calibrated", "beta"]);
 
 export function configStale(v: BotView, now: number): boolean {
   const at = v.cfg?.exported_at;
@@ -114,23 +115,27 @@ export function MoneySwitch({ v, now, showWord = false }: { v: BotView; now: num
   );
 }
 
-/** Read-only: Telegram follows maturity_label = calibrated; /performance follows {calibrated, beta}. */
+/** Read-only Telegram / performance state. The tooltip is the same one-line reason the sheet
+ *  shows (channel-reasons.ts) — never a blanket rule that is wrong for the forward test. */
 export function ReadOnlyPublishIcons({ v }: { v: BotView }) {
-  const tg = v.caps?.telegram === true;
-  const perf = PUBLIC_LABELS.has(v.sb?.maturity_label ?? "");
+  const ctl = useControls();
+  const vip = (ctl.state.bots.rows.find((b) => b.name === v.name) as (BotControlRow & { vip?: boolean | null }) | undefined)?.vip ?? null;
+  const lines = channelLines(v, { showOnPicks: ctl.current("show_on_picks", v.name), vip, publishingPaused: ctl.current("publishing_paused", null) });
+  const tg = lines.telegram.on === true;
+  const perf = lines.performance.on === true;
   return (
     <span className="inline-flex items-center gap-1">
       <span
-        className={`inline-flex h-5 w-5 items-center justify-center rounded-full ${tg ? "bg-sky-500/15 text-sky-300 ring-1 ring-sky-500/30" : "text-muted-foreground/40"}`}
-        title={`Telegram channel: ${tg ? "yes" : "no"} — the channel posts bots that earned the “calibrated” label; it is not a switch here`}
+        className={`inline-flex h-5 w-5 items-center justify-center rounded-full ${tg ? "bg-info/15 text-info ring-1 ring-info/30" : "text-muted-foreground/40"}`}
+        title={lines.telegram.text}
         role="img"
         aria-label={`Telegram ${tg ? "yes" : "no"}`}
       >
         <Send size={11} />
       </span>
       <span
-        className={`inline-flex h-5 w-5 items-center justify-center rounded-full ${perf ? "bg-teal-500/15 text-teal-300 ring-1 ring-teal-500/30" : "text-muted-foreground/40"}`}
-        title={`On /performance: ${perf ? "yes" : "no"} — decided by the bot's label (calibrated or beta), never by the /picks switch`}
+        className={`inline-flex h-5 w-5 items-center justify-center rounded-full ${perf ? "bg-success/15 text-success ring-1 ring-success/30" : "text-muted-foreground/40"}`}
+        title={lines.performance.text}
         role="img"
         aria-label={`/performance ${perf ? "yes" : "no"}`}
       >

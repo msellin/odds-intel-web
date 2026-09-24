@@ -22,20 +22,64 @@ interface Entry {
   label: string;
   hint?: string;
   href: string;
+  /** Extra words that should find this entry (not shown). */
+  keywords?: string;
 }
 
-const ACTIONS: Entry[] = [
-  { id: "a-pause", section: "Actions", label: "Pause real-money placement", hint: "Bots · Real money", href: "/admin/bots#real-money" },
-  { id: "a-arm", section: "Actions", label: "Arm / disarm real money", hint: "Bots · Real money", href: "/admin/bots#real-money" },
-  { id: "a-picks", section: "Actions", label: "Pause / resume the picks channel", hint: "Bots · Publishing", href: "/admin/bots#controls" },
-  { id: "a-footprint", section: "Actions", label: "Pause / resume Coolbet sweeping", hint: "Feeds", href: "/admin/feeds#coolbet-footprint" },
+/** The live fleet state, so actions say what they would actually do right now. */
+export interface PaletteFleet {
+  placementPaused: boolean | null;
+  armed: boolean | null;
+  picksPaused: boolean | null;
+  sweepingPaused: boolean | null;
+}
+
+function word(v: boolean | null, onTrue: string, onFalse: string): string {
+  return v == null ? "" : v ? onTrue : onFalse;
+}
+
+function actions(f: PaletteFleet): Entry[] {
+  return [
+  {
+    id: "a-pause",
+    section: "Actions",
+    label: f.placementPaused ? "Real-money placement is already paused (kill switch) — open to resume" : "Pause real-money placement (kill switch)",
+    hint: "Bots · Real money",
+    href: "/admin/bots#real-money",
+    keywords: "stop kill emergency halt off turn off real money betting automatic placement switch",
+  },
+  {
+    id: "a-arm",
+    section: "Actions",
+    label: f.armed ? "Disarm real money (it is ARMED)" : "Arm real money (owner only; it is off)",
+    hint: "Bots · Real money",
+    href: "/admin/bots#real-money",
+    keywords: "arm disarm stop money on off",
+  },
+  {
+    id: "a-picks",
+    section: "Actions",
+    label: `${word(f.picksPaused, "Resume", "Pause")} the picks channel${word(f.picksPaused, " (paused now)", " (sending now)")}`.replace(/^ the/, "Pause / resume the"),
+    hint: "Bots · Publishing",
+    href: "/admin/bots#controls",
+    keywords: "telegram customers channel stop mute publish",
+  },
+  {
+    id: "a-footprint",
+    section: "Actions",
+    label: `${word(f.sweepingPaused, "Resume", "Pause")} Coolbet sweeping${word(f.sweepingPaused, " (paused now)", " (collecting now)")}`.replace(/^ Coolbet/, "Pause / resume Coolbet"),
+    hint: "Feeds",
+    href: "/admin/feeds#coolbet-footprint",
+    keywords: "footprint imperva blocked odds collection stop",
+  },
   { id: "a-feed", section: "Actions", label: "Pause or re-run one odds feed", hint: "Feeds", href: "/admin/feeds" },
   { id: "a-place", section: "Actions", label: "Place a bet by hand from today's picks", hint: "Pick queue", href: "/admin/shadow-bots" },
   { id: "a-attention", section: "Actions", label: "What needs my attention?", hint: "Overview", href: "/admin#attention" },
-  { id: "a-activity", section: "Actions", label: "Who changed what?", hint: "Activity", href: "/admin/activity" },
-];
+  { id: "a-activity", section: "Actions", label: "Who changed what?", hint: "Activity", href: "/admin/activity", keywords: "history audit log changes" },
+  ];
+}
 
-export function CommandPalette({ open, onClose, bots }: { open: boolean; onClose: () => void; bots: PaletteBot[] }) {
+export function CommandPalette({ open, onClose, bots, fleet }: { open: boolean; onClose: () => void; bots: PaletteBot[]; fleet: PaletteFleet }) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
@@ -52,12 +96,15 @@ export function CommandPalette({ open, onClose, bots }: { open: boolean; onClose
       hint: b.label === b.name ? undefined : b.name,
       href: `/admin/bots?bot=${encodeURIComponent(b.name)}`,
     }));
-    return [...pages, ...ACTIONS, ...botEntries];
-  }, [bots]);
+    return [...pages, ...actions(fleet), ...botEntries];
+  }, [bots, fleet]);
 
   const filtered = useMemo(() => {
     const n = q.trim().toLowerCase();
-    const hits = n ? entries.filter((e) => `${e.label} ${e.hint ?? ""}`.toLowerCase().includes(n)) : entries.filter((e) => e.section !== "Bots");
+    // every word must match somewhere in label / hint / keywords / id ("ev5" finds "1x2 NEW+ EV5")
+    const words = n.split(/\s+/).filter(Boolean);
+    const hay = (e: Entry) => `${e.label} ${e.hint ?? ""} ${e.keywords ?? ""} ${e.id}`.toLowerCase();
+    const hits = n ? entries.filter((e) => words.every((w) => hay(e).includes(w))) : entries.filter((e) => e.section !== "Bots");
     return hits.slice(0, 40);
   }, [entries, q]);
 

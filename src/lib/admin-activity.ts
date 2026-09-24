@@ -7,12 +7,16 @@
  *   - feed_actions (engine migration 389) — every per-feed pause / resume / run-now from /admin/feeds,
  *     plus the engine's own auto-pause / auto-resume, with what the engine did with it.
  * Also feed labels (feed_status) and bot display names (bots) so the page can speak in words.
+ * Owner: the actor strings (e-mail and user id) of the users in OWNER_USER_IDS are resolved here,
+ * server-side, so the page can say "Owner" instead of an e-mail (#139 UX fix round). Unset env or an
+ * unreadable profile = no mapping, and the page falls back to the short e-mail.
  * Each read keeps its error: a log that could not be read says so, it never reads as "no activity".
  */
 import { createServerServiceClient } from "@/lib/supabase-server";
 import { readAdminFixture } from "@/lib/admin-fixture";
 import type { ControlChange } from "@/lib/bot-controls/types";
 import type { R } from "@/lib/admin-feeds";
+import { ownerIds } from "@/lib/admin-auth";
 
 export interface FeedAction {
   id: number;
@@ -31,6 +35,8 @@ export interface ActivityData {
   feedActions: R<FeedAction[]>;
   feedLabels: Record<string, string>;
   botNames: Record<string, string>;
+  /** Actor strings (e-mail / user id) that are the owner — shown as "Owner". */
+  ownerActors: string[];
 }
 
 /** Newest N of each log. Both tables are small (tens of rows a week); raise if the page ever fills. */
@@ -69,10 +75,12 @@ export async function loadActivity(): Promise<ActivityData> {
       changes: fx.changes ? { v: fx.changes, error: null } : { v: [], error: "control_changes: not in fixture" },
       feedActions: fx.feed_actions ? { v: fx.feed_actions, error: null } : { v: [], error: "feed_actions: not in fixture" },
       ...maps(fx.feeds ?? [], fx.bots ?? []),
+      ownerActors: [],
     };
   }
   const db = createServerServiceClient();
-  const [changes, feedActions, feeds, bots] = await Promise.all([
+  const owners = [...ownerIds()];
+  const [changes, feedActions, feeds, bots, ownerProfiles] = await Promise.all([
     read<ControlChange[]>(
       "control_changes",
       () =>
@@ -90,6 +98,10 @@ export async function loadActivity(): Promise<ActivityData> {
     ),
     read<{ feed_id: string; label: string }[]>("feed_status", () => db.from("feed_status").select("feed_id, label"), []),
     read<{ name: string; display_name: string | null }[]>("bots", () => db.from("bots").select("name, display_name"), []),
+    owners.length
+      ? read<{ id: string; email: string | null }[]>("profiles", () => db.from("profiles").select("id, email").in("id", owners), [])
+      : Promise.resolve({ v: [] as { id: string; email: string | null }[], error: null }),
   ]);
-  return { now, changes, feedActions, ...maps(feeds.v, bots.v) };
+  const ownerActors = ownerProfiles.v.flatMap((p) => [p.id, ...(p.email ? [p.email] : [])]);
+  return { now, changes, feedActions, ...maps(feeds.v, bots.v), ownerActors };
 }

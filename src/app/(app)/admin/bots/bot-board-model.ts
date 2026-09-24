@@ -15,7 +15,8 @@ import type {
   BotWeeklyRow,
   RetiredInfo,
 } from "@/lib/bot-board";
-import { fmtRuleVersion, identityLine, prettyDisplayName, relTime } from "./bot-board-format";
+import { fmtRuleVersion, identityLine, prettyDisplayName } from "./bot-board-format";
+import { timeAgo } from "@/lib/rel-time";
 
 export type Metric = "clv_mc" | "clv_pinnacle" | "lift";
 
@@ -340,11 +341,56 @@ export interface Issue {
   severity: "warn" | "danger";
 }
 
+const marketGroup = (m: string) => (/^(o\/?u|over_under)/i.test(m) ? "ou" : m.toLowerCase());
+
+/**
+ * A model-paper bot whose probability SOURCE is gone: it prices off the picks of bots with a given
+ * maturity label (gate `source_maturity`, e.g. ["calibrated"]), and no active customer-model bot
+ * with that label covers any of its markets any more — so it CANNOT pick. Example (2026-09-24):
+ * bot_coolbet_ou_model_v1 reads calibrated O/U picks, and the calibrated O/U bot (bot_v10_ou) was
+ * retired. `active` = the active fleet the page shows.
+ */
+export function sourceRetired(v: BotView, active: BotView[]): boolean {
+  const src = (v.cfg?.gates ?? []).find((g) => g.name === "source_maturity")?.value;
+  if (!Array.isArray(src) || src.length === 0) return false;
+  const want = new Set((v.cfg?.markets ?? []).map(marketGroup));
+  if (want.size === 0) return false;
+  return !active.some(
+    (a) =>
+      a.name !== v.name &&
+      a.family === "model_sim" &&
+      src.includes(a.sb?.maturity_label ?? "") &&
+      (a.cfg?.markets ?? []).some((m) => want.has(marketGroup(m))),
+  );
+}
+
+/**
+ * Silent on purpose — NOT a to-do (#139 UX fix round): its real money is locked off (a
+ * coolbet_placer_bots lock) AND its source is retired, so silence is the expected state.
+ * Shown as information ("silent (source retired, locked off)"), never counted as an issue.
+ */
+export function quietByDesign(v: BotView, active: BotView[], lockedBots: ReadonlySet<string> | undefined): boolean {
+  return v.silent && !!lockedBots?.has(v.name) && sourceRetired(v, active);
+}
+
+/** Information lines for the bots that are silent by design (see quietByDesign). */
+export function quietInfo(active: BotView[], lockedBots: ReadonlySet<string> | undefined): { bot: string; text: string }[] {
+  return active
+    .filter((v) => quietByDesign(v, active, lockedBots))
+    .map((v) => ({ bot: v.name, text: `${v.displayName} silent (source retired, locked off)` }));
+}
+
+/**
+ * `opts.lockedBots` (optional, 2026-09-24): bots whose real-money row is locked
+ * (coolbet_placer_bots.locked_reason). With it, a bot that is silent BY DESIGN (locked off and its
+ * source retired — quietByDesign) is not reported; without it every silent bot is, as before.
+ */
 export function needsALook(
   active: BotView[],
   fleet: BotCapabilitiesRow | undefined,
   errors: { view: string; error: string | null }[],
   now: number,
+  opts?: { lockedBots?: ReadonlySet<string> },
 ): Issue[] {
   const out: Issue[] = [];
   for (const e of errors) if (e.error) out.push({ text: `${e.view} unreadable`, severity: "warn" });
@@ -354,12 +400,11 @@ export function needsALook(
     }
   }
   for (const v of active) {
-    if (!v.silent) continue;
-    const r = relTime(v.sb?.last_pick_at, now);
-    out.push({ bot: v.name, text: `${v.displayName} silent · last pick ${/\d (min|h|d)$/.test(r) ? `${r} ago` : r}`, severity: "warn" });
+    if (!v.silent || quietByDesign(v, active, opts?.lockedBots)) continue;
+    out.push({ bot: v.name, text: `${v.displayName} silent · last pick ${timeAgo(v.sb?.last_pick_at, now)}`, severity: "warn" });
   }
   for (const v of active) {
-    if (v.family === "unknown") out.push({ bot: v.name, text: `${v.name} has no resolvable config`, severity: "warn" });
+    if (v.family === "unknown") out.push({ bot: v.name, text: `${v.displayName}: settings missing from the daily config export`, severity: "warn" });
   }
   return out;
 }
@@ -377,11 +422,11 @@ export interface RetiredView {
 
 export function picksUnavailable(v: BotView): { kind: "rule" | "stub"; label: string; text: string; ref?: string } | null {
   if (v.family === "forward_test") {
-    return { kind: "rule", label: "By rule", text: "A pre-registered public test: what it publishes was fixed in advance. Changing it means a new rule version, not a click.", ref: "I16, I17 · rule_version" };
+    return { kind: "rule", label: "By rule", text: "A pre-registered public test: what it publishes was fixed in advance. Changing it means a new rule version, not a click.", ref: "set by the pre-registration (rule version)" };
   }
   if (v.family === "control") return { kind: "rule", label: "Never", text: "The deliberately bad reference bot. It is never published.", ref: "control_junk_anchor" };
   if (v.cfg?.ledger !== "simulated_bets") {
-    return { kind: "stub", label: "Private", text: "This bot records its picks in the own-money book, which never reaches customers. Only the customer-model bots can be shown on /picks.", ref: "shadow_bets ledger · I13" };
+    return { kind: "stub", label: "Private", text: "This bot records its picks in the own-money book, which never reaches customers. Only the customer-model bots can be shown on /picks.", ref: "own-money book (shadow_bets)" };
   }
   return null;
 }

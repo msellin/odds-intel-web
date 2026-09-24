@@ -49,12 +49,13 @@ import { withUnpickedBots,
   controlRef,
   isActive,
   needsALook,
+  quietInfo,
   sortBots,
   type BotView,
   type Issue,
   type RetiredView,
 } from "./bot-board-model";
-import { hhmmUtc, relTime, utcStamp } from "./bot-board-format";
+import { hhmmUtc, relTime, timeAgo, utcStamp } from "./bot-board-format";
 import { FamilySection, type RowCtx } from "./bot-row";
 import { FleetStrip } from "./fleet-strip";
 import { type LedgerState } from "./bot-drawer";
@@ -88,7 +89,7 @@ const FILTERS: [Filter, string][] = [
   ["published", "On /picks"],
   ["capable", "Real-money capable"],
   ["silent", "Silent"],
-  ["look", "Needs a look"],
+  ["look", "Bot issues"],
 ];
 
 const VERDICT_FACET: Record<string, string> = {
@@ -102,9 +103,12 @@ const VERDICT_FACET: Record<string, string> = {
 const listParam = (v: string | null) => (v ? v.split(",").filter(Boolean) : []);
 
 
-async function fetchPicks(name: string, offset: number): Promise<Extract<LedgerState, { loading: false }>> {
+/** Ledger cache key: the full ledger, or the server-side "Bet made only" filter of it. */
+const ledgerKey = (name: string, placedOnly: boolean) => (placedOnly ? `placed:${name}` : name);
+
+async function fetchPicks(name: string, offset: number, placedOnly = false): Promise<Extract<LedgerState, { loading: false }>> {
   try {
-    const r = await fetch(`/api/admin/bot-ledger?bot=${encodeURIComponent(name)}&limit=50&offset=${offset}`);
+    const r = await fetch(`/api/admin/bot-ledger?bot=${encodeURIComponent(name)}&limit=50&offset=${offset}${placedOnly ? "&placed=1" : ""}`);
     const j = (await r.json()) as Partial<BotPicksResult> & { error?: string | null };
     return {
       loading: false,
@@ -114,6 +118,8 @@ async function fetchPicks(name: string, offset: number): Promise<Extract<LedgerS
       pricesError: j.pricesError ?? null,
       placementLinked: j.placementLinked ?? true,
       hasMore: j.hasMore ?? false,
+      placedPicks: j.placedPicks ?? null,
+      placedOnly: j.placedOnly ?? placedOnly,
     };
   } catch (e) {
     return { loading: false, rows: [], error: e instanceof Error ? e.message : String(e) };
@@ -259,6 +265,13 @@ function Board({ data }: { data: BotBoardData }) {
     [fleetCaps, livePaused, liveArmed],
   );
   const pulse = liveArmed === true && livePaused === false;
+  // Bots whose real money is locked (coolbet_placer_bots.locked_reason): with a retired source,
+  // their silence is by design — information, not an issue (quietByDesign).
+  const lockedBots = useMemo(
+    () => new Set(ctl.state.placers.rows.filter((p) => !!p.locked_reason).map((p) => p.bot_name)),
+    [ctl.state.placers.rows],
+  );
+  const quiet = useMemo(() => quietInfo(active, lockedBots), [active, lockedBots]);
   const issues: Issue[] = useMemo(() => {
     const base = needsALook(
       active,
@@ -269,6 +282,7 @@ function Board({ data }: { data: BotBoardData }) {
         { view: "bot_capabilities", error: capabilities.error },
       ],
       now,
+      { lockedBots },
     );
     // The Ludogorets shape (mig 356, I14): /picks and Telegram disagree for a bot.
     for (const v of active) {
@@ -277,7 +291,7 @@ function Board({ data }: { data: BotBoardData }) {
       }
     }
     return base;
-  }, [active, fleet, scoreboard.error, config.error, capabilities.error, now, ctl]);
+  }, [active, fleet, scoreboard.error, config.error, capabilities.error, now, ctl, lockedBots]);
   const lookBots = useMemo(() => new Set(issues.map((i) => i.bot).filter(Boolean) as string[]), [issues]);
 
   const filtered = useMemo(() => {
@@ -336,30 +350,36 @@ function Board({ data }: { data: BotBoardData }) {
   );
   const configStale = !!exportedAt && now - new Date(exportedAt).getTime() > 36 * 3600_000;
 
+  // "Bet made only" in the Picks tab — a SERVER-side filter over the whole ledger (#139 UX fix
+  // round), cached separately from the full ledger. Not in the URL: it is a view of one tab.
+  const [placedOnly, setPlacedOnly] = useState(false);
+
   const loadLedger = useCallback(
-    (name: string) => {
-      const cur = ledgers[name];
+    (name: string, onlyPlaced = false) => {
+      const key = ledgerKey(name, onlyPlaced);
+      const cur = ledgers[key];
       if (cur && (cur.loading || !cur.error)) return; // cached (refetch only after an error)
-      setLedgers((prev) => ({ ...prev, [name]: { loading: true } }));
-      fetchPicks(name, 0).then((r) => setLedgers((prev) => ({ ...prev, [name]: r })));
+      setLedgers((prev) => ({ ...prev, [key]: { loading: true } }));
+      fetchPicks(name, 0, onlyPlaced).then((r) => setLedgers((prev) => ({ ...prev, [key]: r })));
     },
     [ledgers],
   );
 
   // "Load 50 older picks" in the sheet's Picks tab (IA move P7: the full ledger, a page at a time).
   const loadMore = useCallback(
-    (name: string) => {
-      const cur = ledgers[name];
+    (name: string, onlyPlaced = false) => {
+      const key = ledgerKey(name, onlyPlaced);
+      const cur = ledgers[key];
       if (!cur || cur.loading || cur.loadingMore || !cur.hasMore) return;
-      setLedgers((prev) => ({ ...prev, [name]: { ...cur, loadingMore: true, moreError: null } }));
-      fetchPicks(name, cur.rows.length).then((r) =>
+      setLedgers((prev) => ({ ...prev, [key]: { ...cur, loadingMore: true, moreError: null } }));
+      fetchPicks(name, cur.rows.length, onlyPlaced).then((r) =>
         setLedgers((prev) => {
-          const base = prev[name];
+          const base = prev[key];
           if (!base || base.loading) return prev;
-          if (r.error) return { ...prev, [name]: { ...base, loadingMore: false, moreError: r.error } };
+          if (r.error) return { ...prev, [key]: { ...base, loadingMore: false, moreError: r.error } };
           return {
             ...prev,
-            [name]: {
+            [key]: {
               ...base,
               rows: [...base.rows, ...r.rows],
               hasMore: r.hasMore,
@@ -376,11 +396,20 @@ function Board({ data }: { data: BotBoardData }) {
 
   // The open bot lives in the URL (?bot=&tab=), so a deep link from Telegram opens it.
   useEffect(() => {
-    if (selected) loadLedger(selected);
-  }, [selected, loadLedger]);
+    if (selected) loadLedger(selected, placedOnly);
+  }, [selected, placedOnly, loadLedger]);
 
-  const open = useCallback((name: string, t?: string) => setParams({ bot: name, tab: t && t !== "overview" ? t : null }), [setParams]);
-  const close = useCallback(() => setParams({ bot: null, tab: null }), [setParams]);
+  const open = useCallback(
+    (name: string, t?: string) => {
+      setPlacedOnly(false);
+      setParams({ bot: name, tab: t && t !== "overview" ? t : null });
+    },
+    [setParams],
+  );
+  const close = useCallback(() => {
+    setPlacedOnly(false);
+    setParams({ bot: null, tab: null });
+  }, [setParams]);
 
   const selectedView = useMemo(() => {
     if (!selected) return null;
@@ -412,6 +441,18 @@ function Board({ data }: { data: BotBoardData }) {
     setHighlight(true);
     setTimeout(() => setHighlight(false), 1600);
   }, []);
+  // Placement stat card → straight to the kill switch (#139 UX fix round, item 10): scroll the
+  // Pause / Resume box into the middle of the screen and focus its first enabled button, so on a
+  // phone one tap from the top of the page lands on the control. Focus only — nothing is pressed.
+  const jumpKill = useCallback(() => {
+    const box = document.getElementById("kill-switch");
+    if (!box) return jump();
+    const btn = box.querySelector<HTMLButtonElement>("[data-kill-switch-action]:not(:disabled)");
+    (btn ?? box).scrollIntoView({ behavior: "smooth", block: "center" });
+    btn?.focus({ preventScroll: true });
+    setHighlight(true);
+    setTimeout(() => setHighlight(false), 1600);
+  }, [jump]);
 
   const copyState = useCallback(() => {
     const s = ctl.state;
@@ -450,7 +491,7 @@ function Board({ data }: { data: BotBoardData }) {
           <span className="tabular-nums">
             {active.length} active{controlView ? " · 1 control" : ""}
             {exportedAt && (
-              <span title={`config exported ${utcStamp(exportedAt)} (${relTime(exportedAt, now)} ago)`}> · data {hhmmUtc(exportedAt)}</span>
+              <span title={`config exported ${utcStamp(exportedAt)} (${timeAgo(exportedAt, now)})`}> · data {hhmmUtc(exportedAt)}</span>
             )}
             {ctl.readOnly && (
               <span className="ml-2 align-middle">
@@ -515,7 +556,7 @@ function Board({ data }: { data: BotBoardData }) {
 
       {viewsMissing ? (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-          {["Placement", "Real money", "Active bots", "Verdicts", "Picks · 7d", "Needs a look"].map((l) => (
+          {["Kill switch", "Real money", "Active bots", "Verdicts", "Picks · 7 days", "Bot issues"].map((l) => (
             <StatCard key={l} label={l} value="—" unknown foot="views not deployed" />
           ))}
         </div>
@@ -526,9 +567,11 @@ function Board({ data }: { data: BotBoardData }) {
           active={active}
           hasControl={!!controlView}
           issues={issues}
+          quiet={quiet}
           capsMissing={capabilities.error !== null}
           onOpenBot={(n) => open(n)}
           onJump={jump}
+          onJumpKill={jumpKill}
         />
       )}
 
@@ -606,8 +649,10 @@ function Board({ data }: { data: BotBoardData }) {
         tab={sheetTab}
         onTab={(t) => setParams({ tab: t === "overview" ? null : t })}
         now={now}
-        ledger={selectedView ? ledgers[selectedView.name] : undefined}
-        onMore={selectedView ? () => loadMore(selectedView.name) : undefined}
+        ledger={selectedView ? ledgers[ledgerKey(selectedView.name, placedOnly)] : undefined}
+        onMore={selectedView ? () => loadMore(selectedView.name, placedOnly) : undefined}
+        placedOnly={placedOnly}
+        onPlacedOnly={setPlacedOnly}
         markets={selectedView && marketsBy ? marketsBy.get(selectedView.name) ?? [] : null}
         weekly={selectedView && weeklyBy ? weeklyBy.get(selectedView.name) ?? ([] as BotWeeklyRow[]) : null}
         fleetPaused={livePaused}

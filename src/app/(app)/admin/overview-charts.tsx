@@ -14,15 +14,25 @@ import { fmtEur, fmtInt, fmtPct } from "@/components/oi/format";
 // be told apart in a stacked bar without breaking the "one hue per method" rule.
 const FAMILY_COLOR: Record<string, string> = {
   forward_test: "var(--color-method-consensus)",
-  sharp_trigger: "var(--color-method-sharp)",
-  sharp_generator: "oklch(0.50 0.21 300)",
-  model_shadow: "var(--color-method-model)",
-  model_sim: "oklch(0.52 0.17 255)",
+  // UX test 2026-09-24: the two sharp and the two model families were hard to tell apart —
+  // same method hue, but now far apart in lightness AND nudged in hue.
+  sharp_trigger: "oklch(0.80 0.12 295)",
+  sharp_generator: "oklch(0.55 0.23 325)",
+  model_shadow: "oklch(0.80 0.11 225)",
+  model_sim: "oklch(0.52 0.19 262)",
   inplay: "var(--chart-3)",
   unknown: "var(--chart-5)",
   [RETIRED_SERIES]: "oklch(0.40 0.01 260)",
 };
 const familyLabel = (f: string) => (f === RETIRED_SERIES ? "Retired bots" : FAMILY_INFO[f]?.title ?? f);
+
+/** The smallest range that still contains every week with data (so a chart is not 3/4 empty). */
+function fitRange(rows: Record<string, number | string | null>[], keys: string[]): string {
+  const first = rows.findIndex((r) => keys.some((k) => r[k] != null && r[k] !== 0));
+  const span = first < 0 ? 12 : rows.length - first;
+  return span <= 4 ? "4w" : span <= 8 ? "8w" : "12w";
+}
+const ZERO_IN_VIEW: [(m: number) => number, (M: number) => number] = [(m) => Math.min(0, m), (M) => Math.max(0, M)];
 
 const RANGES = [
   { value: "4w", label: "4w", last: 4 },
@@ -64,14 +74,15 @@ export function OverviewCharts({ d }: { d: OverviewData }) {
         <div className="lg:col-span-2">
           <ChartCard
             title="Picks per week, by bot family"
-            description="Every bot, whichever ledger it writes; bots retired since are one grey block. Pre-registered tests count their current rule only. This week is still running."
+            description="Every active bot, whichever ledger it writes. Pre-registered tests count their current rule only. This week is still running. Turn on “Retired bots” in the legend to see picks from bots retired since."
             kind="bar"
             stacked
             data={d.picksByFamily}
             xKey="week"
             series={famSeries}
+            defaultHidden={[RETIRED_SERIES]}
             ranges={RANGES}
-            defaultRange="12w"
+            defaultRange={fitRange(d.picksByFamily, d.families.filter((f) => f !== RETIRED_SERIES))}
             xFmt={wk}
             fmt={(v) => fmtInt(num(v))}
             height={280}
@@ -96,9 +107,10 @@ export function OverviewCharts({ d }: { d: OverviewData }) {
             xKey="week"
             series={clvSeries}
             ranges={RANGES}
-            defaultRange="8w"
+            defaultRange={fitRange(d.clvByFamily, d.clvFamilies)}
             xFmt={wk}
             yFmt={(v) => fmtPct(v, 1)}
+            yDomain={ZERO_IN_VIEW}
             fmt={pct}
             zeroLine
             height={260}
@@ -111,15 +123,17 @@ export function OverviewCharts({ d }: { d: OverviewData }) {
       <div className="grid gap-4 lg:grid-cols-2">
         <ChartCard
           title="Flat-stake P/L, cumulative, by family"
-          description="Running total since 12 weeks ago, as if we bet 1 unit on every settled pick. Units, not money."
+          description="Running total since 12 weeks ago, as if we bet 1 unit on every settled pick of today's active bots. Units, not money. “Retired bots” can be turned on in the legend."
           kind="area"
           data={d.pnlByFamily}
           xKey="week"
           series={famSeries}
+          defaultHidden={[RETIRED_SERIES]}
           ranges={RANGES}
-          defaultRange="12w"
+          defaultRange={fitRange(d.pnlByFamily, d.families.filter((f) => f !== RETIRED_SERIES))}
           xFmt={wk}
           fmt={units}
+          yDomain={ZERO_IN_VIEW}
           yFmt={(v) => `${v.toFixed(0)}u`}
           zeroLine
           height={260}

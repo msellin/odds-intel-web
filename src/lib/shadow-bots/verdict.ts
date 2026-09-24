@@ -229,6 +229,26 @@ export function inplayOverride(v: PickVerdictResult): PickVerdictResult {
   return { ...v, verdict: "SKIP", reason: NO_INPLAY_PLACER_REASON };
 }
 
+/**
+ * The edge the Pick queue SHOWS, at the best available price now (UX fix round, 2026-09-24).
+ *
+ * `liveEdge` is p − 1/price, which stays POSITIVE between break-even and the bot's own
+ * minimum price. Shown bare, that read as "+8.9% edge" on a row whose price (1.62) was below
+ * the bot's minimum (1.80) — an invitation to bet a price the bot itself would not take.
+ * So the shown edge is:
+ *   • below break-even        → the (negative) edge, as is;
+ *   • break-even … minimum    → null ("—, below the bot's minimum"): positive, but not an edge
+ *                               the bot would act on;
+ *   • no reachable minimum    → null, for the same reason;
+ *   • at or above the minimum → the edge.
+ */
+export function shownEdge(v: PickVerdictResult, livePrice: number | null | undefined): number | null {
+  if (v.liveEdge == null || livePrice == null) return null;
+  if (v.breakEven != null && livePrice < v.breakEven) return v.liveEdge;
+  if (v.gateFloor == null || livePrice < v.gateFloor) return null;
+  return v.liveEdge;
+}
+
 /** The per-pick verdict, with the in-play override applied when it applies. */
 export function pickVerdict(i: PickVerdictInput): PickVerdictResult {
   const v = corePickVerdict(i);

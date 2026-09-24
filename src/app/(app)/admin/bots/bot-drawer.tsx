@@ -35,7 +35,7 @@ import {
   parseFloor,
   pct,
   pctPlain,
-  relTime,
+  timeAgo,
   tStat,
   utcStamp,
 } from "./bot-board-format";
@@ -57,6 +57,10 @@ export type LedgerState =
       /** false: the ledger has no bot_id (forward-test arms) — placements cannot be linked. */
       placementLinked?: boolean;
       hasMore?: boolean;
+      /** Picks with a real bet over the WHOLE ledger (null = unknown). */
+      placedPicks?: number | null;
+      /** This state is the server-side "Bet made only" filter. */
+      placedOnly?: boolean;
       loadingMore?: boolean;
       moreError?: string | null;
     };
@@ -408,7 +412,7 @@ export function WhatItBets({ v, now }: { v: BotView; now: number }) {
               <dt className="text-muted-foreground">Edge floor (raw)</dt><dd className="break-all font-mono">{cfg.edge_floor ?? "—"}</dd>
               <dt className="text-muted-foreground">Floor source</dt><dd className="break-all font-mono">{cfg.edge_floor_source ?? "—"}</dd>
               <dt className="text-muted-foreground">Books source</dt><dd className="break-all font-mono">{cfg.books_source ?? "—"}</dd>
-              <dt className="text-muted-foreground">Exported</dt><dd className="font-mono">{utcStamp(cfg.exported_at)} ({relTime(cfg.exported_at, now)} ago)</dd>
+              <dt className="text-muted-foreground">Exported</dt><dd className="font-mono">{utcStamp(cfg.exported_at)} ({timeAgo(cfg.exported_at, now)})</dd>
             </dl>
           </details>
         </>

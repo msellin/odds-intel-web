@@ -37,6 +37,8 @@ import { createServerServiceClient } from "@/lib/supabase-server";
 export interface BotRow {
   id: string;
   name: string;
+  /** bots.display_name — the ONE human name for the bot (rendered via prettyDisplayName). */
+  display_name: string | null;
   maturity_label: string | null;
   is_active: boolean | null;
 }
@@ -187,7 +189,7 @@ async function _loadShadowBotsPage(): Promise<ShadowBotsPageData> {
   queryCount++;
   const { data: botsRaw } = await db
     .from("bots")
-    .select("id, name, maturity_label, is_active")
+    .select("id, name, display_name, maturity_label, is_active")
     .is("retired_at", null)
     .order("name");
   const bots = (botsRaw ?? []) as BotRow[];
@@ -425,7 +427,7 @@ async function _loadShadowBotsPage(): Promise<ShadowBotsPageData> {
   };
 }
 
-export const loadShadowBotsPage = unstable_cache(_loadShadowBotsPage, ["admin-shadow-bots-page-v1"], {
+export const loadShadowBotsPage = unstable_cache(_loadShadowBotsPage, ["admin-shadow-bots-page-v2"], {
   revalidate: 60,
 });
 

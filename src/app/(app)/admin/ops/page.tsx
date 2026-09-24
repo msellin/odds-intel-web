@@ -9,7 +9,8 @@ import { FailuresChart } from "./jobs-charts";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
 import { isBotBoardDevPreview } from "@/lib/bot-board";
 import { loadJobsPage, STALE_AFTER_MIN } from "@/lib/admin-jobs";
-import { buildJobViews, JOB_GROUPS, OTHER_GROUP, type JobView } from "@/lib/admin-jobs-model";
+import { buildJobViews, JOB_GROUPS, longestFailing, mostRepeats, OTHER_GROUP, type JobView } from "@/lib/admin-jobs-model";
+import { dayMonth } from "../bots/bot-board-format";
 import { PageHeader, Panel, PanelHeader } from "@/components/oi/panel";
 import { StatCard } from "@/components/oi/stat-card";
 import { StatusBadge } from "@/components/oi/status-badge";
@@ -56,6 +57,28 @@ export default async function OpsDashboardPage() {
   const jobsUnknown = !!d.jobs.error;
   const failing = views.filter((v) => v.state === "failing");
   const stuck = views.filter((v) => v.state === "stuck");
+  // #139 UX fix round: "worst" was the most repeat failures, read as "longest failing" — show both, named.
+  const longest = longestFailing(views);
+  const repeats = mostRepeats(views);
+  const sinceText = (v: JobView) =>
+    v.failingSince ? (v.sinceFloor ? `since before ${dayMonth(new Date(v.failingSince))}` : `since ${ago(v.failingSince, now)} ago`) : "";
+  const failFoot = failing.length ? (
+    <>
+      <span className="block">of {views.length} jobs</span>
+      {longest && (
+        <span className="block">
+          longest failing: {longest.label}, {sinceText(longest)}
+        </span>
+      )}
+      {repeats && (
+        <span className="block">
+          most repeat failures: {repeats.label} ({repeats.streak} in a row)
+        </span>
+      )}
+    </>
+  ) : (
+    `all ${views.length} jobs' last runs passed`
+  );
   const settlement = d.jobs.v.find((j) => j.job_name === "settlement");
   const sweep = d.jobs.v.find((j) => j.job_name === "settle_ready");
   const settleOk = settlement?.last_ok_at ?? null;
@@ -92,7 +115,7 @@ export default async function OpsDashboardPage() {
           tone={failing.length ? "danger" : "success"}
           unknown={jobsUnknown}
           value={failing.length}
-          foot={failing.length ? `of ${views.length} jobs · worst: ${failing[0].label}` : `all ${views.length} jobs' last runs passed`}
+          foot={failFoot}
           href="#runs"
           hrefLabel="See jobs"
         />
@@ -183,7 +206,7 @@ export default async function OpsDashboardPage() {
           }
         />
         <div className="p-4 pt-3">
-          <JobsTable rows={views} now={now} />
+          <JobsTable rows={views} now={now} feeds={d.feeds.v} preview={isBotBoardDevPreview()} />
         </div>
       </Panel>
 

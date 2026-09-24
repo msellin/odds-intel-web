@@ -6,6 +6,7 @@
 // or "over_under_25". No React in this file — easy to reason about and to test.
 
 import type { BotConfigRow, BotGate } from "@/lib/bot-board";
+import { relSpan, timeAgo } from "@/lib/rel-time";
 
 export const MINUS = "−";
 
@@ -71,16 +72,13 @@ export function minutesAgo(iso: string | null | undefined, now: number): number 
   return Number.isNaN(t) ? null : (now - t) / 60000;
 }
 
-/** "just now" · "25 min" · "6 h" · "2 d" · "12 Sep". */
+/** "just now" · "25 min" · "6 h" · "2 d" · "12 Sep" — a DURATION. Delegates to the shared
+ *  src/lib/rel-time.ts (one format for every admin page). For a moment use `timeAgo`, which adds
+ *  " ago" only where it reads right (never "12 Sep ago"). */
 export function relTime(iso: string | null | undefined, now: number): string {
-  const m = minutesAgo(iso, now);
-  if (m == null) return "never";
-  if (m < 1) return "just now";
-  if (m < 90) return `${Math.round(m)} min`;
-  if (m < 60 * 36) return `${Math.round(m / 60)} h`;
-  if (m < 1440 * 14) return `${Math.round(m / 1440)} d`;
-  return dayMonth(new Date(iso as string));
+  return relSpan(iso, now);
 }
+export { timeAgo };
 
 export function monthLabel(iso: string | null | undefined): string {
   if (!iso) return "Unknown date";

@@ -100,6 +100,7 @@ export function ControlsProvider({
   const placerBy = useMemo(() => new Map(state.placers.rows.map((p) => [p.bot_name, p])), [state.placers.rows]);
   const botBy = useMemo(() => new Map(state.bots.rows.map((b) => [b.name, b])), [state.bots.rows]);
   const nameBy = useMemo(() => new Map(views.map((v) => [v.name, v.displayName])), [views]);
+  const viewBy = useMemo(() => new Map(views.map((v) => [v.name, v])), [views]);
   const capableSet = useMemo(() => (capable ? new Set(capable) : null), [capable]);
   const ladder = useMemo(() => computeLadder(state, capable, now), [state, capable, now]);
 
@@ -215,13 +216,14 @@ export function ControlsProvider({
     (intent: Intent) => {
       const spec = specFor(intent, {
         name: intent.bot ? nameBy.get(intent.bot) ?? intent.bot : null,
+        view: intent.bot ? viewBy.get(intent.bot) ?? null : null,
         state,
         ladder,
       });
       setDialogError(null);
       setDialog({ intent, spec });
     },
-    [state, nameBy, ladder],
+    [state, nameBy, viewBy, ladder],
   );
 
   const openArm = useCallback(() => {

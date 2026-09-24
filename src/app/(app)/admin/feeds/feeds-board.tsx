@@ -8,14 +8,29 @@
 // benchmark), closing prices and infrastructure sit in a smaller row below.
 //
 // The selected block lives in client state (so the 60 s auto-refresh never closes
-// it) and in the URL hash (#coolbet), so an alert can link straight to a book.
-// Blocks never resize; details open in one panel under the selected block's row.
+// it) and in the URL hash, so an alert can link straight to a book. Anchor scheme
+// (#139 UX fix round, 2026-09-24): every block has id="book-<key>" — book-coolbet,
+// book-epicbet, book-unibet, book-tonybet, book-betfair, book-api-football,
+// book-closing, book-infra — and /admin/feeds#book-coolbet opens that block. The
+// old #coolbet form still opens it. Blocks never resize; details open in one panel
+// under the selected block's row.
+//
+// Honesty rules added in the same round: when the status check itself is older than
+// STATUS_STALE_MIN every colour goes grey ("unknown") — a green from a stale check is
+// a claim we cannot make; a feed's "Fresh" is only said when its last data is within
+// its own schedule (a 2-minute live feed quiet for 34 min between games says "OK ·
+// quiet", with its allowed gap); and a book's request budget is described by the hour
+// that actually ran out (budgetSentence in src/lib/admin-feeds.ts), not by a refusal
+// counter that lands in the wrong hour.
 
 import { useEffect, useState } from "react";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
 import type { FeedStatus, FeedBookStats } from "@/lib/engine-data";
 import { StatusBadge, TONE_DOT, TONE_TEXT } from "@/components/oi/status-badge";
 import { FeedControls } from "./feed-controls";
+import { ToastProvider } from "../bots/toast";
+import { relSpan, timeAgo } from "@/lib/rel-time";
+import { BUDGET_REASON_RE, budgetSentence, budgetView, STATUS_STALE_MIN, type BudgetView, type FootprintHour } from "@/lib/admin-feeds-model";
 
 // #139 admin redesign (2026-09-24): colours are the admin status tokens (success / warning /
 // danger / info / neutral) instead of hard-coded emerald / amber / red / sky; logic unchanged.
@@ -64,17 +79,35 @@ const TONE_BORDER: Record<Tone, string> = {
 };
 const RANK: Record<Tone, number> = { danger: 0, warning: 1, info: 2, neutral: 3, success: 4 };
 export const STATUS_WORD: Record<FeedStatus["status"], string> = {
-  ok: "Fresh", warn: "Needs a look", fail: "Stopped", paused: "Paused", unknown: "Unknown",
+  ok: "OK", warn: "Needs a look", fail: "Stopped", paused: "Paused", unknown: "Unknown",
 };
 
-function statusTone(f?: FeedStatus): Tone {
-  if (!f) return "neutral";
+/** Minutes a feed's data may age and still be called fresh: 1.5 schedule slots + 5 min. */
+function freshLimitMin(f: FeedStatus): number {
+  return (f.interval_min ?? 30) * 1.5 + 5;
+}
+
+/**
+ * The word on a feed's badge. "Fresh" only when its last data is inside its own schedule; a feed the
+ * engine judges by runs or by the service being up says so instead of claiming fresh data.
+ */
+export function okWord(f: FeedStatus, now: number): string {
+  if (f.status !== "ok") return STATUS_WORD[f.status];
+  if (f.health_basis === "service") return "Up";
+  if (!f.last_data_at) return f.health_basis === "runs" ? "Running on time" : "OK";
+  const m = (now - new Date(f.last_data_at).getTime()) / 60000;
+  if (m <= freshLimitMin(f)) return "Fresh";
+  return f.health_basis === "runs" ? "Running · quiet" : "OK · quiet";
+}
+
+function statusTone(f: FeedStatus | undefined, stale = false): Tone {
+  if (!f || stale) return "neutral";
   return ({ ok: "success", warn: "warning", fail: "danger", paused: "info", unknown: "neutral" } as const)[f.status];
 }
 
 /** The headline colour: age of the last data row against this feed's own schedule. */
-function ageTone(f: FeedStatus | undefined, now: number): Tone {
-  if (!f) return "neutral";
+function ageTone(f: FeedStatus | undefined, now: number, stale: boolean): Tone {
+  if (!f || stale) return "neutral";
   if (f.paused) return "info";
   // Closing capture only writes when a paired match kicks off within 15 min, so
   // "34 min since last data" between kickoff waves is normal — colour it by the
@@ -82,20 +115,15 @@ function ageTone(f: FeedStatus | undefined, now: number): Tone {
   if (f.kind === "close") return statusTone(f);
   if (!f.last_data_at) return f.health_basis === "data" ? "danger" : statusTone(f);
   const m = (now - new Date(f.last_data_at).getTime()) / 60000;
-  const interval = f.interval_min ?? 30;
-  const stale = f.stale_after_min ?? interval * 3;
-  if (m <= interval * 1.5 + 5) return "success";
-  if (m <= stale) return "warning";
+  const limit = f.stale_after_min ?? (f.interval_min ?? 30) * 3;
+  if (m <= freshLimitMin(f)) return "success";
+  if (m <= limit) return "warning";
   return "danger";
 }
 
+/** Shared admin wording (src/lib/rel-time.ts): "25 min ago" · "6 h ago" · "12 Sep". */
 function ago(iso: string | null, now: number): string {
-  if (!iso) return "never";
-  const m = Math.round((now - new Date(iso).getTime()) / 60000);
-  if (m < 1) return "just now";
-  if (m < 90) return `${m} min ago`;
-  if (m < 60 * 36) return `${(m / 60).toFixed(1)} h ago`;
-  return `${(m / 1440).toFixed(1)} d ago`;
+  return iso ? timeAgo(iso, now) : "never";
 }
 
 function clock(iso: string | null): string {
@@ -108,48 +136,78 @@ function worst(tones: Tone[]): Tone {
   return tones.reduce<Tone>((a, t) => (RANK[t] < RANK[a] ? t : a), "success");
 }
 
-export function FeedsBoard({ feeds, books, now }: { feeds: FeedStatus[]; books: FeedBookStats[]; now: number }) {
+export function FeedsBoard({
+  feeds,
+  books,
+  footprint,
+  now,
+  statusAgeMin,
+  preview,
+}: {
+  feeds: FeedStatus[];
+  books: FeedBookStats[];
+  footprint: FootprintHour[];
+  now: number;
+  /** Minutes since the engine's status check wrote feed_status (null = never). */
+  statusAgeMin: number | null;
+  preview: boolean;
+}) {
   const byId = new Map(feeds.map((f) => [f.feed_id, f]));
   const stats = new Map(books.map((b) => [b.book, b]));
+  const stale = statusAgeMin == null || statusAgeMin > STATUS_STALE_MIN;
+  const budgets = new Map<string, BudgetView>(
+    books.filter((b) => b.budget_1h != null).map((b) => [b.book, budgetView(b.book, b.budget_1h, footprint, now)]),
+  );
   // ONE selected block at a time. Blocks never change size or position (the first
   // version stretched the opened block to full width and reflowed the grid); the
   // details open in a single panel directly under the selected block's row.
   const [selected, setSelected] = useState<string | null>(null);
 
   useEffect(() => {
-    const h = window.location.hash.replace("#", "");
-    if (h) setSelected(h);
+    const keys = new Set([...BOOKS, ...OTHERS].map((b) => b.key));
+    const fromHash = () => {
+      const h = window.location.hash.replace(/^#(book-)?/, "");
+      if (keys.has(h)) setSelected(h);
+    };
+    fromHash();
+    window.addEventListener("hashchange", fromHash);
+    return () => window.removeEventListener("hashchange", fromHash);
   }, []);
 
+  // The URL update happens OUTSIDE the state updater: Next's router patches history.replaceState,
+  // and calling it inside setState's updater updated the Router during FeedsBoard's render
+  // ("Cannot update a component while rendering a different component", #139 UX fix round).
   function select(key: string) {
-    setSelected((prev) => {
-      const next = prev === key ? null : key;
-      window.history.replaceState(null, "", next ? `#${next}` : window.location.pathname);
-      return next;
-    });
+    const next = selected === key ? null : key;
+    setSelected(next);
+    window.history.replaceState(window.history.state, "", next ? `#book-${next}` : window.location.pathname + window.location.search);
   }
 
   const view = (b: BlockDef) => {
     const main = b.main ? byId.get(b.main) : undefined;
     const extras = b.extra.map((id) => byId.get(id)).filter(Boolean) as FeedStatus[];
-    const headTone = b.main ? ageTone(main, now) : worst(extras.map(statusTone));
+    const headTone = b.main ? ageTone(main, now, stale) : worst(extras.map((e) => statusTone(e, stale)));
     // The headline number is coloured by data age; the block's border also carries the main feed's
-    // own verdict (e.g. "request budget spent"), so a warn is never hidden behind a fresh timestamp.
-    const tone = worst([headTone, ...(main ? [statusTone(main)] : []), ...extras.map(statusTone)]);
+    // own verdict (e.g. a sweep came back thin), so a warn is never hidden behind a fresh timestamp.
+    // A stale status check greys everything: worst() of all-neutral is neutral.
+    const tone = stale ? "neutral" : worst([headTone, ...(main ? [statusTone(main)] : []), ...extras.map((e) => statusTone(e))]);
     const st = b.statsBook ? stats.get(b.statsBook) : undefined;
+    const budget = b.statsBook ? budgets.get(b.statsBook) ?? null : null;
     const deps = b.deps.map((id) => byId.get(id)).filter(Boolean) as FeedStatus[];
-    return { main, extras, headTone, tone, st, deps };
+    return { main, extras, headTone, tone, st, deps, budget };
   };
 
   const card = (b: BlockDef, big: boolean) => {
-    const { main, extras, headTone, tone, st } = view(b);
+    const { main, extras, headTone, tone, st, budget } = view(b);
     const isSel = selected === b.key;
-    const problem = main && main.status !== "ok" && main.status !== "paused"
+    const raw = main && main.status !== "ok" && main.status !== "paused"
       ? main.status_reason
       : extras.find((e) => e.status === "fail" || e.status === "warn")?.status_reason;
+    // The engine's "request budget spent — N refused this hour" is replaced by which hour actually ran out.
+    const problem = raw && BUDGET_REASON_RE.test(raw) && budget ? budgetSentence(budget) : raw;
     return (
-      <button key={b.key} id={b.key} onClick={() => select(b.key)} aria-expanded={isSel}
-        className={`rounded-xl border-2 ${TONE_BORDER[tone]} bg-card px-4 py-3 text-left transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${isSel ? "ring-2 ring-foreground/60 ring-offset-2 ring-offset-background" : ""}`}>
+      <button key={b.key} id={`book-${b.key}`} type="button" onClick={() => select(b.key)} aria-expanded={isSel}
+        className={`scroll-mt-24 rounded-xl border-2 ${TONE_BORDER[tone]} bg-card px-4 py-3 text-left transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${isSel ? "ring-2 ring-foreground/60 ring-offset-2 ring-offset-background" : ""}`}>
         <div className="flex items-center justify-between gap-2">
           <span className={`flex min-w-0 items-center gap-2 font-medium ${big ? "text-base" : "text-sm"}`}>
             <span className={`size-2 shrink-0 rounded-full ${TONE_DOT[tone]}`} aria-hidden="true" />
@@ -178,19 +236,19 @@ export function FeedsBoard({ feeds, books, now }: { feeds: FeedStatus[]; books: 
           <div className="flex flex-wrap gap-2 mt-1.5">
             {extras.map((e) => (
               <span key={e.feed_id} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                <span className={`h-1.5 w-1.5 rounded-full ${TONE_DOT[statusTone(e)]}`} aria-hidden="true" />
+                <span className={`h-1.5 w-1.5 rounded-full ${TONE_DOT[statusTone(e, stale)]}`} aria-hidden="true" />
                 {SHORT[e.feed_id] ?? e.label}
               </span>
             ))}
           </div>
         )}
-        {problem && tone !== "success" && <div className={`mt-1.5 line-clamp-2 text-xs ${TONE_TEXT[tone]}`}>{problem}</div>}
+        {problem && tone !== "success" && !stale && <div className={`mt-1.5 line-clamp-3 text-xs ${TONE_TEXT[tone]}`}>{problem}</div>}
       </button>
     );
   };
 
   const panel = (b: BlockDef) => {
-    const { main, extras, st, deps } = view(b);
+    const { main, extras, st, deps, budget } = view(b);
     return (
       <div className="space-y-3 rounded-xl border border-border bg-muted/20 px-4 py-3">
         <div className="flex items-center justify-between gap-2">
@@ -242,11 +300,12 @@ export function FeedsBoard({ feeds, books, now }: { feeds: FeedStatus[]; books: 
             {" · "}bot-checks {st.challenges_1h ?? 0}
             {" · "}errors {st.errors_1h ?? 0}
             {" · "}{(st.requests_24h ?? 0).toLocaleString("en-US")} in 24 h
+            {budget && <span className="mt-0.5 block">{budgetSentence(budget)}</span>}
           </div>
         )}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
           {[main, ...extras].filter(Boolean).map((f) => (
-            <SubFeed key={(f as FeedStatus).feed_id} f={f as FeedStatus} now={now} />
+            <SubFeed key={(f as FeedStatus).feed_id} f={f as FeedStatus} now={now} stale={stale} budget={budget} preview={preview} />
           ))}
         </div>
         {deps.length > 0 && (
@@ -254,7 +313,7 @@ export function FeedsBoard({ feeds, books, now }: { feeds: FeedStatus[]; books: 
             <span className="text-muted-foreground">Depends on:</span>
             {deps.map((d) => (
               <span key={d.feed_id} className="inline-flex items-center gap-1">
-                <span className={`h-1.5 w-1.5 rounded-full ${TONE_DOT[statusTone(d)]}`} aria-hidden="true" />
+                <span className={`h-1.5 w-1.5 rounded-full ${TONE_DOT[statusTone(d, stale)]}`} aria-hidden="true" />
                 {SHORT[d.feed_id] ?? d.label}
               </span>
             ))}
@@ -269,19 +328,30 @@ export function FeedsBoard({ feeds, books, now }: { feeds: FeedStatus[]; books: 
   const selOther = OTHERS.find((b) => b.key === selected);
 
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        {sortedBooks.map((b) => card(b, true))}
+    <ToastProvider>
+      <div className="space-y-3">
+        {stale && (
+          <p className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+            {statusAgeMin == null
+              ? "No status check recorded yet, so every block is grey — unknown, not healthy."
+              : `The status check is ${statusAgeMin} min old (it should run every 5 min), so every block is grey — unknown, not healthy. The times shown are the last ones it saw.`}
+          </p>
+        )}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          {sortedBooks.map((b) => card(b, true))}
+        </div>
+        {selBook && panel(selBook)}
+        <div className="grid grid-cols-1 gap-3 pt-3 sm:grid-cols-3">{OTHERS.map((b) => card(b, false))}</div>
+        {selOther && panel(selOther)}
       </div>
-      {selBook && panel(selBook)}
-      <div className="grid grid-cols-1 gap-3 pt-3 sm:grid-cols-3">{OTHERS.map((b) => card(b, false))}</div>
-      {selOther && panel(selOther)}
-    </div>
+    </ToastProvider>
   );
 }
 
-function SubFeed({ f, now }: { f: FeedStatus; now: number }) {
-  const tone = statusTone(f);
+function SubFeed({ f, now, stale, budget, preview }: { f: FeedStatus; now: number; stale: boolean; budget: BudgetView | null; preview: boolean }) {
+  const tone = statusTone(f, stale);
+  const word = stale ? "Unknown" : okWord(f, now);
+  const reason = f.status_reason && BUDGET_REASON_RE.test(f.status_reason) && budget ? budgetSentence(budget) : f.status_reason;
   return (
     <div className="rounded-lg border border-border bg-card px-3 py-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -289,11 +359,20 @@ function SubFeed({ f, now }: { f: FeedStatus; now: number }) {
           <span className="text-sm font-medium">{SHORT[f.feed_id] ?? f.label}</span>
           <span className="text-xs text-muted-foreground">{f.schedule}</span>
         </div>
-        <StatusBadge tone={tone} title={f.status_reason ?? undefined}>
-          {STATUS_WORD[f.status]}
+        <StatusBadge tone={tone} title={stale ? "The status check is stale — this is the last state it saw" : (reason ?? undefined)}>
+          {word}
         </StatusBadge>
       </div>
-      {f.status !== "ok" && f.status_reason && <div className={`mt-1 text-xs ${TONE_TEXT[tone]}`}>{f.status_reason}</div>}
+      {f.status !== "ok" && reason && <div className={`mt-1 text-xs ${TONE_TEXT[tone]}`}>{reason}</div>}
+      {!stale && word.endsWith("quiet") && (
+        <div className="mt-1 text-xs text-muted-foreground">
+          No new data for {relSpan(f.last_data_at, now)}, though it runs every {f.interval_min} min.{" "}
+          {f.health_basis === "runs"
+            ? "Its runs are on time, so it counts as OK"
+            : `The engine allows a gap of up to ${f.stale_after_min} min before calling it stopped`}
+          {f.kind === "live" ? " — live data only comes while games are on." : "."}
+        </div>
+      )}
       {(f.kind === "service" || f.kind === "host") && f.service_state && (
         <div className="mt-1 text-xs text-muted-foreground">
           {Object.values(f.service_state).join(" · ")} · checked {ago(f.updated_at, now)}
@@ -314,8 +393,8 @@ function SubFeed({ f, now }: { f: FeedStatus; now: number }) {
         )}
         {f.paused && f.paused_reason && <span className="text-info">Paused: “{f.paused_reason}”</span>}
       </div>
-      <FeedControls feedId={f.feed_id} label={f.label} controls={f.controls ?? []} paused={f.paused}
-        runNowPending={f.run_now_pending} />
+      <FeedControls feedId={f.feed_id} label={f.label} book={f.book} schedule={f.schedule} controls={f.controls ?? []} paused={f.paused}
+        runNowPending={f.run_now_pending} budget={f.category === "book" ? budget : null} preview={preview} />
       {f.last_error && f.status !== "ok" && (
         <details className="mt-1.5">
           <summary className="cursor-pointer text-xs text-muted-foreground">Last error</summary>

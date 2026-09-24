@@ -9,7 +9,7 @@ import { Bot, Database, Globe, Send, Terminal, type LucideIcon } from "lucide-re
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { fetchAudit } from "@/lib/bot-controls/client";
 import { CONTROL_LABEL, type ChangeSource, type ControlChange } from "@/lib/bot-controls/types";
-import { relTime, utcStamp } from "./bot-board-format";
+import { timeAgo, utcStamp } from "./bot-board-format";
 import { useControls } from "./controls-context";
 
 /** Who made a change, in words (the raw actor stays in the title). */
@@ -94,7 +94,7 @@ export function ActivityTimeline({
             <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
               <span className="rounded border border-border px-1">{s.word}</span>
               <span className="break-all" title={c.actor}>{actorWord(c.actor)}</span>
-              <span title={utcStamp(c.created_at)}>{relTime(c.created_at, now)} ago</span>
+              <span title={utcStamp(c.created_at)}>{timeAgo(c.created_at, now)}</span>
             </div>
             {c.reason && <p className="mt-0.5 line-clamp-3 whitespace-pre-wrap break-words text-xs" title={c.reason}>“{c.reason}”</p>}
             {c.refusal && <p className="mt-0.5 break-words text-xs text-red-300/90">{c.refusal}</p>}

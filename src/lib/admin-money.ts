@@ -15,6 +15,9 @@ import { createServerServiceClient } from "@/lib/supabase-server";
 import { readAdminFixture } from "@/lib/admin-fixture";
 import type { RealBet } from "@/lib/engine-data";
 import { MANUAL_RECONCILE_SINCE } from "@/lib/admin-attention";
+// Pure helpers live in admin-money-format.ts so the client half of /admin/real-bets can use them
+// without importing this module's server-only reads; re-exported here as the one import point.
+export { moneyBotLabel } from "@/lib/admin-money-format";
 
 /**
  * Daily blast-radius caps for the AUTOMATED placer. DEFAULTS ONLY — the engine reads
@@ -36,7 +39,10 @@ export const RECONCILE_AFTER_H = 24;
 export interface MoneyBet extends RealBet {
   /** TRUE = confirmed against the book account · NULL = hand-logged, not yet confirmed. */
   placedReal: boolean | null;
+  /** bots.display_name, raw. Render with `moneyBotLabel()` — `bot` (the id) is secondary text. */
+  botDisplayName: string | null;
 }
+
 
 /** One active `promo_terms` row plus its `promo_ledger` aggregates. */
 export interface PromoRow {
@@ -84,7 +90,7 @@ const MAX_PAGES = 5;
 const BET_SELECT = `id, match_id, market, selection, bookmaker, captured_odds, actual_odds,
    slippage_pct, edge_pct_taken, clv, clv_pinnacle, closing_bookmaker, closing_minutes_before_ko,
    stake, placed_at, result, pnl, resolved_at, notes, placed_real,
-   bot:bot_id(name),
+   bot:bot_id(name, display_name),
    paper:simulated_bet_id(stake, pnl, result),
    match:match_id(date,
      home_team:home_team_id(name),
@@ -97,7 +103,7 @@ const n = (v: unknown) => (v == null ? null : Number(v));
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapBet(r: any): MoneyBet {
-  const bot = one<{ name: string }>(r.bot);
+  const bot = one<{ name: string; display_name: string | null }>(r.bot);
   const m = one<{ home_team: One<{ name: string }>; away_team: One<{ name: string }>; league: One<{ name: string; country: string }> }>(r.match);
   const ht = one(m?.home_team);
   const at = one(m?.away_team);
@@ -127,6 +133,7 @@ function mapBet(r: any): MoneyBet {
     resolvedAt: r.resolved_at,
     notes: r.notes,
     placedReal: r.placed_real ?? null,
+    botDisplayName: bot?.display_name ?? null,
     paper: paper ? { stake: Number(paper.stake), pnl: n(paper.pnl), result: paper.result } : null,
   };
 }
@@ -210,6 +217,54 @@ export async function loadMoney(): Promise<MoneyData> {
   }
   const { promos, promoError } = await promosP;
   return { bets, betsError, promos, promoError, loadedAt: new Date().toISOString() };
+}
+
+/**
+ * The recent real-money window — ONE definition shared by /admin/real-bets and the Overview card
+ * (UX fix round, 2026-09-24: the two pages showed "last 30 days" and "4 weeks" for the same idea).
+ *
+ *   • window  = placed_at >= now − days × 24 h (a rolling window, not calendar weeks);
+ *   • paper rows (placedReal === false) are excluded — they are not money;
+ *   • bets    = every real bet placed in the window, open or settled;
+ *   • staked  = the stake of every one of those bets (money put at risk, open included);
+ *   • settled / pnl = settled bets only (result present and not "pending") — an open bet has no P/L.
+ * Pure: pass `now` in so the page and the Overview compute against the same instant.
+ */
+export interface RealMoneyWindowRow {
+  placedAt: string;
+  stake: number | string | null;
+  pnl: number | string | null;
+  result: string | null;
+  placedReal?: boolean | null;
+}
+export interface RealMoneyWindow {
+  days: number;
+  /** ISO start of the window. */
+  from: string;
+  bets: number;
+  staked: number;
+  settled: number;
+  pnl: number;
+}
+export function realMoneyWindow(rows: RealMoneyWindowRow[], now: number | Date, days: number): RealMoneyWindow {
+  const end = typeof now === "number" ? now : now.getTime();
+  const from = end - days * 86_400_000;
+  let bets = 0;
+  let staked = 0;
+  let settled = 0;
+  let pnl = 0;
+  for (const r of rows) {
+    if (r.placedReal === false) continue;
+    const t = Date.parse(r.placedAt);
+    if (!(t >= from)) continue;
+    bets++;
+    staked += Number(r.stake ?? 0) || 0;
+    if (r.result != null && r.result !== "pending") {
+      settled++;
+      pnl += Number(r.pnl ?? 0) || 0;
+    }
+  }
+  return { days, from: new Date(from).toISOString(), bets, staked, settled, pnl };
 }
 
 /** Unconfirmed hand-logged bets the account reconciler has not matched (the to-do list). */

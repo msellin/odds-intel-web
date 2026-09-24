@@ -4,6 +4,13 @@
 // sentences ("sellinmargus paused the picks channel — “reason”"). Wording helpers: actorWord comes
 // from the /admin/bots Activity timeline so both views name people the same way; the sentence
 // verbs below are new (the timeline shows "old → new" values instead).
+//
+// #139 UX fix round (2026-09-24): "Database change 413" meant nothing to the owner — the rows the
+// change-log migration wrote when it was created now read "Set up when the change log started
+// (24 Sep): …"; a later migration row reads "A database update (date)". The owner's e-mail / user
+// id (resolved server-side from OWNER_USER_IDS) reads "Owner"; other e-mails keep the part before
+// the @. Below sm the table is one column of stacked cards (when · from · result inside each row)
+// instead of a 652 px-wide table. Times use the shared src/lib/rel-time.ts.
 
 import { useMemo } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -15,7 +22,8 @@ import { StatusBadge, type Tone } from "@/components/oi/status-badge";
 import { CONTROL_LABEL, type ControlChange } from "@/lib/bot-controls/types";
 import type { ActivityData, FeedAction } from "@/lib/admin-activity";
 import { actorWord } from "../bots/activity-timeline";
-import { relTime, utcStamp } from "../bots/bot-board-format";
+import { utcStamp } from "../bots/bot-board-format";
+import { timeAgo } from "@/lib/rel-time";
 
 type Kind = "control" | "feed";
 type Outcome = "applied" | "noop" | "refused" | "conflict" | "pending";
@@ -33,7 +41,7 @@ interface Row {
 }
 
 const KIND_WORD: Record<Kind, string> = { control: "Switch", feed: "Feed" };
-const SOURCE_WORD: Record<string, string> = { web: "Web admin", telegram: "Telegram", engine: "Engine", cli: "Command line", migration: "Database change", other: "Other" };
+const SOURCE_WORD: Record<string, string> = { web: "Web admin", telegram: "Telegram", engine: "Engine", cli: "Command line", migration: "Database update", other: "Other" };
 const OUTCOME: Record<Outcome, { word: string; tone: Tone }> = {
   applied: { word: "Done", tone: "success" },
   noop: { word: "No change", tone: "neutral" },
@@ -42,10 +50,22 @@ const OUTCOME: Record<Outcome, { word: string; tone: Tone }> = {
   pending: { word: "Waiting for engine", tone: "info" },
 };
 
-/** Who, in words, starting with a capital: e-mail addresses shortened to the part before the @. */
-function who(actor: string | null): string {
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const day = (iso: string) => {
+  const d = new Date(iso);
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
+};
+
+/**
+ * Who, in words, starting with a capital. The owner (OWNER_USER_IDS, resolved server-side) is
+ * "Owner"; other e-mail addresses are shortened to the part before the @; a migration is "A
+ * database update (date)" — never "Database change 413".
+ */
+function who(actor: string | null, at: string, owners: Set<string>): string {
   if (!actor) return "Someone";
+  if (owners.has(actor)) return "Owner";
   if (actor === "auto") return "The engine (automatic)";
+  if (/^migration:\d+$/.test(actor)) return `A database update (${day(at)})`;
   const w = actorWord(actor);
   const s = w.includes("@") ? w.split("@")[0] : w;
   return s.charAt(0).toUpperCase() + s.slice(1);
@@ -101,12 +121,12 @@ function verb(c: ControlChange, bot: string): string {
   }
 }
 
-function controlRow(c: ControlChange, botNames: Record<string, string>): Row {
+function controlRow(c: ControlChange, botNames: Record<string, string>, owners: Set<string>): Row {
   const bot = c.bot_name ? botNames[c.bot_name] ?? c.bot_name : "";
-  const w = who(c.actor);
+  const w = who(c.actor, c.created_at, owners);
   const initial = c.source === "migration" && (c.old_value === null || c.old_value === undefined);
   let sentence: string;
-  if (initial) sentence = `${w} recorded the starting state: ${stateText(c, bot)}`;
+  if (initial) sentence = `Set up when the change log started (${day(c.created_at)}): ${stateText(c, bot)}`;
   else if (c.outcome === "refused") sentence = `${w} asked for ${stateText(c, bot)} — refused`;
   else if (c.outcome === "conflict") sentence = `${w} asked for ${stateText(c, bot)} — not applied, someone changed it first`;
   else if (c.outcome === "noop") sentence = `${w} ${verb(c, bot)} (no change — it already was)`;
@@ -133,9 +153,9 @@ function feedSource(actor: string | null): string {
   return "other";
 }
 
-function feedRow(a: FeedAction, feedLabels: Record<string, string>): Row {
+function feedRow(a: FeedAction, feedLabels: Record<string, string>, owners: Set<string>): Row {
   const feed = feedLabels[a.feed_id] ?? a.feed_id;
-  const w = who(a.actor);
+  const w = who(a.actor, a.created_at, owners);
   const what =
     a.action === "pause"
       ? `paused ${feed}`
@@ -163,13 +183,12 @@ function feedRow(a: FeedAction, feedLabels: Record<string, string>): Row {
 }
 
 export function ActivityTable({ d }: { d: ActivityData }) {
-  const rows = useMemo(
-    () =>
-      [...d.changes.v.map((c) => controlRow(c, d.botNames)), ...d.feedActions.v.map((a) => feedRow(a, d.feedLabels))].sort((a, b) =>
-        a.at < b.at ? 1 : a.at > b.at ? -1 : 0,
-      ),
-    [d],
-  );
+  const rows = useMemo(() => {
+    const owners = new Set(d.ownerActors);
+    return [...d.changes.v.map((c) => controlRow(c, d.botNames, owners)), ...d.feedActions.v.map((a) => feedRow(a, d.feedLabels, owners))].sort((a, b) =>
+      a.at < b.at ? 1 : a.at > b.at ? -1 : 0,
+    );
+  }, [d]);
   const now = d.now;
   const week = rows.filter((r) => now - new Date(r.at).getTime() < 7 * 86_400_000);
   const people = week.filter((r) => r.source === "web" || r.source === "telegram");
@@ -180,10 +199,10 @@ export function ActivityTable({ d }: { d: ActivityData }) {
     {
       accessorKey: "at",
       header: "When",
-      meta: { label: "When (UTC)", csv: (r) => r.at, className: "w-28" },
+      meta: { label: "When (UTC)", csv: (r) => r.at, className: "hidden w-28 sm:table-cell" },
       cell: ({ row }) => (
         <span className="whitespace-nowrap" title={utcStamp(row.original.at)}>
-          <span className="block text-sm tabular-nums">{relTime(row.original.at, now) === "just now" ? "just now" : `${relTime(row.original.at, now)} ago`}</span>
+          <span className="block text-sm tabular-nums">{timeAgo(row.original.at, now)}</span>
           <span className="block font-mono text-[11px] text-muted-foreground">{row.original.at.slice(5, 16).replace("T", " ")}</span>
         </span>
       ),
@@ -192,11 +211,19 @@ export function ActivityTable({ d }: { d: ActivityData }) {
       accessorKey: "sentence",
       header: "What happened",
       enableSorting: false,
-      meta: { label: "What happened", className: "min-w-[18rem]" },
+      meta: { label: "What happened", className: "sm:min-w-[18rem]" },
       cell: ({ row }) => {
         const r = row.original;
         return (
           <div className={r.outcome === "refused" || r.outcome === "noop" ? "opacity-80" : ""}>
+            {/* phone: the other columns are hidden, so each row is a stacked card with them inline */}
+            <span className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground sm:hidden">
+              <span className="tabular-nums" title={utcStamp(r.at)}>
+                {timeAgo(r.at, now)} · {r.at.slice(5, 16).replace("T", " ")} UTC
+              </span>
+              <span>· {SOURCE_WORD[r.source] ?? r.source}</span>
+              <StatusBadge tone={OUTCOME[r.outcome].tone}>{OUTCOME[r.outcome].word}</StatusBadge>
+            </span>
             <span className="block text-sm" title={r.actor}>
               {r.sentence}
             </span>
@@ -217,19 +244,19 @@ export function ActivityTable({ d }: { d: ActivityData }) {
     {
       accessorKey: "source",
       header: "From",
-      meta: { label: "From", csv: (r) => SOURCE_WORD[r.source] ?? r.source },
+      meta: { label: "From", csv: (r) => SOURCE_WORD[r.source] ?? r.source, className: "hidden sm:table-cell" },
       cell: ({ row }) => <span className="whitespace-nowrap text-xs text-muted-foreground">{SOURCE_WORD[row.original.source] ?? row.original.source}</span>,
     },
     {
       accessorKey: "kind",
       header: "Kind",
-      meta: { label: "Kind", csv: (r) => KIND_WORD[r.kind] },
+      meta: { label: "Kind", csv: (r) => KIND_WORD[r.kind], className: "hidden sm:table-cell" },
       cell: ({ row }) => <span className="whitespace-nowrap text-xs text-muted-foreground">{KIND_WORD[row.original.kind]}</span>,
     },
     {
       accessorKey: "outcome",
       header: "Result",
-      meta: { label: "Result", csv: (r) => OUTCOME[r.outcome].word },
+      meta: { label: "Result", csv: (r) => OUTCOME[r.outcome].word, className: "hidden sm:table-cell" },
       cell: ({ row }) => <StatusBadge tone={OUTCOME[row.original.outcome].tone}>{OUTCOME[row.original.outcome].word}</StatusBadge>,
     },
   ];
@@ -251,7 +278,7 @@ export function ActivityTable({ d }: { d: ActivityData }) {
           label="Last change"
           icon={Clock}
           tone="neutral"
-          value={rows[0] ? relTime(rows[0].at, now) : "none"}
+          value={rows[0] ? timeAgo(rows[0].at, now) : "none"}
           unknown={errors.length === 2}
           foot={rows[0] ? rows[0].sentence : "nothing recorded yet"}
         />

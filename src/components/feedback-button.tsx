@@ -19,6 +19,7 @@
 
 import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
+import { isAdminPath } from "@/components/public-chrome";
 import * as Sentry from "@sentry/nextjs";
 import { MessageSquare } from "lucide-react";
 
@@ -42,7 +43,8 @@ export function FeedbackButton() {
   }, []);
 
   // Hide on landing — conversion surface, not feedback-collection surface.
-  if (pathname === "/") return null;
+  // #139 (2026-09-24): not on the admin — it sat on top of chart axes; the operator is the owner.
+  if (pathname === "/" || isAdminPath(pathname)) return null;
 
   return (
     <button

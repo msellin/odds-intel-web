@@ -9,6 +9,8 @@ import type { Intent } from "./controls-context";
 import { LadderList } from "./ladder-list";
 import { PauseReason } from "./pause-reason";
 import type { Ladder } from "@/lib/bot-controls/ladder";
+import type { BotView } from "./bot-board-model";
+import { channelLines } from "./channel-reasons";
 import {
   MIN_REASON,
   PHRASE_PAUSE_PICKS,
@@ -21,10 +23,22 @@ import {
 } from "@/lib/bot-controls/types";
 
 /** Title, consequence and strength for each (control, direction). */
-export function specFor(i: Intent, ctx: { name: string | null; state: ControlState; ladder: Ladder }): ConfirmSpec {
+export function specFor(i: Intent, ctx: { name: string | null; view?: BotView | null; state: ControlState; ladder: Ladder }): ConfirmSpec {
   const f = ctx.state.fleet.row;
   const start = isStartDirection(i.control, i.value);
   const base = { takesEffect: TAKES_EFFECT[i.control], minReason: start ? MIN_REASON : undefined };
+  // The bot a per-bot dialog is about: its display name large, its id as the phrase to type.
+  const subject = i.bot ? { name: ctx.name ?? i.bot, id: i.bot } : undefined;
+  // The same one-line channel reasons the sheet shows (channel-reasons.ts) — never a blanket rule.
+  const lines = ctx.view
+    ? channelLines(ctx.view, {
+        showOnPicks: i.value,
+        vip: (ctx.state.bots.rows.find((b) => b.name === i.bot) as { vip?: boolean | null } | undefined)?.vip ?? null,
+        publishingPaused: f?.publishing_paused ?? null,
+      })
+    : null;
+  // Inside the /picks dialog the "does not follow this switch" is said once, up front.
+  const noSwitch = (t: string) => t.replace(" The /picks switch does not change this.", "");
   switch (i.control) {
     case "placement_paused":
       if (i.value) {
@@ -32,7 +46,18 @@ export function specFor(i: Intent, ctx: { name: string | null; state: ControlSta
           ...base,
           strength: "a",
           title: "Pause real-money placement?",
-          consequence: <p>Every placer refuses at its next check. Publishing picks is not affected.</p>,
+          consequence: (
+            <>
+              <p className="font-medium text-foreground">
+                Kill switch — stops all automatic real bets. Hand-placed bets from the Pick queue are separate.
+              </p>
+              <p>
+                Every automatic placer (the Coolbet UI placer and the best-price router on the Mac) refuses at its next check.
+                Bets you place yourself at the bookmaker are not blocked, and recording them from the Pick queue still works.
+                Publishing picks is not affected.
+              </p>
+            </>
+          ),
           confirmLabel: "Pause placement",
         };
       }
@@ -102,7 +127,8 @@ export function specFor(i: Intent, ctx: { name: string | null; state: ControlSta
         return {
           ...base,
           strength: "a",
-          title: `Turn off real money for ${ctx.name}?`,
+          subject,
+          title: "Turn off real money for this bot?",
           consequence: <p>This bot is excluded at the next eligibility read. Its picks keep being recorded.</p>,
           confirmLabel: "Turn off",
         };
@@ -110,7 +136,8 @@ export function specFor(i: Intent, ctx: { name: string | null; state: ControlSta
       return {
         ...base,
         strength: "b",
-        title: `Turn on real money for ${ctx.name}?`,
+        subject,
+        title: "Turn on real money for this bot?",
         consequence: (
           <>
             <p>
@@ -129,21 +156,34 @@ export function specFor(i: Intent, ctx: { name: string | null; state: ControlSta
         return {
           ...base,
           strength: "a",
-          title: `Hide ${ctx.name} from /picks?`,
-          consequence: <p>Its picks disappear from /picks and /api/v1/upcoming on the next render. Telegram is not affected.</p>,
+          subject,
+          title: "Hide this bot from /picks?",
+          consequence: (
+            <>
+              <p>Its picks disappear from /picks and /api/v1/upcoming on the next render.</p>
+              {lines && <p>Telegram does not follow this switch: {noSwitch(lines.telegram.text)}</p>}
+            </>
+          ),
           confirmLabel: "Hide from /picks",
         };
       }
       return {
         ...base,
         strength: "b",
-        title: `Show ${ctx.name} on /picks?`,
+        subject,
+        title: "Show this bot on /picks?",
         consequence: (
-          <p>
-            Customers see its picks on /picks immediately. The Telegram channel does NOT follow this switch — it posts bots that
-            have earned the “calibrated” label — and /performance is not affected either.{" "}
-            <span className="text-xs opacity-70">(maturity_label = calibrated)</span>
-          </p>
+          <>
+            <p>Customers see its picks on /picks immediately.</p>
+            {lines ? (
+              <ul className="list-disc space-y-1 pl-5">
+                <li>Telegram does not follow this switch. {noSwitch(lines.telegram.text)}</li>
+                <li>/performance does not follow it either. {noSwitch(lines.performance.text)}</li>
+              </ul>
+            ) : (
+              <p>Telegram and /performance do not follow this switch.</p>
+            )}
+          </>
         ),
         phrase: i.bot ?? "",
         confirmLabel: "Show on /picks",

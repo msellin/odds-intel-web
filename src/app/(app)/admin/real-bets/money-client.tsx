@@ -9,6 +9,14 @@ import { DataTable } from "@/components/oi/data-table";
 import { StatusBadge, type Tone } from "@/components/oi/status-badge";
 import { fmtEur, fmtInt, fmtPct } from "@/components/oi/format";
 import type { MoneyBet } from "@/lib/admin-money";
+import { moneyBotLabel } from "@/lib/admin-money-format";
+import { formatPickLabel } from "@/lib/shadow-bots/labels";
+
+/** Plain words for the bet ("1×2 Away", "Under 3.5"); the raw codes stay in the tooltip and CSV. */
+const betLabel = (b: MoneyBet) => {
+  const l = formatPickLabel(b.market, b.selection);
+  return b.market.toLowerCase() === "1x2" ? `1×2 ${l}` : l;
+};
 
 export interface DayPoint {
   day: string;
@@ -24,7 +32,10 @@ export interface WeekPoint {
   [k: string]: string | number | null;
 }
 export interface BotMoneyRow {
+  /** Display name (bots.display_name via prettyDisplayName). */
   bot: string;
+  /** bots.name — secondary text, and a CSV column. */
+  botId: string | null;
   bets: number;
   settled: number;
   open: number;
@@ -109,7 +120,17 @@ export function MoneyCharts({ daily, weekly }: { daily: DayPoint[]; weekly: Week
 
 const RESULT_TONE: Record<string, Tone> = { won: "success", lost: "danger", void: "neutral", pending: "info" };
 const RESULT_LABEL: Record<string, string> = { won: "Won", lost: "Lost", void: "Void", pending: "Open" };
-const confirmLabel = (b: MoneyBet) => (b.placedReal === true ? "Confirmed on the account" : "Logged by hand, not confirmed");
+const confirmLabel = (b: MoneyBet) => (b.placedReal === true ? "Confirmed" : "Not confirmed (by hand)");
+
+
+function BotName({ label, id }: { label: string; id: string | null }) {
+  return (
+    <div className="min-w-0">
+      <div className="truncate text-xs">{label}</div>
+      {id && <div className="truncate font-mono text-[10px] text-muted-foreground/70">{id}</div>}
+    </div>
+  );
+}
 
 function betColumns(): ColumnDef<MoneyBet>[] {
   return [
@@ -132,8 +153,15 @@ function betColumns(): ColumnDef<MoneyBet>[] {
       ),
       meta: { csv: (b) => b.match },
     },
-    { id: "bot", accessorFn: (b) => b.bot ?? "(no bot)", header: "Bot", cell: ({ getValue }) => <span className="font-mono text-xs">{String(getValue())}</span> },
-    { id: "market", accessorFn: (b) => b.market, header: "Market", cell: ({ row }) => <span className="whitespace-nowrap text-xs">{row.original.market} · {row.original.selection}</span>, meta: { csv: (b) => `${b.market} ${b.selection}` } },
+    {
+      id: "bot",
+      accessorFn: (b) => moneyBotLabel(b),
+      header: "Bot",
+      cell: ({ row }) => <BotName label={moneyBotLabel(row.original)} id={row.original.bot} />,
+      // CSV keeps the id beside the name so an export can be joined back to the DB
+      meta: { csv: (b) => (b.bot ? `${moneyBotLabel(b)} (${b.bot})` : moneyBotLabel(b)) },
+    },
+    { id: "market", accessorFn: (b) => b.market, header: "Market", cell: ({ row }) => <span className="whitespace-nowrap text-xs" title={`${row.original.market} · ${row.original.selection}`}>{betLabel(row.original)}</span>, meta: { csv: (b) => `${b.market} ${b.selection}` } },
     { id: "book", accessorFn: (b) => b.bookmaker, header: "Book", cell: ({ getValue }) => <span className="text-xs">{String(getValue())}</span> },
     { id: "odds", accessorFn: (b) => b.actualOdds, header: "Odds", meta: { align: "right" }, cell: ({ row }) => odds(row.original.actualOdds) },
     {
@@ -191,15 +219,16 @@ function betColumns(): ColumnDef<MoneyBet>[] {
     {
       id: "confirmed",
       accessorFn: confirmLabel,
-      header: "Confirmed",
+      header: () => <span title="Has the account check matched this bet to a ticket at the book?">Confirmed</span>,
+      meta: { label: "Confirmed" },
       cell: ({ row }) =>
         row.original.placedReal === true ? (
-          <StatusBadge tone="success" dot={false}>
+          <StatusBadge tone="success" dot={false} title="Matched to a ticket on the book account.">
             Confirmed
           </StatusBadge>
         ) : (
           <StatusBadge tone="warning" dot={false} title="Logged by hand; the account check has not matched it to a ticket yet.">
-            By hand
+            Not confirmed (by hand)
           </StatusBadge>
         ),
     },
@@ -219,6 +248,7 @@ export function BetLogTable({ bets, exportName = "real-bets" }: { bets: MoneyBet
         { column: "confirmed", label: "Confirmed" },
       ]}
       exportName={exportName}
+      exportLabel="Export all real bets"
       emptyText="No real bets logged yet."
       dense
     />
@@ -227,12 +257,28 @@ export function BetLogTable({ bets, exportName = "real-bets" }: { bets: MoneyBet
 
 /** The reconciliation to-do: a short table, no paging, same columns. */
 export function ToDoTable({ bets }: { bets: MoneyBet[] }) {
-  return <DataTable data={bets} columns={betColumns()} searchPlaceholder={null} pageSize={0} exportName="real-bets-unconfirmed" maxHeight="40dvh" dense />;
+  return (
+    <DataTable
+      data={bets}
+      columns={betColumns()}
+      searchPlaceholder={null}
+      pageSize={0}
+      exportName="real-bets-unconfirmed"
+      exportLabel="Export unconfirmed bets"
+      maxHeight="40dvh"
+      dense
+    />
+  );
 }
 
 export function BotMoneyTable({ rows }: { rows: BotMoneyRow[] }) {
   const cols: ColumnDef<BotMoneyRow>[] = [
-    { accessorKey: "bot", header: "Bot", cell: ({ getValue }) => <span className="font-mono text-xs">{String(getValue())}</span> },
+    {
+      accessorKey: "bot",
+      header: "Bot",
+      cell: ({ row }) => <BotName label={row.original.bot} id={row.original.botId} />,
+      meta: { csv: (r) => (r.botId ? `${r.bot} (${r.botId})` : r.bot) },
+    },
     { accessorKey: "bets", header: "Bets", meta: { align: "right" }, cell: ({ getValue }) => fmtInt(getValue() as number) },
     { accessorKey: "open", header: "Open", meta: { align: "right" }, cell: ({ getValue }) => ((getValue() as number) > 0 ? fmtInt(getValue() as number) : "—") },
     { accessorKey: "staked", header: "Staked (settled)", meta: { align: "right" }, cell: ({ getValue }) => fmtEur(getValue() as number) },
@@ -267,7 +313,7 @@ export function BotMoneyTable({ rows }: { rows: BotMoneyRow[] }) {
       enableSorting: false,
     },
   ];
-  return <DataTable data={rows} columns={cols} searchPlaceholder="Search bots…" pageSize={0} exportName="real-bets-by-bot" initialSort={[{ id: "bets", desc: true }]} />;
+  return <DataTable data={rows} columns={cols} searchPlaceholder="Search bots…" pageSize={0} exportName="real-bets-by-bot" exportLabel="Export results by bot" initialSort={[{ id: "bets", desc: true }]} />;
 }
 
 export function DailyTable({ rows }: { rows: DailyRow[] }) {
@@ -284,5 +330,5 @@ export function DailyTable({ rows }: { rows: DailyRow[] }) {
     },
     { accessorKey: "roi", header: "Return", meta: { align: "right" }, cell: ({ row }) => fmtPct(row.original.roi) },
   ];
-  return <DataTable data={rows} columns={cols} searchPlaceholder={null} pageSize={0} exportName="real-bets-daily" maxHeight="50dvh" dense />;
+  return <DataTable data={rows} columns={cols} searchPlaceholder={null} pageSize={0} exportName="real-bets-daily" exportLabel="Export day by day" maxHeight="50dvh" dense />;
 }

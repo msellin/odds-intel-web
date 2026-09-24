@@ -10,6 +10,9 @@
  *   - pending simulated_bets with their kickoff → stale pending bets (settlement stuck);
  *   - today's ops_snapshots row → settlement + enrichment coverage;
  *   - profiles.created_at → signups in 7 days (the one user number kept, IA §2.3).
+ *   - feed_status (feed_id, controls, paused, …) → the Jobs drawer's Run-now for jobs that are a feed's
+ *     scheduler job (JOB_FEED in admin-jobs-model.ts). The drawer's run list comes from
+ *     /api/admin/job-runs on demand.
  * Every read keeps its error so an unreadable source renders "unreadable", never 0 / all clear.
  */
 import { createServerServiceClient } from "@/lib/supabase-server";
@@ -32,6 +35,17 @@ export interface FailDay {
   jobs: number;
 }
 
+/** What the Jobs drawer needs about a feed to offer Run now. */
+export interface JobFeed {
+  feed_id: string;
+  label: string;
+  book: string | null;
+  schedule: string | null;
+  controls: string[] | null;
+  paused: boolean;
+  run_now_pending: boolean;
+}
+
 export interface JobsPageData {
   now: number;
   jobs: R<JobLatestRow[]>;
@@ -42,6 +56,7 @@ export interface JobsPageData {
   pendingTotal: number;
   snapshot: R<OpsSnapshot | null>;
   signups7d: R<number | null>;
+  feeds: R<JobFeed[]>;
 }
 
 /** Same 150-min rule as getStalePendingBets: fix_stale_live_matches uses 130 min, so alarm after it. */
@@ -55,6 +70,7 @@ interface JobsFixture {
   pending?: StaleBet[];
   snapshot?: OpsSnapshot | null;
   signups_7d?: number;
+  feeds?: JobFeed[];
 }
 
 async function read<T>(label: string, q: () => PromiseLike<{ data: unknown; error: { message: string } | null }>, fallback: T): Promise<R<T>> {
@@ -102,6 +118,7 @@ export async function loadJobsPage(): Promise<JobsPageData> {
       pendingTotal: pending.length,
       snapshot: fx.snapshot === undefined ? { v: null, error: "ops_snapshots: not in fixture" } : { v: fx.snapshot, error: null },
       signups7d: fx.signups_7d === undefined ? { v: null, error: "profiles: not in fixture" } : { v: fx.signups_7d, error: null },
+      feeds: fx.feeds ? { v: fx.feeds, error: null } : { v: [], error: "feed_status: not in fixture" },
     };
   }
 
@@ -109,7 +126,7 @@ export async function loadJobsPage(): Promise<JobsPageData> {
   const today = new Date(now).toISOString().slice(0, 10);
   const since14 = new Date(now - FAIL_DAYS * 86_400_000).toISOString();
   const since7 = new Date(now - 7 * 86_400_000).toISOString();
-  const [jobs, failed, pending, snap, signups] = await Promise.all([
+  const [jobs, failed, pending, snap, signups, feeds] = await Promise.all([
     read<JobLatestRow[]>("pipeline_job_latest", () => db.from("pipeline_job_latest").select("*"), []),
     read<{ job_name: string; started_at: string }[]>(
       "pipeline_runs",
@@ -142,6 +159,7 @@ export async function loadJobsPage(): Promise<JobsPageData> {
         return { v: null, error: `profiles: ${e instanceof Error ? e.message : String(e)}` };
       }
     })(),
+    read<JobFeed[]>("feed_status", () => db.from("feed_status").select("feed_id, label, book, schedule, controls, paused, run_now_pending"), []),
   ]);
   const pend: StaleBet[] = pending.v.map((b) => ({ id: b.id, market: b.market, pick_time: b.pick_time, bot_id: b.bot_id, match_kickoff: b.match?.date ?? null }));
   return {
@@ -153,5 +171,6 @@ export async function loadJobsPage(): Promise<JobsPageData> {
     pendingTotal: pend.length,
     snapshot: { v: snap.v[0] ?? null, error: snap.error },
     signups7d: signups,
+    feeds,
   };
 }

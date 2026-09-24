@@ -4,9 +4,15 @@
 // results_check). #139 admin redesign (2026-09-24): a Panel with the 24 h counts as badges and the
 // 7-day list in the shared DataTable (search, check/book facets, CSV). Anchor id="dq" is linked from
 // the Overview's attention inbox and must stay.
+//
+// #139 UX fix round (2026-09-24): the 24 h summary is grouped into the four plain categories of
+// dqGroupLabel() (src/lib/admin-feeds.ts, reused by the Overview): price far from the other books /
+// wrong match on the board / home-away or over-under swapped / results disagree — one badge per
+// category with the books it hit, instead of one badge per raw check × book.
 
 import type { ColumnDef } from "@tanstack/react-table";
 import type { DataQualityFinding } from "@/lib/engine-data";
+import { dqGroupLabel } from "@/lib/admin-feeds-model";
 import { DataTable } from "@/components/oi/data-table";
 import { Panel, PanelHeader } from "@/components/oi/panel";
 import { StatusBadge } from "@/components/oi/status-badge";
@@ -37,6 +43,7 @@ interface Row {
   id: number;
   at: string;
   check: string;
+  group: string;
   book: string;
   rows: number;
   detail: string;
@@ -44,15 +51,20 @@ interface Row {
 
 export function DqFindings({ findings, now, error }: { findings: DataQualityFinding[]; now: number; error: string | null }) {
   const day = findings.filter((f) => now - new Date(f.found_at).getTime() < 86_400_000);
-  const counts = new Map<string, number>();
+  const counts = new Map<string, { n: number; books: Map<string, number> }>();
   for (const f of day) {
-    const k = `${label(f.check_name)} · ${f.bookmaker ?? "?"}`;
-    counts.set(k, (counts.get(k) ?? 0) + 1);
+    const k = dqGroupLabel(f.check_name);
+    const g = counts.get(k) ?? { n: 0, books: new Map<string, number>() };
+    g.n += 1;
+    const b = f.bookmaker ?? "unknown book";
+    g.books.set(b, (g.books.get(b) ?? 0) + 1);
+    counts.set(k, g);
   }
   const data: Row[] = findings.map((f) => ({
     id: f.id,
     at: f.found_at,
     check: f.check_name,
+    group: dqGroupLabel(f.check_name),
     book: f.bookmaker ?? "—",
     rows: f.rows_moved ?? 0,
     detail: short(f),
@@ -63,7 +75,13 @@ export function DqFindings({ findings, now, error }: { findings: DataQualityFind
       header: "When (UTC)",
       cell: ({ row }) => <span className="whitespace-nowrap font-mono text-xs tabular-nums">{row.original.at.slice(5, 16).replace("T", " ")}</span>,
     },
-    { accessorKey: "check", header: "Check", meta: { csv: (r) => label(r.check) }, cell: ({ row }) => <span className="whitespace-nowrap">{label(row.original.check)}</span> },
+    { accessorKey: "group", header: "What was wrong", cell: ({ row }) => <span className="whitespace-nowrap">{row.original.group}</span> },
+    {
+      accessorKey: "check",
+      header: "Check",
+      meta: { csv: (r) => label(r.check) },
+      cell: ({ row }) => <span className="whitespace-nowrap text-xs text-muted-foreground">{label(row.original.check)}</span>,
+    },
     { accessorKey: "book", header: "Book" },
     {
       accessorKey: "rows",
@@ -103,12 +121,20 @@ export function DqFindings({ findings, now, error }: { findings: DataQualityFind
         ) : (
           <>
             {counts.size > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {[...counts.entries()].map(([k, n]) => (
-                  <StatusBadge key={k} tone="warning">
-                    {k}: {n}
-                  </StatusBadge>
-                ))}
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                {[...counts.entries()]
+                  .sort((a, b) => b[1].n - a[1].n)
+                  .map(([k, g]) => (
+                    <div key={k} className="rounded-lg border border-warning/30 bg-warning/5 px-3 py-2">
+                      <div className="flex items-center justify-between gap-2 text-sm">
+                        <span>{k}</span>
+                        <span className="font-mono tabular-nums text-warning">{g.n}</span>
+                      </div>
+                      <div className="mt-0.5 text-xs text-muted-foreground">
+                        {[...g.books.entries()].map(([b, n]) => `${b} ${n}`).join(" · ")} · last 24 h
+                      </div>
+                    </div>
+                  ))}
               </div>
             )}
             <DataTable
@@ -116,6 +142,7 @@ export function DqFindings({ findings, now, error }: { findings: DataQualityFind
               columns={columns}
               searchPlaceholder="Search findings…"
               facets={[
+                { column: "group", label: "What was wrong" },
                 { column: "check", label: "Check", format: label },
                 { column: "book", label: "Book" },
               ]}

@@ -7,8 +7,10 @@
 // money cards scroll to the Real money card — they never toggle anything.
 
 import { useState, type KeyboardEvent, type ReactNode } from "react";
+import Link from "next/link";
 import {
   AlertTriangle,
+  Ban,
   Bot,
   CheckCircle2,
   HelpCircle,
@@ -35,8 +37,8 @@ const VERDICT_WORD: Record<Verdict, string> = {
   noclv: "no CLV",
 };
 
-/** A StatCard that jumps to the Real money card. Nothing is toggled. */
-function Jump({ onJump, children }: { onJump?: () => void; children: ReactNode }) {
+/** A StatCard that jumps to a control further down. Nothing is toggled. */
+function Jump({ onJump, title = "Show the controls for this — nothing is toggled", children }: { onJump?: () => void; title?: string; children: ReactNode }) {
   if (!onJump) return <>{children}</>;
   const onKey = (e: KeyboardEvent) => {
     if (e.key === "Enter" || e.key === " ") {
@@ -50,7 +52,7 @@ function Jump({ onJump, children }: { onJump?: () => void; children: ReactNode }
       tabIndex={0}
       onClick={onJump}
       onKeyDown={onKey}
-      title="Show the controls for this — nothing is toggled"
+      title={title}
       className="cursor-pointer rounded-xl outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring [&>*]:h-full"
     >
       {children}
@@ -71,9 +73,11 @@ export function FleetStrip({
   active,
   hasControl,
   issues,
+  quiet = [],
   capsMissing,
   onOpenBot,
   onJump,
+  onJumpKill,
 }: {
   fleet: BotCapabilitiesRow | undefined;
   caps: BotCapabilitiesRow[];
@@ -81,9 +85,13 @@ export function FleetStrip({
   active: BotView[];
   hasControl: boolean;
   issues: Issue[];
+  /** Bots silent BY DESIGN (locked off, source retired) — information, not counted as issues. */
+  quiet?: { bot: string; text: string }[];
   capsMissing: boolean;
   onOpenBot: (name: string) => void;
   onJump?: () => void;
+  /** Placement card: scroll to the kill switch and focus its Pause / Resume button. */
+  onJumpKill?: () => void;
 }) {
   const [showIssues, setShowIssues] = useState(false);
   const known = !capsMissing && !!fleet;
@@ -123,20 +131,22 @@ export function FleetStrip({
 
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-      <Jump onJump={onJump}>
+      {/* Placement = the kill switch. Colour = what money can do (#139 UX fix round): Paused is OFF
+          (neutral grey, Ban) — not "good"; Running means placement can flow (red); unreadable = amber. */}
+      <Jump onJump={onJumpKill ?? onJump} title="Go to the kill switch (Pause / Resume) — nothing is toggled">
         <StatCard
-          label="Placement"
-          icon={paused ? PauseCircle : PlayCircle}
-          tone={paused == null ? "warning" : paused ? "info" : "warning"}
+          label="Kill switch"
+          icon={paused == null ? PauseCircle : paused ? Ban : PlayCircle}
+          tone={paused == null ? "warning" : paused ? "neutral" : "danger"}
           unknown={paused == null}
           value={
             paused ? (
-              <Word tone="info" icon={icon20(PauseCircle)}>Paused</Word>
+              <Word tone="neutral" icon={icon20(Ban)}>Paused</Word>
             ) : (
-              <Word tone="warning" icon={icon20(PlayCircle)}>Running</Word>
+              <Word tone="danger" icon={icon20(PlayCircle)}>Running</Word>
             )
           }
-          foot={paused == null ? "state unreadable" : placerWord}
+          foot={paused == null ? "real-money placement · state unreadable · tap to go to the switch" : `real-money placement · ${placerWord} · tap for Pause / Resume`}
         />
       </Jump>
       <Jump onJump={onJump}>
@@ -184,16 +194,19 @@ export function FleetStrip({
         />
       </div>
       <StatCard
-        label="Picks · 7d"
+        label="Picks · 7 days"
         icon={Zap}
         tone="model"
         value={count(picks7)}
         spark={weekTotals ? <Sparkline values={weekTotals} tone="model" kind="bars" /> : undefined}
-        foot={`across ${firing} bot${firing === 1 ? "" : "s"}${weekTotals ? " · bars = 12 weeks" : ""}`}
+        // Basis: ACTIVE bots only (retired and the control excluded) — the same set as the Overview's
+        // picks card. The window differs: this is a rolling 7 days (bot_scoreboard.picks_7d), the
+        // Overview counts the calendar week so far (Mon–now), hence the explicit label.
+        foot={`last 7 days (rolling, not Mon–now) · active bots · ${firing} bot${firing === 1 ? "" : "s"} picked${weekTotals ? " · bars = 12 weeks" : ""}`}
       />
       <div className="order-6 col-span-2 md:col-span-1 xl:order-none [&>*]:h-full">
         <StatCard
-          label="Needs a look"
+          label="Bot issues"
           icon={issues.length === 0 ? CheckCircle2 : AlertTriangle}
           tone={issues.length === 0 ? "success" : danger ? "danger" : "warning"}
           value={
@@ -204,7 +217,8 @@ export function FleetStrip({
             )
           }
           foot={
-            issues.length === 0 ? undefined : (
+            <>
+              {issues.length > 0 && (
               <>
                 <IssueText issue={issues[0]} onOpenBot={onOpenBot} />
                 {issues.length > 1 && (
@@ -225,7 +239,22 @@ export function FleetStrip({
                   </ul>
                 )}
               </>
-            )
+              )}
+              {quiet.map((q) => (
+                <button
+                  key={q.bot}
+                  type="button"
+                  onClick={() => onOpenBot(q.bot)}
+                  className="block text-left text-muted-foreground underline-offset-2 hover:underline"
+                  title="Information, not a to-do: its real money is locked off and the bots it copies are retired"
+                >
+                  ⓘ {q.text}
+                </button>
+              ))}
+              <Link href="/admin" className="mt-0.5 block text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
+                Bots only · see all on Overview →
+              </Link>
+            </>
           }
         />
       </div>

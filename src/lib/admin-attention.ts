@@ -20,6 +20,7 @@
  */
 import type { ControlState } from "./bot-controls/types";
 import { HEARTBEAT_STALE_MIN } from "./bot-controls/types";
+import { dqGroupLabel } from "./admin-feeds-model";
 
 export type Severity = "danger" | "warn" | "info";
 
@@ -66,6 +67,8 @@ export interface AttentionInputs {
 const MIN = 60_000;
 const H24 = 24 * 60 * MIN;
 const SEV_ORDER: Record<Severity, number> = { danger: 0, warn: 1, info: 2 };
+/** Within a severity: money first, then the customer channel, feeds, jobs, bots, data (UX test 2026-09-24). */
+const AREA_ORDER: Record<AttentionItem["area"], number> = { money: 0, picks: 1, feeds: 2, jobs: 3, bots: 4, data: 5 };
 /** feed_status is rewritten every 5 min by the engine; older than this = the status job is stuck. */
 const FEED_STATUS_STALE_MIN = 15;
 /** A job still 'running' after this long has almost certainly died without recording it. */
@@ -79,19 +82,23 @@ function humanJob(name: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-// Data-quality check codes → a plain group (the owner is not a data person). Unknown codes fall
-// into "other checks". Codes: workers/jobs/board_guard.py, board_audit.py, results_check.py.
-const DQ_GROUP: [RegExp, string][] = [
-  [/wrong_fixture|mirrored|swapped|single_market/, "odds that looked wrong and were set aside"],
-  [/result/, "results that disagreed between sources"],
-];
+// Data-quality groups: the SAME plain labels as the /admin/feeds summary (admin-feeds-model.ts).
 function dqSummary(rows: { check_name: string; n: number }[]): string {
   const g = new Map<string, number>();
   for (const r of rows) {
-    const label = DQ_GROUP.find(([re]) => re.test(r.check_name))?.[1] ?? "other checks";
+    const label = dqGroupLabel(r.check_name).toLowerCase();
     g.set(label, (g.get(label) ?? 0) + r.n);
   }
   return [...g.entries()].sort((a, b) => b[1] - a[1]).map(([l, n]) => `${n} ${l}`).join(" · ");
+}
+
+/** Which /admin/feeds block a feed lives in (ids: book-<key>, feeds-board.tsx). */
+function feedAnchor(feedId: string): string {
+  const p = feedId.split("_")[0];
+  if (["coolbet", "epicbet", "unibet", "tonybet", "betfair"].includes(p)) return `/admin/feeds#book-${p}`;
+  if (p === "af") return "/admin/feeds#book-api-football";
+  if (feedId === "direct_close") return "/admin/feeds#book-closing";
+  return "/admin/feeds#book-infra";
 }
 
 function unreadable(id: string, area: AttentionItem["area"], what: string, error: string, href: string): AttentionItem {
@@ -144,7 +151,7 @@ function feedItems(i: AttentionInputs): AttentionItem[] {
       title: `${fd.label}: ${fd.status === "fail" ? "stopped" : "needs a look"}`,
       detail: fd.status_reason ?? undefined,
       since: fd.status === "fail" ? fd.last_data_at : undefined,
-      href: "/admin/feeds",
+      href: feedAnchor(fd.feed_id),
     });
   }
   if (f?.daemons_paused && f.daemons_paused_at && i.now - new Date(f.daemons_paused_at).getTime() > H24) {
@@ -152,7 +159,7 @@ function feedItems(i: AttentionInputs): AttentionItem[] {
   }
   for (const fd of i.feeds) {
     if (fd.paused && fd.paused_at && i.now - new Date(fd.paused_at).getTime() > H24) {
-      out.push({ id: `feed-paused-${fd.feed_id}`, severity: "warn", area: "feeds", title: `${fd.label} paused for over a day`, since: fd.paused_at, href: "/admin/feeds" });
+      out.push({ id: `feed-paused-${fd.feed_id}`, severity: "warn", area: "feeds", title: `${fd.label} paused for over a day`, since: fd.paused_at, href: feedAnchor(fd.feed_id) });
     }
   }
   return out;
@@ -174,15 +181,15 @@ function jobItems(i: AttentionInputs): AttentionItem[] {
         detail: `${err ? `Error: ${err} · ` : ""}${j.job_name}`,
         since: j.failing_since ?? j.started_at,
         sinceFloor: j.last_ok_at == null,
-        href: "/admin/ops",
+        href: `/admin/ops#job-${j.job_name}`,
       });
     } else if (j.status === "running" && i.now - new Date(j.started_at).getTime() > JOB_STUCK_H * 60 * MIN) {
-      out.push({ id: `job-stuck-${j.job_name}`, severity: "warn", area: "jobs", title: `${humanJob(j.job_name)} job has been "running" for over ${JOB_STUCK_H} h — probably died`, detail: j.job_name, since: j.started_at, href: "/admin/ops" });
+      out.push({ id: `job-stuck-${j.job_name}`, severity: "warn", area: "jobs", title: `${humanJob(j.job_name)} job has been "running" for over ${JOB_STUCK_H} h — probably died`, detail: j.job_name, since: j.started_at, href: `/admin/ops#job-${j.job_name}` });
     }
   }
   if (i.staleError) out.push(unreadable("stale-unreadable", "jobs", "Pending-bet check", i.staleError, "/admin/ops"));
   else if (i.stalePending > 0) {
-    out.push({ id: "stale-pending", severity: "warn", area: "jobs", title: `${i.stalePending} bet${i.stalePending === 1 ? "" : "s"} still unsettled 2½ h after kick-off`, detail: "Settlement looks stuck", href: "/admin/ops" });
+    out.push({ id: "stale-pending", severity: "warn", area: "jobs", title: `${i.stalePending} bet${i.stalePending === 1 ? "" : "s"} still unsettled 2½ h after kick-off`, detail: "Settlement looks stuck", href: "/admin/ops#settlement" });
   }
   return out;
 }
@@ -202,5 +209,5 @@ export function buildAttention(i: AttentionInputs): AttentionItem[] {
   if (dq > 0) {
     out.push({ id: "dq", severity: "warn", area: "data", title: `${dq} data-quality finding${dq === 1 ? "" : "s"} in the last 24 h`, detail: dqSummary(i.dqLast24h), href: "/admin/feeds#dq" });
   }
-  return out.sort((a, b) => SEV_ORDER[a.severity] - SEV_ORDER[b.severity]);
+  return out.sort((a, b) => SEV_ORDER[a.severity] - SEV_ORDER[b.severity] || AREA_ORDER[a.area] - AREA_ORDER[b.area]);
 }

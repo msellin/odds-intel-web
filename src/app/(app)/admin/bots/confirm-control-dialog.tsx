@@ -31,6 +31,8 @@ export interface ConfirmSpec {
   /** Red confirm button (money / destructive). */
   danger?: boolean;
   confirmLabel: string;
+  /** Per-bot dialogs: the bot's display name (shown large) and its id (the phrase to type). */
+  subject?: { name: string; id: string };
 }
 
 export function ConfirmControlDialog({
@@ -55,7 +57,7 @@ export function ConfirmControlDialog({
     <Dialog open={open} onOpenChange={(o) => !o && !busy && onCancel()}>
       {spec && (
         // key: a fresh form for every request, so a half-typed phrase never carries over.
-        <Body key={`${spec.title}-${spec.phrase ?? ""}`} spec={spec} busy={busy} error={error} onCancel={onCancel} onConfirm={onConfirm} readOnlyReason={readOnlyReason} />
+        <Body key={`${spec.title}-${spec.subject?.id ?? ""}-${spec.phrase ?? ""}`} spec={spec} busy={busy} error={error} onCancel={onCancel} onConfirm={onConfirm} readOnlyReason={readOnlyReason} />
       )}
     </Dialog>
   );
@@ -87,6 +89,12 @@ function Body({
     <DialogContent className={`max-h-[calc(100dvh-2rem)] overflow-y-auto ${b ? "sm:max-w-lg" : "sm:max-w-md"}`} showCloseButton={!busy}>
       <DialogHeader>
         <DialogTitle>{spec.title}</DialogTitle>
+        {spec.subject && (
+          <div className="rounded-md border border-border bg-muted/30 px-3 py-2">
+            <div className="text-base font-semibold text-foreground">{spec.subject.name}</div>
+            <div className="font-mono text-xs text-muted-foreground">bot id: {spec.subject.id}</div>
+          </div>
+        )}
         <DialogDescription render={<div />} className="space-y-2 text-sm text-muted-foreground">
           {spec.consequence}
         </DialogDescription>
@@ -126,7 +134,15 @@ function Body({
         {b && spec.phrase && (
           <label className="block space-y-1 text-sm">
             <span className="font-medium">
-              Type <code className="rounded bg-muted px-1 font-mono text-xs">{spec.phrase}</code> to confirm
+              {spec.subject && spec.phrase === spec.subject.id ? (
+                <>
+                  Type the bot&apos;s id to confirm: <code className="rounded bg-muted px-1 font-mono text-xs">{spec.phrase}</code>
+                </>
+              ) : (
+                <>
+                  Type <code className="rounded bg-muted px-1 font-mono text-xs">{spec.phrase}</code> to confirm
+                </>
+              )}
             </span>
             <Input
               value={typed}
@@ -139,9 +155,9 @@ function Body({
             />
           </label>
         )}
-        {readOnlyReason && <p className="rounded-md bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-300">{readOnlyReason}</p>}
+        {readOnlyReason && <p className="rounded-md bg-warning/10 px-2.5 py-1.5 text-xs text-warning">{readOnlyReason}</p>}
         {error && (
-          <p role="alert" className="rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-sm text-red-300">
+          <p role="alert" className="rounded-md border border-danger/40 bg-danger/10 px-2.5 py-1.5 text-sm text-danger">
             {error}
           </p>
         )}

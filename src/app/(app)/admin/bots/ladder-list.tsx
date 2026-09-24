@@ -3,14 +3,21 @@
 // The numbered real-money layer ladder + CAN STAKE line (#139 phase A, spec §3.4). Pure display;
 // used by the Real money card, the confirmation dialogs and the bot sheet.
 
-import { AlertTriangle, Ban, CheckCircle2, CircleDot, HelpCircle, Info, ShieldAlert } from "lucide-react";
+import { AlertTriangle, Ban, CircleDot, HelpCircle, Info, LockOpen, ShieldAlert } from "lucide-react";
 import type { Layer, Ladder } from "@/lib/bot-controls/ladder";
 
+// Colour = what money can do at this layer (#139 UX fix round, 2026-09-24). A BLOCKED layer used
+// to be green, and green reads as "go" — the opposite of what it means. Now:
+//   open    → red, unlocked padlock: money can flow through this layer
+//   blocked → neutral grey, Ban: this layer stops money. Off is not good or bad, it is off.
+//   unknown → amber, ?: unreadable — never treated as off
+//   info    → muted dot: not a gate
+// The sr-only word keeps the state readable without colour.
 const STATE_UI: Record<Layer["state"], { Icon: typeof Info; cls: string; word: string }> = {
-  open: { Icon: CheckCircle2, cls: "text-danger", word: "open" },
-  blocked: { Icon: Ban, cls: "text-success", word: "blocks" },
+  open: { Icon: LockOpen, cls: "text-danger", word: "open — money can pass" },
+  blocked: { Icon: Ban, cls: "text-muted-foreground", word: "blocks" },
   unknown: { Icon: HelpCircle, cls: "text-warning", word: "unknown" },
-  info: { Icon: CircleDot, cls: "text-muted-foreground", word: "information" },
+  info: { Icon: CircleDot, cls: "text-muted-foreground/70", word: "information" },
 };
 
 export function LadderList({ ladder, compact = false }: { ladder: Ladder; compact?: boolean }) {
@@ -58,7 +65,7 @@ export function CanStakeLine({ ladder }: { ladder: Ladder }) {
   }
   return (
     <div className="flex items-center gap-2 rounded-md bg-muted/40 px-2.5 py-1.5 text-sm font-semibold text-foreground">
-      <Ban size={16} className="text-success" aria-hidden="true" /> CAN STAKE: NO — blocked at layer{ladder.blockedAt.length === 1 ? "" : "s"}{" "}
+      <Ban size={16} className="text-muted-foreground" aria-hidden="true" /> CAN STAKE: NO — blocked at layer{ladder.blockedAt.length === 1 ? "" : "s"}{" "}
       {ladder.blockedAt.join(", ")}
     </div>
   );

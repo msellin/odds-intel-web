@@ -6,7 +6,7 @@
 
 import type { FleetState } from "@/lib/bot-controls/types";
 
-export type StatusTone = "ok" | "warn" | "danger" | "unknown" | "idle";
+export type StatusTone = "ok" | "warn" | "danger" | "unknown" | "idle" | "off";
 export interface StatusDot {
   label: string;
   word: string;
@@ -19,12 +19,15 @@ export const DOT_CLS: Record<StatusTone, string> = {
   danger: "bg-red-500",
   unknown: "bg-amber-300/60 ring-1 ring-amber-300",
   idle: "bg-sky-400",
+  // "blocked is not green" (UX test 2026-09-24): money OFF / placement PAUSED is neither good nor bad
+  off: "bg-muted-foreground/60",
 };
 
 export const WORD_CLS: Record<StatusTone, string> = {
   ok: "",
   warn: "",
   idle: "",
+  off: "",
   danger: "font-semibold text-red-400",
   unknown: "text-amber-300",
 };
@@ -35,8 +38,8 @@ export function fleetStatus(f: FleetState | null): StatusDot[] {
   const pub = f?.publishing_paused ?? null;
   const foot = f?.daemons_paused ?? null;
   return [
-    { label: "Placement", word: paused == null ? "Unknown" : paused ? "Paused" : "Running", tone: paused == null ? "unknown" : paused ? "idle" : "warn" },
-    { label: "Real money", word: armed == null ? "Unknown" : armed ? "ARMED" : "Off", tone: armed == null ? "unknown" : armed ? "danger" : "ok" },
+    { label: "Placement", word: paused == null ? "Unknown" : paused ? "Paused" : "Running", tone: paused == null ? "unknown" : paused ? "off" : "danger" },
+    { label: "Real money", word: armed == null ? "Unknown" : armed ? "ARMED" : "Off", tone: armed == null ? "unknown" : armed ? "danger" : "off" },
     { label: "Picks channel", word: pub == null ? "Unknown" : pub ? "Paused" : "Sending", tone: pub == null ? "unknown" : pub ? "warn" : "ok" },
     { label: "Coolbet sweeping", word: foot == null ? "Unknown" : foot ? "Paused" : "Collecting", tone: foot == null ? "unknown" : foot ? "idle" : "ok" },
   ];

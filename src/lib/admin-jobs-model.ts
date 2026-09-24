@@ -152,3 +152,50 @@ export const STATE_WORD: Record<JobState, string> = {
   quiet: "Quiet",
   ok: "OK",
 };
+
+// ── #139 UX fix round (2026-09-24) ──────────────────────────────────────────────────────────────
+
+/**
+ * Jobs that have a Run-now path: the scheduler job of every feed whose registry entry grants
+ * "run_now" (engine workers/registry/feed_registry.py → feed_status.controls). The Jobs drawer
+ * posts to the same audited /api/admin/feed-control as /admin/feeds. Every other job has no
+ * run-now path from the web. Smoke ADMIN-JOBS-DRAWER pins this map against the registry.
+ */
+export const JOB_FEED: Record<string, string> = {
+  coolbet_odds_snapshot: "coolbet_prematch",
+  epicbet_odds_snapshot: "epicbet_prematch",
+  unibet_site_odds: "unibet_prematch",
+  tonybet_odds_snapshot: "tonybet_prematch",
+  tonybet_live: "tonybet_live",
+  tonybet_results: "tonybet_results",
+  odds_refresh: "af_odds",
+  closing_snap: "af_closing",
+  betfair_exchange_snapshot: "betfair_exchange",
+};
+
+/** Anchor for one job row: id="job-<job_name>". The 48 shadow_HHMM slots share job-shadow_HHMM. */
+export function jobAnchor(jobName: string): string {
+  return `job-${/^shadow_\d{4}$/.test(jobName) ? "shadow_HHMM" : jobName}`;
+}
+
+/** The failing job that has been failing the longest (earliest failingSince). */
+export function longestFailing(views: JobView[]): JobView | null {
+  const f = views.filter((v) => v.state === "failing" && v.failingSince);
+  return f.sort((a, b) => (a.failingSince as string).localeCompare(b.failingSince as string))[0] ?? null;
+}
+
+/** The failing job with the most failed runs in a row. */
+export function mostRepeats(views: JobView[]): JobView | null {
+  const f = views.filter((v) => v.state === "failing");
+  return f.sort((a, b) => b.streak - a.streak || a.label.localeCompare(b.label))[0] ?? null;
+}
+
+/** One pipeline_runs row, as the Jobs drawer shows it. */
+export interface JobRun {
+  job_name: string;
+  status: string;
+  started_at: string;
+  completed_at: string | null;
+  records_count: number | null;
+  error_message: string | null;
+}

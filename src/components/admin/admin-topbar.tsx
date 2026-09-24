@@ -10,7 +10,7 @@ import Link from "next/link";
 import { Bell, ChevronRight, Menu, Search } from "lucide-react";
 import type { AttentionItem } from "@/lib/admin-attention";
 import type { AdminNavItem } from "./admin-nav";
-import { CommandPalette, type PaletteBot } from "./command-palette";
+import { CommandPalette, type PaletteBot, type PaletteFleet } from "./command-palette";
 import { DOT_CLS, type StatusDot } from "./admin-status";
 
 const SEV_DOT: Record<AttentionItem["severity"], string> = { danger: "bg-danger", warn: "bg-warning", info: "bg-info" };
@@ -32,8 +32,17 @@ export function AdminTopbar({
   onMenu: () => void;
   drawerOpen: boolean;
 }) {
+  const w = (label: string) => status.find((d) => d.label === label)?.word ?? "Unknown";
+  const tri = (label: string, yes: string, no: string) => (w(label) === yes ? true : w(label) === no ? false : null);
+  const fleet: PaletteFleet = {
+    placementPaused: tri("Placement", "Paused", "Running"),
+    armed: tri("Real money", "ARMED", "Off"),
+    picksPaused: tri("Picks channel", "Paused", "Sending"),
+    sweepingPaused: tri("Coolbet sweeping", "Paused", "Collecting"),
+  };
   const [palette, setPalette] = useState(false);
   const [bell, setBell] = useState(false);
+  const [legend, setLegend] = useState(false);
   const bellRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -41,7 +50,10 @@ export function AdminTopbar({
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPalette((p) => !p);
-      } else if (e.key === "Escape") setBell(false);
+      } else if (e.key === "Escape") {
+        setBell(false);
+        setLegend(false);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -102,15 +114,34 @@ export function AdminTopbar({
           </ol>
         </nav>
 
-        {/* status dots only where the sidebar (which lists them in words) is hidden */}
-        <ul className="flex items-center gap-1.5 lg:hidden" aria-label="Status">
-          {status.map((d) => (
-            <li key={d.label} title={`${d.label}: ${d.word}`}>
-              <span className={`block h-2 w-2 rounded-full ${DOT_CLS[d.tone]}`} aria-hidden="true" />
-              <span className="sr-only">{`${d.label}: ${d.word}`}</span>
-            </li>
-          ))}
-        </ul>
+        {/* status dots only where the sidebar (which lists them in words) is hidden; tap = legend
+            (UX test 2026-09-24: hover titles do not exist on a phone) */}
+        <div className="relative lg:hidden">
+          <button
+            type="button"
+            onClick={() => setLegend((v) => !v)}
+            aria-expanded={legend}
+            aria-label={`Status: ${status.map((d) => `${d.label} ${d.word}`).join(", ")}`}
+            className="flex h-8 items-center gap-1.5 rounded-md px-1.5 hover:bg-accent"
+          >
+            {status.map((d) => (
+              <span key={d.label} className={`block h-2 w-2 rounded-full ${DOT_CLS[d.tone]}`} aria-hidden="true" />
+            ))}
+          </button>
+          {legend && (
+            <div className="absolute right-0 top-10 z-40 w-56 rounded-xl border border-border bg-popover p-2 shadow-2xl" role="dialog" aria-label="Status">
+              <ul className="space-y-1 text-sm">
+                {status.map((d) => (
+                  <li key={d.label} className="flex items-center gap-2">
+                    <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${DOT_CLS[d.tone]}`} aria-hidden="true" />
+                    <span className="text-muted-foreground">{d.label}</span>
+                    <span className="ml-auto">{d.word}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
 
         <button
           type="button"
@@ -154,24 +185,25 @@ export function AdminTopbar({
                 <p className="px-3 py-4 text-sm text-muted-foreground">Nothing needs an action.</p>
               ) : (
                 <ul className="max-h-80 divide-y divide-border/60 overflow-y-auto">
-                  {attention.slice(0, 8).map((a) => (
+                  {attention.slice(0, 12).map((a) => (
                     <li key={a.id}>
                       <Link href={a.href} onClick={() => setBell(false)} className="flex items-start gap-2 px-3 py-2 text-sm hover:bg-accent/50">
                         <span className={`mt-1.5 size-2 shrink-0 rounded-full ${SEV_DOT[a.severity]}`} aria-hidden="true" />
-                        <span className="min-w-0">{a.title}</span>
+                        <span className="min-w-0 flex-1">{a.title}</span>
+                        {a.severity === "danger" && <span className="shrink-0 rounded bg-danger/15 px-1 text-[10px] font-medium uppercase tracking-wider text-danger">Urgent</span>}
                       </Link>
                     </li>
                   ))}
                 </ul>
               )}
               <Link href="/admin#attention" onClick={() => setBell(false)} className="block border-t border-border px-3 py-2 text-center text-xs text-primary hover:bg-accent/50">
-                Open the full list on Overview
+                {count > 12 ? `${count - 12} more — open the full list on Overview` : "Open the full list on Overview"}
               </Link>
             </div>
           )}
         </div>
       </header>
-      <CommandPalette open={palette} onClose={() => setPalette(false)} bots={bots} />
+      <CommandPalette open={palette} onClose={() => setPalette(false)} bots={bots} fleet={fleet} />
     </>
   );
 }

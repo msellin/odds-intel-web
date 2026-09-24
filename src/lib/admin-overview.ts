@@ -43,6 +43,15 @@ export interface WeekRealBets {
   pnl: number;
 }
 
+/** Real bets in the last 30 days — the SAME window and rules as the Real bets page (paper rows
+ *  excluded, P/L on settled bets only), so the two pages show one number (UX test 2026-09-24). */
+export interface RealWindow {
+  days: number;
+  bets: number;
+  staked: number;
+  pnl: number;
+}
+
 /** One row of view pipeline_job_latest (engine migration 417): latest run per job, 35 days. */
 export interface JobLatest {
   job_name: string;
@@ -79,11 +88,21 @@ export interface OverviewData {
   canStake: "yes" | "no" | "unknown";
   /** Cumulative flat 1-unit P/L per family (+ one 'retired' series). */
   pnlByFamily: Record<string, number | string | null>[];
-  realBets: { rows: WeekRealBets[]; error: string | null };
+  realBets: { rows: WeekRealBets[]; error: string | null; last30: RealWindow | null };
+  /** Plain-language reasons real money cannot move now (ladder layers that block), [] when it can. */
+  moneyBlockers: string[];
   jobs: { failed: number; total: number; error: string | null };
   /** Active bots for the ⌘K palette (name + display name). */
   botNames: { name: string; label: string }[];
 }
+
+const BLOCKER_WORDS: Record<string, string> = {
+  path: "no bot can be placed",
+  eligible: "no bot switched on",
+  pause: "placement paused",
+  armed: "not armed",
+  executors: "Mac placer not running",
+};
 
 /** Families judged on margin-corrected CLV (model_sim is Pinnacle-judged; in-play has no close). */
 const MC_FAMILIES = ["forward_test", "sharp_trigger", "sharp_generator", "model_shadow"];
@@ -98,6 +117,7 @@ interface OverviewFixture {
   dq_24h?: { check_name: string; n: number }[];
   unconfirmed_manual?: number;
   real_bets_weekly?: WeekRealBets[];
+  real_bets_30d?: RealWindow;
 }
 
 async function readOverviewFixture(): Promise<OverviewFixture> {
@@ -108,10 +128,11 @@ async function readOverviewFixture(): Promise<OverviewFixture> {
 
 type R<T> = { v: T; error: string | null };
 
-async function realBetsWeekly(now: number): Promise<{ rows: WeekRealBets[]; error: string | null }> {
+async function realBetsWeekly(now: number): Promise<{ rows: WeekRealBets[]; error: string | null; last30: RealWindow | null }> {
   try {
     const db = createServerServiceClient();
-    const since = new Date(weekStart(now) - (WEEKS - 1) * 7 * 86_400_000).toISOString();
+    // from whichever starts earlier: 12 weeks of buckets, or the 30-day window
+    const since = new Date(Math.min(weekStart(now) - (WEEKS - 1) * 7 * 86_400_000, now - 30 * 86_400_000)).toISOString();
     const { data, error } = await db
       .from("real_bets")
       .select("placed_at, stake, pnl, result, placed_real")
@@ -119,9 +140,16 @@ async function realBetsWeekly(now: number): Promise<{ rows: WeekRealBets[]; erro
       // paper rows (placed_real = false) are not money — same rule as engine-data's real-bets reads
       .or("placed_real.is.null,placed_real.eq.true")
       .limit(5000);
-    if (error) return { rows: [], error: `real_bets: ${error.message}` };
+    if (error) return { rows: [], error: `real_bets: ${error.message}`, last30: null };
     const by = new Map<string, WeekRealBets>();
+    const last30: RealWindow = { days: 30, bets: 0, staked: 0, pnl: 0 };
+    const cut30 = now - 30 * 86_400_000;
     for (const r of (data ?? []) as { placed_at: string; stake: number | null; pnl: number | null; result: string | null }[]) {
+      if (new Date(r.placed_at).getTime() >= cut30) {
+        last30.bets += 1;
+        last30.staked += Number(r.stake ?? 0);
+        if (r.result && r.result !== "pending") last30.pnl += Number(r.pnl ?? 0);
+      }
       const w = new Date(weekStart(new Date(r.placed_at).getTime())).toISOString().slice(0, 10);
       const cur = by.get(w) ?? { week: w, bets: 0, staked: 0, pnl: 0 };
       cur.bets += 1;
@@ -129,9 +157,9 @@ async function realBetsWeekly(now: number): Promise<{ rows: WeekRealBets[]; erro
       if (r.result && r.result !== "pending") cur.pnl += Number(r.pnl ?? 0);
       by.set(w, cur);
     }
-    return { rows: [...by.values()], error: null };
+    return { rows: [...by.values()], error: null, last30 };
   } catch (e) {
-    return { rows: [], error: `real_bets: ${e instanceof Error ? e.message : String(e)}` };
+    return { rows: [], error: `real_bets: ${e instanceof Error ? e.message : String(e)}`, last30: null };
   }
 }
 
@@ -195,7 +223,9 @@ export async function loadOverview(viewerId: string | null): Promise<OverviewDat
           manual: { v: fx.unconfirmed_manual ?? 0, error: null },
         })
       : readLive(now),
-    fx ? Promise.resolve({ rows: fx.real_bets_weekly ?? [], error: fx.real_bets_weekly ? null : "real_bets: not in fixture" }) : realBetsWeekly(now),
+    fx
+      ? Promise.resolve({ rows: fx.real_bets_weekly ?? [], error: fx.real_bets_weekly ? null : "real_bets: not in fixture", last30: fx.real_bets_30d ?? null })
+      : realBetsWeekly(now),
   ]);
   const { feeds: feedsR, jobs: jobsR, stale: staleR, dq: dqR, manual: manualR } = live;
 
@@ -215,11 +245,13 @@ export async function loadOverview(viewerId: string | null): Promise<OverviewDat
   const fleetCaps = board.capabilities.rows[0]
     ? { ...board.capabilities.rows[0], fleet_placement_paused: control.fleet.row?.placement_paused ?? null, fleet_real_money_armed: control.fleet.row?.real_money_armed ?? null }
     : undefined;
+  // same rule as /admin/bots: a locked-off bot whose source is gone is info, not a to-do
+  const lockedBots = new Set(control.placers.rows.filter((p) => !!p.locked_reason).map((p) => p.bot_name));
   const issues = needsALook(views, fleetCaps, [
     { view: "bot_scoreboard", error: board.scoreboard.error },
     { view: "bot_config", error: board.config.error },
     { view: "bot_capabilities", error: board.capabilities.error },
-  ], now);
+  ], now, { lockedBots });
   const showBy = new Map(control.bots.rows.map((b) => [b.name, b.show_on_picks]));
   for (const v of views) {
     if (picksTelegramMismatch(v, control.bots.error ? null : showBy.get(v.name) ?? null)) {
@@ -321,7 +353,8 @@ export async function loadOverview(viewerId: string | null): Promise<OverviewDat
     clvFamilies,
     canStake: ladder.canStake,
     pnlByFamily,
-    realBets: { rows: realRows, error: realBets.error },
+    realBets: { rows: realRows, error: realBets.error, last30: realBets.last30 },
+    moneyBlockers: ladder.layers.filter((l) => l.state === "blocked").map((l) => BLOCKER_WORDS[l.key] ?? l.title),
     jobs: { failed: jobsR.v.filter((j) => j.status === "failed").length, total: jobsR.v.length, error: jobsR.error },
     botNames: views.map((v) => ({ name: v.name, label: v.displayName })),
   };

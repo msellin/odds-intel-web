@@ -32,9 +32,12 @@ import { loadSessionState, loadShadowBotsPage, type SessionState, type ShadowBot
 import { DAILY_MAX_BETS, DAILY_MAX_STAKE_EUR } from "@/lib/admin-money";
 import { buildPickRows, queueCounts } from "@/components/shadow-bots/picks-table";
 import { PicksQueueTable } from "@/components/shadow-bots/picks-queue-table";
+import { QUOTE_MAX_AGE_MIN } from "@/lib/shadow-bots/verdict";
 import { HowItWorks } from "@/components/shadow-bots/how-it-works";
 import { PageHeader, Panel } from "@/components/oi/panel";
 import { StatCard } from "@/components/oi/stat-card";
+import { StatusBadge } from "@/components/oi/status-badge";
+import { prettyDisplayName } from "@/app/(app)/admin/bots/bot-board-format";
 import { fmtEur } from "@/components/oi/format";
 
 export const metadata: Metadata = { title: "Pick queue · Admin · OddsIntel", robots: { index: false } };
@@ -73,13 +76,18 @@ export default async function PickQueuePage() {
   const placedToday = t.confirmedCount + t.unconfirmedCount;
   const overCap = t.confirmedCount >= DAILY_MAX_BETS || t.confirmedStake >= DAILY_MAX_STAKE_EUR;
   const loaded = new Date(data.loadedAt).toISOString().slice(11, 16);
+  // The fleet's automatic-placing state, stated ONCE here (UX fix round, 2026-09-24) — it used to
+  // be an "auto off" chip on every row. Off is neutral, not red and not green: money being off is
+  // "off", not "bad" or "good". It never affects the Place button, which only RECORDS a hand bet.
+  const botLabel = new Map(data.bots.map((b) => [b.name, prettyDisplayName(b.display_name, b.name)]));
+  const toggledOff = data.placerBots.filter((p) => !p.ui_place_enabled).map((p) => botLabel.get(p.bot_name) ?? prettyDisplayName(null, p.bot_name));
 
   return (
     <div className="space-y-4 lg:space-y-6">
       <PageHeader
         eyebrow="Bots & money"
         title="Pick queue"
-        meta={`What to place by hand today: every pending pick from the ${data.bots.length} active bots, best first. Prices checked ${loaded} UTC (refreshed every minute).`}
+        meta={`What to place by hand today: every pending pick from the ${data.bots.length} active bots, placeable first, one row per bet. Prices checked ${loaded} UTC (refreshed every minute).`}
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -87,15 +95,16 @@ export default async function PickQueuePage() {
           label="Picks waiting"
           icon={ListChecks}
           tone="info"
-          value={c.total}
-          foot={`${c.today} kick off today (UTC)${c.inplay > 0 ? ` · ${c.inplay} in-play (can't be placed)` : ""}`}
+          // pre-match bets only — the table's default view; in-play rows are hidden behind a chip
+          value={c.total - c.inplay}
+          foot={`${c.today - c.inplayToday} kick off today (UTC) · ${c.botPicks - c.inplayBotPicks} bot picks, same bet grouped${c.inplay > 0 ? ` · +${c.inplay} in-play (hidden, can't be placed)` : ""}`}
         />
         <StatCard
           label="Ready to place"
           icon={CheckCircle2}
           tone={c.place > 0 ? "success" : "neutral"}
           value={c.place}
-          foot={c.thin > 0 ? `+ ${c.thin} thin: above break-even, below the bot's own bar` : "Price clears the bot's own bar and is fresh"}
+          foot={c.thin > 0 ? `+ ${c.thin} thin: above break-even, below the bot's own bar` : `Price clears the bot's own bar and is under ${QUOTE_MAX_AGE_MIN} min old`}
         />
         <StatCard
           label="Placed today"
@@ -120,21 +129,38 @@ export default async function PickQueuePage() {
         />
       </div>
 
-      <p className="text-xs text-muted-foreground">
-        Can real money be staked right now, and by which bots?{" "}
-        <Link href="/admin/bots#real-money" className="text-primary hover:underline">
-          Real-money switches
-        </Link>{" "}
-        · Which bots are any good?{" "}
-        <Link href="/admin/bots" className="text-primary hover:underline">
-          Bot scores
-        </Link>{" "}
-        · What did we bet?{" "}
-        <Link href="/admin/real-bets" className="text-primary hover:underline">
-          Real bets
-        </Link>
-        {state.placement_paused ? " · The automatic placer is paused — you can still place by hand and record it here." : ""}
-      </p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5">
+          Automatic placing:
+          {state.placement_paused ? (
+            <StatusBadge tone="neutral" title={state.placement_paused_reason ?? undefined}>
+              Off (paused)
+            </StatusBadge>
+          ) : (
+            <StatusBadge tone="success">On</StatusBadge>
+          )}
+        </span>
+        <span>
+          {state.placement_paused
+            ? "The machine places nothing. You can still place by hand at the book and record it here."
+            : toggledOff.length > 0
+              ? `Switched off for ${toggledOff.join(", ")}. Hand bets can always be recorded.`
+              : "Hand bets can always be recorded."}
+        </span>
+        <span className="basis-full sm:basis-auto">
+          <Link href="/admin/bots#real-money" className="text-primary hover:underline">
+            Real-money switches
+          </Link>{" "}
+          ·{" "}
+          <Link href="/admin/bots" className="text-primary hover:underline">
+            Bot scores
+          </Link>{" "}
+          ·{" "}
+          <Link href="/admin/real-bets" className="text-primary hover:underline">
+            Real bets
+          </Link>
+        </span>
+      </div>
 
       {data.truncatedBooks.length > 0 && (
         <div className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-2 text-xs text-warning">

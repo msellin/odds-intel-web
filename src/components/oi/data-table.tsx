@@ -78,6 +78,7 @@ export function DataTable<T>({
   emptyText = "Nothing to show.",
   toolbar,
   exportName,
+  exportLabel = "Export CSV",
   maxHeight = "70dvh",
   dense = false,
 }: {
@@ -94,6 +95,8 @@ export function DataTable<T>({
   toolbar?: ReactNode;
   /** Filename (no extension) — shows an "Export CSV" button. */
   exportName?: string;
+  /** Button text (default "Export CSV") — say what it exports when a page has several tables. */
+  exportLabel?: string;
   maxHeight?: string;
   dense?: boolean;
 }) {
@@ -230,7 +233,7 @@ export function DataTable<T>({
               }}
               className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
             >
-              <Download size={13} aria-hidden="true" /> Export CSV
+              <Download size={13} aria-hidden="true" /> {exportLabel}
             </button>
           )}
           <div className="relative">

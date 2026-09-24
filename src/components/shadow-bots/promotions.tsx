@@ -55,15 +55,14 @@ export function Promotions({ promos, error }: { promos: PromoRow[]; error: strin
   }
 
   if (promos.length === 0) {
+    // Plain words for the owner (UX fix round, 2026-09-24) — the shell command moved here, out of
+    // the UI. A developer adds a promo from the book's terms page with, in the engine repo:
+    //   python3 scripts/promo_ev.py add-terms --book Coolbet --type odds_boost --title "…" --min-odds 1.5
+    //     --max-stake 20 --valid-to YYYY-MM-DD --url …
     return (
       <p className="rounded-xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
-        <span className="font-medium text-foreground">Promotions:</span> none entered yet. To add one from a book&apos;s
-        terms page, run{" "}
-        <code className="rounded bg-muted px-1 font-mono text-[11px] text-foreground">
-          python3 scripts/promo_ev.py add-terms --book Coolbet --type odds_boost --title &quot;…&quot; --min-odds 1.5
-          --max-stake 20 --valid-to YYYY-MM-DD --url …
-        </code>{" "}
-        in the engine repo.
+        <span className="font-medium text-foreground">Promotions:</span> no promotions recorded yet. When a book&apos;s
+        offer is entered, its expected value and what it actually returned show here.
       </p>
     );
   }
@@ -142,8 +141,8 @@ export function Promotions({ promos, error }: { promos: PromoRow[]; error: strin
         </table>
       </div>
       <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
-        Read-only. Terms and every promo taken are entered with <code className="font-mono">scripts/promo_ev.py</code> in the
-        engine repo, which refuses a bet without an expected value worked out first. The gap compares only settled bets on both
+        Read-only. Each promotion is entered from the book&apos;s terms page, with its expected value worked out before
+        the bet (engine: scripts/promo_ev.py). The gap compares only settled bets on both
         sides; open ones are left out.
       </p>
     </details>

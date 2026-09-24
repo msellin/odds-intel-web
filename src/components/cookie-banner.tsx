@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { isAdminPath } from "@/components/public-chrome";
 
 const STORAGE_KEY = "oddsintel_cookie_consent";
 // Mobile UX audit flagged the banner as blocking the Telegram CTA
@@ -14,6 +16,9 @@ const APPEAR_DELAY_MS = 1200;
 
 export function CookieBanner() {
   const [visible, setVisible] = useState(false);
+  // #139 (2026-09-24): not on the admin (the operator console) — it covered chart axes there.
+  // Showing or hiding the notice changes nothing about what is stored or measured.
+  const onAdmin = isAdminPath(usePathname());
 
   useEffect(() => {
     if (localStorage.getItem(STORAGE_KEY)) return;
@@ -31,7 +36,7 @@ export function CookieBanner() {
     setVisible(false);
   }
 
-  if (!visible) return null;
+  if (!visible || onAdmin) return null;
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/[0.08] bg-background/95 backdrop-blur-md">

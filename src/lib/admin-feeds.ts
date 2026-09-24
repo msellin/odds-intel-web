@@ -12,6 +12,8 @@
 import { createServerServiceClient } from "@/lib/supabase-server";
 import { readAdminFixture } from "@/lib/admin-fixture";
 import type { DataQualityFinding, FeedBookStats, FeedStatus, OpsSnapshot } from "@/lib/engine-data";
+import type { FootprintHour } from "@/lib/admin-feeds-model";
+export type { FootprintHour } from "@/lib/admin-feeds-model";
 
 export interface R<T> {
   v: T;
@@ -26,7 +28,10 @@ export interface FeedsPageData {
   dq: R<DataQualityFinding[]>;
   snapshot: R<OpsSnapshot | null>;
   lastLiveAt: R<string | null>;
+  /** book_footprint, last 25 clock hours (workers/utils/footprint.py) — which hour's budget ran out. */
+  footprint: R<FootprintHour[]>;
 }
+
 
 /** API-Football Mega plan: 150,000 calls per day, reset at midnight UTC. */
 export const AF_DAILY_BUDGET = 150_000;
@@ -37,6 +42,7 @@ interface FeedsFixture {
   dq?: DataQualityFinding[];
   snapshot?: OpsSnapshot | null;
   last_live_at?: string | null;
+  footprint?: FootprintHour[];
 }
 
 async function read<T>(label: string, q: () => PromiseLike<{ data: unknown; error: { message: string } | null }>, fallback: T): Promise<R<T>> {
@@ -63,12 +69,14 @@ export async function loadFeedsPage(): Promise<FeedsPageData> {
       dq: miss(fx.dq, [], "data_quality_findings"),
       snapshot: miss(fx.snapshot, null, "ops_snapshots"),
       lastLiveAt: miss(fx.last_live_at, null, "live_match_snapshots"),
+      footprint: miss(fx.footprint, [], "book_footprint"),
     };
   }
   const db = createServerServiceClient();
   const today = new Date(now).toISOString().slice(0, 10);
   const since7 = new Date(now - 7 * 86_400_000).toISOString();
-  const [feeds, books, dq, snap, live] = await Promise.all([
+  const since25h = new Date(now - 25 * 3_600_000).toISOString();
+  const [feeds, books, dq, snap, live, footprint] = await Promise.all([
     read<FeedStatus[]>("feed_status", () => db.from("feed_status").select("*"), []),
     read<FeedBookStats[]>("feed_book_stats", () => db.from("feed_book_stats").select("*"), []),
     read<DataQualityFinding[]>(
@@ -86,6 +94,11 @@ export async function loadFeedsPage(): Promise<FeedsPageData> {
       () => db.from("live_match_snapshots").select("captured_at").order("captured_at", { ascending: false }).limit(1),
       [],
     ),
+    read<FootprintHour[]>(
+      "book_footprint",
+      () => db.from("book_footprint").select("book, hour, requests, refused").gte("hour", since25h).order("hour", { ascending: true }),
+      [],
+    ),
   ]);
   return {
     now,
@@ -94,5 +107,10 @@ export async function loadFeedsPage(): Promise<FeedsPageData> {
     dq,
     snapshot: { v: snap.v[0] ?? null, error: snap.error },
     lastLiveAt: { v: live.v[0]?.captured_at ?? null, error: live.error },
+    footprint,
   };
 }
+
+// Pure, client-safe helpers live in admin-feeds-model.ts (a client component cannot import this
+// server module); re-exported so callers can import either.
+export { budgetView, budgetSentence, BUDGET_REASON_RE, STATUS_STALE_MIN, DQ_GROUPS, dqGroupLabel, type BudgetView } from "@/lib/admin-feeds-model";

@@ -6,7 +6,7 @@ import { AutoRefreshBadge } from "../ops/auto-refresh";
 import { Meter, shareTone } from "../ops/meter";
 import { FeedsBoard } from "./feeds-board";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
-import { AF_DAILY_BUDGET, loadFeedsPage } from "@/lib/admin-feeds";
+import { AF_DAILY_BUDGET, budgetSentence, budgetView, loadFeedsPage, STATUS_STALE_MIN } from "@/lib/admin-feeds";
 import { DqFindings } from "./dq-findings";
 import { isBotBoardDevPreview, loadControlState } from "@/lib/bot-board";
 import { FootprintControl } from "./footprint-control";
@@ -28,8 +28,6 @@ import { fmtInt } from "@/components/oi/format";
 // Loader: src/lib/admin-feeds.ts (every read keeps its error — unreadable never reads as all clear).
 
 export const metadata: Metadata = { title: "Feeds · Admin · OddsIntel", robots: { index: false } };
-
-const STATUS_STUCK_MIN = 15;
 
 export default async function FeedsPage() {
   let user: { id: string } | null = null;
@@ -58,10 +56,14 @@ export default async function FeedsPage() {
   const fail = count("fail");
   const paused = count("paused");
   const unknown = count("unknown");
-  const feedsUnknown = !!d.feeds.error;
+  // A status check older than STATUS_STALE_MIN is not a claim we can make: the counts go "unknown" (grey).
+  const statusStale = statusAgeMin == null || statusAgeMin > STATUS_STALE_MIN;
+  const feedsUnknown = !!d.feeds.error || statusStale;
+  const staleFoot = statusAgeMin == null ? "no status check yet" : `the status check is ${statusAgeMin} min old`;
 
   const cb = d.books.v.find((b) => b.book === "Coolbet");
   const cbShare = cb?.budget_1h ? (cb.requests_1h ?? 0) / cb.budget_1h : null;
+  const cbBudget = cb?.budget_1h != null && !d.footprint.error ? budgetView("Coolbet", cb.budget_1h, d.footprint.v, now) : null;
   const s = d.snapshot.v;
   const afCalls = s?.af_calls_today ?? null;
   const afShare = afCalls != null ? afCalls / AF_DAILY_BUDGET : null;
@@ -82,9 +84,9 @@ export default async function FeedsPage() {
           <>
             Is data coming in, and at what cost? Every odds sweeper and data feed, checked every 5 minutes by the engine.
             {statusAgeMin !== null && (
-              <span className={statusAgeMin > STATUS_STUCK_MIN ? " text-danger" : ""}>
+              <span className={statusAgeMin > STATUS_STALE_MIN ? " text-danger" : ""}>
                 {" "}Status checked {statusAgeMin < 1 ? "just now" : `${statusAgeMin} min ago`}
-                {statusAgeMin > STATUS_STUCK_MIN ? " — the status job itself looks stuck." : "."}
+                {statusAgeMin > STATUS_STALE_MIN ? " — the status job itself looks stuck, so the colours below are grey (unknown)." : "."}
               </span>
             )}
           </>
@@ -102,10 +104,10 @@ export default async function FeedsPage() {
 
       {/* ── KPI strip ── */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-6">
-        <StatCard label="Fresh" icon={CheckCircle2} tone="success" unknown={feedsUnknown} value={`${fresh}/${feeds.length}`} foot={unknown ? `${unknown} with no status yet` : "sweeping on time"} />
-        <StatCard label="Needs a look" icon={AlertTriangle} tone={warn ? "warning" : "success"} unknown={feedsUnknown} value={warn} foot={warn ? "a sweep missed or came back thin" : "none"} />
-        <StatCard label="Stopped" icon={CircleStop} tone={fail ? "danger" : "success"} unknown={feedsUnknown} value={fail} foot={fail ? "no data past its limit" : "none"} />
-        <StatCard label="Paused" icon={CirclePause} tone={paused ? "info" : "neutral"} unknown={feedsUnknown} value={paused} foot={paused ? "by us — see the block for why" : "none paused"} />
+        <StatCard label="Healthy" icon={CheckCircle2} tone="success" unknown={feedsUnknown} value={`${fresh}/${feeds.length}`} foot={statusStale ? staleFoot : unknown ? `${unknown} with no status yet` : "on schedule"} />
+        <StatCard label="Needs a look" icon={AlertTriangle} tone={warn ? "warning" : "success"} unknown={feedsUnknown} value={warn} foot={statusStale ? staleFoot : warn ? "a sweep missed or came back thin" : "none"} />
+        <StatCard label="Stopped" icon={CircleStop} tone={fail ? "danger" : "success"} unknown={feedsUnknown} value={fail} foot={statusStale ? staleFoot : fail ? "no data past its limit" : "none"} />
+        <StatCard label="Paused" icon={CirclePause} tone={paused ? "info" : "neutral"} unknown={feedsUnknown} value={paused} foot={statusStale ? staleFoot : paused ? "by us — see the block for why" : "none paused"} />
         <StatCard
           label="Coolbet requests · hour"
           icon={Gauge}
@@ -139,9 +141,10 @@ export default async function FeedsPage() {
           title="Bookmakers"
           description={
             <>
-              Time since each book&apos;s last odds — <span className="text-success">green</span> fresh, <span className="text-warning">amber</span> a sweep
-              missed, <span className="text-danger">red</span> stopped, <span className="text-info">blue</span> paused. Click a block for its sweepers,
-              Pause / Resume / Run now, and today&apos;s numbers.
+              Time since each book&apos;s last odds — <span className="text-success">green</span> fresh,{" "}
+              <span className="text-warning">amber</span> a sweep missed, <span className="text-danger">red</span> stopped,{" "}
+              <span className="text-info">blue</span>{" "}paused, grey unknown. Click a block for its sweepers, Pause / Resume / Run now, and
+              today&apos;s numbers.
             </>
           }
         />
@@ -151,7 +154,7 @@ export default async function FeedsPage() {
               {d.feeds.error ? "Unreadable — see above." : "No status yet — the engine writes it every 5 minutes."}
             </p>
           ) : (
-            <FeedsBoard feeds={feeds} books={d.books.v} now={now} />
+            <FeedsBoard feeds={feeds} books={d.books.v} footprint={d.footprint.v} now={now} statusAgeMin={statusAgeMin} preview={isBotBoardDevPreview()} />
           )}
         </div>
       </Panel>
@@ -178,7 +181,9 @@ export default async function FeedsPage() {
           <p className="mt-2 text-xs text-muted-foreground">
             {cb ? (
               <>
+                {cbBudget && <span className="mb-1 block text-foreground/90">{budgetSentence(cbBudget)}</span>}
                 {fmtInt(cb.requests_24h)} requests in 24 h · bot-checks this hour {cb.challenges_1h ?? 0} · errors this hour {cb.errors_1h ?? 0}
+                {d.footprint.error && <span className="block text-warning">Hourly history unreadable ({d.footprint.error}).</span>}
               </>
             ) : d.books.error ? (
               <span className="text-warning">Coolbet numbers unreadable ({d.books.error}).</span>

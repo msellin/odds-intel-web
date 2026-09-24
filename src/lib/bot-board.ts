@@ -40,7 +40,6 @@ import type {
   PlacerRow,
 } from "@/lib/bot-controls/types";
 import { PREVIEW_REFUSAL } from "@/lib/bot-controls/types";
-import { placementPathReason } from "@/lib/bot-controls/placement-path";
 import { SNAPSHOT_BOOKS, type SnapshotBook } from "@/lib/bot-snapshot-books";
 
 export type BotFamily =
@@ -237,6 +236,14 @@ interface BotBoardFixture {
   /** IA move P7: real_bets placed rows per bot and current prices (dump_bot_board_fixture.py). */
   placed?: Record<string, PlacedRaw[]>;
   prices?: PriceRaw[];
+  /** The REAL control state (dump_bot_board_fixture.py, #139 UX fix round). Absent in older snapshots. */
+  control?: {
+    fleet: FleetState | null;
+    placers: PlacerRow[];
+    bots: BotControlRow[];
+    heartbeats: PlacerHeartbeat[];
+    changes: ControlChange[];
+  };
 }
 
 export function isBotBoardDevPreview(): boolean {
@@ -383,11 +390,13 @@ async function readRows<T>(relation: string, columns: string, order?: { col: str
 
 /** Everything the controls render. `viewerUserId` decides the owner-only Arm button. */
 export async function loadControlState(viewerUserId: string | null): Promise<ControlState> {
-  if (isBotBoardDevPreview()) return previewControlState(await readFixture());
+  if (isBotBoardDevPreview()) return previewControlState(await readFixture(), await readActivityChanges());
   const [fleet, placers, bots, heartbeats, changes] = await Promise.all([
     readFleet(),
     readRows<PlacerRow>("coolbet_placer_bots", "bot_name, ui_place_enabled, locked_reason, note, updated_at"),
-    readRows<BotControlRow>("bots", "name, show_on_picks, maturity_label, is_active, retired_at, display_name"),
+    // vip (migration 420): the paid-tier bot is on /performance whatever its label — the sheet's
+    // "/performance because …" line reads it. Extra column, carried at runtime (BotControlVip).
+    readRows<BotControlRow>("bots", "name, show_on_picks, maturity_label, is_active, retired_at, display_name, vip"),
     readRows<PlacerHeartbeat>("placer_heartbeats", "placer, host, last_seen_at, execute_requested, execute_effective, refused_reason, result"),
     readRows<ControlChange>(
       "control_changes",
@@ -411,7 +420,7 @@ export async function loadControlState(viewerUserId: string | null): Promise<Con
  * reads this on every admin page. One row, not the five reads loadControlState() makes.
  */
 export async function loadFleetStatus(): Promise<ControlState["fleet"]> {
-  if (isBotBoardDevPreview()) return previewControlState(await readFixture()).fleet;
+  if (isBotBoardDevPreview()) return previewControlState(await readFixture(), null).fleet;
   return readFleet();
 }
 
@@ -428,94 +437,42 @@ async function readFleet(): Promise<ControlState["fleet"]> {
 }
 
 /**
- * Fake-but-realistic control state for the design preview. Built from the fixture's own bots so
- * the switches line up with the rows; the fleet mirrors today's real state (placement paused on a
- * strategic stop, not armed, picks sending). `readOnly` makes every control render disabled, and
- * the write routes refuse in this mode regardless.
+ * The /admin/activity preview snapshot's control_changes (admin-activity.json, written by the
+ * engine's dump_admin_fixture.py --page activity), so the bots page's Activity drawer shows the
+ * SAME rows as /admin/activity. null when that snapshot is absent.
  */
-function previewControlState(f: BotBoardFixture): ControlState {
-  const hour = 3600_000;
-  const now = Date.now();
-  const iso = (msAgo: number) => new Date(now - msAgo).toISOString();
-  const fleetCaps = f.capabilities[0];
-  const fleet: FleetState = {
-    placement_paused: fleetCaps?.fleet_placement_paused ?? true,
-    placement_paused_at: iso(240 * hour),
-    placement_paused_reason:
-      "OWN-PATH-VERDICT 2026-09-14: kill criterion met. This is a STRATEGIC closure, not a transport incident -- do NOT clear it when fixing Imperva/CDP/JWT.",
-    real_money_armed: fleetCaps?.fleet_real_money_armed ?? false,
-    real_money_armed_at: null,
-    real_money_armed_reason: "disarmed by migration 354 (OWN-ARMED-UNDER-PAUSE); owner arms explicitly",
-    publishing_paused: false,
-    publishing_paused_at: null,
-    publishing_paused_reason: null,
-    daemons_paused: false,
-    daemons_paused_at: null,
-    daemons_paused_reason: null,
-  };
-  const activeNames = new Set(f.scoreboard.filter((r) => !r.retired_at && r.is_active !== false).map((r) => r.bot_name));
-  const capable = f.config.filter((c) => activeNames.has(c.bot_name) && placementPathReason(c.family, c.ledger, c.books) == null);
-  const placers: PlacerRow[] = capable.map((c) => ({
-    bot_name: c.bot_name,
-    ui_place_enabled: false,
-    locked_reason:
-      c.bot_name === "bot_coolbet_ou_model_v1"
-        ? "OU-CALIBRATOR-DOMAIN-MISMATCH (2026-09-13): every pick it staked came from a calibrator fitted on raw ensemble probs and applied to Pinnacle-shrunk probs. Re-enable only on positive post-fix CLV."
-        : null,
-    note: "seeded OFF by migration 413 (has a placement path)",
-    updated_at: iso(2 * hour),
-  }));
-  const capsBy = new Map(f.capabilities.map((c) => [c.bot_name, c]));
-  const bots: BotControlRow[] = f.scoreboard.map((r) => ({
-    name: r.bot_name,
-    show_on_picks: capsBy.get(r.bot_name)?.publish ?? false,
-    maturity_label: r.maturity_label,
-    is_active: r.is_active,
-    retired_at: r.retired_at,
-    display_name: r.display_name,
-  }));
-  const heartbeats: PlacerHeartbeat[] = [
-    {
-      placer: "coolbet_ui_placer",
-      host: "operator-mac",
-      last_seen_at: iso(26 * hour),
-      execute_requested: false,
-      execute_effective: false,
-      refused_reason: null,
-      result: { caps: { max_bets_per_day: 80, max_stake_per_day: 800, kickoff_cutoff_min: 3 } },
-    },
-  ];
-  let id = 100;
-  const change = (msAgo: number, c: Partial<ControlChange>): ControlChange => ({
-    id: id--,
-    created_at: iso(msAgo),
-    actor: "migration:413",
-    source: "migration",
-    control: "placement_paused",
-    bot_name: null,
-    old_value: null,
-    new_value: null,
-    reason: null,
-    outcome: "applied",
-    refusal: null,
-    ...c,
-  });
-  const changes: ControlChange[] = [
-    change(0.5 * hour, { actor: "owner@example.test", source: "web", control: "placer_enabled", bot_name: "bot_coolbet_ou_model_v1", old_value: false, new_value: true, reason: "try the O/U bot again", outcome: "refused", refusal: "locked: OU-CALIBRATOR-DOMAIN-MISMATCH (2026-09-13)" }),
-    change(3 * hour, { actor: "telegram:operator", source: "telegram", control: "placement_paused", old_value: true, new_value: true, reason: "operator /pause", outcome: "noop" }),
-    change(2 * hour + 1, { control: "real_money_armed", new_value: false, reason: "state at audit start: disarmed by migration 354 (OWN-ARMED-UNDER-PAUSE); owner arms explicitly" }),
-    change(2 * hour + 2, { control: "placement_paused", new_value: true, reason: "state at audit start: OWN-PATH-VERDICT 2026-09-14 (strategic closure)" }),
-    change(2 * hour + 3, { control: "publishing_paused", new_value: false, reason: "state at audit start" }),
-    ...placers.map((p, i) =>
-      change(2 * hour + 10 + i, { control: "placer_enabled", bot_name: p.bot_name, new_value: false, reason: `state at audit start: ${p.note}` }),
-    ),
-  ];
+async function readActivityChanges(): Promise<ControlChange[] | null> {
+  try {
+    const { readFile } = await import("node:fs/promises");
+    const { dirname, join } = await import("node:path");
+    const file = join(dirname(process.env.BOT_BOARD_FIXTURE as string), "admin-activity.json");
+    const j = JSON.parse(await readFile(file, "utf8")) as { changes?: ControlChange[] };
+    return Array.isArray(j.changes) ? j.changes.slice(0, 50) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Control state for the design preview — the REAL rows from the snapshot (#139 UX fix round,
+ * 2026-09-24). It used to be invented (a fake owner@example.test change, a refused off→on, a
+ * Telegram /pause, a 26-hour-old heartbeat), so the Activity drawer disagreed with /admin/activity
+ * and the ladder showed a placer check-in that never happened. Now: fleet, eligibility rows, bots
+ * and heartbeats from the bot-board snapshot's `control` block; the audit rows from
+ * admin-activity.json when present (so both pages list the same changes), else the snapshot's own.
+ * An older snapshot without `control` renders every layer as unreadable (Unknown), never as a
+ * made-up state. `readOnly` keeps every control disabled, and the write routes refuse regardless.
+ */
+function previewControlState(f: BotBoardFixture, activity: ControlChange[] | null): ControlState {
+  const c = f.control;
+  const missing = "not in the preview snapshot — re-run scripts/dump_bot_board_fixture.py";
+  const changes = activity ?? c?.changes ?? null;
   return {
-    fleet: { row: fleet, error: null },
-    placers: { rows: placers, error: null },
-    bots: { rows: bots, error: null },
-    heartbeats: { rows: heartbeats, error: null },
-    changes: { rows: changes, error: null },
+    fleet: c?.fleet ? { row: c.fleet, error: null } : { row: null, error: `coolbet_session_state: ${missing}` },
+    placers: c ? { rows: c.placers, error: null } : { rows: [], error: `coolbet_placer_bots: ${missing}` },
+    bots: c ? { rows: c.bots, error: null } : { rows: [], error: `bots: ${missing}` },
+    heartbeats: c ? { rows: c.heartbeats, error: null } : { rows: [], error: `placer_heartbeats: ${missing}` },
+    changes: changes ? { rows: changes, error: null } : { rows: [], error: `control_changes: ${missing}` },
     viewer: { isOwner: true, readOnly: true, readOnlyReason: PREVIEW_REFUSAL },
   };
 }
@@ -576,6 +533,15 @@ export interface BotPicksResult {
   /** false when the bot's ledger rows carry no bot_id (forward-test arms): placements cannot be linked. */
   placementLinked: boolean;
   hasMore: boolean;
+  /**
+   * Picks of this bot that carry a real bet, over its WHOLE ledger (distinct match · market ·
+   * selection among its real_bets rows) — not just the loaded page. null = unknown (real_bets
+   * unreadable, or the bot's rows carry no bot id). #139 UX fix round: the tab used to say
+   * "No real money on any of these 50 picks", which was only about the loaded rows.
+   */
+  placedPicks: number | null;
+  /** true = this result is the "Bet made only" filter, applied server-side over the whole ledger. */
+  placedOnly: boolean;
 }
 
 interface PlacedRaw {
@@ -646,31 +612,44 @@ function attachExtras(rows: BotLedgerRow[], placed: PlacedRaw[], prices: PriceRa
   });
 }
 
+const distinctPicks = (placed: PlacedRaw[]) => new Set(placed.map((p) => pickKey(p.match_id, p.market, p.selection))).size;
+
 /**
- * One page of a bot's picks (newest first) with "Bet made" and current prices attached.
- * `limit` ≤ 100; `hasMore` says whether an older page exists.
+ * One page of a bot's picks (newest pick first) with "Bet made" and current prices attached.
+ * `limit` ≤ 100; `hasMore` says whether an older page exists. `placedOnly` = only picks that
+ * carry a real bet, filtered over the WHOLE ledger (not the loaded page): the placed rows'
+ * matches are read first, then only those matches' ledger rows.
  */
-export async function loadBotPicks(botName: string, { limit = 50, offset = 0 }: { limit?: number; offset?: number } = {}): Promise<BotPicksResult> {
+export async function loadBotPicks(
+  botName: string,
+  { limit = 50, offset = 0, placedOnly = false }: { limit?: number; offset?: number; placedOnly?: boolean } = {},
+): Promise<BotPicksResult> {
   const lim = Math.max(1, Math.min(100, limit));
   const off = Math.max(0, offset);
   const now = Date.now();
   if (isBotBoardDevPreview()) {
     const f = await readFixture();
     const all = (f.ledger[botName] ?? []).map(redactLedgerRow);
-    const page = all.slice(off, off + lim);
-    const linked = page.some((r) => r.bot_id);
+    const linked = all.some((r) => r.bot_id);
+    const placed = linked ? f.placed?.[botName] ?? [] : [];
+    const placedError = f.placed ? null : "real_bets: not in fixture";
+    const pool = placedOnly ? attachExtras(all, placed, [], now).filter((r) => r.placed) : null;
+    const page = pool ? pool.slice(off, off + lim) : all.slice(off, off + lim);
     return {
-      rows: attachExtras(page, linked ? f.placed?.[botName] ?? [] : [], f.prices ?? [], now),
+      rows: attachExtras(page, placed, f.prices ?? [], now),
       error: null,
-      placedError: f.placed ? null : "real_bets: not in fixture",
+      placedError,
       pricesError: f.prices ? null : "odds_snapshots: not in fixture",
-      placementLinked: linked || page.length === 0,
-      hasMore: all.length > off + lim,
+      placementLinked: linked || all.length === 0,
+      hasMore: (pool ?? all).length > off + lim,
+      placedPicks: linked && !placedError ? distinctPicks(placed) : null,
+      placedOnly,
     };
   }
+  if (placedOnly) return loadPlacedPicks(botName, lim, off, now);
   let page = await readLedgerPage("bot_ledger_display", botName, lim + 1, off);
   if (page.error) page = await readLedgerPage("bot_ledger", botName, lim + 1, off);
-  if (page.error) return { rows: [], error: page.error, placedError: null, pricesError: null, placementLinked: true, hasMore: false };
+  if (page.error) return { rows: [], error: page.error, placedError: null, pricesError: null, placementLinked: true, hasMore: false, placedPicks: null, placedOnly };
   const hasMore = page.rows.length > lim;
   const rows = page.rows.slice(0, lim);
   const botId = rows.find((r) => r.bot_id)?.bot_id ?? null;
@@ -682,7 +661,68 @@ export async function loadBotPicks(botName: string, { limit = 50, offset = 0 }: 
     pricesError: prices.error,
     placementLinked: !!botId || rows.length === 0,
     hasMore,
+    placedPicks: botId && !placed.error ? distinctPicks(placed.rows) : null,
+    placedOnly,
   };
+}
+
+/** "Bet made only", server-side: the bot's real bets → their matches' ledger rows → linked ones. */
+async function loadPlacedPicks(botName: string, lim: number, off: number, now: number): Promise<BotPicksResult> {
+  const empty = { rows: [], pricesError: null, hasMore: false, placedOnly: true };
+  let botId: string | null = null;
+  try {
+    const db = createServerServiceClient();
+    const { data, error } = await db.from("bots").select("id").eq("name", botName).maybeSingle();
+    if (error) return { ...empty, error: null, placedError: `bots: ${error.message}`, placementLinked: true, placedPicks: null };
+    botId = (data as { id: string } | null)?.id ?? null;
+  } catch (e) {
+    return { ...empty, error: null, placedError: `bots: ${e instanceof Error ? e.message : String(e)}`, placementLinked: true, placedPicks: null };
+  }
+  // No `bots` row (forward-test arms, the control): their ledger rows cannot be linked to a bet.
+  if (!botId) return { ...empty, error: null, placedError: null, placementLinked: false, placedPicks: null };
+  const placed = await readPlaced(botId);
+  if (placed.error) return { ...empty, error: null, placedError: placed.error, placementLinked: true, placedPicks: null };
+  const matchIds = [...new Set(placed.rows.map((p) => p.match_id).filter((m): m is string => !!m))];
+  const ledger: BotLedgerRow[] = [];
+  // ≤ 100 match ids per request keeps the PostgREST URL short.
+  for (let i = 0; i < matchIds.length; i += 100) {
+    const chunk = matchIds.slice(i, i + 100);
+    let r = await readLedgerForMatches("bot_ledger_display", botName, chunk);
+    if (r.error) r = await readLedgerForMatches("bot_ledger", botName, chunk);
+    if (r.error) return { ...empty, error: r.error, placedError: null, placementLinked: true, placedPicks: null };
+    ledger.push(...r.rows);
+  }
+  ledger.sort((a, b) => (b.pick_time ?? "").localeCompare(a.pick_time ?? ""));
+  const withBet = attachExtras(ledger, placed.rows, [], now).filter((r) => r.placed);
+  const page = withBet.slice(off, off + lim);
+  const prices = await readPrices(page, now);
+  return {
+    rows: attachExtras(page, placed.rows, prices.rows, now),
+    error: null,
+    placedError: null,
+    pricesError: prices.error,
+    placementLinked: true,
+    hasMore: withBet.length > off + lim,
+    placedPicks: distinctPicks(placed.rows),
+    placedOnly: true,
+  };
+}
+
+async function readLedgerForMatches(relation: string, botName: string, matchIds: string[]): Promise<Read<BotLedgerRow>> {
+  try {
+    const db = createServerServiceClient();
+    const { data, error } = await db
+      .from(relation)
+      .select("*")
+      .eq("bot_name", botName)
+      .in("match_id", matchIds)
+      .order("pick_time", { ascending: false, nullsFirst: false })
+      .limit(5000);
+    if (error) return { rows: [], error: `${relation}: ${error.message}` };
+    return { rows: ((data ?? []) as BotLedgerRow[]).map(redactLedgerRow), error: null };
+  } catch (e) {
+    return { rows: [], error: `${relation}: ${e instanceof Error ? e.message : String(e)}` };
+  }
 }
 
 async function readLedgerPage(relation: string, botName: string, count: number, offset: number): Promise<Read<BotLedgerRow>> {

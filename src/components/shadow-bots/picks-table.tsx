@@ -9,8 +9,10 @@ import {
   leadBotName,
   pickVerdict,
   quoteFreshness,
+  shownEdge,
   PICK_VERDICT_RANK,
 } from "@/lib/shadow-bots/verdict";
+import { prettyDisplayName } from "@/app/(app)/admin/bots/bot-board-format";
 import type { PickRowData } from "@/components/shadow-bots/picks-row";
 
 /** Market key for the placer's per-market odds floor (engine-floors.ts). */
@@ -28,6 +30,8 @@ export function buildPickRows(
   now = Date.now(),
 ): PickRowData[] {
   const placerByName = new Map<string, PlacerBotRow>(data.placerBots.map((p) => [p.bot_name, p]));
+  // ONE bot name everywhere (UX fix round, 2026-09-24): bots.display_name, id as secondary text.
+  const labelByName = new Map(data.bots.map((b) => [b.name, prettyDisplayName(b.display_name, b.name)]));
   // TRACK, from the SAME scoreboard the table below reads, so the two surfaces
   // cannot disagree about which bot is the lead. A green PLACE chip is a per-PICK
   // price test and says nothing about whether the bot behind it works — on
@@ -66,6 +70,11 @@ export function buildPickRows(
       }
     }
     const bestAgeMin = best ? (now - Date.parse(best.ts)) / 60000 : null;
+    // The book the bot PRICED the pick at (recommended_bookmaker). "Best price now" is the best
+    // across every book we can bet at, so for e.g. a Unibet sharp bot it can be a Coolbet price;
+    // the row then also shows the bot's own book's current price, so the two are not confused.
+    const ownBook = pick.recommended_bookmaker;
+    const ownQuote = ownBook && best && ownBook !== best.book ? (quotes.find((q) => q.book === ownBook) ?? null) : null;
     const prob = pick.calibrated_prob ?? pick.model_probability;
     const threshold = botEdgeThreshold(pick.bot_name);
     const placer = placerByName.get(pick.bot_name) ?? null;
@@ -95,6 +104,10 @@ export function buildPickRows(
     });
     return {
       pick,
+      botLabel: labelByName.get(pick.bot_name) ?? prettyDisplayName(null, pick.bot_name),
+      ownQuote,
+      shownEdge: inplay ? null : shownEdge(verdict, best?.odds ?? null),
+      siblings: [],
       prob,
       threshold,
       best,
@@ -106,22 +119,54 @@ export function buildPickRows(
       isControlArm: isInplayControlBot(pick.bot_name),
       track: botTrack(statsByName.get(pick.bot_name) ?? noStats, pick.bot_name === lead),
       alreadyLogged: loggedIds.has(pick.id),
-      // Automation state is CONTEXT on the row, not a verdict — see verdict.ts.
-      automationOff: state.placement_paused || placer?.ui_place_enabled === false,
       markState: markStates[pick.id] ?? 0,
       stake: FLAT_STAKE_EUR,
     };
   });
-  // Verdict band first (unchanged), then the lead bot's picks ahead of the rest
-  // of that band, then kickoff. The band still dominates: a SKIP from the lead
-  // must never sort above a PLACE.
-  rows.sort(
-    (a, b) =>
-      PICK_VERDICT_RANK[a.verdict.verdict] - PICK_VERDICT_RANK[b.verdict.verdict] ||
-      Number(b.track === "LEAD") - Number(a.track === "LEAD") ||
-      a.pick.kickoff.localeCompare(b.pick.kickoff),
+  rows.sort(byBestFirst);
+  return groupPickRows(rows);
+}
+
+/**
+ * "Best first", one definition (UX fix round, 2026-09-24): the verdict band (Place → Thin →
+ * Skip → Blocked), then pre-match before in-play — an in-play row can never be placed, so it
+ * must never sit above a placeable one — then the lead bot's picks, then the higher shown edge,
+ * then kickoff. The band still dominates: a SKIP from the lead never sorts above a PLACE.
+ */
+function byBestFirst(a: PickRowData, b: PickRowData): number {
+  return (
+    PICK_VERDICT_RANK[a.verdict.verdict] - PICK_VERDICT_RANK[b.verdict.verdict] ||
+    Number(a.inplay) - Number(b.inplay) ||
+    Number(b.track === "LEAD") - Number(a.track === "LEAD") ||
+    (b.shownEdge ?? -1) - (a.shownEdge ?? -1) ||
+    a.pick.kickoff.localeCompare(b.pick.kickoff)
   );
-  return rows;
+}
+
+/**
+ * One row per match + market + selection (UX fix round, 2026-09-24). Several bots often raise
+ * the SAME bet (one fixture showed ×5) — five rows for one decision. The group's row is its
+ * strongest member under `byBestFirst` (so the verdict, price and Place action are the best any
+ * bot offers); the others ride along in `siblings` and are listed, expandable, in the Bot cell.
+ * Input must already be sorted; output keeps that order.
+ */
+export function groupPickRows(sorted: PickRowData[]): PickRowData[] {
+  const byKey = new Map<string, PickRowData>();
+  const out: PickRowData[] = [];
+  for (const r of sorted) {
+    const k = `${oddsKey(r.pick.match_id, r.pick.market, r.pick.selection)}|${r.inplay ? "live" : "pre"}`;
+    const head = byKey.get(k);
+    if (head) {
+      head.siblings.push(r);
+      // a bet logged against ANY bot's copy of this pick is the same bet — never invite a second
+      if (r.alreadyLogged) head.alreadyLogged = true;
+      continue;
+    }
+    const lead = { ...r, siblings: [] };
+    byKey.set(k, lead);
+    out.push(lead);
+  }
+  return out;
 }
 
 /** Headline counts for the StatCard row — one definition of stale (quoteFreshness, as the row). */
@@ -131,9 +176,12 @@ export function queueCounts(rows: PickRowData[], now = Date.now()) {
   dayEnd.setUTCHours(24, 0, 0, 0);
   return {
     total: rows.length,
+    botPicks: rows.reduce((a, r) => a + 1 + r.siblings.length, 0),
     place: by("PLACE"),
     thin: by("THIN"),
     inplay: rows.filter((r) => r.inplay).length,
+    inplayToday: rows.filter((r) => r.inplay && Date.parse(r.pick.kickoff) < dayEnd.getTime()).length,
+    inplayBotPicks: rows.filter((r) => r.inplay).reduce((a, r) => a + 1 + r.siblings.length, 0),
     today: rows.filter((r) => Date.parse(r.pick.kickoff) < dayEnd.getTime()).length,
     stale: rows.filter((r) => quoteFreshness(r.pick.decision_quote_age_min) === "STALE").length,
     lead: rows.filter((r) => r.track === "LEAD").length,

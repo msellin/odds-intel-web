@@ -2,8 +2,11 @@ import { NextResponse } from "next/server";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
 import { isBotBoardDevPreview, loadBotPicks } from "@/lib/bot-board";
 
-/** GET ?bot=<bot_name>[&limit=50&offset=0] -> BotPicksResult
- *  ({ rows: BotPickRow[], error, placedError, pricesError, placementLinked, hasMore })
+/** GET ?bot=<bot_name>[&limit=50&offset=0][&placed=1] -> BotPicksResult
+ *  ({ rows: BotPickRow[], error, placedError, pricesError, placementLinked, hasMore, placedPicks, placedOnly })
+ *
+ *  placed=1 = only picks that carry a real bet, filtered over the bot's WHOLE ledger (the sheet's
+ *  "Bet made" filter — #139 UX fix round; it used to filter only the 50 loaded rows).
  *
  *  One page (newest first, 50 by default, ≤ 100) of a bot's `bot_ledger` picks for the
  *  /admin/bots sheet's Picks tab (#139 phase 1; paging + "Bet made" + current prices since
@@ -27,7 +30,12 @@ export async function GET(req: Request) {
   if (!Number.isInteger(limit) || !Number.isInteger(offset) || limit < 1 || limit > 100 || offset < 0 || offset > 100_000) {
     return NextResponse.json({ error: "invalid limit/offset" }, { status: 400 });
   }
-  const result = await loadBotPicks(bot, { limit, offset });
+  const placed = sp.get("placed");
+  if (placed != null && placed !== "0" && placed !== "1") {
+    return NextResponse.json({ error: "invalid placed" }, { status: 400 });
+  }
+  const placedOnly = placed === "1";
+  const result = await loadBotPicks(bot, { limit, offset, placedOnly });
   return NextResponse.json(result);
 }
 

@@ -10,7 +10,7 @@ import { Panel, PanelHeader } from "@/components/oi/panel";
 import { heartbeatStatus, PLACER_LABEL } from "@/lib/bot-controls/ladder";
 import { TAKES_EFFECT } from "@/lib/bot-controls/types";
 import { useControls } from "./controls-context";
-import { relTime, utcStamp } from "./bot-board-format";
+import { timeAgo, utcStamp } from "./bot-board-format";
 import { LadderList } from "./ladder-list";
 import { PauseReason } from "./pause-reason";
 
@@ -40,11 +40,14 @@ export function RealMoneyCard({ highlight }: { highlight: boolean }) {
         <LadderList ladder={ladder} />
 
         <div className="space-y-3">
-          {/* Layer 3 — kill switch */}
-          <div className="rounded-lg border border-border bg-background/40 p-3">
+          {/* Layer 3 — kill switch. id="kill-switch": the Placement stat card at the top of the page
+              scrolls here and focuses the Pause / Resume button (#139 UX fix round — on a phone this
+              box sat ~1.5 screens below the jump target). */}
+          <div id="kill-switch" className="scroll-mt-20 rounded-lg border border-border bg-background/40 p-3">
             <div className="flex items-center justify-between gap-2">
-              <div className="text-sm font-medium">3 · Placement</div>
-              <span className={`text-xs ${paused === null ? "text-warning" : paused ? "text-info" : "text-warning"}`}>
+              <div className="text-sm font-medium">3 · Placement <span className="font-normal text-muted-foreground">(kill switch)</span></div>
+              {/* Paused = off (neutral), Running = money can flow (red), unreadable = amber. */}
+              <span className={`text-xs ${paused === null ? "text-warning" : paused ? "text-muted-foreground" : "font-semibold text-danger"}`}>
                 {paused === null ? "Unknown" : paused ? "Paused" : "Running"}
                 {pausePending && " …"}
               </span>
@@ -52,28 +55,38 @@ export function RealMoneyCard({ highlight }: { highlight: boolean }) {
             {paused && (
               <div className="mt-1.5 space-y-1">
                 <PauseReason reason={f?.placement_paused_reason ?? null} compact />
-                <p className="text-xs text-muted-foreground">since {relTime(f?.placement_paused_at, now)} ago</p>
+                <p className="text-xs text-muted-foreground">paused {timeAgo(f?.placement_paused_at, now)}</p>
               </div>
             )}
             <div className="mt-2 flex flex-wrap gap-2">
               {paused !== true && (
-                <Button size="sm" variant="outline" disabled={pausePending} onClick={() => ctl.request({ control: "placement_paused", bot: null, value: true })}>
-                  Pause placement
+                <Button
+                  size="sm"
+                  variant="outline"
+                  data-kill-switch-action
+                  disabled={pausePending}
+                  onClick={() => ctl.request({ control: "placement_paused", bot: null, value: true })}
+                >
+                  Pause real-money placement
                 </Button>
               )}
               {paused !== false && (
                 <Button
                   size="sm"
                   variant="outline"
+                  data-kill-switch-action
                   disabled={paused === null || pausePending}
                   title={paused === null ? "state unreadable" : "Typed confirmation + reason"}
                   onClick={() => ctl.request({ control: "placement_paused", bot: null, value: false })}
                 >
-                  Resume…
+                  Resume placement…
                 </Button>
               )}
             </div>
-            <p className="mt-1.5 text-xs text-muted-foreground">{TAKES_EFFECT.placement_paused}</p>
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Kill switch — stops all automatic real bets. Hand-placed bets from the Pick queue are separate: you place those at the
+              bookmaker yourself, and recording them is not blocked by this switch. {TAKES_EFFECT.placement_paused}
+            </p>
           </div>
 
           {/* Layer 4 — arming */}
@@ -144,7 +157,7 @@ function Executors() {
               <li key={h.placer} className="flex flex-wrap items-baseline justify-between gap-x-2">
                 <span>{PLACER_LABEL[h.placer] ?? h.placer}</span>
                 <span className={st === "alive" ? (h.execute_requested ? "text-danger" : "text-foreground") : "text-muted-foreground"} title={h.last_seen_at ? utcStamp(h.last_seen_at) : undefined}>
-                  {st === "alive" ? "Alive" : "Stale"} · {h.execute_requested ? "--execute" : "dry-run"} · {relTime(h.last_seen_at, now)} ago
+                  {st === "alive" ? "Alive" : "Stale"} · {h.execute_requested ? "--execute" : "dry-run"} · {timeAgo(h.last_seen_at, now)}
                 </span>
                 {h.refused_reason && <span className="basis-full truncate text-muted-foreground" title={h.refused_reason}>gate: {h.refused_reason}</span>}
               </li>

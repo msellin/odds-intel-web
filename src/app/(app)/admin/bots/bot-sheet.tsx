@@ -10,10 +10,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AlertTriangle, CheckCircle2, CircleSlash, Lock } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { placementPathReason } from "@/lib/bot-controls/placement-path";
 import { fetchAudit } from "@/lib/bot-controls/client";
-import { TAKES_EFFECT, type ControlChange } from "@/lib/bot-controls/types";
+import { TAKES_EFFECT, type BotControlRow, type ControlChange } from "@/lib/bot-controls/types";
 import type { BotMarketStatsRow, BotWeeklyRow } from "@/lib/bot-board";
 import { METRIC_SHORT, MIN_N, otherMetric, type BotView } from "./bot-board-model";
 import { ciHalf, count, dayMonth, pct, tStat } from "./bot-board-format";
@@ -25,12 +25,13 @@ import { MoneySwitch, PicksSwitch, isRetired, picksTelegramMismatch, picksUnavai
 import { useControls } from "./controls-context";
 import { LadderList } from "./ladder-list";
 import { ActivityTimeline } from "./activity-timeline";
+import { channelLines, type ChannelLine } from "./channel-reasons";
 
 export const SHEET_TABS = ["overview", "settings", "performance", "picks", "activity"] as const;
 export type SheetTab = (typeof SHEET_TABS)[number];
+const TAB_LABEL: Record<SheetTab, string> = { overview: "Overview", settings: "Settings", performance: "Performance", picks: "Picks", activity: "Activity" };
 
 const LABEL = "font-mono text-xs uppercase tracking-widest text-muted-foreground";
-const PUBLIC_LABELS = new Set(["calibrated", "beta"]);
 
 export function BotSheet({
   v,
@@ -39,6 +40,8 @@ export function BotSheet({
   now,
   ledger,
   onMore,
+  placedOnly,
+  onPlacedOnly,
   markets,
   weekly,
   fleetPaused,
@@ -52,6 +55,9 @@ export function BotSheet({
   ledger: LedgerState | undefined;
   /** Picks tab: load the next 50 older picks. */
   onMore?: () => void;
+  /** Picks tab: the server-side "Bet made only" filter. */
+  placedOnly: boolean;
+  onPlacedOnly: (on: boolean) => void;
   markets: BotMarketStatsRow[] | null;
   /** This bot's bot_weekly rows (null = view unreadable) — the Performance charts. */
   weekly: BotWeeklyRow[] | null;
@@ -84,23 +90,21 @@ export function BotSheet({
                   </TabsTrigger>
                 </TabsList>
               </div>
-              <div className="px-4 py-4 sm:px-5">
-                <TabsContent value="overview">
-                  <Evidence v={v} now={now} withOther={false} />
-                </TabsContent>
-                <TabsContent value="settings">
-                  <SettingsTab v={v} now={now} />
-                </TabsContent>
-                <TabsContent value="performance">
-                  <PerformanceTab v={v} markets={markets} weekly={weekly} />
-                </TabsContent>
-                <TabsContent value="picks">
+              {/* ONE panel at a time (#139 UX fix round). Base UI's Tabs.Panel kept the previous panel
+                  mounted in its exit transition inside the Sheet (data-ending-style never cleared), so
+                  every tab visited stacked into one long page and the tabs read as in-page jumps. The
+                  active tab is rendered here directly; ?tab= stays in the URL via replaceState. */}
+              <div role="tabpanel" aria-label={TAB_LABEL[tab]} className="px-4 py-4 sm:px-5">
+                {tab === "overview" && <Evidence v={v} now={now} withOther={false} />}
+                {tab === "settings" && <SettingsTab v={v} now={now} />}
+                {tab === "performance" && <PerformanceTab v={v} markets={markets} weekly={weekly} />}
+                {tab === "picks" && (
                   <section className="space-y-2">
-                    <h3 className={LABEL}>Picks{ledger && !ledger.loading && !ledger.error ? ` (${ledger.rows.length} loaded)` : ""}</h3>
-                    <PicksTable v={v} ledger={ledger} onMore={onMore} />
+                    <h3 className={LABEL}>Picks</h3>
+                    <PicksTable v={v} ledger={ledger} onMore={onMore} placedOnly={placedOnly} onPlacedOnly={onPlacedOnly} />
                   </section>
-                </TabsContent>
-                <TabsContent value="activity">{tab === "activity" && <BotActivity name={v.name} now={now} />}</TabsContent>
+                )}
+                {tab === "activity" && <BotActivity name={v.name} now={now} />}
               </div>
             </Tabs>
           </>
@@ -160,6 +164,14 @@ function Line({ label, control, children }: { label: string; control?: ReactNode
   );
 }
 
+function ChannelState({ line }: { line: ChannelLine }) {
+  return (
+    <span className={`text-xs ${line.on == null ? "text-warning" : line.on ? "text-info" : "text-muted-foreground"}`}>
+      {line.on == null ? "Unknown" : line.on ? "Yes" : "No"}
+    </span>
+  );
+}
+
 function EvidenceChip({ v }: { v: BotView }) {
   return (
     <span className="inline-flex items-center gap-1.5" title="The family's admissible metric — the evidence next to the switch">
@@ -179,8 +191,8 @@ function SettingsTab({ v, now }: { v: BotView; now: number }) {
   const showOnPicks = ctl.current("show_on_picks", v.name);
   const picksNa = picksUnavailable(v);
   const mismatch = picksTelegramMismatch(v, showOnPicks);
-  const label = v.sb?.maturity_label ?? null;
-  const onPerf = PUBLIC_LABELS.has(label ?? "");
+  const vip = (ctl.state.bots.rows.find((b) => b.name === v.name) as (BotControlRow & { vip?: boolean | null }) | undefined)?.vip ?? null;
+  const lines = channelLines(v, { showOnPicks, vip, publishingPaused: ctl.current("publishing_paused", null) });
   const pathWhy = placementPathReason(v.cfg?.family ?? v.family, v.cfg?.ledger, v.cfg?.books);
   const row = ctl.placerBy.get(v.name);
   return (
@@ -209,24 +221,19 @@ function SettingsTab({ v, now }: { v: BotView; now: number }) {
 
       <Card title="2 · Publish" state={<EvidenceChip v={v} />}>
         <Line label="Show on /picks" control={<PicksSwitch v={v} now={now} showWord />}>
-          {picksNa ? picksNa.text : `Changes only what customers see on /picks. ${TAKES_EFFECT.show_on_picks}`}
+          {lines.picks.text} {picksNa ? null : <>The switch changes only what customers see on /picks. {TAKES_EFFECT.show_on_picks}</>}
         </Line>
-        <Line
-          label="Telegram channel"
-          control={<span className={`text-xs ${v.caps?.telegram ? "text-info" : "text-muted-foreground"}`}>{v.caps?.telegram == null ? "Unknown" : v.caps.telegram ? "Yes" : "No"}</span>}
-        >
-          The channel posts bots that earned the “calibrated” label (this bot: {label ?? "none"}). It does not follow the /picks switch and cannot be changed here yet.{" "}
-          <span className="opacity-70">(maturity_label)</span>
+        <Line label="Telegram channel" control={<ChannelState line={lines.telegram} />}>
+          {lines.telegram.text} <span className="opacity-70">Not a switch on this page.</span>
         </Line>
-        <Line label="/performance" control={<span className="text-xs text-muted-foreground">{onPerf ? "Yes" : "No"}</span>}>
-          Listed when the bot&apos;s label is “calibrated” or “beta” — never because of the /picks switch.{" "}
-          <span className="opacity-70">(maturity_label · I12)</span>
+        <Line label="/performance" control={<ChannelState line={lines.performance} />}>
+          {lines.performance.text}
         </Line>
         {mismatch && (
           <div className="flex gap-2 rounded-md border border-warning/40 bg-warning/10 px-2.5 py-1.5 text-xs text-warning">
             <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
             /picks and Telegram disagree: {showOnPicks ? "shown on /picks but not sent to Telegram" : "sent to Telegram but hidden from /picks"}.
-            Customers see different things in the two places. <span className="opacity-70">(migration 356, “Ludogorets”)</span>
+            Customers see different things in the two places.
           </div>
         )}
       </Card>

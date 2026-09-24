@@ -65,10 +65,11 @@ export default async function AdminIndexPage() {
   const paceChange = lastWeek > 0 && weekShare >= 1 / 7 ? Math.round(((pace - lastWeek) / lastWeek) * 100) : null;
   const feedsOk = d.feeds.rows.filter((x) => x.status === "ok").length;
   const feedsBad = d.feeds.rows.filter((x) => x.status === "fail" || x.status === "warn").length;
-  const rb4 = d.realBets.rows.slice(-4);
-  const rbPnl = rb4.reduce((a, r) => a + r.pnl, 0);
-  const rbBets = rb4.reduce((a, r) => a + r.bets, 0);
-  const rbStaked = rb4.reduce((a, r) => a + r.staked, 0);
+  // same window + rules as the Real bets page ("last 30 days"), so both pages show one number
+  const rb = d.realBets.last30;
+  const rbPnl = rb?.pnl ?? 0;
+  const rbBets = rb?.bets ?? 0;
+  const rbStaked = rb?.staked ?? 0;
   const hhmm = new Date(d.now).toISOString().slice(11, 16);
 
   return (
@@ -90,11 +91,17 @@ export default async function AdminIndexPage() {
         <StatCard
           label="Real money"
           icon={ShieldAlert}
-          tone={f?.real_money_armed ? "danger" : "success"}
+          tone={f?.real_money_armed ? "danger" : "neutral"}
           unknown={!f}
           danger={!!f?.real_money_armed}
           value={f?.real_money_armed ? "ARMED" : "Off"}
-          foot={`${d.bots.switchedOn == null ? "?" : d.bots.switchedOn} bot${d.bots.switchedOn === 1 ? "" : "s"} switched on · placement ${f == null ? "unknown" : f.placement_paused ? "paused" : "running"} · can stake: ${d.canStake}`}
+          foot={
+            d.canStake === "yes"
+              ? `CAN STAKE — ${d.bots.switchedOn ?? "?"} bot${d.bots.switchedOn === 1 ? "" : "s"} switched on`
+              : d.canStake === "unknown"
+                ? "Some switches unreadable — can't tell if money can move"
+                : `Can't stake — blocked by: ${d.moneyBlockers.join(", ")}`
+          }
           href="/admin/bots#real-money"
         />
         <StatCard
@@ -108,7 +115,7 @@ export default async function AdminIndexPage() {
           href="/admin/bots"
         />
         <StatCard
-          label="Picks · week"
+          label="Picks · this week"
           icon={Sparkles}
           tone="model"
           value={fmtInt(thisWeek)}
@@ -118,7 +125,7 @@ export default async function AdminIndexPage() {
             ) : undefined
           }
           spark={<Sparkline values={picksPerWeek} tone="model" kind="bars" />}
-          foot={`on pace for ${fmtInt(pace)} · last week ${fmtInt(lastWeek)}`}
+          foot={`Mon–now, active bots · on pace for ${fmtInt(pace)} · last week ${fmtInt(lastWeek)}`}
           href="/admin/bots"
         />
         <StatCard
@@ -131,10 +138,10 @@ export default async function AdminIndexPage() {
           href="/admin/feeds"
         />
         <StatCard
-          label="Real bets · 4 wk"
+          label="Real bets · 30 days"
           icon={Euro}
           tone={rbPnl >= 0 ? "success" : "danger"}
-          unknown={!!d.realBets.error}
+          unknown={!!d.realBets.error || !rb}
           value={fmtEur(rbPnl, { signed: true })}
           spark={<Sparkline values={d.realBets.rows.map((r) => r.pnl)} kind="bars" signed />}
           foot={`${fmtInt(rbBets)} bets · ${fmtEur(rbStaked)} staked`}
@@ -154,28 +161,44 @@ export default async function AdminIndexPage() {
             <CheckCircle2 size={16} className="text-success" aria-hidden="true" /> All clear — checked {hhmm} UTC.
           </p>
         ) : (
-          <ul className="mt-3 divide-y divide-border/60 border-t border-border/60">
-            {d.attention.map((a) => (
-              <li key={a.id}>
-                <Link href={a.href} className="group flex items-start gap-3 px-4 py-2.5 hover:bg-accent/40">
-                  <span className="mt-0.5 w-16 shrink-0">
-                    <StatusBadge tone={SEV_TONE[a.severity]}>{AREA_LABEL[a.area]}</StatusBadge>
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm">{a.title}</span>
-                    {a.detail && <span className="block truncate text-xs text-muted-foreground" title={a.detail}>{a.detail}</span>}
-                  </span>
-                  {ago(a.since, d.now) && (
-                    <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground" title={a.sinceFloor ? "No success in the 35 days of history we keep — it may be longer" : undefined}>
-                      {a.sinceFloor ? "over " : ""}
-                      {ago(a.since, d.now)}
-                    </span>
-                  )}
-                  <ArrowRight size={14} className="mt-0.5 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" aria-hidden="true" />
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <div className="mt-3 border-t border-border/60">
+            {(
+              [
+                ["Urgent", d.attention.filter((a) => a.severity === "danger")],
+                ["To check", d.attention.filter((a) => a.severity !== "danger")],
+              ] as const
+            ).map(([label, items]) =>
+              items.length === 0 ? null : (
+                <div key={label}>
+                  <div className={`px-4 pb-1 pt-3 font-mono text-[11px] uppercase tracking-wider ${label === "Urgent" ? "text-danger" : "text-warning"}`}>
+                    {label} · {items.length}
+                  </div>
+                  <ul className="divide-y divide-border/60">
+                    {items.map((a) => (
+                      <li key={a.id}>
+                        <Link href={a.href} className="group flex items-start gap-3 px-4 py-2.5 hover:bg-accent/40">
+                          <span className="mt-0.5 w-16 shrink-0">
+                            <StatusBadge tone={SEV_TONE[a.severity]}>{AREA_LABEL[a.area]}</StatusBadge>
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm">{a.title}</span>
+                            {a.detail && <span className="block truncate text-xs text-muted-foreground" title={a.detail}>{a.detail}</span>}
+                          </span>
+                          {ago(a.since, d.now) && (
+                            <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground" title={a.sinceFloor ? "No success in the 35 days of history we keep — it may be longer" : undefined}>
+                              {a.sinceFloor ? "over " : ""}
+                              {ago(a.since, d.now)}
+                            </span>
+                          )}
+                          <ArrowRight size={14} className="mt-0.5 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" aria-hidden="true" />
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ),
+            )}
+          </div>
         )}
       </Panel>
 

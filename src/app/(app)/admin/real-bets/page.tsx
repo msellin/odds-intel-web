@@ -14,7 +14,16 @@ import type { Metadata } from "next";
 import { AlertTriangle, CalendarClock, Coins, Euro, LineChart, Scale, Wallet } from "lucide-react";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
 import { isBotBoardDevPreview } from "@/lib/bot-board";
-import { DAILY_MAX_BETS, DAILY_MAX_STAKE_EUR, loadMoney, RECONCILE_AFTER_H, unconfirmedToDo, type MoneyBet } from "@/lib/admin-money";
+import {
+  DAILY_MAX_BETS,
+  DAILY_MAX_STAKE_EUR,
+  loadMoney,
+  moneyBotLabel,
+  realMoneyWindow,
+  RECONCILE_AFTER_H,
+  unconfirmedToDo,
+  type MoneyBet,
+} from "@/lib/admin-money";
 import { MARKET_THRESHOLDS_V2_EPOCH } from "@/lib/engine-data";
 import { PageHeader, Panel, PanelHeader, SectionLabel } from "@/components/oi/panel";
 import { Sparkline, StatCard } from "@/components/oi/stat-card";
@@ -153,13 +162,13 @@ function daily(bets: MoneyBet[], days: number): DailyRow[] {
 function perBot(bets: MoneyBet[]): BotMoneyRow[] {
   const m = new Map<string, MoneyBet[]>();
   for (const b of bets) {
-    const k = b.bot ?? "(no bot)";
+    const k = b.bot ?? "";
     m.set(k, [...(m.get(k) ?? []), b]);
   }
-  return [...m.entries()].map(([bot, bs]) => {
+  return [...m.entries()].map(([botId, bs]) => {
     const a = aggregate(bs);
     const c = meanClv(bs, (b) => b.clv);
-    return { bot, bets: a.total, settled: a.settled, open: a.open, staked: a.staked, pnl: a.pnl, roi: a.roi, clv: c.mean, clvN: c.n, won: a.won, lost: a.lost };
+    return { bot: moneyBotLabel(bs[0]), botId: botId || null, bets: a.total, settled: a.settled, open: a.open, staked: a.staked, pnl: a.pnl, roi: a.roi, clv: c.mean, clvN: c.n, won: a.won, lost: a.lost };
   });
 }
 
@@ -189,7 +198,9 @@ export default async function RealBetsPage() {
   const overCap = todayAuto.length >= DAILY_MAX_BETS || autoStake >= DAILY_MAX_STAKE_EUR;
 
   const overall = aggregate(bets);
-  const last30 = aggregate(bets.filter((b) => Date.parse(b.placedAt) >= now.getTime() - 30 * 86_400_000));
+  // The SAME window definition as the Overview's real-money card (realMoneyWindow in admin-money.ts):
+  // placed in the last 30 × 24 h, paper excluded, staked = every bet placed, P/L = settled only.
+  const last30 = realMoneyWindow(bets, now, 30);
   const clv = meanClv(bets, (b) => b.clv);
   const clvPin = meanClv(bets, (b) => b.clvPinnacle);
   const open = bets.filter((b) => !isSettled(b));
@@ -249,7 +260,7 @@ export default async function RealBetsPage() {
           tone="info"
           unknown={unreadable}
           value={fmtEur(overall.staked)}
-          foot={`Settled bets, all time · ${fmtEur(last30.staked)} in the last 30 days`}
+          foot={`Settled bets, all time · last 30 days: ${fmtEur(last30.staked)} on ${fmtInt(last30.bets)} bets (open included)`}
         />
         <StatCard
           label="Profit / loss"
@@ -258,7 +269,7 @@ export default async function RealBetsPage() {
           unknown={unreadable}
           value={<span className={overall.pnl > 0 ? "text-success" : overall.pnl < 0 ? "text-danger" : ""}>{fmtEur(overall.pnl, { signed: true })}</span>}
           spark={<Sparkline values={pnlSpark} kind="bars" signed />}
-          foot={`Return on stake ${fmtPct(overall.roi)} · last 30 days ${fmtEur(last30.pnl, { signed: true })}`}
+          foot={`Return on stake ${fmtPct(overall.roi)} · last 30 days ${fmtEur(last30.pnl, { signed: true })} (${fmtInt(last30.settled)} settled)`}
         />
         <StatCard
           label="Beat the close?"

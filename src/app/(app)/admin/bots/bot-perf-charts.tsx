@@ -40,7 +40,7 @@ export function BotPerfCharts({ v, weekly }: { v: BotView; weekly: BotWeeklyRow[
 
   const byWeek = new Map<number, BotWeeklyRow>();
   for (const r of weekly) byWeek.set(weekStart(new Date(r.week).getTime()), r);
-  const data: { week: string; clv: number | null; zero: number; n: number; pnl: number; cum: number; settled: number }[] = [];
+  const data: { week: string; clv: number | null; n: number; pnl: number; cum: number; settled: number }[] = [];
   for (const w of weeks) {
     const r = byWeek.get(w.start);
     const raw = Number(r?.pnl_unit ?? 0);
@@ -49,9 +49,6 @@ export function BotPerfCharts({ v, weekly }: { v: BotView; weekly: BotWeeklyRow[
     data.push({
       week: new Date(w.start).toISOString().slice(0, 10),
       clv: !inplay && w.clvN >= MIN_WEEK_N && w.clvMean != null ? w.clvMean * 100 : null,
-      // A constant 0 series keeps zero (= the close) inside the y-axis even when every week is
-      // negative — ChartCard has no domain prop, and a CLV axis without zero reads as "fine".
-      zero: 0,
       n: w.clvN,
       pnl: Math.round(pnl * 100) / 100,
       cum: Math.round((prev + pnl) * 100) / 100,
@@ -80,14 +77,16 @@ export function BotPerfCharts({ v, weekly }: { v: BotView; weekly: BotWeeklyRow[
           kind="line"
           data={data}
           xKey="week"
-          series={[
-            { key: "clv", label: METRIC_SHORT[metric], color: "var(--color-method-model)" },
-            { key: "zero", label: "0% = the closing price", color: "var(--muted-foreground)", dashed: true },
-          ]}
+          series={[{ key: "clv", label: METRIC_SHORT[metric], color: "var(--color-method-model)" }]}
           ranges={RANGES}
           defaultRange="12w"
           xFmt={wk}
-          yFmt={(y) => signed(y, 0, "%")}
+          // The smallest range that holds every point AND zero (= the close): a CLV axis without
+          // zero reads as "fine" when every week is negative. 1-decimal ticks — whole-percent ticks
+          // repeated ("−2%, −2%") on a narrow range. The dashed zero SERIES this replaces drew dots.
+          yDomain={[(m: number) => Math.min(0, m), (M: number) => Math.max(0, M)]}
+          yFmt={(y) => signed(y, 1, "%")}
+          zeroLine
           fmt={(val) => (num(val) == null ? "—" : signed(num(val) as number, 1, "%"))}
           height={200}
           empty={clvEmpty}
@@ -104,7 +103,7 @@ export function BotPerfCharts({ v, weekly }: { v: BotView; weekly: BotWeeklyRow[
         ranges={RANGES}
         defaultRange="12w"
         xFmt={wk}
-        yFmt={(y) => signed(y, 0, "u")}
+        yFmt={(y) => signed(y, 1, "u")}
         fmt={(val) => (num(val) == null ? "—" : signed(num(val) as number, 1, "u"))}
         zeroLine
         height={200}

@@ -46,19 +46,19 @@ export function HowItWorks() {
         </p>
         <ul className="mb-3 list-disc pl-5">
           <li className={LI}>
-            <strong>Model bots</strong> (<span className={CODE}>O/U 3.5 model</span>) compare the book&rsquo;s price with{" "}
+            <strong>Model bots</strong> (e.g. <em>Goals over/under 3.5</em>) compare the book&rsquo;s price with{" "}
             <em>our own model</em>. The model is noisier than the market, so they demand a big edge — 8 to 13 points.
           </li>
           <li className={LI}>
-            <strong>Sharp bots</strong> (<span className={CODE}>CB 1x2 sharp</span>) compare it with{" "}
+            <strong>Sharp bots</strong> (e.g. <em>Coolbet match result (sharp trigger)</em>) compare it with{" "}
             <em>Pinnacle&rsquo;s price with its margin removed</em>. That is a much tighter yardstick, so their bar is about
             3 points. Different rulers, not different strictness.
           </li>
         </ul>
         <p className={P}>
-          The bot name tells you which ruler a row uses: <span className={CODE}>sharp</span> or{" "}
-          <span className={CODE}>model</span>. The book prefix (<span className={CODE}>CB</span> Coolbet,{" "}
-          <span className={CODE}>UB</span> Unibet) is where it was priced.
+          The bot name tells you which ruler a row uses: <em>sharp trigger</em> bots use Pinnacle, the rest our model. A
+          book in the name (Coolbet, Unibet) is where the bot prices its picks; the small grey text under each name is the
+          bot&rsquo;s id, the same one the Bots page uses.
         </p>
 
         <h3 className={H}>2 · Everything is kept</h3>
@@ -71,17 +71,21 @@ export function HowItWorks() {
         <h3 className={H}>3 · Reading one row</h3>
         <ul className="mb-3 list-disc pl-5">
           <li className={LI}>
-            <strong>Best price now</strong> — the best price right now at a book you can actually bet at. If only a book we
-            cannot bet at has a price, it is shown greyed; a price you cannot take is not an opportunity.
+            <strong>One row per bet</strong> — when several bots raised the same match, market and selection, they share
+            one row. The row shows the strongest of them; &ldquo;+N more bots&rdquo; lists the others with their own
+            verdicts.
           </li>
           <li className={LI}>
-            <strong>Bot&rsquo;s price age</strong> — how old the price was <em>when the bot decided</em>. A bot that fired
-            on a 20-hour-old price decided on a price nobody could take. Fresh means {DECISION_FRESH_MAX_MIN} minutes or
-            less — the engine&rsquo;s own definition.
+            <strong>Best price now</strong> — the best price right now across <em>all</em> the books you can actually bet
+            at, so it can be a different book from the one the bot priced its pick at (a Unibet bot can show a Coolbet
+            price). When it is, that book&rsquo;s own price is shown underneath. Under the price is how old it is: at{" "}
+            {QUOTE_MAX_AGE_MIN} minutes or more it is marked too old and the row reads Skip — we assume it has gone from
+            the book&rsquo;s screen. If only a book we cannot bet at has a price, it is shown greyed.
           </li>
           <li className={LI}>
-            <strong>Price age</strong> — how old the price in &ldquo;Best price now&rdquo; is. At {QUOTE_MAX_AGE_MIN}{" "}
-            minutes or more we assume it has gone from the book&rsquo;s screen.
+            <strong>Age at pick</strong> — how old the price was <em>when the bot decided</em>, a different
+            clock from the price shown now. A bot that fired on a 20-hour-old price decided on a price nobody could take.
+            Over {DECISION_FRESH_MAX_MIN} minutes — the engine&rsquo;s own limit — it is marked and the row greyed.
           </li>
           <li className={LI}>
             <strong>Break-even</strong> — below this price the bet loses money on the bot&rsquo;s own numbers.
@@ -91,8 +95,9 @@ export function HowItWorks() {
             break-even and this, a bet is positive but below the bot&rsquo;s standard.
           </li>
           <li className={LI}>
-            <strong>Edge now</strong> — the edge worked out again at the price shown now, not at the price when the pick
-            was raised. This is the number that has moved since.
+            <strong>Edge now</strong> — the edge worked out again at the best price now, not at the price when the pick
+            was raised. It is only shown when that price reaches the bot&rsquo;s minimum; between break-even and the
+            minimum it reads &ldquo;below min&rdquo;, because that is not a bet the bot would make.
           </li>
           <li className={LI}>
             <strong>Bot chips</strong> — <em>lead bot</em> is the one bot worth watching (beating the closing price on the
@@ -106,7 +111,7 @@ export function HowItWorks() {
         <ul className="mb-3 list-disc pl-5">
           <li className={LI}>
             <span className={`${CHIP} bg-success/15 text-success`}>Place</span> — the price clears the bot&rsquo;s own
-            minimum and is fresh.
+            minimum, and the price is under {QUOTE_MAX_AGE_MIN} minutes old.
           </li>
           <li className={LI}>
             <span className={`${CHIP} bg-warning/15 text-warning`}>Thin</span> — above break-even, below the bot&rsquo;s
@@ -123,9 +128,9 @@ export function HowItWorks() {
           </li>
         </ul>
         <p className={P}>
-          <strong>What blocked does not mean:</strong> the automatic placer being paused. That is the muted{" "}
-          <span className={`${CHIP} border border-border text-muted-foreground`}>auto off</span> marker instead — the
-          machine being off is not a fact about the price.
+          <strong>What blocked does not mean:</strong> the automatic placer being paused. That is stated once, above the
+          table (&ldquo;Automatic placing: Off&rdquo;) — the machine being off is not a fact about the price, and it
+          never stops you recording a bet you placed by hand.
         </p>
 
         <h3 className={H}>5 · Why some rows are greyed</h3>
@@ -141,7 +146,8 @@ export function HowItWorks() {
             answer &ldquo;what did I pass on, and was I right?&rdquo; later.
           </li>
           <li className={LI}>
-            <strong>Place €10</strong> does not bet for you. It <em>records</em> a bet you already placed by hand at the
+            <strong>Place €10</strong> appears only on Place rows, and on Thin rows with a warning; every other row says
+            in words why not. It does not bet for you. It <em>records</em> a bet you already placed by hand at the
             book, so it lands in the ledger, gets settled, and gets scored against the closing price. You can change the
             price and stake to what you actually took before confirming. It stays available when automation is paused.
           </li>

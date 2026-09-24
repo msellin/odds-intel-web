@@ -3,12 +3,23 @@
 // /admin/ops (Jobs) — every scheduled job, latest run, failing first (#139 admin redesign,
 // 2026-09-24). Rows come from view pipeline_job_latest (engine migration 417) through
 // buildJobViews(); this file only renders them in the shared DataTable.
+//
+// #139 UX fix round (2026-09-24): every row is clickable and opens JobDrawer (last runs, full error,
+// Run now where a feed-control path exists); each row carries id="job-<job_name>" (jobAnchor) so
+// /admin/ops#job-<name> — e.g. from the Overview's attention list — scrolls to it AND opens its
+// drawer; the table is unpaged so every anchor exists. "Failing since" sorts non-failing rows last
+// in BOTH directions (their value is undefined, sortUndefined "last").
 
+import { useEffect, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "@/components/oi/data-table";
 import { StatusBadge, type Tone } from "@/components/oi/status-badge";
-import { STATE_RANK, STATE_WORD, type JobState, type JobView } from "@/lib/admin-jobs-model";
-import { dayMonth, relTime, utcStamp } from "../bots/bot-board-format";
+import { jobAnchor, STATE_RANK, STATE_WORD, type JobState, type JobView } from "@/lib/admin-jobs-model";
+import type { JobFeed } from "@/lib/admin-jobs";
+import { ToastProvider } from "../bots/toast";
+import { JobDrawer } from "./job-drawer";
+import { dayMonth, utcStamp } from "../bots/bot-board-format";
+import { timeAgo } from "@/lib/rel-time";
 
 const STATE_TONE: Record<JobState, Tone> = { failing: "danger", stuck: "warning", running: "info", quiet: "neutral", ok: "success" };
 const STATE_TITLE: Record<JobState, string> = {
@@ -19,23 +30,34 @@ const STATE_TITLE: Record<JobState, string> = {
   ok: "Last run completed",
 };
 
-/** "25 min ago" · "6 h ago" · "on 7 Sep" (relTime switches to a date after 14 days). */
 function ago(iso: string | null, now: number): string {
-  if (!iso) return "—";
-  const r = relTime(iso, now);
-  if (r === "just now") return r;
-  return /\d (min|h|d)$/.test(r) ? `${r} ago` : `on ${r}`;
+  return iso ? timeAgo(iso, now) : "—";
 }
 
-export function JobsTable({ rows, now }: { rows: JobView[]; now: number }) {
+export function JobsTable({ rows, now, feeds, preview }: { rows: JobView[]; now: number; feeds: JobFeed[]; preview: boolean }) {
+  const [open, setOpen] = useState<JobView | null>(null);
+  useEffect(() => {
+    const fromHash = () => {
+      const h = window.location.hash.slice(1);
+      if (!h.startsWith("job-")) return;
+      const v = rows.find((r) => jobAnchor(r.job) === jobAnchor(h.slice(4)));
+      if (v) {
+        document.getElementById(jobAnchor(v.job))?.scrollIntoView({ block: "center" });
+        setOpen(v);
+      }
+    };
+    fromHash();
+    window.addEventListener("hashchange", fromHash);
+    return () => window.removeEventListener("hashchange", fromHash);
+  }, [rows]);
   const columns: ColumnDef<JobView>[] = [
     {
       accessorKey: "label",
       header: "Job",
       meta: { label: "Job", csv: (r) => r.job },
       cell: ({ row }) => (
-        <div className="min-w-[12rem]">
-          <span className="block text-sm">{row.original.label}</span>
+        <div id={jobAnchor(row.original.job)} className="min-w-[12rem] scroll-mt-24">
+          <span className="block text-sm underline-offset-2 group-hover:underline">{row.original.label}</span>
           <span className="block font-mono text-[11px] text-muted-foreground">{row.original.job}</span>
         </div>
       ),
@@ -68,7 +90,9 @@ export function JobsTable({ rows, now }: { rows: JobView[]; now: number }) {
       ),
     },
     {
-      accessorKey: "failingSince",
+      id: "failingSince",
+      // undefined (not null) for non-failing rows, so sortUndefined keeps them last in both directions
+      accessorFn: (r) => r.failingSince ?? undefined,
       header: "Failing since",
       sortUndefined: "last",
       meta: { label: "Failing since (UTC)", csv: (r) => r.failingSince ?? "" },
@@ -106,20 +130,38 @@ export function JobsTable({ rows, now }: { rows: JobView[]; now: number }) {
     },
   ];
   return (
-    <DataTable
-      data={rows}
-      columns={columns}
-      searchPlaceholder="Search jobs or errors…"
-      facets={[
-        { column: "state", label: "Status", format: (v) => STATE_WORD[v as JobState] ?? v },
-        { column: "group", label: "Group" },
-      ]}
-      exportName="admin-jobs"
-      pageSize={25}
-      dense
-      emptyText="No job runs recorded in the last 35 days."
-      rowClassName={(r) => (r.state === "failing" ? "bg-danger/5" : "")}
-    />
+    <ToastProvider>
+      <DataTable
+        data={rows}
+        columns={columns}
+        searchPlaceholder="Search jobs or errors…"
+        facets={[
+          { column: "state", label: "Status", format: (v) => STATE_WORD[v as JobState] ?? v },
+          { column: "group", label: "Group" },
+        ]}
+        exportName="admin-jobs"
+        pageSize={0}
+        maxHeight="44rem"
+        dense
+        emptyText="No job runs recorded in the last 35 days."
+        onRowClick={(r) => {
+          setOpen(r);
+          window.history.replaceState(window.history.state, "", `#${jobAnchor(r.job)}`);
+        }}
+        rowClassName={(r) => `group ${r.state === "failing" ? "bg-danger/5" : ""}`}
+      />
+      <p className="mt-2 text-xs text-muted-foreground">Click a job for its last runs, the full error and how to run it again.</p>
+      <JobDrawer
+        view={open}
+        feeds={feeds}
+        now={now}
+        preview={preview}
+        onClose={() => {
+          setOpen(null);
+          window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
+        }}
+      />
+    </ToastProvider>
   );
 }
 

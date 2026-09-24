@@ -2,8 +2,11 @@
 
 // The bot sheet's Picks tab (#139 IA move P7, 2026-09-24) — the per-bot ledger that used to live on
 // /admin/shadow-bots/[bot], rebuilt on the unified bot_ledger and the shared DataTable (search,
-// result / bet-made facets, sortable columns, CSV export). Pages of 50, newest first, with
-// "Load 50 older picks" until the ledger is exhausted.
+// result facet, sortable columns, CSV export). Pages of 50, newest PICK first (the first column is
+// the pick time, so the order and the column agree), with "Load 50 older picks" until the ledger
+// is exhausted. "Bet made only" is a SERVER-side filter over the whole ledger (?placed=1), and the
+// real-money line counts the whole ledger too — #139 UX fix round: both used to cover only the
+// loaded rows ("No real money on any of these 50 picks").
 //
 // Columns, and why each family sees only its own:
 //  * Bet made — was real money staked on THIS pick: our price + the venue (real_bets,
@@ -45,7 +48,7 @@ function ResultTag({ result }: { result: string | null }) {
   return <span className="text-foreground">{result ?? "—"}</span>;
 }
 
-function kickoffLabel(iso: string | null): string {
+function timeLabel(iso: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
   return `${dayMonth(d)} ${d.toISOString().slice(11, 16)}`;
@@ -59,7 +62,19 @@ function marketSel(r: BotPickRow): string {
 
 const matchText = (r: BotPickRow) => (r.home_team && r.away_team ? `${r.home_team} – ${r.away_team}` : `match ${r.match_id ? r.match_id.slice(0, 8) : "—"}`);
 
-export function PicksTable({ v, ledger, onMore }: { v: BotView; ledger: LedgerState | undefined; onMore?: () => void }) {
+export function PicksTable({
+  v,
+  ledger,
+  onMore,
+  placedOnly = false,
+  onPlacedOnly,
+}: {
+  v: BotView;
+  ledger: LedgerState | undefined;
+  onMore?: () => void;
+  placedOnly?: boolean;
+  onPlacedOnly?: (on: boolean) => void;
+}) {
   const metric = v.metric.metric;
   const inplay = metric === "lift" || v.family === "inplay";
   const scored = v.sb?.scored_rule_version ?? null;
@@ -72,20 +87,21 @@ export function PicksTable({ v, ledger, onMore }: { v: BotView; ledger: LedgerSt
   const linked = loaded?.placementLinked !== false;
   const placedUnknown = !!loaded?.placedError;
   const anyPriceRow = !inplay && rows.some((r) => r.now != null);
-  const placedN = rows.filter((r) => r.placed).length;
+  const placedPicks = loaded?.placedPicks ?? null;
+  const totalPicks = v.sb?.picks_total ?? null;
 
   const columns = useMemo<ColumnDef<BotPickRow>[]>(() => {
     const cols: ColumnDef<BotPickRow>[] = [
       {
-        id: "kickoff",
-        header: "Kickoff",
-        accessorFn: (r) => (r.kickoff ? new Date(r.kickoff).getTime() : 0),
+        id: "picked",
+        header: () => <span title="When the bot made the pick (UTC). The list is newest pick first.">Picked</span>,
+        accessorFn: (r) => (r.pick_time ? new Date(r.pick_time).getTime() : 0),
         cell: ({ row }) => (
-          <span className="whitespace-nowrap font-mono text-xs text-muted-foreground" title={utcStamp(row.original.kickoff)}>
-            {kickoffLabel(row.original.kickoff)}
+          <span className="whitespace-nowrap font-mono text-xs text-muted-foreground" title={`Picked ${utcStamp(row.original.pick_time)}`}>
+            {timeLabel(row.original.pick_time)}
           </span>
         ),
-        meta: { csv: (r) => r.kickoff ?? "" },
+        meta: { label: "Picked", csv: (r) => r.pick_time ?? "" },
       },
       {
         id: "match",
@@ -95,25 +111,24 @@ export function PicksTable({ v, ledger, onMore }: { v: BotView; ledger: LedgerSt
           const r = row.original;
           const old = scored != null && r.source === "forward_test" && r.rule_version !== scored;
           return (
-            <span className="block max-w-[14rem] truncate" title={matchText(r)}>
-              {r.home_team && r.away_team ? matchText(r) : <span className="font-mono text-muted-foreground">{matchText(r)}</span>}
-              {old && (
-                <span className="ml-1 rounded bg-muted px-1 font-mono text-xs" title={`Earlier rule version ${r.rule_version ?? ""} — not scored`}>
-                  {fmtRuleVersion(r.rule_version)?.split(" ·")[0] ?? "old"}
-                </span>
-              )}
+            <span className="block max-w-[14rem] leading-tight" title={`${matchText(r)} · kick-off ${utcStamp(r.kickoff)}`}>
+              <span className="block truncate">
+                {r.home_team && r.away_team ? matchText(r) : <span className="font-mono text-muted-foreground">{matchText(r)}</span>}
+                {old && (
+                  <span className="ml-1 rounded bg-muted px-1 font-mono text-xs" title={`Earlier rule version ${r.rule_version ?? ""} — not scored`}>
+                    {fmtRuleVersion(r.rule_version)?.split(" ·")[0] ?? "old"}
+                  </span>
+                )}
+              </span>
+              {/* kick-off under the match: the first column is the PICK time (the sort order) */}
+              <span className="block font-mono text-[11px] text-muted-foreground">KO {timeLabel(r.kickoff)}</span>
             </span>
           );
         },
+        meta: { csv: (r) => `${matchText(r)} (kick-off ${r.kickoff ?? "?"})` },
       },
       { id: "pick", header: "Pick", accessorFn: marketSel, cell: ({ getValue }) => <span className="whitespace-nowrap">{String(getValue())}</span> },
       { id: "odds", header: "Odds", accessorFn: (r) => r.odds, cell: ({ row }) => odds2(row.original.odds), meta: { align: "right" } },
-      {
-        id: "book",
-        header: "Book",
-        accessorFn: (r) => r.bookmaker?.replace(/-Site$/, "") ?? "—",
-        cell: ({ getValue }) => <span className="whitespace-nowrap text-muted-foreground">{String(getValue())}</span>,
-      },
     ];
     if (linked) {
       cols.push({
@@ -139,6 +154,13 @@ export function PicksTable({ v, ledger, onMore }: { v: BotView; ledger: LedgerSt
         meta: { label: "Bet made", csv: (r) => (r.placed ? `${r.placed.odds ?? ""} ${r.placed.bookmaker ?? ""}`.trim() : "") },
       });
     }
+    cols.push({
+      id: "book",
+      header: () => <span title="The book whose price the bot quoted — not necessarily where a real bet went (see Bet made).">Book</span>,
+      accessorFn: (r) => r.bookmaker?.replace(/-Site$/, "") ?? "—",
+      cell: ({ getValue }) => <span className="whitespace-nowrap text-muted-foreground">{String(getValue())}</span>,
+      meta: { label: "Book" },
+    });
     if (anyPriceRow) {
       for (const book of SNAPSHOT_BOOKS) {
         const c = BOOK_COL[book];
@@ -193,7 +215,6 @@ export function PicksTable({ v, ledger, onMore }: { v: BotView; ledger: LedgerSt
     );
   }
   if (ledger.error) return <p className="break-words text-sm text-warning">Could not read the ledger: {ledger.error}</p>;
-  if (rows.length === 0) return <p className="text-sm text-muted-foreground">No picks yet.</p>;
 
   return (
     <div className="space-y-2">
@@ -203,18 +224,44 @@ export function PicksTable({ v, ledger, onMore }: { v: BotView; ledger: LedgerSt
           <li className="text-warning">No {METRIC_SHORT[metric]} recorded on any of these {rows.length} picks — the column is hidden. The scoreboard figure comes from older picks.</li>
         )}
         {!linked && <li>Forward-test picks are not linked to real bets (the ledger carries no bot id), so there is no Bet made column.</li>}
-        {linked && !placedUnknown && <li>{placedN > 0 ? `${placedN} of these ${rows.length} picks had real money on them.` : `No real money on any of these ${rows.length} picks.`}</li>}
+        {linked && !placedUnknown && placedPicks != null && (
+          <li className={placedPicks > 0 ? "text-foreground" : undefined}>
+            Real money on {count(placedPicks)} of {totalPicks != null ? count(totalPicks) : "all"} picks (whole ledger, not just the loaded rows).
+          </li>
+        )}
         {placedUnknown && <li className="text-warning">Placements unreadable ({loaded?.placedError}) — Bet made shows Unknown, not “no”.</li>}
         {loaded?.pricesError && <li className="text-warning">Current prices unreadable ({loaded.pricesError}).</li>}
       </ul>
+      {linked && !placedUnknown && onPlacedOnly && (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-muted-foreground">Show</span>
+          <div className="inline-flex rounded-lg border border-border p-0.5" role="group" aria-label="Which picks">
+            {[
+              [false, "All picks"],
+              [true, "Bet made only"],
+            ].map(([on, label]) => (
+              <button
+                key={String(on)}
+                type="button"
+                aria-pressed={placedOnly === on}
+                onClick={() => onPlacedOnly(on as boolean)}
+                className={`h-7 rounded-md px-2.5 ${placedOnly === on ? "bg-accent font-medium text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                {label as string}
+              </button>
+            ))}
+          </div>
+          {placedOnly && <span className="text-muted-foreground">searched across the whole ledger</span>}
+        </div>
+      )}
+      {rows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{placedOnly ? "No pick of this bot has a real bet on it." : "No picks yet."}</p>
+      ) : (
       <DataTable
         data={rows}
         columns={columns}
         searchPlaceholder="Search team, market…"
-        facets={[
-          { column: "result", label: "Result" },
-          ...(linked && !placedUnknown ? [{ column: "bet", label: "Bet made" }] : []),
-        ]}
+        facets={[{ column: "result", label: "Result" }]}
         pageSize={0}
         maxHeight="60dvh"
         dense
@@ -222,9 +269,11 @@ export function PicksTable({ v, ledger, onMore }: { v: BotView; ledger: LedgerSt
         rowClassName={(r) => (scored != null && r.source === "forward_test" && r.rule_version !== scored ? "opacity-50" : "")}
         emptyText="No picks yet."
       />
+      )}
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
         <span className="tabular-nums">
-          {count(rows.length)} loaded, newest first{v.sb?.picks_total != null ? ` · ${count(v.sb.picks_total)} on the scoreboard` : ""}
+          {count(rows.length)} {placedOnly ? "picks with a real bet" : "picks"} loaded, newest pick first
+          {!placedOnly && totalPicks != null ? ` · ${count(totalPicks)} in total` : ""}
         </span>
         {ledger.hasMore ? (
           <button
@@ -237,7 +286,7 @@ export function PicksTable({ v, ledger, onMore }: { v: BotView; ledger: LedgerSt
             Load 50 older picks
           </button>
         ) : (
-          <span>That is the whole ledger.</span>
+          <span>{placedOnly ? "That is every pick with a real bet." : "That is the whole ledger."}</span>
         )}
       </div>
       {ledger.moreError && <p className="text-xs text-warning">Could not load older picks: {ledger.moreError}</p>}

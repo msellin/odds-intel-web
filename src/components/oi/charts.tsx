@@ -141,8 +141,8 @@ function Legend({ series, hidden, toggle }: { series: Series[]; hidden: Set<stri
   );
 }
 
-function useHidden() {
-  const [hidden, setHidden] = useState<Set<string>>(new Set());
+function useHidden(initial: string[] = []) {
+  const [hidden, setHidden] = useState<Set<string>>(() => new Set(initial));
   const toggle = (k: string) =>
     setHidden((h) => {
       const n = new Set(h);
@@ -178,6 +178,8 @@ export function ChartCard({
   xFmt,
   yFmt,
   zeroLine = false,
+  yDomain,
+  defaultHidden,
   empty,
   footer,
   id,
@@ -196,11 +198,15 @@ export function ChartCard({
   xFmt?: (v: string) => string;
   yFmt?: (v: number) => string;
   zeroLine?: boolean;
+  /** Passed to the Y axis, e.g. [(m) => Math.min(0, m), (M) => Math.max(0, M)] to keep 0 in view. */
+  yDomain?: [number | string | ((v: number) => number), number | string | ((v: number) => number)];
+  /** Series keys hidden until the viewer turns them on in the legend (opt-in series). */
+  defaultHidden?: string[];
   empty?: ReactNode;
   footer?: ReactNode;
   id?: string;
 }) {
-  const { hidden, toggle } = useHidden();
+  const { hidden, toggle } = useHidden(defaultHidden);
   const [range, setRange] = useState(defaultRange ?? ranges?.[ranges.length - 1]?.value ?? "");
   const rows = useMemo(() => {
     const r = ranges?.find((o) => o.value === range);
@@ -213,7 +219,7 @@ export function ChartCard({
     <>
       <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 3" />
       <XAxis dataKey={xKey} {...AXIS} tickFormatter={xFmt} minTickGap={12} />
-      <YAxis {...AXIS} width={44} tickFormatter={yFmt} />
+      <YAxis {...AXIS} width={48} tickFormatter={yFmt} domain={yDomain} allowDecimals />
       {zeroLine && <ReferenceLine y={0} stroke="var(--muted-foreground)" strokeOpacity={0.4} />}
       <Tooltip
         cursor={kind === "bar" ? { fill: "var(--accent)", opacity: 0.4 } : { stroke: "var(--border)" }}

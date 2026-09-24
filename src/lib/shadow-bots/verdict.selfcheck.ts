@@ -21,6 +21,7 @@ import {
   pickVerdict,
   inplayOverride,
   quoteFreshness,
+  shownEdge,
   DECISION_FRESH_MAX_MIN,
   botVerdict,
   meanSd,
@@ -251,3 +252,28 @@ console.log("verdict.selfcheck: 2026-09-15 corrections asserted");
   );
 }
 console.log("verdict.selfcheck: 2026-09-16 TRACK asserted");
+
+// ── shown edge (UX fix round, 2026-09-24) ─────────────────────────────────────
+// The tester's case: best 1.62, bot minimum 1.80, raw edge +8.9% — the page must NOT show a
+// positive edge on a price below the bot's own minimum.
+{
+  // p = 0.706 → BE 1.416; threshold 0.15 → gate 1/(0.556) = 1.80
+  const inp = { ...base, prob: 0.706, threshold: 0.15, livePrice: 1.62 };
+  const v = pickVerdict(inp);
+  assert.ok(v.liveEdge != null && v.liveEdge > 0.08, "raw edge is positive (≈ +8.9%)");
+  assert.equal(v.verdict, "THIN");
+  assert.equal(shownEdge(v, 1.62), null, "between break-even and the minimum → no edge shown");
+  // below break-even → the negative edge is shown as is
+  const lo = pickVerdict({ ...inp, livePrice: 1.3 });
+  assert.ok(shownEdge(lo, 1.3)! < 0, "below break-even the shown edge is negative");
+  // at/above the minimum → the edge
+  const hi = pickVerdict({ ...inp, livePrice: 1.9 });
+  close(shownEdge(hi, 1.9), 0.706 - 1 / 1.9, "at/above the minimum the edge is shown");
+  // gate unreachable → nothing shown even though the price beats break-even
+  const un = pickVerdict({ ...inp, threshold: 0.8, livePrice: 2.0 });
+  assert.equal(un.gateFloor, null);
+  assert.equal(shownEdge(un, 2.0), null);
+  // no price → nothing
+  assert.equal(shownEdge(pickVerdict({ ...inp, livePrice: null }), null), null);
+}
+console.log("verdict.selfcheck: 2026-09-24 shown edge asserted");
