@@ -166,6 +166,7 @@ export function FeedsBoard({ feeds, books, now }: { feeds: FeedStatus[]; books: 
         <div className="text-xs text-muted-foreground mt-0.5">
           {b.main && <>{main?.kind === "close" ? "last capture" : "last odds"} {clock(main?.last_data_at ?? null)}</>}
           {st && st.fixtures_today ? <> · {st.priced_today}/{st.fixtures_today} fixtures today</> : null}
+          {st && st.liquid_today != null ? <> · {st.liquid_today} liquid</> : null}
         </div>
         {extras.length > 0 && b.main && (
           <div className="flex flex-wrap gap-2 mt-1.5">
@@ -195,6 +196,12 @@ export function FeedsBoard({ feeds, books, now }: { feeds: FeedStatus[]; books: 
           <div className="text-xs text-muted-foreground">
             Today: <span className="text-foreground">{st.priced_today}/{st.fixtures_today}</span> fixtures priced
             {st.fixtures_today ? ` (${Math.round((100 * (st.priced_today ?? 0)) / st.fixtures_today)}%)` : ""}
+            {st.liquid_today != null && (
+              <span title="Listed = the exchange has the market (thin placeholders included). Liquid = usable as a price: every runner's lay/back spread ≤ 5% and ≥ €1,000 matched on the market (betfair_exchange_feed.is_liquid).">
+                {" · "}<span className="text-foreground">{st.liquid_today}</span> liquid
+                {st.fixtures_today ? ` (${Math.round((100 * st.liquid_today) / st.fixtures_today)}%)` : ""}
+              </span>
+            )}
             {" · "}yesterday {st.priced_yesterday}/{st.fixtures_yesterday}
             {st.fixtures_yesterday ? ` (${Math.round((100 * (st.priced_yesterday ?? 0)) / st.fixtures_yesterday)}%)` : ""}
             {" · "}{(st.rows_today ?? 0).toLocaleString("en-US")} prices stored today
