@@ -43,6 +43,14 @@ export const ENGINE_BOT_FLOORS: Record<string, {
   market: string;
 }> =
   {
+  "bot_combined_1x2_v1": {
+    "edgeFloor": null,
+    "oddsFloor": null,
+    "oddsCap": null,
+    "realMoney": false,
+    "anchor": "model",
+    "market": "1x2"
+  },
   "bot_consensus_b_v1": {
     "edgeFloor": 0.03,
     "oddsFloor": 1.2,
