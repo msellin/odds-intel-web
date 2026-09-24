@@ -28,7 +28,7 @@ export function DqFindings({ findings, now }: { findings: DataQualityFinding[]; 
     counts.set(k, (counts.get(k) ?? 0) + 1);
   }
   return (
-    <section className="rounded-lg border border-border bg-card/60 px-4 py-3 space-y-3">
+    <section id="dq" className="scroll-mt-20 rounded-lg border border-border bg-card/60 px-4 py-3 space-y-3">
       <div>
         <h2 className="font-semibold">Data quality</h2>
         <p className="text-xs text-muted-foreground">

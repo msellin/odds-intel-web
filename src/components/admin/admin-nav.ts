@@ -1,17 +1,15 @@
 // The admin sidebar's contents — every route under src/app/(app)/admin/**/page.tsx, grouped.
 // `unused` marks routes the owner dropped from the index on 2026-09-23 (ADMIN-REDO, #107): they
-// still work, so they stay reachable, but read as secondary.
+// still work, so they stay reachable, but read as secondary. CS2, LoL and Tennis were DELETED
+// 2026-09-24 (#139 IA P8; owner: delete LoL + Tennis; CS2 read tables that no longer exist).
 
 import {
   Activity,
   Bot,
-  Crosshair,
   Ghost,
   LayoutDashboard,
   Receipt,
   Rss,
-  Swords,
-  Trophy,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
@@ -44,14 +42,6 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     items: [
       { href: "/admin/feeds", label: "Feeds", Icon: Rss },
       { href: "/admin/ops", label: "Ops", Icon: Activity },
-    ],
-  },
-  {
-    label: "Other sports",
-    items: [
-      { href: "/admin/cs2", label: "CS2", Icon: Crosshair, unused: true },
-      { href: "/admin/lol", label: "LoL", Icon: Swords, unused: true },
-      { href: "/admin/tennis", label: "Tennis", Icon: Trophy, unused: true },
     ],
   },
 ];

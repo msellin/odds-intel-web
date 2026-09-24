@@ -1,0 +1,206 @@
+/**
+ * The /admin attention inbox (#139 IA move P4, dev/active/admin-information-architecture.md §3.3).
+ *
+ * One list of things that need an ACTION, built from state we already read. Each item says one
+ * sentence, how long the condition has lasted, and links to the exact place it is fixed.
+ * Information that needs no action (verdict mixes, pick counts, ROI) is deliberately NOT here — it
+ * lives in the charts.
+ *
+ * Honesty: an unreadable source is itself an item ("… unreadable"), never an empty list.
+ *
+ * Manual real bets awaiting confirmation (IA G9): real_bets.placed_real NULL means LEGACY before
+ * 2026-09-09 (migration 325) but "not yet confirmed by the account reconciler" for every manual bet
+ * since (record_manual_real_bet, migration 407). So the rule counts NULL rows placed on/after
+ * MANUAL_RECONCILE_SINCE and older than 24 h.
+ *
+ * Not yet covered (need an engine source first, IA gaps): picks-channel send proof (G3), deploy
+ * drift (G6), duplicate bets (ops_snapshots).
+ *
+ * Pure and client-safe: the loader (admin-overview.ts) does the reads, this only decides.
+ */
+import type { ControlState } from "./bot-controls/types";
+import { HEARTBEAT_STALE_MIN } from "./bot-controls/types";
+
+export type Severity = "danger" | "warn" | "info";
+
+export interface AttentionItem {
+  id: string;
+  severity: Severity;
+  area: "money" | "picks" | "feeds" | "bots" | "jobs" | "data";
+  title: string;
+  detail?: string;
+  /** ISO time the condition STARTED, when known (for a failing job: its first failure since the last success). */
+  since?: string | null;
+  /** `since` is only a lower bound (no success inside the history window) — render "over …". */
+  sinceFloor?: boolean;
+  href: string;
+}
+
+export interface AttentionInputs {
+  now: number;
+  control: ControlState;
+  canStake: "yes" | "no" | "unknown";
+  feeds: {
+    feed_id: string;
+    label: string;
+    status: string;
+    status_reason: string | null;
+    last_data_at: string | null;
+    paused?: boolean;
+    paused_at?: string | null;
+    updated_at?: string | null;
+  }[];
+  feedsError: string | null;
+  jobs: { job_name: string; status: string; started_at: string; error_message: string | null; fail_streak: number | null; failing_since: string | null; last_ok_at: string | null }[];
+  jobsError: string | null;
+  stalePending: number;
+  staleError: string | null;
+  dqLast24h: { check_name: string; n: number }[];
+  dqError: string | null;
+  /** Manual real bets with placed_real NULL, placed since MANUAL_RECONCILE_SINCE, older than 24 h. */
+  unconfirmedManual: number;
+  unconfirmedError: string | null;
+  bots: { bot: string; text: string; severity: "warn" | "danger" }[];
+}
+
+const MIN = 60_000;
+const H24 = 24 * 60 * MIN;
+const SEV_ORDER: Record<Severity, number> = { danger: 0, warn: 1, info: 2 };
+/** feed_status is rewritten every 5 min by the engine; older than this = the status job is stuck. */
+const FEED_STATUS_STALE_MIN = 15;
+/** A job still 'running' after this long has almost certainly died without recording it. */
+const JOB_STUCK_H = 3;
+/** First day every NULL placed_real row means "unconfirmed manual", not "legacy" (see header). */
+export const MANUAL_RECONCILE_SINCE = "2026-09-10";
+
+/** "league_draw_rate" → "League draw rate". */
+function humanJob(name: string): string {
+  const s = name.replace(/^job_/, "").replace(/_/g, " ").trim();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// Data-quality check codes → a plain group (the owner is not a data person). Unknown codes fall
+// into "other checks". Codes: workers/jobs/board_guard.py, board_audit.py, results_check.py.
+const DQ_GROUP: [RegExp, string][] = [
+  [/wrong_fixture|mirrored|swapped|single_market/, "odds that looked wrong and were set aside"],
+  [/result/, "results that disagreed between sources"],
+];
+function dqSummary(rows: { check_name: string; n: number }[]): string {
+  const g = new Map<string, number>();
+  for (const r of rows) {
+    const label = DQ_GROUP.find(([re]) => re.test(r.check_name))?.[1] ?? "other checks";
+    g.set(label, (g.get(label) ?? 0) + r.n);
+  }
+  return [...g.entries()].sort((a, b) => b[1] - a[1]).map(([l, n]) => `${n} ${l}`).join(" · ");
+}
+
+function unreadable(id: string, area: AttentionItem["area"], what: string, error: string, href: string): AttentionItem {
+  return { id, severity: "warn", area, title: `${what} unreadable — this list may be missing items`, detail: error, href };
+}
+
+function moneyItems(i: AttentionInputs): AttentionItem[] {
+  const out: AttentionItem[] = [];
+  const f = i.control.fleet.row;
+  if (i.control.fleet.error || !f) {
+    out.push({ id: "fleet-unknown", severity: "warn", area: "money", title: "Fleet switches unreadable — every switch shows Unknown", detail: i.control.fleet.error ?? "row missing", href: "/admin/bots#real-money" });
+  }
+  if (f?.real_money_armed) {
+    const running = f.placement_paused === false;
+    // same executor rule as ladder layer 5: alive AND started with --execute (a dry-run placer is not an executor)
+    const executing = i.control.heartbeats.rows.some(
+      (h) => h.execute_requested && h.last_seen_at && i.now - new Date(h.last_seen_at).getTime() <= HEARTBEAT_STALE_MIN * MIN,
+    );
+    const stake = i.canStake === "yes" ? "CAN STAKE: YES" : i.canStake === "unknown" ? "CAN STAKE: UNKNOWN" : "CAN STAKE: NO";
+    out.push({
+      id: "armed",
+      severity: "danger",
+      area: "money",
+      title: running ? `Real money is ARMED and placement is running · ${stake}` : `Real money is ARMED (placement paused) · ${stake}`,
+      detail: running && !executing ? "…and no placer on the Mac has checked in with --execute recently" : f.real_money_armed_reason ?? undefined,
+      since: f.real_money_armed_at,
+      href: "/admin/bots#real-money",
+    });
+  }
+  if (f?.publishing_paused) {
+    out.push({ id: "picks-paused", severity: "warn", area: "picks", title: "Picks channel paused — customers get nothing on Telegram", detail: f.publishing_paused_reason ?? undefined, since: f.publishing_paused_at, href: "/admin/bots#controls" });
+  }
+  return out;
+}
+
+function feedItems(i: AttentionInputs): AttentionItem[] {
+  const out: AttentionItem[] = [];
+  const f = i.control.fleet.row;
+  if (i.feedsError) out.push(unreadable("feeds-unreadable", "feeds", "Feed status", i.feedsError, "/admin/feeds"));
+  const updated = i.feeds.reduce<string | null>((a, x) => (x.updated_at && (!a || x.updated_at > a) ? x.updated_at : a), null);
+  if (updated && i.now - new Date(updated).getTime() > FEED_STATUS_STALE_MIN * MIN) {
+    out.push({ id: "feed-status-stale", severity: "danger", area: "feeds", title: "The feed status check itself has stopped — feed colours are out of date", since: updated, href: "/admin/feeds" });
+  }
+  for (const fd of i.feeds) {
+    if (fd.status !== "fail" && fd.status !== "warn") continue;
+    out.push({
+      id: `feed-${fd.feed_id}`,
+      severity: fd.status === "fail" ? "danger" : "warn",
+      area: "feeds",
+      title: `${fd.label}: ${fd.status === "fail" ? "stopped" : "needs a look"}`,
+      detail: fd.status_reason ?? undefined,
+      since: fd.status === "fail" ? fd.last_data_at : undefined,
+      href: "/admin/feeds",
+    });
+  }
+  if (f?.daemons_paused && f.daemons_paused_at && i.now - new Date(f.daemons_paused_at).getTime() > H24) {
+    out.push({ id: "footprint-long", severity: "warn", area: "feeds", title: "Coolbet sweeping paused for over a day", detail: f.daemons_paused_reason ?? "no reason given", since: f.daemons_paused_at, href: "/admin/feeds#coolbet-footprint" });
+  }
+  for (const fd of i.feeds) {
+    if (fd.paused && fd.paused_at && i.now - new Date(fd.paused_at).getTime() > H24) {
+      out.push({ id: `feed-paused-${fd.feed_id}`, severity: "warn", area: "feeds", title: `${fd.label} paused for over a day`, since: fd.paused_at, href: "/admin/feeds" });
+    }
+  }
+  return out;
+}
+
+function jobItems(i: AttentionInputs): AttentionItem[] {
+  const out: AttentionItem[] = [];
+  if (i.jobsError) out.push(unreadable("jobs-unreadable", "jobs", "Job history", i.jobsError, "/admin/ops"));
+  for (const j of i.jobs) {
+    if (j.status === "failed") {
+      // the raw error usually repeats the job name ("line_velocity failed: exit 1") — keep the useful tail
+      const err = j.error_message?.replace(new RegExp(`^${j.job_name}\\s*failed:?\\s*`, "i"), "").slice(0, 160);
+      const streak = j.fail_streak ?? 1;
+      out.push({
+        id: `job-${j.job_name}`,
+        severity: "danger",
+        area: "jobs",
+        title: streak > 1 ? `${humanJob(j.job_name)} job has failed ${streak} runs in a row` : `${humanJob(j.job_name)} job failed on its last run`,
+        detail: `${err ? `Error: ${err} · ` : ""}${j.job_name}`,
+        since: j.failing_since ?? j.started_at,
+        sinceFloor: j.last_ok_at == null,
+        href: "/admin/ops",
+      });
+    } else if (j.status === "running" && i.now - new Date(j.started_at).getTime() > JOB_STUCK_H * 60 * MIN) {
+      out.push({ id: `job-stuck-${j.job_name}`, severity: "warn", area: "jobs", title: `${humanJob(j.job_name)} job has been "running" for over ${JOB_STUCK_H} h — probably died`, detail: j.job_name, since: j.started_at, href: "/admin/ops" });
+    }
+  }
+  if (i.staleError) out.push(unreadable("stale-unreadable", "jobs", "Pending-bet check", i.staleError, "/admin/ops"));
+  else if (i.stalePending > 0) {
+    out.push({ id: "stale-pending", severity: "warn", area: "jobs", title: `${i.stalePending} bet${i.stalePending === 1 ? "" : "s"} still unsettled 2½ h after kick-off`, detail: "Settlement looks stuck", href: "/admin/ops" });
+  }
+  return out;
+}
+
+export function buildAttention(i: AttentionInputs): AttentionItem[] {
+  const out: AttentionItem[] = [...moneyItems(i), ...feedItems(i)];
+  for (const b of i.bots) {
+    out.push({ id: `bot-${b.bot}-${b.text}`, severity: b.severity, area: "bots", title: b.text, href: `/admin/bots?bot=${encodeURIComponent(b.bot)}` });
+  }
+  out.push(...jobItems(i));
+  if (i.unconfirmedError) out.push(unreadable("manual-unreadable", "money", "Real-bet ledger", i.unconfirmedError, "/admin/real-bets"));
+  else if (i.unconfirmedManual > 0) {
+    out.push({ id: "manual-unconfirmed", severity: "warn", area: "money", title: `${i.unconfirmedManual} manual real bet${i.unconfirmedManual === 1 ? "" : "s"} not confirmed against the bookmaker account for over a day`, detail: "Placed by hand from the pick queue; the account reconciler has not matched them yet", href: "/admin/real-bets" });
+  }
+  if (i.dqError) out.push(unreadable("dq-unreadable", "data", "Data-quality findings", i.dqError, "/admin/feeds#dq"));
+  const dq = i.dqLast24h.reduce((a, d) => a + d.n, 0);
+  if (dq > 0) {
+    out.push({ id: "dq", severity: "warn", area: "data", title: `${dq} data-quality finding${dq === 1 ? "" : "s"} in the last 24 h`, detail: dqSummary(i.dqLast24h), href: "/admin/feeds#dq" });
+  }
+  return out.sort((a, b) => SEV_ORDER[a.severity] - SEV_ORDER[b.severity]);
+}

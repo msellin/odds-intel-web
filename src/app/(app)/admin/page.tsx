@@ -1,143 +1,185 @@
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 import Link from "next/link";
+import type { Metadata } from "next";
+import { AlertTriangle, ArrowRight, Bot, CheckCircle2, Euro, Rss, ShieldAlert, Sparkles } from "lucide-react";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
-import { getFeedStatus, type FeedStatus } from "@/lib/engine-data";
+import { isBotBoardDevPreview } from "@/lib/bot-board";
+import { loadOverview } from "@/lib/admin-overview";
+import type { AttentionItem } from "@/lib/admin-attention";
+import { PageHeader, Panel, PanelHeader } from "@/components/oi/panel";
+import { Sparkline, StatCard } from "@/components/oi/stat-card";
+import { StatusBadge, TrendPill, type Tone } from "@/components/oi/status-badge";
+import { OverviewCharts } from "./overview-charts";
+import { fmtEur, fmtInt } from "@/components/oi/format";
+import { RETIRED_SERIES } from "@/lib/admin-overview-shared";
+import { AutoRefresh } from "./ops/auto-refresh";
 
-// ADMIN-REDO (#107 FEEDS-DASHBOARD, 2026-09-23). CS2, LoL, Tennis, "Place real
-// bets" and "Real bets" were removed from this index at the owner's request — not
-// in use. Their routes still exist; only the entry points are gone. The page now
-// leads with the Bookmakers block, the entry into /admin/feeds.
-const SECTIONS: { href: string; title: string; blurb: string }[] = [
-  {
-    href: "/admin/bots",
-    title: "Bot dashboard",
-    blurb: "Every active bot on one ledger — config, capabilities, flat ROI and the family's admissible CLV verdict.",
-  },
-  {
-    href: "/admin/shadow-bots",
-    title: "Shadow bots",
-    blurb: "Shadow-bot board — the main operator view of paper picks.",
-  },
-  {
-    href: "/admin/ops",
-    title: "Ops",
-    blurb: "Match coverage, odds pipeline, settlement, scheduler runs.",
-  },
-];
+// /admin Overview (#139, 2026-09-24). Was a link index with one feed widget (ADMIN-REDO #107).
+// Now, per the IA audit (dev/active/admin-information-architecture.md §3.3, move P4) and the
+// owner's brief ("make it look like a real admin dashboard … graphs, bars, columns"):
+//   1. KPI cards with trends/sparklines — each links to the page that owns the number;
+//   2. the ATTENTION inbox — only things that need an action, each linking to where it is fixed;
+//   3. interactive charts (picks per family, CLV vs the junk control, P/L, real bets, verdict and
+//      feed mixes). Data: src/lib/admin-overview.ts, all from reads that already exist.
 
-const DOT: Record<FeedStatus["status"], string> = {
-  ok: "bg-emerald-500",
-  warn: "bg-amber-500",
-  fail: "bg-red-500",
-  unknown: "bg-zinc-500",
-  paused: "bg-sky-500",
-};
+export const metadata: Metadata = { title: "Overview · Admin · OddsIntel", robots: { index: false } };
+
+const SEV_TONE: Record<AttentionItem["severity"], Tone> = { danger: "danger", warn: "warning", info: "info" };
+const AREA_LABEL: Record<AttentionItem["area"], string> = { money: "Money", picks: "Picks", feeds: "Feeds", bots: "Bots", jobs: "Jobs", data: "Data" };
+
+function ago(iso: string | null | undefined, now: number): string | null {
+  if (!iso) return null;
+  const m = Math.max(0, Math.round((now - new Date(iso).getTime()) / 60000));
+  if (m < 60) return `${m} min`;
+  const h = Math.round(m / 60);
+  return h < 48 ? `${h} h` : `${Math.round(h / 24)} d`;
+}
 
 export default async function AdminIndexPage() {
-  const supabase = await createSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return (
-      <div className="flex items-center justify-center py-24 text-muted-foreground">
-        Access denied.
-      </div>
-    );
-  }
-  const db = createServerServiceClient();
-  const { data: profile } = await db
-    .from("profiles")
-    .select("is_superadmin")
-    .eq("id", user.id)
-    .single();
-  if (!profile?.is_superadmin) {
-    return (
-      <div className="flex items-center justify-center py-24 text-muted-foreground">
-        Superadmin only.
-      </div>
-    );
+  let viewerId: string | null = null;
+  if (!isBotBoardDevPreview()) {
+    const supabase = await createSupabaseServer();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return <div className="flex items-center justify-center py-24 text-muted-foreground">Access denied.</div>;
+    const db = createServerServiceClient();
+    const { data: profile } = await db.from("profiles").select("is_superadmin").eq("id", user.id).single();
+    if (!profile?.is_superadmin) return <div className="flex items-center justify-center py-24 text-muted-foreground">Superadmin only.</div>;
+    viewerId = user.id;
   }
 
-  const feeds = await getFeedStatus();
-  const count = (s: FeedStatus["status"]) => feeds.filter((f) => f.status === s).length;
-  const bookFeeds = feeds.filter((f) => f.category === "book" && f.kind === "pre-match");
-  const problems = feeds.filter((f) => f.status === "fail" || f.status === "warn");
+  const d = await loadOverview(viewerId);
+  const f = d.control.fleet.row;
+  const danger = d.attention.filter((a) => a.severity === "danger").length;
+  // Active bots only: last week's total includes bots retired since, which would read as a drop.
+  const picksPerWeek = d.picksByFamily.map((r) => d.families.filter((k) => k !== RETIRED_SERIES).reduce((a, k) => a + Number(r[k] ?? 0), 0));
+  const thisWeek = picksPerWeek[picksPerWeek.length - 1] ?? 0;
+  const lastWeek = picksPerWeek[picksPerWeek.length - 2] ?? 0;
+  // The current week is still running: compare its PACE (picks so far ÷ share of the week gone)
+  // with last full week, never the raw part-week — that would read as a collapse every Monday.
+  const weekShare = Math.min(1, Math.max(1 / 168, (d.now - new Date(`${d.weeks[d.weeks.length - 1]}T00:00:00Z`).getTime()) / (7 * 86_400_000)));
+  const pace = Math.round(thisWeek / weekShare);
+  // a pace from the first hours of a week is noise — no trend until a day of it has passed
+  const paceChange = lastWeek > 0 && weekShare >= 1 / 7 ? Math.round(((pace - lastWeek) / lastWeek) * 100) : null;
+  const feedsOk = d.feeds.rows.filter((x) => x.status === "ok").length;
+  const feedsBad = d.feeds.rows.filter((x) => x.status === "fail" || x.status === "warn").length;
+  const rb4 = d.realBets.rows.slice(-4);
+  const rbPnl = rb4.reduce((a, r) => a + r.pnl, 0);
+  const rbBets = rb4.reduce((a, r) => a + r.bets, 0);
+  const rbStaked = rb4.reduce((a, r) => a + r.staked, 0);
+  const hhmm = new Date(d.now).toISOString().slice(11, 16);
 
   return (
-    <div className="max-w-3xl">
-      <h1 className="text-2xl font-bold mb-2">Admin</h1>
-      <p className="text-sm text-muted-foreground mb-8">
-        Operator-only consoles. Each section opens a focused dashboard.
-      </p>
+    <div className="space-y-4 lg:space-y-6">
+      <AutoRefresh intervalMs={120_000} />
+      <PageHeader eyebrow="Admin" title="Overview" meta={`Checked ${hhmm} UTC · refreshes every 2 min`} />
 
-      <Link
-        href="/admin/feeds"
-        className="block rounded-lg border border-border bg-card hover:bg-accent transition-colors px-4 py-4 mb-3"
-      >
-        <div className="flex items-baseline justify-between gap-3 flex-wrap">
-          <div className="font-semibold text-lg">Bookmakers &amp; feeds</div>
-          <div className="text-xs text-muted-foreground">
-            {feeds.length === 0 ? (
-              "no status yet"
-            ) : (
-              <>
-                <span className="text-emerald-500">{count("ok")} ok</span>
-                {" · "}
-                <span className="text-amber-500">{count("warn")} warn</span>
-                {" · "}
-                <span className="text-red-500">{count("fail")} fail</span>
-              </>
-            )}
-          </div>
-        </div>
-        <div className="text-sm text-muted-foreground mt-0.5">
-          Every sweeper and feed: last data written, schedule, today&apos;s coverage, errors.
-        </div>
-        {bookFeeds.length > 0 && (
-          <div className="flex flex-wrap gap-2 mt-3">
-            {bookFeeds.map((f) => (
-              <span
-                key={f.feed_id}
-                className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-0.5 text-xs"
-              >
-                <span className={`h-2 w-2 rounded-full ${DOT[f.status]}`} />
-                {f.book}
-              </span>
-            ))}
-          </div>
-        )}
-        {problems.length > 0 && (
-          <ul className="mt-3 space-y-1">
-            {problems.slice(0, 4).map((f) => (
-              <li key={f.feed_id} className="text-xs">
-                <span className={f.status === "fail" ? "text-red-500" : "text-amber-500"}>
-                  {f.status === "fail" ? "✕" : "!"} {f.label}
-                </span>
-                {f.status_reason && (
-                  <span className="text-muted-foreground"> — {f.status_reason}</span>
-                )}
+      {/* ── KPI strip ── */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-6">
+        <StatCard
+          label="Needs attention"
+          icon={danger ? AlertTriangle : CheckCircle2}
+          tone={danger ? "danger" : d.attention.length ? "warning" : "success"}
+          value={d.attention.length}
+          foot={d.attention.length === 0 ? "All clear" : `${danger} urgent · ${d.attention.length - danger} to check`}
+          href="#attention"
+          hrefLabel="See list"
+        />
+        <StatCard
+          label="Real money"
+          icon={ShieldAlert}
+          tone={f?.real_money_armed ? "danger" : "success"}
+          unknown={!f}
+          danger={!!f?.real_money_armed}
+          value={f?.real_money_armed ? "ARMED" : "Off"}
+          foot={`${d.bots.switchedOn == null ? "?" : d.bots.switchedOn} bot${d.bots.switchedOn === 1 ? "" : "s"} switched on · placement ${f == null ? "unknown" : f.placement_paused ? "paused" : "running"} · can stake: ${d.canStake}`}
+          href="/admin/bots#real-money"
+        />
+        <StatCard
+          label="Active bots"
+          icon={Bot}
+          tone="info"
+          unknown={!!d.bots.error}
+          value={d.bots.active}
+          trend={<StatusBadge tone={d.bots.verdicts.beats > 0 ? "success" : "warning"} dot={false} title="Bots that get better prices than the closing price">{d.bots.verdicts.beats} beat</StatusBadge>}
+          foot={`${d.bots.published} on /picks · ${d.bots.telegram} on Telegram`}
+          href="/admin/bots"
+        />
+        <StatCard
+          label="Picks · week"
+          icon={Sparkles}
+          tone="model"
+          value={fmtInt(thisWeek)}
+          trend={
+            paceChange != null ? (
+              <TrendPill good={null} up={paceChange === 0 ? null : paceChange > 0} value={`${paceChange > 0 ? "+" : paceChange < 0 ? "\u2212" : ""}${Math.abs(paceChange)}%`} title="This week's pace against last full week (bots active today only)" />
+            ) : undefined
+          }
+          spark={<Sparkline values={picksPerWeek} tone="model" kind="bars" />}
+          foot={`on pace for ${fmtInt(pace)} · last week ${fmtInt(lastWeek)}`}
+          href="/admin/bots"
+        />
+        <StatCard
+          label="Feeds fresh"
+          icon={Rss}
+          tone={feedsBad ? "warning" : "success"}
+          unknown={!!d.feeds.error}
+          value={`${feedsOk}/${d.feeds.rows.length}`}
+          foot={feedsBad ? `${feedsBad} need a look` : "all sweeping on time"}
+          href="/admin/feeds"
+        />
+        <StatCard
+          label="Real bets · 4 wk"
+          icon={Euro}
+          tone={rbPnl >= 0 ? "success" : "danger"}
+          unknown={!!d.realBets.error}
+          value={fmtEur(rbPnl, { signed: true })}
+          spark={<Sparkline values={d.realBets.rows.map((r) => r.pnl)} kind="bars" signed />}
+          foot={`${fmtInt(rbBets)} bets · ${fmtEur(rbStaked)} staked`}
+          href="/admin/real-bets"
+        />
+      </div>
+
+      {/* ── Attention inbox ── */}
+      <Panel id="attention">
+        <PanelHeader
+          title="Needs attention"
+          description="Only things that need an action. Each one links to where it is fixed."
+          actions={<StatusBadge tone={danger ? "danger" : d.attention.length ? "warning" : "success"}>{d.attention.length ? `${d.attention.length} open` : "All clear"}</StatusBadge>}
+        />
+        {d.attention.length === 0 ? (
+          <p className="flex items-center gap-2 px-4 py-6 text-sm text-muted-foreground">
+            <CheckCircle2 size={16} className="text-success" aria-hidden="true" /> All clear — checked {hhmm} UTC.
+          </p>
+        ) : (
+          <ul className="mt-3 divide-y divide-border/60 border-t border-border/60">
+            {d.attention.map((a) => (
+              <li key={a.id}>
+                <Link href={a.href} className="group flex items-start gap-3 px-4 py-2.5 hover:bg-accent/40">
+                  <span className="mt-0.5 w-16 shrink-0">
+                    <StatusBadge tone={SEV_TONE[a.severity]}>{AREA_LABEL[a.area]}</StatusBadge>
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm">{a.title}</span>
+                    {a.detail && <span className="block truncate text-xs text-muted-foreground" title={a.detail}>{a.detail}</span>}
+                  </span>
+                  {ago(a.since, d.now) && (
+                    <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground" title={a.sinceFloor ? "No success in the 35 days of history we keep — it may be longer" : undefined}>
+                      {a.sinceFloor ? "over " : ""}
+                      {ago(a.since, d.now)}
+                    </span>
+                  )}
+                  <ArrowRight size={14} className="mt-0.5 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" aria-hidden="true" />
+                </Link>
               </li>
             ))}
           </ul>
         )}
-        <div className="text-xs text-muted-foreground/70 mt-2 font-mono">/admin/feeds</div>
-      </Link>
+      </Panel>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {SECTIONS.map((s) => (
-          <Link
-            key={s.href}
-            href={s.href}
-            className="rounded-lg border border-border bg-card hover:bg-accent transition-colors px-4 py-3 block"
-          >
-            <div className="font-semibold">{s.title}</div>
-            <div className="text-sm text-muted-foreground mt-0.5">{s.blurb}</div>
-            <div className="text-xs text-muted-foreground/70 mt-1 font-mono">{s.href}</div>
-          </Link>
-        ))}
-      </div>
+      <OverviewCharts d={d} />
     </div>
   );
 }

@@ -49,6 +49,15 @@
   --color-positive: #22c55e;
   --color-negative: #ef4444;
   --color-warning: #f59e0b;
+  /* Admin semantic aliases (#139 admin visual direction §2, 2026-09-24) — no new colours, only
+     names, so status code says what it means (success/danger/info) instead of emerald-400/red-400. */
+  --color-success: var(--color-positive);
+  --color-danger: var(--color-negative);
+  --color-info: oklch(0.74 0.11 200); /* cyan — kept apart from the model-family sky (235) */
+  /* Pick-method hues, the same as /picks: sharp = violet, consensus = teal, model = sky. */
+  --color-method-sharp: oklch(0.72 0.16 295);
+  --color-method-consensus: oklch(0.78 0.12 180);
+  --color-method-model: oklch(0.75 0.13 235);
   --color-edge-high: #22c55e;
   --color-edge-medium: #f59e0b;
   --color-edge-low: #6b7280;

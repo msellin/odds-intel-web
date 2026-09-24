@@ -14,7 +14,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { placementPathReason } from "@/lib/bot-controls/placement-path";
-import type { BotView } from "./bot-board-model";
+import { picksTelegramMismatch, picksUnavailable, type BotView } from "./bot-board-model";
+
+// Moved to the pure view model 2026-09-24 so /admin (the attention inbox) uses the same rule.
+export { picksTelegramMismatch, picksUnavailable };
 import { ControlSwitch } from "./control-switch";
 import { useControls } from "./controls-context";
 import { useToast } from "./toast";
@@ -33,16 +36,6 @@ export function isRetired(v: BotView): boolean {
 
 /** Why the /picks switch is not offered for this bot, or null when it is. Plain words first,
  *  the code reference after (`ref`, shown muted). */
-export function picksUnavailable(v: BotView): { kind: "rule" | "stub"; label: string; text: string; ref?: string } | null {
-  if (v.family === "forward_test") {
-    return { kind: "rule", label: "By rule", text: "A pre-registered public test: what it publishes was fixed in advance. Changing it means a new rule version, not a click.", ref: "I16, I17 · rule_version" };
-  }
-  if (v.family === "control") return { kind: "rule", label: "Never", text: "The deliberately bad reference bot. It is never published.", ref: "control_junk_anchor" };
-  if (v.cfg?.ledger !== "simulated_bets") {
-    return { kind: "stub", label: "Private", text: "This bot records its picks in the own-money book, which never reaches customers. Only the customer-model bots can be shown on /picks.", ref: "shadow_bets ledger · I13" };
-  }
-  return null;
-}
 
 /** Short visible word for a bot that cannot stake at all (#139 review item 10). */
 export function moneyUnavailableLabel(v: BotView): string {
@@ -148,10 +141,6 @@ export function ReadOnlyPublishIcons({ v }: { v: BotView }) {
 }
 
 /** "/picks ≠ Telegram": the Ludogorets shape (migration 356, I14). */
-export function picksTelegramMismatch(v: BotView, showOnPicks: boolean | null): boolean {
-  if (picksUnavailable(v) || showOnPicks == null || v.caps?.telegram == null) return false;
-  return showOnPicks !== v.caps.telegram;
-}
 
 export function RowMenu({ v, onOpen }: { v: BotView; onOpen: (tab?: string) => void }) {
   const ctl = useControls();
