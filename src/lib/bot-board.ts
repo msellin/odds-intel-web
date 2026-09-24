@@ -402,6 +402,15 @@ export async function loadControlState(viewerUserId: string | null): Promise<Con
   };
 }
 
+/**
+ * Just the fleet switches — the shared admin shell's STATUS block (src/app/(app)/admin/layout.tsx)
+ * reads this on every admin page. One row, not the five reads loadControlState() makes.
+ */
+export async function loadFleetStatus(): Promise<ControlState["fleet"]> {
+  if (isBotBoardDevPreview()) return previewControlState(await readFixture()).fleet;
+  return readFleet();
+}
+
 async function readFleet(): Promise<ControlState["fleet"]> {
   try {
     const db = createServerServiceClient();

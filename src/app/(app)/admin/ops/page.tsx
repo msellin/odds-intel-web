@@ -51,7 +51,7 @@ export default async function OpsDashboardPage() {
   const totalBots = (snapshot?.active_bots ?? 0) + (snapshot?.silent_bots ?? 0);
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">
+    <div className="space-y-8">
       <AutoRefresh intervalMs={60_000} />
       {/* Header */}
       <div className="flex items-center justify-between">

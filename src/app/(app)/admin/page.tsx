@@ -66,7 +66,7 @@ export default async function AdminIndexPage() {
   const problems = feeds.filter((f) => f.status === "fail" || f.status === "warn");
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10">
+    <div className="max-w-3xl">
       <h1 className="text-2xl font-bold mb-2">Admin</h1>
       <p className="text-sm text-muted-foreground mb-8">
         Operator-only consoles. Each section opens a focused dashboard.

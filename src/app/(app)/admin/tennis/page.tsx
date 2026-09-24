@@ -468,7 +468,7 @@ export default async function TennisAdminPage() {
   const recentSettled = settled_.slice(0, 30);
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">
+    <div className="space-y-8">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold">Tennis — System Overview</h1>

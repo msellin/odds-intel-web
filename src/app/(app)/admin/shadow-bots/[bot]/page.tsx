@@ -287,7 +287,7 @@ export default async function ShadowBotDetailPage({
   if (!botRow?.id) {
     if (!ALLOWED[botName]) notFound();
     return (
-      <div className="mx-auto max-w-4xl px-6 py-10">
+      <div className="max-w-4xl">
         <BackLink />
         <h1 className="mt-4 text-xl font-semibold">{cfg.title}</h1>
         <p className="mt-2 text-sm text-amber-400">
@@ -488,7 +488,7 @@ export default async function ShadowBotDetailPage({
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-10">
+    <div>
       <BackLink />
 
       <header className="mt-4 mb-6">

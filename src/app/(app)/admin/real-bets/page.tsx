@@ -246,7 +246,7 @@ export default async function RealBetsPage() {
   const byBotSorted = Object.entries(byBot).sort((a, b) => (b[1].n + b[1].pending) - (a[1].n + a[1].pending));
 
   return (
-    <div className="container mx-auto py-8 px-4 max-w-7xl">
+    <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Real bets</h1>
         <p className="text-sm text-muted-foreground mt-1">

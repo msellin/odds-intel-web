@@ -52,7 +52,7 @@ export default async function ShadowBotsPage() {
   const rows = buildPickRows(data, state, markStates);
 
   return (
-    <div className="mx-auto max-w-7xl px-6 py-6">
+    <div>
       <SafetyStrip state={state} placerBots={data.placerBots} today={data.todayRealBets} />
 
       <header className="mb-5">
@@ -74,10 +74,6 @@ export default async function ShadowBotsPage() {
       <Promotions promos={data.promos} error={data.promoError} />
 
       <p className="mt-8 text-xs text-neutral-500">
-        <Link href="/admin/ops" className="underline underline-offset-4 hover:text-neutral-300">
-          ← Back to ops
-        </Link>
-        <span className="mx-2 text-neutral-700">·</span>
         <Link href="/admin/real-bets" className="underline underline-offset-4 hover:text-neutral-300">
           real bets ledger
         </Link>

@@ -1,6 +1,5 @@
 export const dynamic = 'force-dynamic';
 
-import Link from "next/link";
 import { AutoRefresh } from "../ops/auto-refresh";
 import { FeedsBoard } from "./feeds-board";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
@@ -30,11 +29,10 @@ export default async function FeedsPage() {
   const statusAgeMin = updated ? Math.round((now - new Date(updated).getTime()) / 60000) : null;
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 space-y-6">
+    <div className="space-y-6">
       <AutoRefresh intervalMs={60_000} />
       <div>
-        <Link href="/admin" className="text-xs text-muted-foreground hover:underline">← Admin</Link>
-        <h1 className="text-2xl font-bold mt-1">Bookmakers &amp; feeds</h1>
+        <h1 className="text-2xl font-bold">Bookmakers &amp; feeds</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Time since each book&apos;s last odds —{" "}
           <span className="text-emerald-500">green</span> fresh,{" "}

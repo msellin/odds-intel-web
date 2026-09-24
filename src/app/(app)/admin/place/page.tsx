@@ -40,7 +40,7 @@ export default async function PlaceBetPage() {
   ]);
 
   return (
-    <div className="container mx-auto py-8 px-4 max-w-7xl">
+    <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Place real bets</h1>
         <p className="text-sm text-muted-foreground mt-1">

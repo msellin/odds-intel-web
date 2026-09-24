@@ -12,7 +12,7 @@
 // peer section — it is the dashed reference line on every mc-CLV plot and a reference strip
 // on top of the forward test, because a bot sitting on that line is showing no skill.
 //
-// Phase A layout: admin shell (sidebar + status + armed bar) → header with actions → KPI strip
+// Phase A layout: (shared admin shell: sidebar + status) → armed bar → header with actions → KPI strip
 // → Controls card (customers / collection) → Real money card (the layer ladder + CAN STAKE,
 // deliberately a DIFFERENT card, I10) → filter bar → table with inline switches and a row ⋯
 // menu → right-hand detail Sheet with tabs. Filters, search and the open bot live in the URL.
@@ -22,7 +22,8 @@
 // bot-drawer.tsx + bot-sheet.tsx (detail), retired-list.tsx, and the control panel:
 // controls-context.tsx, control-switch.tsx, bot-controls-cell.tsx, fleet-controls-card.tsx,
 // real-money-card.tsx, ladder-list.tsx, confirm-control-dialog.tsx, arm-dialog.tsx,
-// activity-timeline.tsx, admin-shell.tsx, toast.tsx.
+// activity-timeline.tsx, armed-bar.tsx, toast.tsx. The sidebar is the shared admin shell
+// (src/components/admin/, rendered by admin/layout.tsx).
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -56,7 +57,7 @@ import { type LedgerState } from "./bot-drawer";
 import { BotSheet, SHEET_TABS, type SheetTab } from "./bot-sheet";
 import { RetiredList } from "./retired-list";
 import { ControlsProvider, useControls } from "./controls-context";
-import { AdminShell } from "./admin-shell";
+import { ArmedBar } from "./armed-bar";
 import { FleetControlsCard } from "./fleet-controls-card";
 import { RealMoneyCard } from "./real-money-card";
 import { ActivitySheet } from "./activity-timeline";
@@ -94,9 +95,9 @@ export function BotsBoard({ data, controls }: { data: BotBoardData; controls: Co
   );
   return (
     <ControlsProvider state={controls} views={views} capable={capable} now={now}>
-      <AdminShell active="/admin/bots">
-        <Board data={data} />
-      </AdminShell>
+      {/* Sidebar + status come from the shared admin layout (src/app/(app)/admin/layout.tsx). */}
+      <ArmedBar />
+      <Board data={data} />
     </ControlsProvider>
   );
 }

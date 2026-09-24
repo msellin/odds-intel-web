@@ -1,5 +1,6 @@
 import { Nav } from "@/components/nav";
 import { LoginModal } from "@/components/login-modal";
+import { PublicChrome } from "@/components/public-chrome";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
 import { cookies } from "next/headers";
 
@@ -27,10 +28,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <>
-      <Nav previewTier={previewTier} />
-      <main className="mx-auto w-full max-w-7xl flex-1 px-2 sm:px-4 py-6">
-        {children}
-      </main>
+      {/* Nav + centred main for public pages; /admin/** renders bare into its own shell (public-chrome.tsx). */}
+      <PublicChrome nav={<Nav previewTier={previewTier} />}>{children}</PublicChrome>
       <LoginModal />
     </>
   );
