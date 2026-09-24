@@ -3,7 +3,6 @@
 import { CALIBRATED_SINCE } from "@/lib/engine-data";
 import { useState } from "react";
 import { TrendingUp, TrendingDown, Minus, ChevronRight } from "lucide-react";
-import Link from "next/link";
 import { isLiveBot } from "@/lib/bot-aggregates";
 import {
   Dialog,
@@ -790,37 +789,8 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
         </div>
       )}
 
-      {/* Pro upsell — only when there's data to show */}
-      {!isPro && visibleBots.length > 0 && (
-        <div className="border-t border-border/20 px-5 py-4 bg-blue-500/5">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-xs font-medium text-foreground">
-                Win/loss breakdown, P&amp;L, and bankroll charts
-              </p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                Pro unlocks full detail for every bot — click any row.
-              </p>
-            </div>
-            <Link
-              href="/performance"
-              className="shrink-0 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 transition-colors"
-            >
-              Upgrade to Pro
-            </Link>
-          </div>
-        </div>
-      )}
-
-      {/* Elite upsell for Pro users */}
-      {isPro && !isElite && (
-        <div className="border-t border-border/20 px-5 py-3 bg-emerald-500/5">
-          <p className="text-[11px] text-muted-foreground">
-            <span className="text-emerald-400 font-medium">Elite</span> unlocks exact CLV %, current bankroll per bot, and stake sizes.{" "}
-            <Link href="/performance" className="text-emerald-400 hover:underline">Upgrade →</Link>
-          </p>
-        </div>
-      )}
+      {/* #055 follow-up (2026-09-24): the Pro/Elite upsells were removed — there is no paid
+          tier to buy (no checkout), and both links pointed back at /performance itself. */}
 
       {selected && allBets && (
         <BotModal
