@@ -387,7 +387,17 @@ async function _loadShadowBotsPage(): Promise<ShadowBotsPageData> {
       }),
     );
     for (const f of fetches) {
-      if (f.rows.length >= SNAPSHOT_ROW_CAP) truncatedBooks.push(f.book);
+      // #022 (c): hitting the cap alone is not a problem — the newest rows come first, so
+      // the keys that matter are usually present. The banner used to fire on every capped
+      // fetch (44/44 pick keys were verified present when it did) and was being trained
+      // away. Flag a book only when it hit the cap AND a pick on the table has no price
+      // from it at all.
+      if (f.rows.length >= SNAPSHOT_ROW_CAP) {
+        const seen = new Set(f.rows.map((r) => oddsKey(r.match_id, r.market, r.selection)));
+        if (prematch.some((u) => !seen.has(oddsKey(u.match_id, u.market, u.selection)))) {
+          truncatedBooks.push(f.book);
+        }
+      }
       // COOLBET-DOUBLE-WRITE (2026-09-17). Taking the LATEST row per key was
       // measured at +1.87pp worse than the book's live quote, because a scrape
       // pass can write the same selection twice seconds apart and the second

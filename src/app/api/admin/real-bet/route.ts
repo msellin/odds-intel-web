@@ -78,54 +78,33 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `bookmaker '${bookmaker}' status is ${book.status}` }, { status: 400 });
   }
 
-  // DUPE-FIX-1: dedup guard. The /admin/place UI filters out already-placed
-  // bets via getPlaceableBets, but stale UI state + the auto coolbet_placer
-  // can race and double-record the same selection. Belt-and-braces server-side
-  // check against today's real_bets — if one exists for the same
-  // (match, market, selection), return 409 so the UI can surface it instead
-  // of silently inserting a duplicate.
-  const todayStart = new Date();
-  todayStart.setUTCHours(0, 0, 0, 0);
-  const { data: existing } = await sa
-    .from("real_bets")
-    .select("id")
-    .eq("match_id", matchId)
-    .eq("market", market)
-    .eq("selection", selection.toLowerCase())
-    .gte("placed_at", todayStart.toISOString())
-    .limit(1)
-    .maybeSingle();
-  if (existing?.id) {
-    return NextResponse.json(
-      { error: "already_placed", existingId: existing.id },
-      { status: 409 },
-    );
+  // DUPE-FIX-1 → #022 (a), 2026-09-24: dedup AND insert in ONE transaction. The old
+  // SELECT-then-INSERT here ran as two PostgREST calls, so a double-click or a race with
+  // the placer could insert the same (match, market, selection) twice on a day (5
+  // historical duplicate groups). `record_manual_real_bet` (migration 407) takes a
+  // per-selection advisory lock, checks today's real_bets and inserts atomically.
+  // Still returns 409 so the UI can surface it instead of silently inserting a duplicate.
+  const { data: rpc, error } = await sa.rpc("record_manual_real_bet", {
+    p_match_id: matchId,
+    p_market: market,
+    p_selection: selection,
+    p_bookmaker: bookmaker,
+    p_actual_odds: actualOdds,
+    p_stake: stake,
+    p_captured_odds: capturedOdds ?? null,
+    p_notes: notes ?? null,
+    p_bot_id: botId || null,
+    p_simulated_bet_id: simulatedBetId ?? null,
+    p_shadow_bet_id: shadowBetId ?? null,
+  });
+  const res = (rpc ?? {}) as { id?: string; error?: string; existing_id?: string };
+  if (res.error === "already_placed") {
+    return NextResponse.json({ error: "already_placed", existingId: res.existing_id }, { status: 409 });
   }
-
-  const { data, error } = await sa
-    .from("real_bets")
-    .insert({
-      simulated_bet_id: simulatedBetId ?? null,
-      shadow_bet_id: shadowBetId ?? null,
-      bot_id: botId || null,
-      match_id: matchId,
-      market,
-      selection: selection.toLowerCase(),
-      bookmaker,
-      captured_odds: capturedOdds ?? null,
-      actual_odds: actualOdds,
-      stake,
-      notes: notes ?? null,
-      // Manual, unconfirmed: the account reconciler flips this to TRUE when it
-      // finds the ticket, or FALSE if it never does (mig 325). Never TRUE here.
-      placed_real: null,
-    })
-    .select("id")
-    .single();
-
-  if (error || !data) {
-    return NextResponse.json({ error: error?.message ?? "insert failed" }, { status: 500 });
+  if (error || !res.id) {
+    return NextResponse.json({ error: error?.message ?? res.error ?? "insert failed" }, { status: 500 });
   }
+  const data = { id: res.id };
   // LOGGED-PICKS-INVISIBLE (2026-09-15): the shadow-bots page caches its reads
   // for 60 s, so a refresh straight after logging showed the pick untouched and
   // the day's manual count still at zero — the operator reasonably concluded

@@ -15,6 +15,12 @@ import { useState, useTransition } from "react";
  * Two-step on purpose: first click shows book · price · stake, second click
  * commits. 409 = the same (match, market, selection) is already in real_bets
  * today — surfaced, not swallowed.
+ *
+ * #022 (b), 2026-09-24: the price and stake are EDITABLE in the confirm step. The
+ * row used to carry the page's <=60 s cached price and a hardcoded stake — numbers
+ * the operator may not have taken — and was then settled and CLV-scored against
+ * them. The page's price is still sent as `capturedOdds`, so the difference between
+ * what was shown and what was taken stays visible.
  */
 export function PlaceAction({
   shadowBetId,
@@ -50,6 +56,11 @@ export function PlaceAction({
   const [error, setError] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const [oddsIn, setOddsIn] = useState(odds.toFixed(2));
+  const [stakeIn, setStakeIn] = useState(String(stake));
+  const takenOdds = Number(oddsIn);
+  const takenStake = Number(stakeIn);
+  const inputsOk = Number.isFinite(takenOdds) && takenOdds > 1 && Number.isFinite(takenStake) && takenStake > 0;
 
   function commit() {
     setError(null);
@@ -65,9 +76,9 @@ export function PlaceAction({
             market,
             selection,
             bookmaker,
-            capturedOdds,
-            actualOdds: odds,
-            stake,
+            capturedOdds: capturedOdds ?? odds,
+            actualOdds: takenOdds,
+            stake: takenStake,
             notes: "manual via shadow-bots",
           }),
         });
@@ -93,7 +104,7 @@ export function PlaceAction({
         className="font-mono text-[11px] text-neutral-300"
         title={`real_bets ${savedId ?? ""} · placed_real NULL until the account reconciler confirms it`}
       >
-        logged €{stake} @ {odds.toFixed(2)} {bookChip}
+        logged €{takenStake} @ {takenOdds.toFixed(2)} {bookChip}
       </span>
     );
   }
@@ -102,11 +113,26 @@ export function PlaceAction({
     return (
       <span className="inline-flex flex-wrap items-center gap-1.5 font-mono text-[11px]">
         <span className="text-neutral-200">
-          {pickLabel} · {bookChip} @ {odds.toFixed(2)} · €{stake}
+          {pickLabel} · {bookChip} @
         </span>
+        <input
+          aria-label="odds you took"
+          inputMode="decimal"
+          value={oddsIn}
+          onChange={(e) => setOddsIn(e.target.value)}
+          className="w-14 rounded border border-white/15 bg-black/30 px-1 text-right text-neutral-100"
+        />
+        <span className="text-neutral-400">€</span>
+        <input
+          aria-label="stake"
+          inputMode="decimal"
+          value={stakeIn}
+          onChange={(e) => setStakeIn(e.target.value)}
+          className="w-12 rounded border border-white/15 bg-black/30 px-1 text-right text-neutral-100"
+        />
         <button
           type="button"
-          disabled={pending}
+          disabled={pending || !inputsOk}
           onClick={commit}
           className="rounded bg-emerald-500/90 px-2 py-0.5 font-semibold text-emerald-950 hover:bg-emerald-400 disabled:opacity-50"
         >
