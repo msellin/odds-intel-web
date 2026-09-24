@@ -63,6 +63,7 @@ export default async function AdminIndexPage() {
   const pace = Math.round(thisWeek / weekShare);
   // a pace from the first hours of a week is noise — no trend until a day of it has passed
   const paceChange = lastWeek > 0 && weekShare >= 1 / 7 ? Math.round(((pace - lastWeek) / lastWeek) * 100) : null;
+  const feedsStale = d.feedsStale; // same rule as /admin/feeds (status check > 15 min old)
   const feedsOk = d.feeds.rows.filter((x) => x.status === "ok").length;
   const feedsBad = d.feeds.rows.filter((x) => x.status === "fail" || x.status === "warn").length;
   // same window + rules as the Real bets page ("last 30 days"), so both pages show one number
@@ -132,9 +133,9 @@ export default async function AdminIndexPage() {
           label="Feeds fresh"
           icon={Rss}
           tone={feedsBad ? "warning" : "success"}
-          unknown={!!d.feeds.error}
+          unknown={!!d.feeds.error || feedsStale}
           value={`${feedsOk}/${d.feeds.rows.length}`}
-          foot={feedsBad ? `${feedsBad} need a look` : "all sweeping on time"}
+          foot={feedsStale ? "the status check itself is stale — colours can't be trusted" : feedsBad ? `${feedsBad} need a look` : "all sweeping on time"}
           href="/admin/feeds"
         />
         <StatCard
@@ -144,7 +145,7 @@ export default async function AdminIndexPage() {
           unknown={!!d.realBets.error || !rb}
           value={fmtEur(rbPnl, { signed: true })}
           spark={<Sparkline values={d.realBets.rows.map((r) => r.pnl)} kind="bars" signed />}
-          foot={`${fmtInt(rbBets)} bets · ${fmtEur(rbStaked)} staked`}
+          foot={rb ? `${fmtInt(rbBets)} bets · ${fmtEur(rbStaked)} staked` : "couldn't load the real-bet ledger"}
           href="/admin/real-bets"
         />
       </div>

@@ -295,9 +295,11 @@ function Board({ data }: { data: BotBoardData }) {
   const lookBots = useMemo(() => new Set(issues.map((i) => i.bot).filter(Boolean) as string[]), [issues]);
 
   const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
+    // "1x2" finds "1×2 …": fold the multiplication sign and case on both sides
+    const fold = (t: string) => t.toLowerCase().replace(/×/g, "x");
+    const needle = fold(q.trim());
     return active.filter((v) => {
-      if (needle && !v.name.toLowerCase().includes(needle) && !v.displayName.toLowerCase().includes(needle) && !v.identity.toLowerCase().includes(needle)) return false;
+      if (needle && !fold(v.name).includes(needle) && !fold(v.displayName).includes(needle) && !fold(v.identity).includes(needle)) return false;
       if (famSel.length && !famSel.includes(v.family)) return false;
       if (verSel.length && !verSel.includes(v.verdict)) return false;
       switch (filter) {

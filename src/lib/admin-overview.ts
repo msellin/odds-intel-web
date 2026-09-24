@@ -86,6 +86,8 @@ export interface OverviewData {
   clvByFamily: Record<string, number | string | null>[];
   clvFamilies: string[];
   canStake: "yes" | "no" | "unknown";
+  /** feed_status not rewritten for > 15 min — every feed colour is stale (same rule as /admin/feeds). */
+  feedsStale: boolean;
   /** Cumulative flat 1-unit P/L per family (+ one 'retired' series). */
   pnlByFamily: Record<string, number | string | null>[];
   realBets: { rows: WeekRealBets[]; error: string | null; last30: RealWindow | null };
@@ -352,6 +354,10 @@ export async function loadOverview(viewerId: string | null): Promise<OverviewDat
     clvByFamily,
     clvFamilies,
     canStake: ladder.canStake,
+    feedsStale: (() => {
+      const u = feedsR.v.reduce<string | null>((m, x) => (x.updated_at && (!m || x.updated_at > m) ? x.updated_at : m), null);
+      return u != null && now - new Date(u).getTime() > 15 * 60_000;
+    })(),
     pnlByFamily,
     realBets: { rows: realRows, error: realBets.error, last30: realBets.last30 },
     moneyBlockers: ladder.layers.filter((l) => l.state === "blocked").map((l) => BLOCKER_WORDS[l.key] ?? l.title),

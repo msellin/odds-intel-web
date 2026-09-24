@@ -6,8 +6,17 @@
  * its own failure default. The page gives the operator a handle on the ones meant to move at
  * runtime; it never merges them.
  *
- * Honesty rules: an unreadable layer is "unknown", never "off"; any unknown layer makes the line
- * read CAN STAKE: UNKNOWN (amber), never NO. A placer that has not run recently is not "on".
+ * Honesty rules: an unreadable layer is "unknown", never "off". A placer that has not run recently
+ * is not "on".
+ *
+ * CAN STAKE (2026-09-24, UX re-test + money review): a HARD block decides even when another layer is
+ * unreadable — the kill switch reads Paused, arming reads Not armed, or NO bot is switched on
+ * (counted raw: ui_place_enabled and not locked, BEFORE the page's own placement-path filter). The
+ * engine enforces each of those fail-closed on every pick, so money cannot move → NO. Layers 1
+ * (the page's copy of the placement-path rule) and 5 (Mac heartbeat — a router can stake before it
+ * reports) are NOT hard: with any layer unreadable they give UNKNOWN, as before. `canStakeStrict`
+ * keeps the original conservative order (any unknown → UNKNOWN) for views that show the ladder while
+ * OPENING a gate (the confirmation dialogs), where the hard block is the very gate being opened.
  */
 import { HEARTBEAT_STALE_MIN, isStrategicPause, type ControlState, type PlacerHeartbeat } from "./types";
 
@@ -25,6 +34,10 @@ export interface Layer {
 export interface Ladder {
   layers: Layer[];
   canStake: "yes" | "no" | "unknown";
+  /** Conservative order: any unreadable layer → "unknown" (confirmation dialogs). */
+  canStakeStrict: "yes" | "no" | "unknown";
+  /** A readable hard gate (kill switch, arming, zero bots on) is closed. */
+  hardBlock: boolean;
   blockedAt: number[];
   unknownAt: number[];
   /** Bots that would stake if the line reads YES. */
@@ -162,6 +175,9 @@ export function computeLadder(
 
   const unknownAt = layers.filter((l) => l.state === "unknown").map((l) => l.n);
   const blockedAt = layers.filter((l) => l.state === "blocked").map((l) => l.n);
-  const canStake = unknownAt.length > 0 ? "unknown" : blockedAt.length > 0 ? "no" : "yes";
-  return { layers, canStake, blockedAt, unknownAt, stakingBots: canStake === "yes" ? staking : [] };
+  const rawOn = s.placers.error ? null : s.placers.rows.filter((p) => p.ui_place_enabled && !p.locked_reason).length;
+  const hardBlock = paused === true || armed === false || rawOn === 0;
+  const canStakeStrict = unknownAt.length > 0 ? "unknown" : blockedAt.length > 0 ? "no" : "yes";
+  const canStake = hardBlock ? "no" : canStakeStrict;
+  return { layers, canStake, canStakeStrict, hardBlock, blockedAt, unknownAt, stakingBots: canStake === "yes" ? staking : [] };
 }

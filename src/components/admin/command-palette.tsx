@@ -100,10 +100,12 @@ export function CommandPalette({ open, onClose, bots, fleet }: { open: boolean; 
   }, [bots, fleet]);
 
   const filtered = useMemo(() => {
-    const n = q.trim().toLowerCase();
+    // "1x2" must find "1×2 NEW+ EV5": fold the multiplication sign (and case) on both sides
+    const fold = (t: string) => t.toLowerCase().replace(/×/g, "x");
+    const n = fold(q.trim());
     // every word must match somewhere in label / hint / keywords / id ("ev5" finds "1x2 NEW+ EV5")
     const words = n.split(/\s+/).filter(Boolean);
-    const hay = (e: Entry) => `${e.label} ${e.hint ?? ""} ${e.keywords ?? ""} ${e.id}`.toLowerCase();
+    const hay = (e: Entry) => fold(`${e.label} ${e.hint ?? ""} ${e.keywords ?? ""} ${e.id}`);
     const hits = n ? entries.filter((e) => words.every((w) => hay(e).includes(w))) : entries.filter((e) => e.section !== "Bots");
     return hits.slice(0, 40);
   }, [entries, q]);

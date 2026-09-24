@@ -42,13 +42,15 @@ export function LadderList({ ladder, compact = false }: { ladder: Ladder; compac
           );
         })}
       </ol>
-      <CanStakeLine ladder={ladder} />
+      {/* compact = inside a confirmation dialog / the bot sheet: keep the conservative verdict */}
+      <CanStakeLine ladder={ladder} strict={compact} />
     </div>
   );
 }
 
-export function CanStakeLine({ ladder }: { ladder: Ladder }) {
-  if (ladder.canStake === "unknown") {
+export function CanStakeLine({ ladder, strict = false }: { ladder: Ladder; strict?: boolean }) {
+  const verdict = strict ? ladder.canStakeStrict : ladder.canStake;
+  if (verdict === "unknown") {
     return (
       <div className="flex items-center gap-2 rounded-md bg-warning/10 px-2.5 py-1.5 text-sm font-semibold text-warning">
         <AlertTriangle size={16} aria-hidden="true" /> CAN STAKE: UNKNOWN — layer{ladder.unknownAt.length === 1 ? "" : "s"} {ladder.unknownAt.join(", ")} unreadable
@@ -56,7 +58,7 @@ export function CanStakeLine({ ladder }: { ladder: Ladder }) {
       </div>
     );
   }
-  if (ladder.canStake === "yes") {
+  if (verdict === "yes") {
     return (
       <div className="flex items-center gap-2 rounded-md bg-danger/20 px-2.5 py-1.5 text-sm font-semibold text-danger">
         <ShieldAlert size={16} aria-hidden="true" /> CAN STAKE: YES — {ladder.stakingBots.length} bot{ladder.stakingBots.length === 1 ? "" : "s"}
@@ -67,6 +69,9 @@ export function CanStakeLine({ ladder }: { ladder: Ladder }) {
     <div className="flex items-center gap-2 rounded-md bg-muted/40 px-2.5 py-1.5 text-sm font-semibold text-foreground">
       <Ban size={16} className="text-muted-foreground" aria-hidden="true" /> CAN STAKE: NO — blocked at layer{ladder.blockedAt.length === 1 ? "" : "s"}{" "}
       {ladder.blockedAt.join(", ")}
+      {!strict && ladder.hardBlock && ladder.unknownAt.length > 0 && (
+        <span className="font-normal text-muted-foreground">(layer{ladder.unknownAt.length === 1 ? "" : "s"} {ladder.unknownAt.join(", ")} not readable — does not change the answer: a closed kill switch, arming or zero bots on stops every automatic bet)</span>
+      )}
     </div>
   );
 }

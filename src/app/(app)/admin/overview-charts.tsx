@@ -58,12 +58,16 @@ export function OverviewCharts({ d }: { d: OverviewData }) {
   const famSeries: Series[] = d.families.map((f) => ({ key: f, label: familyLabel(f), color: FAMILY_COLOR[f] ?? "var(--chart-5)" }));
   const clvSeries: Series[] = d.clvFamilies.map((f) => ({ key: f, label: familyLabel(f), color: FAMILY_COLOR[f] ?? "var(--chart-5)" }));
   const feedCount = (s: string) => d.feeds.rows.filter((f) => f.status === s).length;
+  // stale status check: show every feed as Unknown, never a green "fresh" (same rule as /admin/feeds)
+  const feedCountRaw = feedCount;
+  const staleCount = (s: string) => (s === "unknown" ? d.feeds.rows.length : 0);
+  const fc = d.feedsStale ? staleCount : feedCountRaw;
   const feedSlices: Slice[] = [
-    { key: "ok", label: "Fresh", value: feedCount("ok"), color: "var(--color-success)", href: "/admin/feeds" },
-    { key: "warn", label: "Needs a look", value: feedCount("warn"), color: "var(--color-warning)", href: "/admin/feeds" },
-    { key: "fail", label: "Stopped", value: feedCount("fail"), color: "var(--color-danger)", href: "/admin/feeds" },
-    { key: "paused", label: "Paused", value: feedCount("paused"), color: "var(--color-info)", href: "/admin/feeds" },
-    { key: "unknown", label: "Unknown", value: feedCount("unknown"), color: "var(--muted-foreground)", href: "/admin/feeds" },
+    { key: "ok", label: "Fresh", value: fc("ok"), color: "var(--color-success)", href: "/admin/feeds" },
+    { key: "warn", label: "Needs a look", value: fc("warn"), color: "var(--color-warning)", href: "/admin/feeds" },
+    { key: "fail", label: "Stopped", value: fc("fail"), color: "var(--color-danger)", href: "/admin/feeds" },
+    { key: "paused", label: "Paused", value: fc("paused"), color: "var(--color-info)", href: "/admin/feeds" },
+    { key: "unknown", label: "Unknown", value: fc("unknown"), color: "var(--muted-foreground)", href: "/admin/feeds" },
   ];
   const verdictSlices: Slice[] = VERDICT_SLICES.map((s) => ({ ...s, value: d.bots.verdicts[s.key], href: "/admin/bots" }));
   const beats = d.bots.verdicts.beats;
@@ -117,7 +121,7 @@ export function OverviewCharts({ d }: { d: OverviewData }) {
             footer="Margin-corrected CLV, weighted by picks within a family (high-volume bots weigh more). Model · simulated bots are judged on Pinnacle's price instead and in-play bots have no closing price, so neither is drawn. This week is still running."
           />
         </div>
-        <DonutCard title="Feeds right now" description="Every odds sweeper and data feed, checked every 5 minutes." slices={feedSlices} center={`${feedCount("ok")}/${d.feeds.rows.length}`} centerLabel="fresh" />
+        <DonutCard title="Feeds right now" description="Every odds sweeper and data feed, checked every 5 minutes." slices={feedSlices} center={d.feedsStale ? "?" : `${feedCount("ok")}/${d.feeds.rows.length}`} centerLabel={d.feedsStale ? "status check stale" : "fresh"} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
