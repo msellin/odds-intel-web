@@ -1550,12 +1550,13 @@ export async function getPublicCohortBotNames(): Promise<Set<string>> {
 //
 // Measured 2026-09-21 on the published cohort: all books +8.17% (n=697),
 // excluding Kambi +7.25% (n=657). That 0.92pp is the honest correction.
-// 'Unibet' ADDED 2026-09-24 (sweeper-odds audit, #125): API-Football's Unibet feed read
-// 33% phantom-high against the site and the engine's `_NON_OFFERS` already excludes it.
-// 87 settled rows in the cohort since 2026-05-04 were priced off it, returning ~+23%;
-// removing them moves the published obtainable ROI from about +10.3% (n=438) to
-// +7.1% (n=351). A visible drop on a public page, and the honest direction.
-const UNOBTAINABLE_BOOKMAKERS = ["Unibet-Kambi", "Unibet"] as const;
+// NOT extended to AF 'Unibet' (reverted 2026-09-24, owner). The "33.1%" measured on
+// 2026-09-14 is the SHARE of AF Unibet quotes above what unibet.ee showed — the ESTONIAN
+// site. That makes it unplaceable for US (🤖 OWN), not unobtainable for a reader in
+// another country, where Unibet prices differ. This is a 👥 PICKS figure: a book's
+// Estonian availability is not a reader's constraint (see the note above and
+// project_own_vs_picks_book_constraint).
+const UNOBTAINABLE_BOOKMAKERS = ["Unibet-Kambi"] as const;
 
 const _getCalibratedHeadlineStatsUncached =
   async (): Promise<CalibratedHeadlineStats> => {
