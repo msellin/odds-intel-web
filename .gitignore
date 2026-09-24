@@ -44,3 +44,4 @@ stitch_output/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.dev-fixtures/

@@ -161,8 +161,38 @@ async function readAll<T>(relation: string, columns = "*"): Promise<Read<T>> {
   }
 }
 
+// ── Local design preview (development only) ──────────────────────────────────────────
+// `next dev` with BOT_BOARD_FIXTURE=<path to a JSON snapshot> renders /admin/bots from a
+// file instead of the database and without the superadmin check, so the page can be
+// designed and reviewed on real numbers with no credentials on the machine. The snapshot
+// is written by odds-intel-engine scripts/dump_bot_board_fixture.py into .dev-fixtures/
+// (gitignored). NODE_ENV is "production" in every build, so this can never switch on in
+// the deployed app.
+interface BotBoardFixture {
+  scoreboard: BotScoreboardRow[];
+  config: BotConfigRow[];
+  capabilities: BotCapabilitiesRow[];
+  retired: RetiredInfo[];
+  ledger: Record<string, BotLedgerRow[]>;
+}
+
+export function isBotBoardDevPreview(): boolean {
+  return process.env.NODE_ENV === "development" && !!process.env.BOT_BOARD_FIXTURE;
+}
+
+async function readFixture(): Promise<BotBoardFixture> {
+  const { readFile } = await import("node:fs/promises");
+  return JSON.parse(await readFile(process.env.BOT_BOARD_FIXTURE as string, "utf8")) as BotBoardFixture;
+}
+
 /** Everything /admin/bots renders on load (the ledger is fetched per bot on demand). */
 export async function loadBotBoard(): Promise<BotBoardData> {
+  if (isBotBoardDevPreview()) {
+    const f = await readFixture();
+    const ok = <T,>(rows: T[]): Read<T> => ({ rows, error: null });
+    return { scoreboard: ok(f.scoreboard), config: ok(f.config), capabilities: ok(f.capabilities),
+             retired: ok(f.retired), now: Date.now() };
+  }
   const [scoreboard, config, capabilities, retired] = await Promise.all([
     readAll<BotScoreboardRow>("bot_scoreboard"),
     readAll<BotConfigRow>("bot_config"),
@@ -191,6 +221,10 @@ async function readRetired(): Promise<Read<RetiredInfo>> {
 
 /** One bot's most recent picks from `bot_ledger` (newest pick first). */
 export async function loadBotLedger(botName: string, limit = 30): Promise<Read<BotLedgerRow>> {
+  if (isBotBoardDevPreview()) {
+    const f = await readFixture();
+    return { rows: (f.ledger[botName] ?? []).slice(0, limit), error: null };
+  }
   try {
     const db = createServerServiceClient();
     const { data, error } = await db

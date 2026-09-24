@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
-import { loadBotLedger } from "@/lib/bot-board";
+import { isBotBoardDevPreview, loadBotLedger } from "@/lib/bot-board";
 
 /** GET ?bot=<bot_name> -> { rows: BotLedgerRow[], error: string | null }
  *
@@ -9,6 +9,19 @@ import { loadBotLedger } from "@/lib/bot-board";
  *  scan the ledger for every bot. Superadmin only (bot_ledger is not anon-readable).
  */
 export async function GET(req: Request) {
+  if (!isBotBoardDevPreview()) {
+    const denied = await superadminDenial();
+    if (denied) return denied;
+  }
+  const bot = new URL(req.url).searchParams.get("bot")?.trim();
+  if (!bot || bot.length > 200 || !/^[a-z0-9_]+$/i.test(bot)) {
+    return NextResponse.json({ error: "invalid bot" }, { status: 400 });
+  }
+  const result = await loadBotLedger(bot, 30);
+  return NextResponse.json(result);
+}
+
+async function superadminDenial() {
   const supabase = await createSupabaseServer();
   const {
     data: { user },
@@ -17,12 +30,5 @@ export async function GET(req: Request) {
   const db = createServerServiceClient();
   const { data: profile } = await db.from("profiles").select("is_superadmin").eq("id", user.id).single();
   if (!profile?.is_superadmin) return NextResponse.json({ error: "forbidden" }, { status: 403 });
-
-  const bot = new URL(req.url).searchParams.get("bot")?.trim();
-  if (!bot || bot.length > 200 || !/^[a-z0-9_]+$/i.test(bot)) {
-    return NextResponse.json({ error: "invalid bot" }, { status: 400 });
-  }
-
-  const result = await loadBotLedger(bot, 30);
-  return NextResponse.json(result);
+  return null;
 }

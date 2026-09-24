@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
-import { loadBotBoard } from "@/lib/bot-board";
+import { isBotBoardDevPreview, loadBotBoard } from "@/lib/bot-board";
 import { BotsBoard } from "./bots-board";
 
 // /admin/bots — rebuilt for #139 UNIFIED-BOT-MODEL phase 1 (2026-09-24).
@@ -19,6 +19,15 @@ import { BotsBoard } from "./bots-board";
 // see docs/BOTS_AUDIT_2026_09_24.md sections A and D4.
 
 export default async function BotsPage() {
+  if (!isBotBoardDevPreview()) {
+    const denied = await superadminDenial();
+    if (denied) return denied;
+  }
+  const data = await loadBotBoard();
+  return renderBoard(data);
+}
+
+async function superadminDenial() {
   const supabase = await createSupabaseServer();
   const {
     data: { user },
@@ -31,9 +40,10 @@ export default async function BotsPage() {
   if (!profile?.is_superadmin) {
     return <div className="flex items-center justify-center py-24 text-muted-foreground">Superadmin only.</div>;
   }
+  return null;
+}
 
-  const data = await loadBotBoard();
-
+function renderBoard(data: Awaited<ReturnType<typeof loadBotBoard>>) {
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 space-y-6">
       <div>
