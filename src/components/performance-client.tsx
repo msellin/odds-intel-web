@@ -26,6 +26,7 @@ interface BotDbRow {
   startingBankroll: number;
   retiredAt?: string | null;
   maturityLabel?: string;
+  isVip?: boolean;
 }
 
 interface Props {
@@ -98,7 +99,10 @@ export function PerformanceClient({
   }, [computedBots, cachedBots]);
 
   // Count non-experimental active bots with enough data for the scale row
-  const botsTracked = leaderboardBots.filter(b => b.hasEnoughData).length || null;
+  // VIP-PERFORMANCE-SETTLED-ONLY (#148): the VIP bot is listed in the table but
+  // never counted in the hero numbers (neither here nor in activeBotCount, which
+  // gates on isPublicBot alone).
+  const botsTracked = leaderboardBots.filter(b => b.hasEnoughData && !b.isVip).length || null;
 
   // PERF-COHORT-RECONCILE (2026-08-21): "strategies live" in the hero must
   // match the leaderboard funnel line ("Tested to date: N · X proven · ...").

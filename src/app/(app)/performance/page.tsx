@@ -56,7 +56,7 @@ import {
   PICKS_FORWARD_TEST_STAKE_EUR,
   PICKS_FORWARD_TEST_START_BANKROLL,
 } from "@/lib/engine-data";
-import { isPublicBot, LEDGER_BACKED_BOTS } from "@/lib/bot-aggregates";
+import { isPublicBot, isVipBot, dropVipUnsettled, LEDGER_BACKED_BOTS } from "@/lib/bot-aggregates";
 import { PerformanceHistory } from "@/components/performance-history";
 import type { FullBetItem } from "@/components/performance-history";
 import { PerformanceExtras } from "@/components/performance-extras";
@@ -97,6 +97,7 @@ function buildCachedBotStats(
       startingBankroll: startingBankrollMap.get(b.name) ?? null,
       hasEnoughData: b.settled >= 5,
       maturityLabel: dbBot?.maturityLabel ?? 'active',
+      isVip: isVipBot(dbBot),
     };
   });
 
@@ -200,10 +201,18 @@ async function LoggedInPerformanceSection({
   // levels of embedded resources (bot, match -> home_team / away_team / league)
   // through PostgREST — so running them one after the other paid its latency
   // twice over for no reason. Parallel now.
-  const [allBetsRaw, publicBotNames] = await Promise.all([
+  const [allBetsUnfiltered, publicBotNames] = await Promise.all([
     getAllBets(),
     getPublicCohortBotNames(),
   ]);
+  // VIP-PERFORMANCE-SETTLED-ONLY (#148). The VIP bot's unsettled picks are the
+  // paid product — they must never reach a browser before kickoff. RLS
+  // (migration 420) already hides them from anon/authenticated; this drops them
+  // again server-side, before BOTH the display array and the raw aggregate
+  // array are serialised to the client, so a future switch of getAllBets to a
+  // service-role client cannot leak them.
+  const vipBotNames = new Set(botsDB.filter((b) => isVipBot(b)).map((b) => b.name));
+  const allBetsRaw = dropVipUnsettled(allBetsUnfiltered, vipBotNames);
   const sanitizedBets = sanitizeBets(allBetsRaw, isElite);
   // PICKS-BOT-ACTS-LIKE-THE-OTHERS-2026-09-14: its bets come from
   // picks_forward_test, not simulated_bets, so they are appended to the same
@@ -336,8 +345,10 @@ export default async function PerformancePage() {
   // `bot_sharp_forward_test_v1` is pushed in BELOW this filter, from its own
   // ledger — it is the bot whose picks readers receive, so it stays regardless
   // of its maturity label.
+  // VIP-PERFORMANCE-SETTLED-ONLY (#148): the VIP bot is listed too, whatever its
+  // maturity label — dashboard_cache.bot_breakdown carries settled counts only.
   const cachedBots = buildCachedBotStats(cache, botsDB, isPro, isElite)
-    .filter(b => isPublicBot(b.maturityLabel))
+    .filter(b => isPublicBot(b.maturityLabel) || b.isVip === true)
     .filter(b => !liveRetiredNames.has(b.name))
     // Ledger-backed bots are pushed below from picks_forward_test; a beta one
     // (grade B) would otherwise ALSO arrive here from dashboard_cache with 0 bets.

@@ -373,6 +373,10 @@ export interface BotRecord {
   isActive: boolean;
   retiredAt: string | null;
   maturityLabel: string;
+  /** #148 (migration 420): the paid-tier "VIP" bot. Shown on /performance with
+   *  SETTLED picks only — its pending picks are the paid product, delivered
+   *  privately before kickoff. RLS hides them from anon/authenticated too. */
+  isVip: boolean;
 }
 
 // PERF-VPS-2026-07-07: switched from createSupabaseServer (cookies) to admin
@@ -382,7 +386,7 @@ const _getAllBotsFromDBUncached = async (): Promise<BotRecord[]> => {
   const admin = createSupabaseAdmin();
   const { data, error } = await admin
     .from("bots")
-    .select("id, name, display_name, strategy, description, strategy_description, starting_bankroll, current_bankroll, is_active, retired_at, maturity_label")
+    .select("id, name, display_name, strategy, description, strategy_description, starting_bankroll, current_bankroll, is_active, retired_at, maturity_label, vip")
     .order("name");
   if (error || !data) {
     console.error("[getAllBotsFromDB] query failed:", error?.message ?? "no data");
@@ -400,6 +404,7 @@ const _getAllBotsFromDBUncached = async (): Promise<BotRecord[]> => {
     isActive: Boolean(r.is_active),
     retiredAt: (r.retired_at as string | null) ?? null,
     maturityLabel: (r.maturity_label as string) ?? 'active',
+    isVip: r.vip === true,
   }));
 };
 
@@ -407,7 +412,8 @@ export const getAllBotsFromDB = unstable_cache(
   _getAllBotsFromDBUncached,
   // v2: the row shape gained display_name (migration 375) — the key must
   // change or 30 minutes of cached rows come back without it.
-  ["getAllBotsFromDB_v2"],
+  // v3: gained `vip` (migration 420, #148).
+  ["getAllBotsFromDB_v3"],
   { revalidate: 1800 }
 );
 

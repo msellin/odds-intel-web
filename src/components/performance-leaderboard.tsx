@@ -3,7 +3,7 @@
 import { CALIBRATED_SINCE } from "@/lib/engine-data";
 import { useState } from "react";
 import { TrendingUp, TrendingDown, Minus, ChevronRight } from "lucide-react";
-import { isLiveBot } from "@/lib/bot-aggregates";
+import { isLiveBot, vipEvLabel, VIP_LIVE_SINCE } from "@/lib/bot-aggregates";
 import {
   Dialog,
   DialogContent,
@@ -67,6 +67,8 @@ export interface PublicBotStat {
   startingBankroll: number | null;
   hasEnoughData: boolean;
   maturityLabel: string;
+  /** #148: the paid-tier VIP bot — settled picks only ever reach this page. */
+  isVip?: boolean;
 }
 
 export interface SanitizedBotBet {
@@ -123,6 +125,36 @@ function MaturityChip({ label }: { label: string }) {
   if (label === 'beta') return <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-400 border border-amber-500/25">beta</span>;
   if (label === 'testing') return <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-zinc-500/15 text-zinc-400 border border-zinc-500/25">testing</span>;
   return null; // 'active' shows no chip — it's the default
+}
+
+/** VIP-PERFORMANCE-SETTLED-ONLY (#148). The paid-tier bot: its live picks go to
+ *  paying members before kickoff; this page shows its record once settled. */
+function VipChip({ isVip }: { isVip?: boolean }) {
+  if (!isVip) return null;
+  return (
+    <span
+      title="Our paid-tier bot — its picks appear here once settled."
+      className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-yellow-400/15 text-yellow-300 border border-yellow-400/40"
+    >
+      VIP
+    </span>
+  );
+}
+
+/** Per-pick EV band on a VIP pick: EV8 (EV ≥ 8%) or EV5 (5–8%). */
+function EvBandChip({ label }: { label: "EV8" | "EV5" | null }) {
+  if (!label) return null;
+  const style = label === "EV8"
+    ? "bg-yellow-400/15 text-yellow-300 border-yellow-400/40"
+    : "bg-yellow-400/5 text-yellow-200/70 border-yellow-400/20";
+  return (
+    <span
+      title={label === "EV8" ? "Expected value ≥ 8% at the price taken" : "Expected value 5–8% at the price taken"}
+      className={`ml-1 rounded px-1 py-0.5 text-[9px] font-bold tracking-wider border ${style}`}
+    >
+      {label}
+    </span>
+  );
 }
 
 /** What the bot prices against — model, sharp line, or book consensus.
@@ -245,8 +277,11 @@ function BotModal({
   // OU/odds-quality cleanup (or future audits) retroactively invalidates a settled bet —
   // pnl=0 by definition, but the row at original odds_at_pick was misleading users into
   // thinking the bot had taken e.g. Over 1.5 at 3.42 (it did, but the price was garbage).
+  // VIP-PERFORMANCE-SETTLED-ONLY (#148): a VIP bot's modal lists settled picks
+  // only. The server already drops its unsettled rows; this is the last guard.
   const botBets = bets
     .filter((b) => b.bot === bot.name && b.result !== "void")
+    .filter((b) => !bot.isVip || b.result === "won" || b.result === "lost")
     .sort((a, b) => new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime());
 
   const chartData = buildChartData(botBets, bot.startingBankroll);
@@ -278,6 +313,11 @@ function BotModal({
                 ? `${bot.settled} settled · ROI ${fmtPct(bot.roi)}`
                 : "Accumulating data…"}
             </span>
+            {bot.isVip && (
+              <span className="flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
+                <VipChip isVip /> Live since {VIP_LIVE_SINCE} · settled picks only
+              </span>
+            )}
           </DialogTitle>
         </DialogHeader>
 
@@ -373,7 +413,10 @@ function BotModal({
                       </td>
                       <td className="py-2 px-2 max-w-[180px] truncate" title={b.match}>{b.match}</td>
                       <td className="py-2 px-2">
-                        <div className="font-mono uppercase text-muted-foreground text-[10px] whitespace-nowrap">{b.market} · {b.selection}</div>
+                        <div className="font-mono uppercase text-muted-foreground text-[10px] whitespace-nowrap">
+                          {b.market} · {b.selection}
+                          {bot.isVip && <EvBandChip label={vipEvLabel(b.modelProb, b.odds)} />}
+                        </div>
                         {b.strategyProfile && (
                           <div className="text-[9px] text-blue-400/60 mt-0.5">{b.strategyProfile}</div>
                         )}
@@ -529,7 +572,10 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
               <span className="mx-1 rounded bg-amber-500/15 px-1 py-0.5 text-[9px] font-bold uppercase text-amber-400">beta</span>
               (early live results),
               <span className="mx-1 rounded bg-zinc-500/15 px-1 py-0.5 text-[9px] font-bold uppercase text-zinc-400">testing</span>
-              (still collecting).
+              (still collecting).{" "}
+              <span className="mx-1 rounded border border-yellow-400/40 bg-yellow-400/15 px-1 py-0.5 text-[9px] font-bold uppercase text-yellow-300">VIP</span>
+              — our paid-tier bot; its picks appear here once settled, each marked
+              EV8 (expected value ≥ 8%) or EV5 (5–8%).
             </p>
             {/* SECOND LEGEND, for the second chip (2026-09-22, owner: "those
                 labels need to be explained and have maybe separate shape?").
@@ -601,12 +647,16 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
                           </Badge>
                         )}
                         <MaturityChip label={bot.maturityLabel ?? "active"} />
+                        <VipChip isVip={bot.isVip} />
                         <AnchorChip bot={bot.name} />
                       </div>
                       {bot.displayName && (
                         <p className="font-mono text-[10px] text-muted-foreground/60 truncate">
                           {bot.name}
                         </p>
+                      )}
+                      {bot.isVip && (
+                        <p className="text-[10px] text-yellow-300/80">Live since {VIP_LIVE_SINCE}</p>
                       )}
                       <p className="mt-1 text-[11px] tabular-nums text-muted-foreground">
                         {isMaturing
@@ -687,10 +737,14 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
                           </Badge>
                         )}
                         <MaturityChip label={bot.maturityLabel ?? 'active'} />
+                        <VipChip isVip={bot.isVip} />
                         <AnchorChip bot={bot.name} />
                       </div>
                       {bot.displayName && (
                         <p className="font-mono text-[10px] text-muted-foreground/60 mt-0.5">{bot.name}</p>
+                      )}
+                      {bot.isVip && (
+                        <p className="text-[10px] text-yellow-300/80 mt-0.5">Live since {VIP_LIVE_SINCE}</p>
                       )}
                       {isMaturing && (
                         <p className="text-[10px] text-muted-foreground mt-0.5">

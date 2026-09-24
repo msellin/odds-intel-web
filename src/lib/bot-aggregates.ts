@@ -113,6 +113,7 @@ interface BotDbRow {
   startingBankroll: number;
   retiredAt?: string | null;
   maturityLabel?: string;
+  isVip?: boolean;
 }
 
 // ── Filtering ────────────────────────────────────────────────────────────────
@@ -298,6 +299,7 @@ export interface PublicBotStatShape {
   startingBankroll: number | null;
   hasEnoughData: boolean;
   maturityLabel: string;
+  isVip?: boolean;
 }
 
 /**
@@ -372,6 +374,55 @@ export function isPublicBot(maturityLabel?: string | null): boolean {
   return PUBLIC_MATURITY_LABELS.has(maturityLabel ?? "");
 }
 
+/**
+ * VIP-PERFORMANCE-SETTLED-ONLY (#148, 2026-09-24). The paid-tier bot
+ * (`bots.vip`, migration 420 — only `bot_combined_1x2_ev5_v1`). Its LIVE picks
+ * are the paid product (delivered privately before kickoff); its record is
+ * public once settled. So it is listed on /performance whatever its maturity
+ * label — but ONLY its settled rows ever reach the page (see
+ * `dropVipUnsettled`), and it is NOT counted in the hero "strategies live"
+ * number or in any HEADLINE_MATURITY_LABELS aggregate.
+ *
+ * Deliberately a SEPARATE gate rather than a new entry in
+ * PUBLIC_MATURITY_LABELS: that set means "live evidence behind it", and
+ * widening it would pull every experimental bot back onto the page.
+ */
+export function isVipBot(bot: { isVip?: boolean | null } | null | undefined): boolean {
+  return bot?.isVip === true;
+}
+
+/** Date the VIP bot's picks started (first live pick 2026-09-24 20:05 UTC). */
+export const VIP_LIVE_SINCE = "2026-09-25";
+
+/** EV of a pick at the price taken: calibrated_prob × odds_at_pick − 1. */
+export function pickEv(modelProb: number | null | undefined, odds: number | null | undefined): number | null {
+  if (modelProb == null || odds == null || !Number.isFinite(modelProb) || !Number.isFinite(odds) || modelProb <= 0) return null;
+  return modelProb * odds - 1;
+}
+
+/** VIP per-pick label: EV8 when EV ≥ 8%, else EV5 (the bot's floor is 5%). */
+export function vipEvLabel(modelProb: number | null | undefined, odds: number | null | undefined): "EV8" | "EV5" | null {
+  const ev = pickEv(modelProb, odds);
+  if (ev == null) return null;
+  return ev >= 0.08 ? "EV8" : "EV5";
+}
+
+/**
+ * Belt and braces on top of the RLS policy (migration 420): drop every VIP-bot
+ * row that is not SETTLED (won/lost/void kept; pending and anything else
+ * dropped) before bets reach a client component. Keys on the bot NAME because
+ * bet rows carry the name, not the vip flag.
+ */
+export function dropVipUnsettled<T extends { bot: string; result: string }>(
+  bets: T[],
+  vipBotNames: ReadonlySet<string>,
+): T[] {
+  if (vipBotNames.size === 0) return bets;
+  return bets.filter(
+    (b) => !vipBotNames.has(b.bot) || b.result === "won" || b.result === "lost" || b.result === "void",
+  );
+}
+
 export function buildPublicBotStats(
   bets: LiveBet[],
   botsDB: BotDbRow[],
@@ -392,8 +443,10 @@ export function buildPublicBotStats(
   // aggregateBets toggle would otherwise resurrect them from raw bets data.
   // PERF-PUBLIC-IS-CALIBRATED-OR-BETA: and the shadow fleet never appears here
   // at all — see PUBLIC_MATURITY_LABELS above for why.
+  // VIP-PERFORMANCE-SETTLED-ONLY (#148): plus the VIP bot, whose bets arrive
+  // here already stripped of unsettled rows (dropVipUnsettled in page.tsx).
   const activeBots = botsDB.filter((b) =>
-    !b.retiredAt && isPublicBot(b.maturityLabel) && !LEDGER_BACKED_BOTS.has(b.name));
+    !b.retiredAt && (isPublicBot(b.maturityLabel) || isVipBot(b)) && !LEDGER_BACKED_BOTS.has(b.name));
   const rows: PublicBotStatShape[] = activeBots.map((dbBot): PublicBotStatShape => {
     const botBets = betsByBot[dbBot.name] || [];
     const settled = botBets.filter((b) => b.result !== "pending" && b.result !== "void");
@@ -424,6 +477,7 @@ export function buildPublicBotStats(
       startingBankroll: dbBot.startingBankroll,
       hasEnoughData: settled.length >= 5,
       maturityLabel: dbBot.maturityLabel ?? 'active',
+      isVip: isVipBot(dbBot),
     };
   });
 
