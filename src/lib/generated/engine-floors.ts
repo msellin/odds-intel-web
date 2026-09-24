@@ -155,6 +155,22 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "anchor": "model",
     "market": "O/U 3.5"
   },
+  "bot_ou_sharp_2anchor_v1": {
+    "edgeFloor": null,
+    "oddsFloor": null,
+    "oddsCap": null,
+    "realMoney": false,
+    "anchor": "sharp",
+    "market": "ou"
+  },
+  "bot_ou_sharp_early_v1": {
+    "edgeFloor": null,
+    "oddsFloor": null,
+    "oddsCap": null,
+    "realMoney": false,
+    "anchor": "sharp",
+    "market": "ou"
+  },
   "bot_rating_1x2_v1": {
     "edgeFloor": null,
     "oddsFloor": null,
