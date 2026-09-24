@@ -687,23 +687,6 @@ function _mapPaperToSnapshotKey(market: string, selection: string): { market: st
   return null;
 }
 
-/** COOLBET-INGEST-ANON-FOLLOWUP (2026-06-06): minutes since the last
- *  Coolbet odds_snapshot landed. Returns null on DB error so the caller
- *  can render a "freshness check failed" softer warning instead of
- *  asserting confidence in the absence of data. */
-export async function getCoolbetSnapshotFreshnessMinutes(): Promise<number | null> {
-  const admin = createSupabaseAdmin();
-  const { data, error } = await admin
-    .from("odds_snapshots")
-    .select("timestamp")
-    .eq("bookmaker", "Coolbet")
-    .order("timestamp", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error || !data?.timestamp) return null;
-  const ageMs = Date.now() - new Date(data.timestamp).getTime();
-  return Math.max(0, Math.floor(ageMs / 60_000));
-}
 
 /** All pending paper bets on matches that haven't kicked off yet, with
  *  Unibet (Coolbet proxy) + Bet365 + Pinnacle odds joined at pick time.
@@ -2020,31 +2003,7 @@ export async function getRecentSettledBets(limit = 10): Promise<SimpleSettledBet
 
 // ─── Ops Dashboard ──────────────────────────────────────────────────────────
 
-/** Latest pre-computed ops snapshot for today (written by each pipeline job). */
-export async function getOpsSnapshot(date?: string): Promise<OpsSnapshot | null> {
-  const admin = createSupabaseAdmin();
-  const targetDate = date ?? new Date().toISOString().slice(0, 10);
-  const { data } = await admin
-    .from("ops_snapshots")
-    .select("*")
-    .eq("snapshot_date", targetDate)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .single();
-  return data ?? null;
-}
 
-/** Last 50 pipeline runs across all jobs (live query — small table). */
-export async function getRecentPipelineRuns(): Promise<PipelineRun[]> {
-  const admin = createSupabaseAdmin();
-  const { data } = await admin
-    .from("pipeline_runs")
-    .select("id, job_name, run_date, status, started_at, completed_at, fixtures_count, records_count, error_message")
-    .not("job_name", "in", '("hist_backfill","backfill_coaches","backfill_transfers","write_ops_snapshot")')
-    .order("started_at", { ascending: false })
-    .limit(50);
-  return (data ?? []) as PipelineRun[];
-}
 
 /** Returns the single latest run per job_name — used for the per-job status dashboard.
  *  Excludes micro-batch backfill jobs (run every 5min — they flood the window and are shown in the Backfill section). */
@@ -2098,17 +2057,6 @@ export async function getStalePendingBets(): Promise<{ id: string; market: strin
     }));
 }
 
-/** Timestamp of most recent live snapshot (live query — 1 row). */
-export async function getLastLiveSnapshotAge(): Promise<string | null> {
-  const admin = createSupabaseAdmin();
-  const { data } = await admin
-    .from("live_match_snapshots")
-    .select("captured_at")
-    .order("captured_at", { ascending: false })
-    .limit(1)
-    .single();
-  return data?.captured_at ?? null;
-}
 
 
 
@@ -2693,18 +2641,6 @@ export interface FeedBookStats {
   updated_at: string;
 }
 
-export async function getFeedStatus(): Promise<FeedStatus[]> {
-  const admin = createSupabaseAdmin();
-  const { data } = await admin.from("feed_status").select("*");
-  return (data ?? []) as FeedStatus[];
-}
-
-export async function getFeedBookStats(): Promise<FeedBookStats[]> {
-  const admin = createSupabaseAdmin();
-  const { data } = await admin.from("feed_book_stats").select("*");
-  return (data ?? []) as FeedBookStats[];
-}
-
 /** Everything /admin/feeds needs, plus the render clock. The clock is read HERE,
  *  in the data layer, not in the component (react-hooks/purity) — same
  *  convention as forward-test-picks.ts. */
@@ -2720,20 +2656,4 @@ export interface DataQualityFinding {
   found_at: string;
 }
 
-export async function getDataQualityFindings(days = 7): Promise<DataQualityFinding[]> {
-  const admin = createSupabaseAdmin();
-  const since = new Date(Date.now() - days * 86_400_000).toISOString();
-  const { data, error } = await admin.from("data_quality_findings").select("*")
-    .gte("found_at", since).order("found_at", { ascending: false }).limit(100);
-  if (error) return [];   // table not migrated yet → empty, never a crash
-  return (data ?? []) as DataQualityFinding[];
-}
 
-export async function getFeedDashboard(): Promise<{
-  feeds: FeedStatus[];
-  books: FeedBookStats[];
-  now: number;
-}> {
-  const [feeds, books] = await Promise.all([getFeedStatus(), getFeedBookStats()]);
-  return { feeds, books, now: Date.now() };
-}
