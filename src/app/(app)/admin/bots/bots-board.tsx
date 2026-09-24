@@ -13,7 +13,7 @@
 // on top of the forward test, because a bot sitting on that line is showing no skill.
 //
 // Phase A layout: (shared admin shell: sidebar + status) → armed bar → header with actions → KPI strip
-// → Controls card (customers / collection) → Real money card (the layer ladder + CAN STAKE,
+// → Publishing card (the customer picks channel; the Coolbet footprint pause moved to /admin/feeds) → Real money card (the layer ladder + CAN STAKE,
 // deliberately a DIFFERENT card, I10) → filter bar → table with inline switches and a row ⋯
 // menu → right-hand detail Sheet with tabs. Filters, search and the open bot live in the URL.
 //

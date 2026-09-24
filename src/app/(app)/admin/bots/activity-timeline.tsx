@@ -35,8 +35,9 @@ function show(control: string, v: unknown): string {
   switch (control) {
     case "placement_paused":
     case "publishing_paused":
-    case "daemons_paused":
       return v ? "paused" : "running";
+    case "daemons_paused":
+      return v ? "paused" : "collecting";
     case "real_money_armed":
       return v ? "ARMED" : "not armed";
     default:

@@ -64,7 +64,7 @@ export function AdminShell({ fleet, children }: { fleet: FleetState | null; chil
         </aside>
 
         <div className="min-w-0 flex-1">
-          {/* below lg: top bar with the drawer button, current section and the three status dots */}
+          {/* below lg: top bar with the drawer button, current section and the status dots */}
           <div className="sticky top-0 z-30 flex h-12 items-center gap-2 border-b border-border bg-background/95 px-2 backdrop-blur lg:hidden">
             <button
               type="button"

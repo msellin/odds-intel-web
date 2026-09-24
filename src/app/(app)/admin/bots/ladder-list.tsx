@@ -28,7 +28,7 @@ export function LadderList({ ladder, compact = false }: { ladder: Ladder; compac
                 <span className="min-w-0">
                   <span className="text-foreground">{l.value}</span>
                   <span className="sr-only"> ({u.word})</span>
-                  {!compact && l.detail && <span className="block truncate text-xs text-muted-foreground" title={l.detail}>{l.detail}</span>}
+                  {!compact && l.detail && <span className="block line-clamp-2 text-xs text-muted-foreground" title={l.detail}>{l.detail}</span>}
                 </span>
               </span>
             </li>

@@ -191,7 +191,7 @@ export const TAKES_EFFECT: Record<PageControl | "real_money_arm", string> = {
 export const CONTROL_LABEL: Record<DbControl, string> = {
   placement_paused: "Placement pause",
   publishing_paused: "Picks channel pause",
-  daemons_paused: "Coolbet footprint pause",
+  daemons_paused: "Coolbet sweeping (footprint pause)",
   real_money_armed: "Real money armed",
   placer_enabled: "Real-money eligible",
   show_on_picks: "Show on /picks",

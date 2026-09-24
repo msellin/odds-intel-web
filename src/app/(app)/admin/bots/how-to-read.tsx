@@ -13,7 +13,7 @@ const HOW_TO_READ = [
   "Dashed amber line = a deliberately junk-anchored bot on the same markets. A bot that cannot be told apart from it is not showing skill.",
   "No verdict below 30 measured picks. ROI is a flat 1-unit stake, for comparison only — uncoloured below 300 settled.",
   "Pre-registered bots are scored on their current rule version only.",
-  "Switches: /picks = shown to customers on /picks (not Telegram, not /performance). € = selected to bet real money — one of six layers; it stakes nothing alone.",
+  "Switches: /picks = shown to customers on /picks (not Telegram, not /performance). € = selected to bet real money — one of six gates; it stakes nothing alone.",
 ];
 
 export function HowToRead() {

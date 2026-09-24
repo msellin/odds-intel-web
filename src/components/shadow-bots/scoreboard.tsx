@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { CoolbetPlacerToggle } from "@/components/coolbet-placer-toggle";
 import { execOdds } from "@/lib/engine-data";
 import type { BotScoreRow, BotRow, PlacerBotRow } from "@/lib/shadow-bots/queries";
 import { botShortLabel } from "@/lib/shadow-bots/labels";
@@ -191,7 +190,15 @@ export function Scoreboard({
                 </td>
                 <td className="px-2 py-1.5">
                   {placer ? (
-                    <CoolbetPlacerToggle botName={bot.name} initialEnabled={placer.ui_place_enabled} />
+                    // #139 IA move P3: read-only. Real-money eligibility is switched on /admin/bots only
+                    // (audited admin_set_control); the legacy OFF-only route is gone.
+                    <Link
+                      href={`/admin/bots?bot=${encodeURIComponent(bot.name)}`}
+                      title="Real-money eligibility — change it on /admin/bots"
+                      className={`font-mono text-[10px] underline-offset-2 hover:underline ${placer.ui_place_enabled ? "text-red-300" : "text-neutral-500"}`}
+                    >
+                      € {placer.ui_place_enabled ? "ON" : "off"}
+                    </Link>
                   ) : (
                     <span className="font-mono text-[10px] text-neutral-600">paper</span>
                   )}

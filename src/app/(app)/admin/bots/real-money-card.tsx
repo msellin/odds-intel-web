@@ -32,7 +32,7 @@ export function RealMoneyCard({ highlight }: { highlight: boolean }) {
       <header className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <h2 id="real-money-title" className="text-base font-semibold">Real money</h2>
-          <p className="text-xs text-muted-foreground">Six separate layers, in gate order. Money moves only when every one is open.</p>
+          <p className="text-xs text-muted-foreground">Six gates in order, plus one information line (7). Money moves only when every gate is open.</p>
         </div>
       </header>
 

@@ -5,6 +5,8 @@ import { FeedsBoard } from "./feeds-board";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
 import { getDataQualityFindings, getFeedDashboard } from "@/lib/engine-data";
 import { DqFindings } from "./dq-findings";
+import { loadControlState } from "@/lib/bot-board";
+import { FootprintControl } from "./footprint-control";
 
 // FEEDS-DASHBOARD (#107). Data: feed_status / feed_book_stats, written every 5 min
 // by the engine (workers/jobs/feed_health.py, registry workers/registry/
@@ -24,7 +26,11 @@ export default async function FeedsPage() {
     return <div className="flex items-center justify-center py-24 text-muted-foreground">Superadmin only.</div>;
   }
 
-  const [{ feeds, books, now }, findings] = await Promise.all([getFeedDashboard(), getDataQualityFindings()]);
+  const [{ feeds, books, now }, findings, controls] = await Promise.all([
+    getFeedDashboard(),
+    getDataQualityFindings(),
+    loadControlState(user.id),
+  ]);
   const updated = feeds.reduce<string | null>((a, f) => (!a || f.updated_at > a ? f.updated_at : a), null);
   const statusAgeMin = updated ? Math.round((now - new Date(updated).getTime()) / 60000) : null;
 
@@ -47,6 +53,7 @@ export default async function FeedsPage() {
           )}
         </p>
       </div>
+      <FootprintControl state={controls} now={now} />
       {feeds.length === 0 ? (
         <p className="text-sm text-muted-foreground">No status yet — the engine writes it every 5 minutes.</p>
       ) : (

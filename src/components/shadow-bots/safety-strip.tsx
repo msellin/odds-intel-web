@@ -1,4 +1,4 @@
-import { CoolbetDaemonsPause } from "@/components/coolbet-daemons-pause";
+import Link from "next/link";
 import type { PlacerBotRow, SessionState, TodayRealBets } from "@/lib/shadow-bots/queries";
 
 /**
@@ -90,12 +90,6 @@ export function SafetyStrip({
           title={state.publishing_paused_reason ?? "coolbet_session_state.publishing_paused — /picks output"}
         />
         <Chip
-          label="daemons"
-          value={state.daemons_paused ? "PAUSED" : "running"}
-          tone={state.daemons_paused ? "warn" : "ok"}
-          title={state.daemons_paused_reason ?? "Mac footprint daemons — control below"}
-        />
-        <Chip
           label="real money"
           value={state.real_money_armed ? "ARMED" : "disarmed"}
           tone={state.real_money_armed ? "ok" : "off"}
@@ -148,11 +142,18 @@ export function SafetyStrip({
         />
       </div>
       <div className="mt-2">
-        <CoolbetDaemonsPause
-          initialPaused={state.daemons_paused}
-          initialReason={state.daemons_paused_reason}
-          lastSeenAt={state.mac_daemon_last_tick_at}
-        />
+        {/* #139 IA move P3 (2026-09-24): read-only. The footprint switch lives on /admin/feeds and
+            writes through the audited admin_set_control; this page's old direct-UPDATE route is gone. */}
+        <p className="text-[11px] text-neutral-400">
+          Coolbet sweeping:{" "}
+          <span className={state.daemons_paused ? "text-sky-300" : "text-emerald-300"}>
+            {state.daemons_paused ? "paused" : "collecting"}
+          </span>
+          {state.daemons_paused && state.daemons_paused_reason ? ` — “${state.daemons_paused_reason}”` : ""} · does not stop real bets ·{" "}
+          <Link href="/admin/feeds#coolbet-footprint" className="underline underline-offset-2 hover:text-neutral-200">
+            change on Feeds
+          </Link>
+        </p>
       </div>
     </section>
   );

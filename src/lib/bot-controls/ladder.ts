@@ -15,7 +15,7 @@ export type LayerState = "open" | "blocked" | "unknown" | "info";
 
 export interface Layer {
   n: number;
-  key: "path" | "eligible" | "pause" | "armed" | "executors" | "perpick";
+  key: "path" | "eligible" | "pause" | "armed" | "executors" | "perpick" | "footprint";
   title: string;
   state: LayerState;
   value: string;
@@ -144,6 +144,20 @@ export function computeLadder(
     value: caps
       ? `cutoff ${caps.kickoff_cutoff_min ?? "?"} min · ${caps.max_bets_per_day ?? "?"} bets · €${caps.max_stake_per_day ?? "?"}/day · always on`
       : "cutoff, daily caps, exposure — always on (values set on the Mac)",
+  });
+
+  // 7 — Coolbet footprint pause (information only, owner decision 2026-09-24). It stops the Coolbet
+  // odds SWEEPS, and the feed watchdog — never a real-money placer:
+  // placement_gate.assert_run_may_place() reads only the kill switch and arming. Shown so an
+  // operator who paused sweeping for Imperva does not believe that also stopped real bets.
+  const foot = fleet?.daemons_paused ?? null;
+  layers.push({
+    n: 7,
+    key: "footprint",
+    title: "Coolbet sweeping",
+    state: "info",
+    value: foot == null ? "Unknown" : foot ? "Paused — does not stop real bets" : "Collecting — not a real-money gate",
+    detail: "The footprint pause stops odds sweeping only. To stop real bets use the kill switch (layer 3).",
   });
 
   const unknownAt = layers.filter((l) => l.state === "unknown").map((l) => l.n);

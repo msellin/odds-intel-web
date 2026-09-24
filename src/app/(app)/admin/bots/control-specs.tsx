@@ -87,15 +87,15 @@ export function specFor(i: Intent, ctx: { name: string | null; state: ControlSta
       return {
         ...base,
         strength: "a",
-        title: i.value ? "Pause the Coolbet collection footprint?" : "Resume Coolbet collection?",
+        title: i.value ? "Pause Coolbet sweeping?" : "Resume Coolbet sweeping?",
         consequence: (
           <p>
             {i.value
-              ? "Coolbet HTTP collection (explorer, feed watchdog, in-play collector) skips its next ticks. This is not a money switch."
-              : "Coolbet collection resumes on the next tick."}
+              ? "We stop reading odds from Coolbet (pre-match and live) until you resume. Real bets are not affected — use the placement kill switch for that."
+              : "We start reading odds from Coolbet again on the next tick."}
           </p>
         ),
-        confirmLabel: i.value ? "Pause collection" : "Resume collection",
+        confirmLabel: i.value ? "Pause sweeping" : "Resume sweeping",
       };
     case "placer_enabled":
       if (!i.value) {

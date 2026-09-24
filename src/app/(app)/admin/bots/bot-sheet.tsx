@@ -244,7 +244,7 @@ function SettingsTab({ v, now }: { v: BotView; now: number }) {
               <Lock size={12} className="mt-0.5 shrink-0" aria-hidden="true" /> Locked: {row.locked_reason}
             </span>
           ) : row ? (
-            <>This alone stakes nothing — it is 1 of 6 layers. {TAKES_EFFECT.placer_enabled}</>
+            <>This alone stakes nothing — it is 1 of 6 gates. {TAKES_EFFECT.placer_enabled}</>
           ) : pathWhy ? (
             "Not real-money capable."
           ) : (
