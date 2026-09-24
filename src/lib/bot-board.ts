@@ -41,6 +41,7 @@ import type {
 } from "@/lib/bot-controls/types";
 import { PREVIEW_REFUSAL } from "@/lib/bot-controls/types";
 import { placementPathReason } from "@/lib/bot-controls/placement-path";
+import { SNAPSHOT_BOOKS, type SnapshotBook } from "@/lib/bot-snapshot-books";
 
 export type BotFamily =
   | "model_sim"
@@ -233,6 +234,9 @@ interface BotBoardFixture {
   ledger: Record<string, BotLedgerRow[]>;
   weekly?: Record<string, BotWeeklyRow[]>;
   market_stats?: BotMarketStatsRow[];
+  /** IA move P7: real_bets placed rows per bot and current prices (dump_bot_board_fixture.py). */
+  placed?: Record<string, PlacedRaw[]>;
+  prices?: PriceRaw[];
 }
 
 export function isBotBoardDevPreview(): boolean {
@@ -514,4 +518,231 @@ function previewControlState(f: BotBoardFixture): ControlState {
     changes: { rows: changes, error: null },
     viewer: { isOwner: true, readOnly: true, readOnlyReason: PREVIEW_REFUSAL },
   };
+}
+
+// ── Picks tab: placements + current prices (IA move P7, 2026-09-24) ──────────────────────────
+//
+// /admin/shadow-bots/[bot] is retired into the /admin/bots sheet. What it had that the sheet
+// lacked is added HERE, on top of bot_ledger, so the sheet stays on the one unified ledger:
+//
+//  * "Bet made": was real money staked on this exact pick, at what price, where? From real_bets
+//    with placed_real IS NOT FALSE (TRUE = money moved; NULL = a legacy reconciled real bet;
+//    FALSE = the paper daemon's execute=False rows, excluded). Matched by the ledger row's own
+//    id (real_bets.shadow_bet_id / simulated_bet_id) OR by (match, market, selection) of the
+//    same bot — shadow ledger rows are the EARLIEST cohort row of a pick, while the placer may
+//    have linked a later cohort row, so the id alone misses some. Forward-test rows carry no
+//    bot_id and cannot be linked to a placement at all: the sheet says so instead of "no".
+//  * Current price at our three books (Coolbet, Unibet-Site, Epicbet) for PENDING PRE-MATCH
+//    picks only, latest non-live snapshot in the last 12 h. Unibet is the PLACEABLE site feed
+//    (UB-COLUMN-NOT-PLACEABLE: never the Kambi API, which unibet.ee left on 2026-09-06). One
+//    query per book, constrained to the page's matches and markets, so one high-volume book
+//    cannot push the others past PostgREST's row cap (OU-COLUMN-CEILING). In-play picks get no
+//    price: a pre-match quote says nothing about a bet placed during the match.
+//
+// Deliberately NOT carried over: the old page's "Min odds" column. It applied one model-edge
+// formula, 1/(p − floor), to every bot — wrong for sharp bots (multiplicative floor), for
+// in-play and for tiered floors (#139 finding b), and bot_ledger carries no probability to
+// compute it honestly. Each family's own gate is shown in the sheet's Configuration instead.
+
+// SNAPSHOT_BOOKS lives in bot-snapshot-books.ts so the client table can import it too.
+export { SNAPSHOT_BOOKS, type SnapshotBook } from "@/lib/bot-snapshot-books";
+
+export interface BotPickPlacement {
+  odds: number | null;
+  bookmaker: string | null;
+  stake: number | null;
+  /** TRUE = money moved; NULL = legacy reconciled real bet. */
+  placedReal: boolean | null;
+}
+
+export interface BotPickPrice {
+  odds: number;
+  ts: string;
+}
+
+export interface BotPickRow extends BotLedgerRow {
+  /** null = no real bet on this pick (or not linkable — see BotPicksResult.placementLinked). */
+  placed: BotPickPlacement | null;
+  /** Pending pre-match picks only; null otherwise. */
+  now: Partial<Record<SnapshotBook, BotPickPrice>> | null;
+}
+
+export interface BotPicksResult {
+  rows: BotPickRow[];
+  error: string | null;
+  /** real_bets unreadable → "Bet made" renders Unknown, never "no". */
+  placedError: string | null;
+  pricesError: string | null;
+  /** false when the bot's ledger rows carry no bot_id (forward-test arms): placements cannot be linked. */
+  placementLinked: boolean;
+  hasMore: boolean;
+}
+
+interface PlacedRaw {
+  match_id: string | null;
+  market: string | null;
+  selection: string | null;
+  actual_odds: number | string | null;
+  bookmaker: string | null;
+  stake: number | string | null;
+  placed_real: boolean | null;
+  shadow_bet_id: string | null;
+  simulated_bet_id: string | null;
+}
+
+interface PriceRaw {
+  match_id: string;
+  market: string;
+  selection: string;
+  bookmaker: string;
+  odds: number | string;
+  timestamp: string;
+}
+
+const pickKey = (m: string | null, market: string | null, sel: string | null) =>
+  `${m ?? ""}|${(market ?? "").toLowerCase()}|${(sel ?? "").toLowerCase()}`;
+
+const isInplayRow = (r: BotLedgerRow) => r.is_inplay === true || /^(bot_)?inplay_/.test(r.bot_name);
+
+/** Pending, pre-match, kick-off still ahead: the only picks a "current price" means anything for. */
+function wantsPrice(r: BotLedgerRow, now: number): boolean {
+  return r.result === "pending" && !isInplayRow(r) && !!r.match_id && !!r.kickoff && new Date(r.kickoff).getTime() > now;
+}
+
+function attachExtras(rows: BotLedgerRow[], placed: PlacedRaw[], prices: PriceRaw[], now: number): BotPickRow[] {
+  const byId = new Map<string, PlacedRaw>();
+  const byKey = new Map<string, PlacedRaw>();
+  for (const p of placed) {
+    if (p.shadow_bet_id) byId.set(p.shadow_bet_id, p);
+    if (p.simulated_bet_id) byId.set(p.simulated_bet_id, p);
+    const k = pickKey(p.match_id, p.market, p.selection);
+    if (!byKey.has(k)) byKey.set(k, p);
+  }
+  const priceBy = new Map<string, Partial<Record<SnapshotBook, BotPickPrice>>>();
+  for (const p of prices) {
+    if (!(SNAPSHOT_BOOKS as readonly string[]).includes(p.bookmaker)) continue;
+    const k = pickKey(p.match_id, p.market, p.selection);
+    const cur = priceBy.get(k) ?? {};
+    const book = p.bookmaker as SnapshotBook;
+    // rows arrive newest-first; keep the first (latest) quote per book
+    if (!cur[book]) cur[book] = { odds: Number(p.odds), ts: p.timestamp };
+    priceBy.set(k, cur);
+  }
+  return rows.map((r) => {
+    const k = pickKey(r.match_id, r.market, r.selection);
+    const p = byId.get(r.pick_id) ?? (r.bot_id ? byKey.get(k) : undefined);
+    return {
+      ...r,
+      placed: p
+        ? {
+            odds: p.actual_odds == null ? null : Number(p.actual_odds),
+            bookmaker: p.bookmaker,
+            stake: p.stake == null ? null : Number(p.stake),
+            placedReal: p.placed_real,
+          }
+        : null,
+      now: wantsPrice(r, now) ? priceBy.get(k) ?? {} : null,
+    };
+  });
+}
+
+/**
+ * One page of a bot's picks (newest first) with "Bet made" and current prices attached.
+ * `limit` ≤ 100; `hasMore` says whether an older page exists.
+ */
+export async function loadBotPicks(botName: string, { limit = 50, offset = 0 }: { limit?: number; offset?: number } = {}): Promise<BotPicksResult> {
+  const lim = Math.max(1, Math.min(100, limit));
+  const off = Math.max(0, offset);
+  const now = Date.now();
+  if (isBotBoardDevPreview()) {
+    const f = await readFixture();
+    const all = (f.ledger[botName] ?? []).map(redactLedgerRow);
+    const page = all.slice(off, off + lim);
+    const linked = page.some((r) => r.bot_id);
+    return {
+      rows: attachExtras(page, linked ? f.placed?.[botName] ?? [] : [], f.prices ?? [], now),
+      error: null,
+      placedError: f.placed ? null : "real_bets: not in fixture",
+      pricesError: f.prices ? null : "odds_snapshots: not in fixture",
+      placementLinked: linked || page.length === 0,
+      hasMore: all.length > off + lim,
+    };
+  }
+  let page = await readLedgerPage("bot_ledger_display", botName, lim + 1, off);
+  if (page.error) page = await readLedgerPage("bot_ledger", botName, lim + 1, off);
+  if (page.error) return { rows: [], error: page.error, placedError: null, pricesError: null, placementLinked: true, hasMore: false };
+  const hasMore = page.rows.length > lim;
+  const rows = page.rows.slice(0, lim);
+  const botId = rows.find((r) => r.bot_id)?.bot_id ?? null;
+  const [placed, prices] = await Promise.all([botId ? readPlaced(botId) : Promise.resolve({ rows: [] as PlacedRaw[], error: null }), readPrices(rows, now)]);
+  return {
+    rows: attachExtras(rows, placed.rows, prices.rows, now),
+    error: null,
+    placedError: placed.error,
+    pricesError: prices.error,
+    placementLinked: !!botId || rows.length === 0,
+    hasMore,
+  };
+}
+
+async function readLedgerPage(relation: string, botName: string, count: number, offset: number): Promise<Read<BotLedgerRow>> {
+  try {
+    const db = createServerServiceClient();
+    const { data, error } = await db
+      .from(relation)
+      .select("*")
+      .eq("bot_name", botName)
+      .order("pick_time", { ascending: false, nullsFirst: false })
+      .range(offset, offset + count - 1);
+    if (error) return { rows: [], error: `${relation}: ${error.message}` };
+    return { rows: ((data ?? []) as BotLedgerRow[]).map(redactLedgerRow), error: null };
+  } catch (e) {
+    return { rows: [], error: `${relation}: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
+async function readPlaced(botId: string): Promise<Read<PlacedRaw>> {
+  try {
+    const db = createServerServiceClient();
+    const { data, error } = await db
+      .from("real_bets")
+      .select("match_id, market, selection, actual_odds, bookmaker, stake, placed_real, shadow_bet_id, simulated_bet_id")
+      .eq("bot_id", botId)
+      .not("placed_real", "is", false)
+      .order("placed_at", { ascending: false })
+      .limit(5000);
+    if (error) return { rows: [], error: `real_bets: ${error.message}` };
+    return { rows: (data ?? []) as PlacedRaw[], error: null };
+  } catch (e) {
+    return { rows: [], error: `real_bets: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
+async function readPrices(rows: BotLedgerRow[], now: number): Promise<Read<PriceRaw>> {
+  const want = rows.filter((r) => wantsPrice(r, now));
+  if (want.length === 0) return { rows: [], error: null };
+  const matchIds = [...new Set(want.map((r) => r.match_id as string))];
+  const markets = [...new Set(want.map((r) => (r.market ?? "").toLowerCase()).filter(Boolean))];
+  const since = new Date(now - 12 * 3600_000).toISOString();
+  try {
+    const db = createServerServiceClient();
+    const per = await Promise.all(
+      SNAPSHOT_BOOKS.map((book) =>
+        db
+          .from("odds_snapshots")
+          .select("match_id, market, selection, odds, timestamp, bookmaker")
+          .in("match_id", matchIds)
+          .in("market", markets)
+          .eq("bookmaker", book)
+          .eq("is_live", false)
+          .gte("timestamp", since)
+          .order("timestamp", { ascending: false })
+          .limit(5000),
+      ),
+    );
+    const err = per.find((r) => r.error)?.error;
+    return { rows: per.flatMap((r) => (r.data ?? []) as PriceRaw[]), error: err ? `odds_snapshots: ${err.message}` : null };
+  } catch (e) {
+    return { rows: [], error: `odds_snapshots: ${e instanceof Error ? e.message : String(e)}` };
+  }
 }

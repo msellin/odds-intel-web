@@ -24,10 +24,10 @@ export function HowToRead() {
           </ul>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
             <span className="text-foreground">Capability icons:</span>
-            <span className="inline-flex items-center gap-1.5"><Legend cls="bg-teal-500/15 text-teal-300 ring-1 ring-teal-500/30"><Globe size={12} /></Legend>Published</span>
-            <span className="inline-flex items-center gap-1.5"><Legend cls="bg-sky-500/15 text-sky-300 ring-1 ring-sky-500/30"><Send size={12} /></Legend>Telegram</span>
-            <span className="inline-flex items-center gap-1.5"><Legend cls="bg-amber-500/10 text-amber-300 ring-1 ring-amber-500/30"><Wallet size={12} /></Legend>Real-money capable</span>
-            <span className="inline-flex items-center gap-1.5"><Legend cls="bg-red-500/20 text-red-300 ring-2 ring-red-500/60"><Banknote size={12} /></Legend>Real money ON</span>
+            <span className="inline-flex items-center gap-1.5"><Legend cls="bg-method-consensus/15 text-method-consensus ring-1 ring-method-consensus/30"><Globe size={12} /></Legend>Published</span>
+            <span className="inline-flex items-center gap-1.5"><Legend cls="bg-info/15 text-info ring-1 ring-info/30"><Send size={12} /></Legend>Telegram</span>
+            <span className="inline-flex items-center gap-1.5"><Legend cls="bg-warning/10 text-warning ring-1 ring-warning/30"><Wallet size={12} /></Legend>Real-money capable</span>
+            <span className="inline-flex items-center gap-1.5"><Legend cls="bg-danger/20 text-danger ring-2 ring-danger/60"><Banknote size={12} /></Legend>Real money ON</span>
             <span>– = collecting only (paper)</span>
           </div>
         </div>

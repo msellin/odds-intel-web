@@ -11,6 +11,9 @@ import type { KeyboardEvent, ReactNode } from "react";
 import {
   AlertCircle,
   AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   Banknote,
   Brain,
   Crosshair,
@@ -44,15 +47,16 @@ import { ciHalf, count, fmtRuleVersion, minutesAgo, pct, relTime, tStat, utcStam
 import { ForestAxis, ForestBar, WeeklyStrip } from "./bot-viz";
 import { ControlsCell } from "./bot-controls-cell";
 import { ControlStrip } from "./control-strip";
+import type { SortDir, SortKey } from "./board-toolbar";
 
 // ─── tokens ──────────────────────────────────────────────────────────────────
 
 export const ACCENT: Record<Accent, { bar: string; text: string }> = {
-  teal: { bar: "border-l-teal-400", text: "text-teal-300" },
-  violet: { bar: "border-l-violet-400", text: "text-violet-300" },
-  sky: { bar: "border-l-sky-400", text: "text-sky-300" },
-  amber: { bar: "border-l-amber-400", text: "text-amber-300" },
-  amberStrong: { bar: "border-l-amber-500", text: "text-amber-400" },
+  teal: { bar: "border-l-method-consensus", text: "text-method-consensus" },
+  violet: { bar: "border-l-method-sharp", text: "text-method-sharp" },
+  sky: { bar: "border-l-method-model", text: "text-method-model" },
+  amber: { bar: "border-l-warning", text: "text-warning" },
+  amberStrong: { bar: "border-l-warning", text: "text-warning" },
 };
 
 export function FamilyIcon({ icon, className }: { icon: FamilyInfo["icon"]; className?: string }) {
@@ -71,19 +75,19 @@ export function FamilyIcon({ icon, className }: { icon: FamilyInfo["icon"]; clas
 const VERDICT_UI: Record<Verdict, { label: string; cls: string; Icon: typeof TrendingUp; title: string }> = {
   beats: {
     label: "Beats close",
-    cls: "text-emerald-400 bg-emerald-500/10 border-emerald-500/40",
+    cls: "text-success bg-success/10 border-success/40",
     Icon: TrendingUp,
     title: `At least ${MIN_N} measured picks and t ≥ 2: priced better than the close. Not a promotion by itself.`,
   },
   loses: {
     label: "Loses to close",
-    cls: "text-red-400 bg-red-500/10 border-red-500/40",
+    cls: "text-danger bg-danger/10 border-danger/40",
     Icon: TrendingDown,
     title: `At least ${MIN_N} measured picks and t ≤ −2: priced worse than the close.`,
   },
   inconclusive: {
     label: "Inconclusive",
-    cls: "text-amber-300 bg-amber-500/10 border-amber-500/30",
+    cls: "text-warning bg-warning/10 border-warning/30",
     Icon: Minus,
     title: `At least ${MIN_N} measured picks but |t| < 2: cannot be told from zero yet.`,
   },
@@ -114,7 +118,7 @@ export function VerdictChip({ verdict }: { verdict: Verdict }) {
 export function ControlLine({ v }: { v: BotView }) {
   if (!v.control) return null;
   const { cmp, t, caveats } = v.control;
-  const cls = cmp === "equal" ? "text-amber-300" : cmp === "above" ? "text-emerald-400" : "text-red-400";
+  const cls = cmp === "equal" ? "text-warning" : cmp === "above" ? "text-success" : "text-danger";
   const text = cmp === "equal" ? "≈ junk control" : cmp === "above" ? "above junk control" : "below junk control";
   const title =
     `Difference from the junk-anchored control on the same market mix, t ${t.toFixed(1)}. ` +
@@ -161,7 +165,7 @@ export function VerdictCell({ v }: { v: BotView }) {
 
 function meanTone(v: BotView): string {
   if (v.verdict === "early" || v.metric.mean == null) return "text-muted-foreground";
-  return v.metric.mean >= 0 ? "text-emerald-400" : "text-red-400";
+  return v.metric.mean >= 0 ? "text-success" : "text-danger";
 }
 
 /** Flat-stake ROI is noise at small n — colour it only from this many settled picks. */
@@ -169,7 +173,7 @@ export const ROI_COLOUR_MIN = 300;
 
 export function roiTone(settled: number, roi: number | null | undefined): string {
   if (settled < ROI_COLOUR_MIN || roi == null) return "text-muted-foreground";
-  return roi >= 0 ? "text-emerald-400" : "text-red-400";
+  return roi >= 0 ? "text-success" : "text-danger";
 }
 
 export function hitVsBreakEven(v: BotView): string {
@@ -245,7 +249,7 @@ export function NRoiCell({ v }: { v: BotView }) {
 export function LastPick({ iso, now, active }: { iso: string | null | undefined; now: number; active: boolean }) {
   const m = minutesAgo(iso, now);
   const stale = active && m != null && m > 7 * 1440;
-  const cls = m == null ? "text-muted-foreground" : m < 1440 ? "text-foreground" : stale ? "text-red-400" : "text-amber-300";
+  const cls = m == null ? "text-muted-foreground" : m < 1440 ? "text-foreground" : stale ? "text-danger" : "text-warning";
   return (
     <span className={`inline-flex items-center gap-1 text-sm tabular-nums whitespace-nowrap ${cls}`} title={iso ? utcStamp(iso) : "No picks yet"}>
       {stale && <AlertCircle size={14} aria-label="silent for more than 7 days" />}
@@ -259,10 +263,10 @@ const CAP_ICON = "inline-flex h-5 w-5 items-center justify-center rounded-full";
 export function capList(caps: BotCapabilitiesRow | undefined, pulse: boolean) {
   if (!caps) return [];
   const out: { key: string; icon: ReactNode; word: string; title: string; cls: string }[] = [];
-  if (caps.publish) out.push({ key: "publish", icon: <Globe size={12} />, word: "Published", title: "Published on /picks and the public track record", cls: "bg-teal-500/15 text-teal-300 ring-1 ring-teal-500/30" });
-  if (caps.telegram) out.push({ key: "telegram", icon: <Send size={12} />, word: "Telegram", title: "Sent to the Telegram channel", cls: "bg-sky-500/15 text-sky-300 ring-1 ring-sky-500/30" });
-  if (caps.place_capable && !caps.place_enabled) out.push({ key: "capable", icon: <Wallet size={12} />, word: "Real-money capable", title: "A placer could stake real money on it — switched off", cls: "bg-amber-500/10 text-amber-300 ring-1 ring-amber-500/30" });
-  if (caps.place_enabled) out.push({ key: "on", icon: <Banknote size={12} />, word: "Real money ON", title: "Real-money placement is switched ON for this bot", cls: `bg-red-500/20 text-red-300 ring-2 ring-red-500/60 ${pulse ? "motion-safe:animate-pulse" : ""}` });
+  if (caps.publish) out.push({ key: "publish", icon: <Globe size={12} />, word: "Published", title: "Published on /picks and the public track record", cls: "bg-method-consensus/15 text-method-consensus ring-1 ring-method-consensus/30" });
+  if (caps.telegram) out.push({ key: "telegram", icon: <Send size={12} />, word: "Telegram", title: "Sent to the Telegram channel", cls: "bg-info/15 text-info ring-1 ring-info/30" });
+  if (caps.place_capable && !caps.place_enabled) out.push({ key: "capable", icon: <Wallet size={12} />, word: "Real-money capable", title: "A placer could stake real money on it — switched off", cls: "bg-warning/10 text-warning ring-1 ring-warning/30" });
+  if (caps.place_enabled) out.push({ key: "on", icon: <Banknote size={12} />, word: "Real money ON", title: "Real-money placement is switched ON for this bot", cls: `bg-danger/20 text-danger ring-2 ring-danger/60 ${pulse ? "motion-safe:animate-pulse" : ""}` });
   return out;
 }
 
@@ -280,7 +284,7 @@ export function CapsCell({ caps, pulse }: { caps: BotCapabilitiesRow | undefined
   return (
     <div className="flex flex-wrap items-center gap-1">
       {caps.collect === false && (
-        <span className="rounded-md border border-red-500/40 bg-red-500/10 px-1.5 py-0.5 text-xs text-red-400">Not collecting</span>
+        <span className="rounded-md border border-danger/40 bg-danger/10 px-1.5 py-0.5 text-xs text-danger">Not collecting</span>
       )}
       {list.map((c) => (
         <span key={c.key} className={`${CAP_ICON} ${c.cls}`} title={c.title} aria-label={c.word} role="img">
@@ -304,14 +308,14 @@ export function RulePill({ v }: { v: BotView }) {
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
       <span
-        className="rounded bg-teal-500/10 px-1.5 font-mono text-xs text-teal-300"
+        className="rounded bg-method-consensus/10 px-1.5 font-mono text-xs text-method-consensus"
         title={`Pre-registered: scored on ${v.sb?.scored_rule_version} only. A rule change starts a new population.`}
       >
         {rv}
       </span>
       {cfgRv && (
         <span
-          className="rounded bg-amber-500/10 px-1.5 font-mono text-xs text-amber-300"
+          className="rounded bg-warning/10 px-1.5 font-mono text-xs text-warning"
           title={`The running config is ${v.configRuleVersion}, but the scoreboard scores ${v.sb?.scored_rule_version} (the version on the latest pick). The rules shown describe the config, not necessarily the scored picks.`}
         >
           config {cfgRv.split(" ·")[0]} · scoring {rv.split(" ·")[0]}
@@ -323,8 +327,8 @@ export function RulePill({ v }: { v: BotView }) {
 }
 
 function IdentityLine({ v, configError }: { v: BotView; configError: boolean }) {
-  if (configError) return <div className="text-xs text-amber-300">config unavailable</div>;
-  if (!v.cfg) return <div className="text-xs text-amber-300">no config — family unknown</div>;
+  if (configError) return <div className="text-xs text-warning">config unavailable</div>;
+  if (!v.cfg) return <div className="text-xs text-warning">no config — family unknown</div>;
   return (
     <div className="line-clamp-2 text-xs text-muted-foreground" title={v.identity}>
       {v.identity || "—"}
@@ -443,19 +447,51 @@ export function MetricPill({ metric }: { metric: Metric }) {
 
 export const HEAD = "font-mono text-xs uppercase tracking-wider text-muted-foreground";
 
-function ColumnHeader({ metric, hasControl }: { metric: Metric; hasControl: boolean }) {
+export interface SortCtl {
+  key: SortKey;
+  dir: SortDir;
+  onSort: (key: SortKey) => void;
+}
+
+/** A column header that sorts (DataTable's look: label + arrow, faint arrow when unsorted). */
+function SortHead({ k, sort, children, title, className = "" }: { k: SortKey; sort?: SortCtl; children: ReactNode; title?: string; className?: string }) {
+  if (!sort) return <div className={`${HEAD} ${className}`} title={title}>{children}</div>;
+  const on = sort.key === k;
+  const Icon = !on ? ArrowUpDown : sort.dir === "asc" ? ArrowUp : ArrowDown;
   return (
-    <div className={`sticky top-0 z-10 hidden border-t border-border bg-background/95 px-4 py-2 backdrop-blur ${ROW_GRID}`}>
-      <div className={HEAD}>Bot</div>
-      <div className={HEAD}>Verdict</div>
+    <button
+      type="button"
+      onClick={() => sort.onSort(k)}
+      title={title}
+      aria-label={`Sort by ${typeof children === "string" ? children : k}`}
+      aria-pressed={on}
+      className={`inline-flex items-center gap-1 text-left hover:text-foreground ${HEAD} ${on ? "text-foreground" : ""} ${className}`}
+    >
+      {children}
+      <Icon size={12} className={on ? "" : "opacity-40"} aria-hidden="true" />
+    </button>
+  );
+}
+
+function ColumnHeader({ metric, hasControl, sort }: { metric: Metric; hasControl: boolean; sort?: SortCtl }) {
+  return (
+    <div className={`sticky top-0 z-10 hidden border-t border-border bg-muted/40 px-4 py-2 backdrop-blur ${ROW_GRID}`}>
+      <div><SortHead k="name" sort={sort}>Bot</SortHead></div>
+      <div><SortHead k="verdict" sort={sort}>Verdict</SortHead></div>
       <div className="flex items-end gap-3">
-        <div className={`w-[64px] shrink-0 text-right ${HEAD}`}>{metric === "lift" ? "Record" : metric === "clv_pinnacle" ? "Pin-CLV" : "mc-CLV"}</div>
+        <div className="w-[64px] shrink-0 text-right">
+          {metric === "lift" ? (
+            <span className={HEAD}>Record</span>
+          ) : (
+            <SortHead k="clv" sort={sort} className="justify-end">{metric === "clv_pinnacle" ? "Pin-CLV" : "mc-CLV"}</SortHead>
+          )}
+        </div>
         <div className="min-w-0 flex-1">
           {metric !== "lift" && (
             <>
               <ForestAxis />
               {metric === "clv_mc" && hasControl && (
-                <div className="mt-0.5 text-xs text-amber-300/90" title="Each row's dashed line is the junk control on that bot's own market mix.">
+                <div className="mt-0.5 text-xs text-warning/90" title="Each row's dashed line is the junk control on that bot's own market mix.">
                   <span className="font-mono">┊</span> junk control, same markets
                 </div>
               )}
@@ -463,9 +499,13 @@ function ColumnHeader({ metric, hasControl }: { metric: Metric; hasControl: bool
           )}
         </div>
       </div>
-      <div className={HEAD}>Weeks</div>
-      <div className={HEAD} title={ROI_TITLE}>Settled · ROI</div>
-      <div className={HEAD}>Last</div>
+      <div><SortHead k="p7" sort={sort} title="Sort by picks in the last 7 days">Weeks</SortHead></div>
+      <div className="flex flex-wrap items-center gap-x-1" title={ROI_TITLE}>
+        <SortHead k="settled" sort={sort}>Settled</SortHead>
+        <span className={HEAD}>·</span>
+        <SortHead k="roi" sort={sort}>ROI</SortHead>
+      </div>
+      <div><SortHead k="last" sort={sort}>Last</SortHead></div>
       <div className={`flex items-center gap-2 ${HEAD}`} title="/picks switch · real-money (€) switch · Telegram · /performance">
         <span className="min-w-9 text-center">/picks</span>
         <span className="min-w-9 text-center">€</span>
@@ -480,16 +520,18 @@ export function FamilySection({
   bots,
   ctx,
   controlBot,
+  sort,
 }: {
   family: string;
   bots: BotView[];
   ctx: RowCtx;
   controlBot?: BotView;
+  sort?: SortCtl;
 }) {
   const info = FAMILY_INFO[family];
   const acc = ACCENT[info.accent];
   return (
-    <section className="space-y-2 xl:space-y-0 xl:overflow-clip xl:rounded-xl xl:border xl:border-border xl:bg-card/40">
+    <section className="space-y-2 xl:space-y-0 xl:overflow-clip xl:rounded-xl xl:border xl:border-border xl:bg-card">
       <header className={`flex flex-wrap items-center gap-x-3 gap-y-1 border-l-[3px] ${acc.bar} py-1 pl-3 pr-2 xl:py-3 xl:pr-4`}>
         <FamilyIcon icon={info.icon} className={acc.text} />
         <h2 className="text-base font-semibold">{info.title}</h2>
@@ -502,7 +544,7 @@ export function FamilySection({
         </div>
       </header>
       {controlBot && <ControlStrip v={controlBot} ctx={ctx} />}
-      <ColumnHeader metric={info.metric} hasControl={ctx.control != null} />
+      <ColumnHeader metric={info.metric} hasControl={ctx.control != null} sort={sort} />
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:block">
         {bots.map((v) => (
           <BotRow key={v.name} v={v} ctx={ctx} />

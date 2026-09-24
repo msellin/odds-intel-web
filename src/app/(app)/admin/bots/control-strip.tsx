@@ -22,17 +22,17 @@ export function ControlStrip({ v, ctx }: { v: BotView; ctx: RowCtx }) {
         onKeyDown={(e) => onKeyOpen(e, open)}
         title={v.name}
         aria-label="Junk control — open details"
-        className="flex cursor-pointer flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-dashed border-amber-400/40 bg-amber-400/5 px-3 py-2 outline-none hover:bg-amber-400/10 focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex cursor-pointer flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-dashed border-warning/40 bg-warning/5 px-3 py-2 outline-none hover:bg-warning/10 focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <span className="font-mono text-xs uppercase tracking-wider text-amber-300">Reference</span>
+        <span className="font-mono text-xs uppercase tracking-wider text-warning">Reference</span>
         <span className="text-sm font-medium">Junk control</span>
-        <span className="text-sm tabular-nums text-amber-300">
+        <span className="text-sm tabular-nums text-warning">
           {pct(m.mean)} <span className="text-xs text-muted-foreground">{ciHalf(m.se)}</span>
         </span>
         <span className="text-xs tabular-nums text-muted-foreground">n {count(m.n)}</span>
         {split.map(([mk, x]) => (
           <span key={mk} className="text-xs tabular-nums text-muted-foreground">
-            {MARKET_NAME[mk] ?? mk} <span className="text-amber-300/90">{pct(x.mean)}</span> (n {count(x.n)})
+            {MARKET_NAME[mk] ?? mk} <span className="text-warning/90">{pct(x.mean)}</span> (n {count(x.n)})
           </span>
         ))}
         <RulePill v={v} />

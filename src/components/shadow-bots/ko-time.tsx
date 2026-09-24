@@ -19,8 +19,8 @@ export function KoTime({ iso }: { iso: string }) {
   const utc = d.toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
   if (now == null) {
     return (
-      <span className="font-mono text-xs text-neutral-300" suppressHydrationWarning>
-        {utc} <span className="text-neutral-600">UTC</span>
+      <span className="whitespace-nowrap font-mono text-xs text-muted-foreground" suppressHydrationWarning>
+        {utc} UTC
       </span>
     );
   }
@@ -29,8 +29,9 @@ export function KoTime({ iso }: { iso: string }) {
     mins < 0 ? "started" : mins < 60 ? `in ${mins}m` : `in ${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, "0")}m`;
   const local = d.toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" });
   return (
-    <span className="font-mono text-xs text-neutral-300" suppressHydrationWarning title={`${utc} UTC`}>
-      <span className="text-neutral-100">{rel}</span> <span className="text-neutral-500">· {local}</span>
+    <span className="flex flex-col whitespace-nowrap font-mono text-xs leading-tight" suppressHydrationWarning title={`${utc} UTC`}>
+      <span className="text-foreground">{rel}</span>
+      <span className="text-[11px] text-muted-foreground">{local}</span>
     </span>
   );
 }

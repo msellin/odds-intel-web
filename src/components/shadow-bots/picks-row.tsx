@@ -2,11 +2,17 @@ import Link from "next/link";
 import { PickBetMark } from "@/components/pick-bet-mark";
 import { PlaceAction } from "@/components/shadow-bots/place-action";
 import { KoTime } from "@/components/shadow-bots/ko-time";
+import { StatusBadge, type Tone } from "@/components/oi/status-badge";
 import type { BotTrack, Freshness, PickVerdict, PickVerdictResult } from "@/lib/shadow-bots/verdict";
 import { quoteFreshness, QUOTE_MAX_AGE_MIN } from "@/lib/shadow-bots/verdict";
 import type { Quote, UpcomingPick } from "@/lib/shadow-bots/queries";
 import { BOOK_CHIP, botShortLabel, formatAge, formatPickLabel } from "@/lib/shadow-bots/labels";
 
+/**
+ * One pick in the Pick queue (/admin/shadow-bots). Since #139 IA move P6 (2026-09-24) the table
+ * is the shared DataTable (picks-queue-table.tsx); this module holds the per-row data and the
+ * CELL renderers, so every rule that used to live in the one <tr> still lives in one file.
+ */
 export interface PickRowData {
   /** Already recorded in real_bets today — shown, and the button says so. */
   alreadyLogged: boolean;
@@ -28,7 +34,7 @@ export interface PickRowData {
   isControlArm: boolean;
   /**
    * Which bot this pick came from, on the "where do I look" axis (verdict.ts).
-   * A green PLACE chip is a per-PICK price test; this is the per-BOT record
+   * A green Place chip is a per-PICK price test; this is the per-BOT record
    * behind it. The two are independent and the row must show both.
    */
   track: BotTrack;
@@ -37,251 +43,274 @@ export interface PickRowData {
 }
 
 /**
- * The Verdict chip is the ONE colour carrier per row. Everything else added for
- * the 2026-09-15 display additions — FRESH/STALE, IN-PLAY, CONTROL — is
- * structural: an outline, muted text, or reduced opacity. A second traffic
- * light on the same row makes neither readable.
+ * The Verdict chip is the ONE colour carrier per row. Everything else — fresh/stale, in-play,
+ * control — is structural: an outline, muted text, or reduced opacity. A second traffic light
+ * on the same row makes neither readable.
  */
-const VERDICT_TONE: Record<PickVerdict, string> = {
-  PLACE: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
-  THIN: "bg-amber-500/15 text-amber-300 border-amber-500/30",
-  SKIP: "bg-white/[0.04] text-neutral-400 border-white/10",
-  BLOCKED: "bg-rose-500/15 text-rose-300 border-rose-500/30",
+export const VERDICT_TONE: Record<PickVerdict, Tone> = {
+  PLACE: "success",
+  THIN: "warning",
+  SKIP: "neutral",
+  BLOCKED: "danger",
+};
+/** Plain words for the owner; the codes stay the values (filters, sorting, CSV). */
+export const VERDICT_LABEL: Record<PickVerdict, string> = {
+  PLACE: "Place",
+  THIN: "Thin",
+  SKIP: "Skip",
+  BLOCKED: "Blocked",
 };
 
 const FRESH_TONE: Record<Freshness, string> = {
-  FRESH: "border-white/20 text-neutral-300",
-  STALE: "border-white/10 text-neutral-500",
-  UNKNOWN: "border-white/[0.07] text-neutral-600",
+  FRESH: "border-border text-foreground",
+  STALE: "border-border/60 text-muted-foreground",
+  UNKNOWN: "border-border/40 text-muted-foreground/70",
 };
 const FRESH_TITLE: Record<Freshness, string> = {
-  FRESH: `Bot decided on a quote under ${QUOTE_MAX_AGE_MIN} min old.`,
-  STALE: `Bot decided on a quote ${QUOTE_MAX_AGE_MIN} min or older — the price may have moved.`,
-  UNKNOWN: "No decision-quote age recorded: written before 2026-09-15, or this bot has no freshness gate.",
+  FRESH: `The bot decided on a price that was still fresh.`,
+  STALE: `The bot decided on an old price — it may have moved since.`,
+  UNKNOWN: "No age recorded: written before 15 Sep, or this bot does not check price age.",
 };
+const FRESH_WORD: Record<Freshness, string> = { FRESH: "fresh", STALE: "old", UNKNOWN: "—" };
 
 const fmtOdds = (v: number | null) => (v == null ? "—" : v.toFixed(2));
-const fmtPct = (v: number | null) => (v == null ? "—" : `${v >= 0 ? "+" : ""}${(v * 100).toFixed(1)}%`);
+const fmtEdge = (v: number | null) => (v == null ? "—" : `${v >= 0 ? "+" : "−"}${Math.abs(v * 100).toFixed(1)}%`);
 
 const CHIP = "inline-block rounded border px-1 text-[10px] font-mono tracking-wider";
+const MONO = "font-mono text-xs tabular-nums";
 
-export function PicksRow({ r }: { r: PickRowData }) {
+/**
+ * Row styling: a pick whose DECISION quote was stale is greyed, never hidden (visibility
+ * invariant — hiding it would quietly shrink the slate). The lead bot's picks get a sky edge.
+ */
+export function pickRowClassName(r: PickRowData): string {
+  const stale = quoteFreshness(r.pick.decision_quote_age_min) === "STALE";
+  return `${stale ? "opacity-50" : ""} ${r.track === "LEAD" ? "bg-info/[0.06] shadow-[inset_3px_0_0_0_var(--color-info)]" : ""}`;
+}
+
+export function KickoffCell({ r }: { r: PickRowData }) {
+  return (
+    <span className="whitespace-nowrap">
+      <KoTime iso={r.pick.kickoff} />
+    </span>
+  );
+}
+
+export function MatchCell({ r }: { r: PickRowData }) {
+  const { pick } = r;
+  const score =
+    pick.inplay_score_home != null && pick.inplay_score_away != null ? `${pick.inplay_score_home}-${pick.inplay_score_away}` : null;
+  return (
+    <div className="min-w-[160px] max-w-[260px]">
+      <div className="truncate">
+        {pick.home} <span className="text-muted-foreground">v</span> {pick.away}
+      </div>
+      <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+        {r.inplay && (
+          <span className={`${CHIP} shrink-0 border-border text-foreground`} title="Raised while the match was running (the in-play test rig).">
+            IN-PLAY
+            {pick.inplay_minute != null ? ` ${pick.inplay_minute}'` : ""}
+            {score ? ` · ${score}` : ""}
+          </span>
+        )}
+        <span className="truncate">
+          {pick.country ? `${pick.country} · ` : ""}
+          {pick.league ?? ""}
+          {pick.tier ? ` · T${pick.tier}` : ""}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+export function PickCell({ r }: { r: PickRowData }) {
+  return <span className="whitespace-nowrap">{formatPickLabel(r.pick.market, r.pick.selection)}</span>;
+}
+
+export function BotCell({ r }: { r: PickRowData }) {
+  const { pick } = r;
+  return (
+    <div className="flex flex-wrap items-center gap-1 whitespace-nowrap">
+      <Link
+        href={`/admin/shadow-bots/${pick.bot_name}`}
+        className="font-mono text-[11px] hover:underline"
+        title={`${pick.bot_name} · needs an edge of ${(r.threshold * 100).toFixed(0)}% before it fires`}
+      >
+        {botShortLabel(pick.bot_name)}
+      </Link>
+      {r.track === "LEAD" && (
+        <span
+          className={`${CHIP} border-info/50 text-info`}
+          title="The one bot worth watching: beating the closing price on the most bets, so it is nearest to a real answer. Where to look — NOT proof that it works yet."
+        >
+          lead bot
+        </span>
+      )}
+      {r.track === "NEGATIVE" && (
+        <span
+          className={`${CHIP} border-border text-muted-foreground`}
+          title="This bot is clearly getting worse prices than the market closes at — decided, at this many bets. A Place chip here means the PRICE clears the bot's bar, not that the bot works."
+        >
+          losing bot
+        </span>
+      )}
+      {r.track === "OPEN" && (
+        <span className={`${CHIP} border-border text-muted-foreground`} title="Not ruled out yet: more bets can still show this bot works.">
+          unproven
+        </span>
+      )}
+      {r.isControlArm && (
+        <span
+          className={`${CHIP} border-dashed border-border text-muted-foreground`}
+          title="Control arm: the same trigger priced off API-Football's average price. For measuring only — nobody can bet at that price."
+        >
+          control
+        </span>
+      )}
+      {r.automationOff && (
+        <span
+          className={`${CHIP} border-border text-muted-foreground`}
+          title="The automatic placer is paused or this bot is switched off. You can still place by hand and record it."
+        >
+          auto off
+        </span>
+      )}
+    </div>
+  );
+}
+
+export function PriceCell({ r }: { r: PickRowData }) {
+  const { pick } = r;
+  const chip = r.best ? BOOK_CHIP[r.best.book] : null;
+  if (r.inplay) {
+    // In-play: the decision price is the book's ON-SCREEN number at the minute the trigger fired,
+    // and `calibrated_prob` holds that book's own de-vigged probability — NOT a model probability.
+    return (
+      <div className="leading-tight">
+        <span className={`${MONO} text-muted-foreground`} title="The book's on-screen price when the trigger fired. There is no way to place in-play bets.">
+          {fmtOdds(pick.odds_at_pick)}
+          <span className={`${CHIP} ml-1 border-border text-muted-foreground`}>{r.isControlArm ? "AF feed" : pick.recommended_bookmaker ?? "on-screen"}</span>
+        </span>
+        <div className="font-mono text-[10px] tabular-nums text-muted-foreground" title="The book's own implied chance at that price, margin removed — a market number, not our model.">
+          book prob {pick.calibrated_prob == null ? "—" : `${(pick.calibrated_prob * 100).toFixed(1)}%`}
+        </div>
+      </div>
+    );
+  }
+  if (r.best && chip) {
+    return (
+      <span className={MONO} title={`${r.best.book} · ${new Date(r.best.ts).toUTCString()}`}>
+        {r.best.odds.toFixed(2)}
+        <span className="ml-1 rounded border border-border px-1 text-[10px] text-muted-foreground">{chip.chip}</span>
+      </span>
+    );
+  }
+  if (r.unplaceable) {
+    return (
+      <span className={`${MONO} text-muted-foreground/70`} title="Epicbet — we cannot place there; shown for reference only">
+        {r.unplaceable.odds.toFixed(2)}
+        <span className="ml-1 rounded border border-border px-1 text-[10px]">EB · can&apos;t bet</span>
+      </span>
+    );
+  }
+  return <span className="text-muted-foreground/70">—</span>;
+}
+
+export function DecisionAgeCell({ r }: { r: PickRowData }) {
+  const fresh = quoteFreshness(r.pick.decision_quote_age_min);
+  return (
+    <span className="whitespace-nowrap" title={FRESH_TITLE[fresh]}>
+      <span className={MONO}>{formatAge(r.pick.decision_quote_age_min)}</span>
+      {fresh !== "UNKNOWN" && <span className={`${CHIP} ml-1 ${FRESH_TONE[fresh]}`}>{FRESH_WORD[fresh]}</span>}
+    </span>
+  );
+}
+
+export function ShownAgeCell({ r }: { r: PickRowData }) {
+  return (
+    <span className={MONO} title={`Age of the price shown in "Best price now"; ${QUOTE_MAX_AGE_MIN} min or older reads Skip`}>
+      {r.bestAgeMin == null ? "—" : `${Math.round(r.bestAgeMin)}m`}
+    </span>
+  );
+}
+
+/**
+ * Break-even / min price / edge now are model-gate arithmetic. For an in-play row the anchor IS
+ * the book's own price, so they would restate the margin and read as a model opinion we did
+ * not form — shown as "n/a".
+ */
+export function GateCell({ r, kind }: { r: PickRowData; kind: "breakEven" | "gateFloor" | "liveEdge" }) {
+  if (r.inplay) return <span className="text-xs text-muted-foreground/70" title="Model gates do not apply to in-play rows.">n/a</span>;
+  const v = r.verdict[kind];
+  return <span className={MONO}>{kind === "liveEdge" ? fmtEdge(v) : fmtOdds(v)}</span>;
+}
+
+/** The verdict's reason in plain words (verdict.ts keeps its terse codes for the self-check). */
+export function plainReason(reason: string): string {
+  if (reason === "price clears gate floor") return "price is at or above the bot's minimum";
+  if (reason === "above break-even, below gate") return "profitable, but below the bot's minimum";
+  if (reason === "gate unreachable at this prob") return "no price is high enough for this bot";
+  if (reason === "price below break-even") return "price is below break-even";
+  if (reason === "no placeable price") return "no book we can bet at has a price";
+  if (reason === "no anchor probability") return "the bot recorded no probability";
+  if (reason === "no in-play placer") return "in-play — can't be placed";
+  if (reason === "kickoff < 3 min") return "kicks off in under 3 minutes";
+  if (reason.startsWith("quote ≥")) return reason.replace("quote ≥", "price is");
+  return reason;
+}
+
+export function VerdictCell({ r }: { r: PickRowData }) {
+  const verdict = { ...r.verdict, reason: plainReason(r.verdict.reason) };
+  return (
+    <div className="min-w-[120px] max-w-[170px]">
+      <StatusBadge tone={VERDICT_TONE[verdict.verdict]} title={verdict.reason}>
+        {VERDICT_LABEL[verdict.verdict]}
+      </StatusBadge>
+      <div className="mt-0.5 text-[11px] leading-tight text-muted-foreground">{verdict.reason}</div>
+    </div>
+  );
+}
+
+export function ActionCell({ r }: { r: PickRowData }) {
   const { pick, verdict } = r;
   const chip = r.best ? BOOK_CHIP[r.best.book] : null;
-  const fresh = quoteFreshness(pick.decision_quote_age_min);
-  // Greyed, never hidden (visibility invariant): a stale row is still a row the
-  // owner must be able to see and judge.
-  const stale = fresh === "STALE";
   const canPlace = verdict.verdict === "PLACE" || verdict.verdict === "THIN";
-  // The control arm is priced off API-Football's aggregate — there is nothing to
-  // place at that number, so it never gets an action, whatever the verdict says.
   // The Place button RECORDS a bet the operator placed by hand at the book; it
-// stakes nothing. So it is deliberately NOT gated on placement_paused or the
-// per-bot toggle — those halt the AUTOMATED placer. Gating it meant a
-// hand-placed bet never reached `real_bets` and was never settled or
-// CLV-scored, which is the whole reason that path exists (review 2026-09-15).
-// Still withheld for in-play and the control arm: there is no in-play placer,
-// and the control arm is priced off a feed nobody can bet.
-const showPlaceAction = !r.inplay && !r.isControlArm && r.best != null && chip != null;
-  const td = "px-2 py-1.5 align-middle";
-  const mono = "font-mono text-xs tabular-nums text-neutral-200";
-  const score =
-    pick.inplay_score_home != null && pick.inplay_score_away != null
-      ? `${pick.inplay_score_home}-${pick.inplay_score_away}`
-      : null;
+  // stakes nothing. So it is deliberately NOT gated on placement_paused or the
+  // per-bot toggle — those halt the AUTOMATED placer. Gating it meant a
+  // hand-placed bet never reached `real_bets` and was never settled or
+  // CLV-scored, which is the whole reason that path exists (review 2026-09-15).
+  // Still withheld for in-play and the control arm: there is no in-play placer,
+  // and the control arm is priced off a feed nobody can bet.
+  const showPlaceAction = !r.inplay && !r.isControlArm && r.best != null && chip != null;
   return (
-    <tr
-      className={`border-t border-white/[0.05] text-sm ${stale ? "opacity-50" : ""} ${
-        r.track === "LEAD" ? "bg-sky-500/[0.06] shadow-[inset_3px_0_0_0_rgb(56_189_248/0.7)]" : ""
-      }`}
-    >
-      <td className={td}>
-        <KoTime iso={pick.kickoff} />
-      </td>
-      <td className={`${td} min-w-0 max-w-[260px]`}>
-        <div className="truncate text-neutral-100">
-          {pick.home} <span className="text-neutral-500">v</span> {pick.away}
-        </div>
-        <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-neutral-500">
-          {r.inplay && (
-            <span
-              className={`${CHIP} shrink-0 border-white/25 text-neutral-300`}
-              title="Raised while the match was running — the in-play slow-state rig."
-            >
-              IN-PLAY
-              {pick.inplay_minute != null ? ` ${pick.inplay_minute}'` : ""}
-              {score ? ` · ${score}` : ""}
-            </span>
-          )}
-          <span className="truncate">
-            {pick.country ? `${pick.country} · ` : ""}
-            {pick.league ?? ""}
-            {pick.tier ? ` · T${pick.tier}` : ""}
-          </span>
-        </div>
-      </td>
-      <td className={`${td} whitespace-nowrap text-neutral-100`}>{formatPickLabel(pick.market, pick.selection)}</td>
-      <td className={`${td} whitespace-nowrap`}>
-        <Link
-          href={`/admin/shadow-bots/${pick.bot_name}`}
-          className="font-mono text-[11px] text-neutral-300 hover:text-neutral-100 hover:underline"
-          title={`${pick.bot_name} · threshold ${(r.threshold * 100).toFixed(0)}%`}
-        >
-          {botShortLabel(pick.bot_name)}
-        </Link>
-        {r.track === "LEAD" && (
-          <span
-            className={`${CHIP} ml-1 border-sky-400/50 text-sky-300`}
-            title="The one bot worth watching: mean margin-corrected CLV above zero on the most legs, so it is nearest to resolving. Where to look — NOT a claim that it works; its CI still spans zero."
-          >
-            LEAD
-          </span>
-        )}
-        {r.track === "NEGATIVE" && (
-          <span
-            className={`${CHIP} ml-1 border-white/10 text-neutral-500`}
-            title="This bot's entire 95% CLV interval sits below zero — decided at this n. A PLACE chip here means the PRICE clears the bot's floor, not that the bot works."
-          >
-            CI &lt; 0
-          </span>
-        )}
-        {r.track === "OPEN" && (
-          <span
-            className={`${CHIP} ml-1 border-white/15 text-neutral-500`}
-            title="Not ruled out: a positive truth is still inside this bot's 95% CLV interval. More legs can still move it."
-          >
-            OPEN
-          </span>
-        )}
-        {r.isControlArm && (
-          <span
-            className={`${CHIP} ml-1 border-dashed border-white/25 text-neutral-400`}
-            title="Control arm: same trigger priced off API-Football's aggregate. Measurement only, never placeable."
-          >
-            CONTROL
-          </span>
-        )}
-        {r.automationOff && (
-          <span
-            className={`${CHIP} ml-1 border-white/15 text-neutral-500`}
-            title="The automated placer is paused or this bot is toggled off. You can still place by hand and record it."
-          >
-            auto off
-          </span>
-        )}
-      </td>
-      <td className={`${td} whitespace-nowrap text-right`}>
-        {r.inplay ? (
-          // In-play: the decision price is the book's ON-SCREEN number at the
-          // minute the trigger fired, and `calibrated_prob` holds that book's
-          // own Shin de-vigged probability — NOT a model probability.
-          <div className="leading-tight">
-            <span
-              className="font-mono text-xs tabular-nums text-neutral-400"
-              title="Book's on-screen price at the minute the trigger fired. No placement path exists for in-play."
-            >
-              {fmtOdds(pick.odds_at_pick)}
-              <span className={`${CHIP} ml-1 border-white/10 text-neutral-500`}>
-                {r.isControlArm ? "AF feed" : pick.recommended_bookmaker ?? "on-screen"}
-              </span>
-            </span>
-            <div
-              className="font-mono text-[10px] tabular-nums text-neutral-500"
-              title="The book's own de-vigged implied probability at that price — a market number, not our model."
-            >
-              book prob {pick.calibrated_prob == null ? "—" : `${(pick.calibrated_prob * 100).toFixed(1)}%`}
-            </div>
-          </div>
-        ) : r.best && chip ? (
-          <span className={mono} title={`${r.best.book} · ${new Date(r.best.ts).toUTCString()}`}>
-            {r.best.odds.toFixed(2)}
-            <span className="ml-1 rounded border border-white/10 px-1 text-[10px] text-neutral-400">{chip.chip}</span>
-          </span>
-        ) : r.unplaceable ? (
-          <span className="font-mono text-xs tabular-nums text-neutral-600" title="Epicbet — no placement path; price discovery only">
-            {r.unplaceable.odds.toFixed(2)}
-            <span className="ml-1 rounded border border-white/10 px-1 text-[10px]">EB · no placer</span>
-          </span>
-        ) : (
-          <span className="text-neutral-600">—</span>
-        )}
-      </td>
-      <td className={`${td} whitespace-nowrap text-right`} title={FRESH_TITLE[fresh]}>
-        <span className="font-mono text-xs tabular-nums text-neutral-300">
-          {formatAge(pick.decision_quote_age_min)}
-        </span>
-        <span className={`${CHIP} ml-1 ${FRESH_TONE[fresh]}`}>{fresh === "UNKNOWN" ? "—" : fresh}</span>
-      </td>
-      <td className={`${td} text-right ${mono}`} title="Age of the live quote shown to the left; ≥ 30 min reads SKIP">
-        {r.bestAgeMin == null ? "—" : `${Math.round(r.bestAgeMin)}m`}
-      </td>
-      {r.inplay ? (
-        // Break-even / gate floor / live edge are model-gate arithmetic. For an
-        // in-play row the anchor IS the book's own price, so they would restate
-        // the vig and read as a model opinion we did not form.
-        <td
-          className={`${td} text-center text-xs text-neutral-600`}
-          colSpan={3}
-          title="Model gates do not apply to in-play rows — the anchor is the book's own de-vigged price."
-        >
-          model gates n/a
-        </td>
-      ) : (
-        <>
-          <td className={`${td} text-right ${mono}`} title="1 / anchor probability — below this the bet loses money">
-            {fmtOdds(verdict.breakEven)}
-          </td>
-          <td className={`${td} text-right ${mono}`} title="1 / (anchor prob − bot threshold), raised to the placer's odds floor for real-money bets">
-            {fmtOdds(verdict.gateFloor)}
-          </td>
-          <td className={`${td} text-right ${mono}`} title="anchor prob − 1 / shown price">
-            {fmtPct(verdict.liveEdge)}
-          </td>
-        </>
-      )}
-      <td className={`${td} whitespace-nowrap`}>
+    <div className="flex items-center gap-2 whitespace-nowrap">
+      <PickBetMark pickId={pick.id} initialState={r.markState} />
+      {r.alreadyLogged && (
         <span
-          className={`inline-block rounded border px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-wider ${VERDICT_TONE[verdict.verdict]}`}
-          title={verdict.reason}
+          className={`${CHIP} border-success/40 text-success`}
+          title="You already recorded a bet on this pick today. It will settle and be scored against the closing price."
         >
-          {verdict.verdict}
+          LOGGED
         </span>
-        {r.inplay && (
-          <span className={`${CHIP} ml-1 border-white/10 text-neutral-500`} title="No placement path exists for in-play at any book we can bet.">
-            {verdict.reason}
-          </span>
-        )}
-      </td>
-      <td className={`${td} whitespace-nowrap`}>
-        <div className="flex items-center gap-2">
-          <PickBetMark pickId={pick.id} initialState={r.markState} />
-          {r.alreadyLogged && (
-            <span
-              className={`${CHIP} border-emerald-500/40 text-emerald-300`}
-              title="You already recorded a bet on this pick today (real_bets). It will settle and be scored against the closing line."
-            >
-              LOGGED
-            </span>
-          )}
-          {!r.alreadyLogged && showPlaceAction && r.best && chip && (
-            <PlaceAction
-              shadowBetId={pick.id}
-              botId={pick.bot_id}
-              matchId={pick.match_id}
-              market={pick.market}
-              selection={pick.selection}
-              bookmaker={chip.realBetsName}
-              bookChip={chip.chip}
-              odds={r.best.odds}
-              capturedOdds={pick.odds_at_pick}
-              stake={r.stake}
-              pickLabel={`${pick.home} v ${pick.away} · ${formatPickLabel(pick.market, pick.selection)}`}
-              disabled={!canPlace}
-              disabledReason={verdict.reason}
-            />
-          )}
-        </div>
-      </td>
-    </tr>
+      )}
+      {!r.alreadyLogged && showPlaceAction && r.best && chip && (
+        <PlaceAction
+          shadowBetId={pick.id}
+          botId={pick.bot_id}
+          matchId={pick.match_id}
+          market={pick.market}
+          selection={pick.selection}
+          bookmaker={chip.realBetsName}
+          bookChip={chip.chip}
+          odds={r.best.odds}
+          capturedOdds={pick.odds_at_pick}
+          stake={r.stake}
+          pickLabel={`${pick.home} v ${pick.away} · ${formatPickLabel(pick.market, pick.selection)}`}
+          disabled={!canPlace}
+          disabledReason={plainReason(verdict.reason)}
+        />
+      )}
+    </div>
   );
 }

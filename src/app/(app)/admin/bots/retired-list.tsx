@@ -122,7 +122,7 @@ export function RetiredList({ rows, ctx, error }: { rows: RetiredView[]; ctx: Ro
 
   return (
     <div className="space-y-4">
-      {error && <p className="text-sm text-amber-300">Retirement reasons unavailable ({error}).</p>}
+      {error && <p className="text-sm text-warning">Retirement reasons unavailable ({error}).</p>}
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className={pill(filter === "had")} onClick={() => setFilter("had")} aria-pressed={filter === "had"}>
           Had picks ({rows.length - never.length})

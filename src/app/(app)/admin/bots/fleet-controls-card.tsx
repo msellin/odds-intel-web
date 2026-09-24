@@ -7,13 +7,12 @@
 // the right (Vercel's settings pattern). The customer channel and real-money placement live in
 // DIFFERENT cards on purpose (I10) — the layout itself says they are not one switch.
 
+import { Panel, PanelHeader, SectionLabel } from "@/components/oi/panel";
 import { TAKES_EFFECT } from "@/lib/bot-controls/types";
 import { ControlSwitch } from "./control-switch";
 import { useControls } from "./controls-context";
 import { relTime } from "./bot-board-format";
 import { actorWord } from "./activity-timeline";
-
-const GROUP = "font-mono text-xs uppercase tracking-wider text-muted-foreground";
 
 function Row({ title, desc, meta, control }: { title: string; desc: string; meta: React.ReactNode; control: React.ReactNode }) {
   return (
@@ -33,12 +32,12 @@ export function FleetControlsCard() {
   const f = state.fleet.row;
   const lastPub = state.changes.rows.find((c) => c.control === "publishing_paused" && c.outcome === "applied");
   return (
-    <section id="controls" aria-labelledby="controls-title" className="scroll-mt-20 rounded-xl border border-border bg-card/40 px-4 pt-3">
-      <h2 id="controls-title" className="text-base font-semibold">Publishing</h2>
-      {state.fleet.error && <p className="mt-1 text-xs text-amber-300">Fleet state unreadable ({state.fleet.error}) — shown as Unknown; starting anything is disabled.</p>}
+    <Panel id="controls">
+      <PanelHeader title="Publishing" description="The customer picks channel. Real-money placement is a different card on purpose." />
+      {state.fleet.error && <p className="mt-1 px-4 text-xs text-warning">Fleet state unreadable ({state.fleet.error}) — shown as Unknown; starting anything is disabled.</p>}
 
-      <div className="mt-2">
-        <div className={GROUP}>Picks · customers</div>
+      <div className="mt-3 px-4 pb-1">
+        <SectionLabel>Picks · customers</SectionLabel>
         <div className="divide-y divide-border/60">
           <Row
             title="Picks channel"
@@ -54,6 +53,6 @@ export function FleetControlsCard() {
           />
         </div>
       </div>
-    </section>
+    </Panel>
   );
 }

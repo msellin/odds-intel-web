@@ -1,576 +1,265 @@
 export const dynamic = 'force-dynamic';
 
-import React from "react";
-import { AutoRefresh } from "./auto-refresh";
+import type { Metadata } from "next";
+import { AlertOctagon, CheckCircle2, Hourglass, Scale, UserPlus } from "lucide-react";
+import { AutoRefreshBadge } from "./auto-refresh";
+import { Meter, shareTone } from "./meter";
+import { JobsTable, StaleBetsTable } from "./jobs-table";
+import { FailuresChart } from "./jobs-charts";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
-import {
-  getOpsSnapshot,
-  getRecentPipelineRuns,
-  getLatestJobStatuses,
-  getStalePendingBets,
-  getLastLiveSnapshotAge,
-} from "@/lib/engine-data";
-import type { OpsSnapshot, PipelineRun } from "@/lib/engine-data";
+import { isBotBoardDevPreview } from "@/lib/bot-board";
+import { loadJobsPage, STALE_AFTER_MIN } from "@/lib/admin-jobs";
+import { buildJobViews, JOB_GROUPS, OTHER_GROUP, type JobView } from "@/lib/admin-jobs-model";
+import { PageHeader, Panel, PanelHeader } from "@/components/oi/panel";
+import { StatCard } from "@/components/oi/stat-card";
+import { StatusBadge } from "@/components/oi/status-badge";
+import { fmtInt } from "@/components/oi/format";
+
+// /admin/ops — labelled "Jobs" in the sidebar (#139 IA move P9, 2026-09-24; URL kept for bookmarks
+// and smoke pins). It answers one question: are the scheduled jobs, settlement and data enrichment
+// healthy? Per the IA audit (dev/active/admin-information-architecture.md §2.1/§2.3):
+//   - odds-pipeline coverage, the live tracker and the API-Football budget MOVED to /admin/feeds;
+//   - "Email & alerts", the Pro/Elite user tiles and the stale "Betting & bots" section (fixed bot
+//     counts, a dollar sign, a long-past paper-trading start date) were DELETED — paid tiers are gone and /admin/bots owns bots;
+//     one "signups in 7 days" number stays;
+//   - the per-job list now reads view pipeline_job_latest (35 days + failure streak) instead of the
+//     newest 300 runs, which covered ~2 h and never showed a nightly job failing.
+// Loader: src/lib/admin-jobs.ts; view model: src/lib/admin-jobs-model.ts.
+
+export const metadata: Metadata = { title: "Jobs · Admin · OddsIntel", robots: { index: false } };
+
+function ago(iso: string | null | undefined, now: number): string {
+  if (!iso) return "—";
+  const m = Math.max(0, Math.round((now - new Date(iso).getTime()) / 60000));
+  if (m < 60) return `${m} min`;
+  const h = Math.round(m / 60);
+  return h < 48 ? `${h} h` : `${Math.round(h / 24)} d`;
+}
 
 export default async function OpsDashboardPage() {
-  const supabase = await createSupabaseServer();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) {
-    return <div className="flex items-center justify-center py-24 text-muted-foreground">Access denied.</div>;
+  if (!isBotBoardDevPreview()) {
+    const supabase = await createSupabaseServer();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return <div className="flex items-center justify-center py-24 text-muted-foreground">Access denied.</div>;
+    }
+    const db = createServerServiceClient();
+    const { data: profile } = await db.from("profiles").select("is_superadmin").eq("id", user.id).single();
+    if (!profile?.is_superadmin) {
+      return <div className="flex items-center justify-center py-24 text-muted-foreground">Superadmin only.</div>;
+    }
   }
 
-  const db = createServerServiceClient();
-  const { data: profile } = await db
-    .from("profiles")
-    .select("is_superadmin")
-    .eq("id", user.id)
-    .single();
+  const d = await loadJobsPage();
+  const { now } = d;
+  const views = buildJobViews(d.jobs.v, now);
+  const jobsUnknown = !!d.jobs.error;
+  const failing = views.filter((v) => v.state === "failing");
+  const stuck = views.filter((v) => v.state === "stuck");
+  const settlement = d.jobs.v.find((j) => j.job_name === "settlement");
+  const sweep = d.jobs.v.find((j) => j.job_name === "settle_ready");
+  const settleOk = settlement?.last_ok_at ?? null;
+  const settleAgeH = settleOk ? (now - new Date(settleOk).getTime()) / 3600_000 : null;
+  const staleN = d.stale.v.length;
+  // Before 22:00 UTC a stale bet is expected (the 21:00 run is the catch-all); after it, it is an alarm.
+  const staleAlarm = staleN > 0 && new Date(now).getUTCHours() >= 22;
+  const s = d.snapshot.v;
+  const snapAge = s ? Math.round((now - new Date(s.created_at).getTime()) / 60000) : null;
+  const snapNote = d.snapshot.error
+    ? `Unreadable: ${d.snapshot.error}`
+    : !s
+      ? "No ops snapshot for today yet — the engine writes one every hour."
+      : `From the ops snapshot written ${snapAge} min ago (hourly).`;
 
-  if (!profile?.is_superadmin) {
-    return <div className="flex items-center justify-center py-24 text-muted-foreground">Superadmin only.</div>;
-  }
-
-  const [snapshot, runs, jobStatuses, staleBets, lastLiveAt] = await Promise.all([
-    getOpsSnapshot(),
-    getRecentPipelineRuns(),
-    getLatestJobStatuses(),
-    getStalePendingBets(),
-    getLastLiveSnapshotAge(),
-  ]);
-
-  const today = new Date().toISOString().slice(0, 10);
-  const snapshotAge = snapshot
-    ? Math.round((Date.now() - new Date(snapshot.created_at).getTime()) / 60000)
-    : null;
-  const liveAge = lastLiveAt
-    ? Math.round((Date.now() - new Date(lastLiveAt).getTime()) / 60000)
-    : null;
-
-  const lastFixturesFetch = runs.find(r => r.job_name === "fetch_fixtures");
-  const totalBots = (snapshot?.active_bots ?? 0) + (snapshot?.silent_bots ?? 0);
+  const byGroup = new Map<string, JobView[]>();
+  for (const v of views) byGroup.set(v.group, [...(byGroup.get(v.group) ?? []), v]);
+  const groups = [...JOB_GROUPS, OTHER_GROUP].filter((g) => byGroup.has(g.label));
 
   return (
-    <div className="space-y-8">
-      <AutoRefresh intervalMs={60_000} />
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Ops Dashboard</h1>
-          <p className="text-sm text-muted-foreground mt-1">{today}</p>
-        </div>
-        <div className="text-right text-sm text-muted-foreground">
-          {snapshotAge !== null ? (
-            <span className={snapshotAge > 90 ? "text-amber-500" : "text-emerald-500"}>
-              snapshot {snapshotAge}m ago
-            </span>
-          ) : (
-            <span className="text-red-500">no snapshot today</span>
-          )}
-        </div>
+    <div className="space-y-4 lg:space-y-6">
+      <PageHeader
+        eyebrow="Data & ops"
+        title="Jobs"
+        meta="Are the engine's scheduled jobs, settlement and match-data loading healthy? Job history covers the last 35 days."
+        actions={<AutoRefreshBadge intervalMs={60_000} checkedAt={now} />}
+      />
+
+      {/* ── KPI strip ── */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
+        <StatCard
+          label="Jobs failing now"
+          icon={failing.length ? AlertOctagon : CheckCircle2}
+          tone={failing.length ? "danger" : "success"}
+          unknown={jobsUnknown}
+          value={failing.length}
+          foot={failing.length ? `of ${views.length} jobs · worst: ${failing[0].label}` : `all ${views.length} jobs' last runs passed`}
+          href="#runs"
+          hrefLabel="See jobs"
+        />
+        <StatCard
+          label="Stuck"
+          icon={Hourglass}
+          tone={stuck.length ? "warning" : "success"}
+          unknown={jobsUnknown}
+          value={stuck.length}
+          foot={stuck.length ? `"running" for over 3 h: ${stuck.map((x) => x.label).join(", ")}` : "nothing hanging"}
+          href="#runs"
+          hrefLabel="See jobs"
+        />
+        <StatCard
+          label="Stale pending bets"
+          icon={Scale}
+          tone={staleN === 0 ? "success" : staleAlarm ? "danger" : "warning"}
+          unknown={!!d.stale.error}
+          value={staleN}
+          foot={staleN ? `unsettled ${STALE_AFTER_MIN / 60} h+ after kick-off · ${fmtInt(d.pendingTotal)} pending in all` : `${fmtInt(d.pendingTotal)} pending, none overdue`}
+          href="#settlement"
+          hrefLabel="Settlement"
+        />
+        <StatCard
+          label="Last settlement"
+          icon={CheckCircle2}
+          tone={settleAgeH == null ? "warning" : settleAgeH > 30 ? "danger" : "success"}
+          unknown={jobsUnknown || !settleOk}
+          value={`${ago(settleOk, now)} ago`}
+          foot={`main run nightly · 15-min sweep ${sweep ? `${ago(sweep.started_at, now)} ago (${sweep.status})` : "not seen"}`}
+          href="#settlement"
+          hrefLabel="Settlement"
+        />
+        <StatCard
+          label="Signups · 7 days"
+          icon={UserPlus}
+          tone="info"
+          unknown={!!d.signups7d.error}
+          value={fmtInt(d.signups7d.v)}
+          foot="new accounts on the public site"
+        />
       </div>
 
-      {!snapshot && (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-400">
-          No ops snapshot for today yet — pipeline hasn&apos;t run or migration is pending.
-        </div>
+      {d.jobs.error && (
+        <Panel className="border-warning/40 px-4 py-3">
+          <p className="text-sm text-warning">Job history unreadable ({d.jobs.error}) — this page is not an all-clear.</p>
+        </Panel>
       )}
 
-      {/* ① Fixtures & Coverage */}
-      <Section
-        title="Fixtures & Coverage"
-        icon="📋"
-        subtitle={
-          lastFixturesFetch
-            ? `Latest fetch_fixtures stored ${lastFixturesFetch.records_count ?? "?"} fixtures (today's date only). matches_today counts every match whose kickoff falls today UTC. The Matches page may show 1–5 more: yesterday's unfinished games stay visible until settled.`
-            : `Fixtures pipeline fetches all upcoming matches across monitored leagues. Matches without odds are still tracked for signals and modelling.`
-        }
-      >
-        <div className="mb-3 flex items-baseline gap-2">
-          <span className="text-2xl font-bold">{snapshot?.matches_today ?? "—"}</span>
-          <span className="text-sm text-muted-foreground">matches today</span>
+      {/* ── Chart + what each group does ── */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <FailuresChart days={d.failDays.v} error={d.failDays.error} truncated={d.failTruncated} />
         </div>
-        <Grid>
-          <Stat label="Have odds" value={snapshot?.matches_with_odds} total={snapshot?.matches_today}
-            note="≥1 bookmaker is pricing this — required for value bet calculation" />
-          <Stat label="Have sharp anchor" value={snapshot?.matches_with_sharp ?? snapshot?.matches_with_pinnacle} total={snapshot?.matches_today}
-            note={`Pinnacle ${snapshot?.matches_with_pinnacle ?? "–"} · liquid Betfair Exchange ${snapshot?.matches_with_exchange_liquid ?? "–"} (≤5% spread, ≥€1k matched). Either one is a sharp price for edge calc.`} />
-          <Stat label="Have AF predictions" value={snapshot?.matches_with_predictions} total={snapshot?.matches_today}
-            note="API-Football's 1X2 probability — one of the model inputs" />
-          <Stat label="Have any signals" value={snapshot?.matches_with_signals} total={snapshot?.matches_today}
-            note="At least one signal (ELO, form, H2H…) written for this match" />
-        </Grid>
-
-        {/* Signal breakdown */}
-        <p className="text-xs font-medium text-muted-foreground mt-4 mb-2 uppercase tracking-wider">Signal breakdown (of today&apos;s matches)</p>
-        <Grid>
-          <Stat label="ELO ratings" value={snapshot?.signals_with_elo} total={snapshot?.matches_today}
-            note="Team strength estimate based on past results. Key model input." />
-          <Stat label="Form (PPG)" value={snapshot?.signals_with_form} total={snapshot?.matches_today}
-            note="Points-per-game over last 5 games for each team" />
-          <Stat label="H2H history" value={snapshot?.signals_with_h2h} total={snapshot?.matches_today}
-            note="Head-to-head win rate from past meetings" />
-          <Stat label="Injury data" value={snapshot?.signals_with_injuries}
-            note="AF only covers injuries for a handful of top leagues — low count is normal" />
-          <Stat label="Standings" value={snapshot?.signals_with_standings} total={snapshot?.matches_today}
-            note="League position, points-to-title, points-to-relegation" />
-          <Stat label="Postponed" value={snapshot?.matches_postponed_today} warn={v => v > 0}
-            note="Won't settle — void any pending bets on these" />
-          <Stat label="Missing sharp anchor" value={snapshot?.matches_without_sharp ?? snapshot?.matches_without_pinnacle} warn={v => v > 5}
-            note="Have odds but neither Pinnacle nor a liquid exchange market — only a multi-book consensus, lower confidence" />
-          <Stat label="ML vectors (finished)" value={snapshot?.matches_with_fvectors} total={snapshot?.matches_today}
-            note="Post-settlement only — 0 is normal for today's upcoming games" />
-        </Grid>
-      </Section>
-
-      {/* ② Odds Pipeline */}
-      <Section
-        title="Odds Pipeline"
-        icon="📊"
-        subtitle="Pre-match odds only (not live). Polls every 30min from 7am–10pm UTC. Low % early morning is normal — bookmakers open lines gradually. Typical full-day coverage: ~75–80% of matches. Remaining ~20% are youth leagues, reserves, or obscure competitions that bookmakers never price."
-      >
-        <Grid>
-          <Stat label="Total rows today" value={snapshot?.odds_snapshots_today}
-            note={`${snapshot?.matches_with_odds ?? "?"} matches × ${snapshot?.distinct_bookmakers ?? "?"} bookmakers × ~${snapshot?.odds_snapshots_today && snapshot?.matches_with_odds && snapshot?.distinct_bookmakers ? Math.round(snapshot.odds_snapshots_today / (snapshot.matches_with_odds * snapshot.distinct_bookmakers)) : "?"} polls × N markets`} />
-          <Stat label="Bookmakers active" value={snapshot?.distinct_bookmakers} warn={v => v < 3}
-            note="Up to 13 via API-Football. <3 = data gap." />
-          <Stat label="Markets: Match Winner (1X2)" value={snapshot?.odds_market_match_winner} total={snapshot?.matches_today}
-            note="Home/draw/away — primary betting market" />
-          <Stat label="Markets: Goals O/U" value={snapshot?.odds_market_goals_ou} total={snapshot?.matches_today}
-            note="Over/Under 2.5 goals — secondary market" />
-          <Stat label="Markets: BTTS" value={snapshot?.odds_market_btts} total={snapshot?.matches_today}
-            note="Both Teams to Score — tertiary market" />
-        </Grid>
-      </Section>
-
-      {/* ③ Betting & Bots */}
-      <Section
-        title="Betting & Bots"
-        icon="🤖"
-        subtitle={`${totalBots} bots total: 16 pre-match (run at 06:00 UTC on upcoming games) + 8 live/inplay (run every 30s during live matches). Paper trading since Apr 27.`}
-      >
-        <Grid>
-          <Stat label="Pre-match bets today" value={snapshot?.bets_placed_today != null && snapshot?.bets_inplay_today != null ? snapshot.bets_placed_today - snapshot.bets_inplay_today : snapshot?.bets_placed_today}
-            note="Placed at 06:00 UTC on upcoming fixtures. Bets cover next few days, not just today." />
-          <Stat label="Inplay bets today" value={snapshot?.bets_inplay_today}
-            good={v => v > 0}
-            note="Placed during live matches by the 8 inplay strategies. 0 = no strategy triggered OR live O/U odds unavailable." />
-          <Stat label="Inplay bots active" value={snapshot?.inplay_active_bots} total={8}
-            note="How many of the 8 inplay bots placed ≥1 bet today" />
-          <Stat
-            label="Pending (all time)"
-            value={snapshot?.bets_pending}
-            warn={v => v > 30}
-            note="All bets not yet settled — includes today's and older. >30 may mean settlement is lagging."
-          />
-          <Stat label="Settled today" value={snapshot?.bets_settled_today} note="Won or lost, match finished today" />
-          <Stat label="P&L today" value={snapshot?.pnl_today} prefix="$" decimals={2} warn={v => v < -50} good={v => v > 0} note="Settled bets only — pending don't count until resolved" />
-          <Stat
-            label="Pre-match bots active"
-            value={snapshot?.active_bots != null && snapshot?.inplay_active_bots != null ? snapshot.active_bots - snapshot.inplay_active_bots : snapshot?.active_bots}
-            total={16}
-            warn={v => v < 8}
-            note="How many of the 16 pre-match bots placed ≥1 bet today. Low = most found no value (can be normal)."
-          />
-          <Stat label="Idle today" value={snapshot?.silent_bots} note="Ran, no qualifying bets found" />
-          <Stat label="Duplicate bets" value={snapshot?.duplicate_bets} warn={v => v > 0} note="Same bot × match × market × selection placed twice — should be 0" />
-        </Grid>
-        {staleBets.length > 0 && (() => {
-          const utcHour = new Date().getUTCHours();
-          // Before 22:00 UTC: amber — expected, 21:00 settlement is the catch-all
-          // After 22:00 UTC: red — main settlement has run and should have caught these
-          const isAlarm = utcHour >= 22;
-          return (
-            <div className={`mt-4 rounded-lg border px-4 py-3 ${isAlarm ? "border-red-500/30 bg-red-500/10" : "border-amber-500/30 bg-amber-500/10"}`}>
-              <p className={`text-sm font-medium mb-1 ${isAlarm ? "text-red-400" : "text-amber-400"}`}>
-                ⚠ {staleBets.length} pending bet{staleBets.length > 1 ? "s" : ""} on matches that kicked off &gt;2.5h ago
-              </p>
-              <p className="text-xs text-muted-foreground mb-2">
-                {isAlarm
-                  ? "Main settlement (21:00 UTC) has already run — these should have been caught. Check Railway logs."
-                  : "settle_ready sweeps every 15min; 21:00 UTC settlement is the guaranteed catch-all. Normal before 22:00 UTC."}
-              </p>
-              <div className="space-y-1">
-                {staleBets.slice(0, 5).map(b => (
-                  <p key={b.id} className="text-xs text-muted-foreground font-mono">
-                    {b.market} — bet {new Date(b.pick_time).toLocaleTimeString()}
-                    {b.match_kickoff && ` · match KO ${new Date(b.match_kickoff).toLocaleTimeString()}`}
-                  </p>
-                ))}
-                {staleBets.length > 5 && (
-                  <p className="text-xs text-muted-foreground">…and {staleBets.length - 5} more</p>
-                )}
-              </div>
-            </div>
-          );
-        })()}
-      </Section>
-
-      {/* ④ Live Tracker */}
-      <Section
-        title="Live Tracker"
-        icon="⚡"
-        subtitle="Polls live games every 30s (score), 60s (events), 5min (odds). ~300 snapshot rows per game per hour — use game counts below, not raw rows."
-      >
-        <Grid>
-          <Stat
-            label="Games tracked today"
-            value={snapshot?.live_games_tracked}
-            note="Distinct matches with at least one live snapshot today"
-          />
-          <Stat
-            label="Games with xG"
-            value={snapshot?.live_games_with_xg}
-            total={snapshot?.live_games_tracked}
-            note="xG only from top leagues (AF stats endpoint). Others use shot proxy for inplay bot."
-          />
-          <Stat
-            label="Games with live O/U odds"
-            value={snapshot?.live_games_with_odds}
-            total={snapshot?.live_games_tracked}
-            note="live_ou_25_over populated — required for 6 of 8 inplay strategies. Low count = most strategies can't fire."
-          />
-          <Stat
-            label="Snapshot rows today"
-            value={snapshot?.live_snapshots_today}
-            note={`~${snapshot?.live_games_tracked ? Math.round((snapshot.live_snapshots_today ?? 0) / snapshot.live_games_tracked) : "?"} rows/game avg. High is normal — one row every 30s.`}
-          />
-          <div className="rounded-lg border border-border bg-card p-3">
-            <p className="text-xs text-muted-foreground mb-1">Last snapshot</p>
-            <p className={`text-lg font-bold tabular-nums ${liveAge !== null && liveAge > 60 ? "text-amber-500" : "text-foreground"}`}>
-              {liveAge !== null ? `${liveAge}m ago` : "—"}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">{">"} 60m outside live window (10am–11pm UTC) is normal</p>
-          </div>
-        </Grid>
-      </Section>
-
-      {/* ⑤ Post-Match */}
-      <Section
-        title="Post-Match / Settlement"
-        icon="✅"
-        subtitle="Runs at 9pm UTC. Settles bets, updates ELO ratings, and builds ML feature vectors for each finished match."
-      >
-        <Grid>
-          <Stat label="Finished today" value={snapshot?.matches_finished_today} note="Live tracker marks matches finished in real-time. Settlement (bet resolution + ML) runs separately at 21:00 UTC." />
-          <Stat
-            label="ML vectors built"
-            value={snapshot?.feature_vectors_today}
-            total={snapshot?.matches_finished_today}
-            note="Only meaningful after 23:00 UTC — settlement builds these at 21:00. Low count during the day is normal."
-          />
-          <Stat
-            label="ELO updates today"
-            value={snapshot?.elo_updates_today}
-            note="Team ELO recalculated for all teams that played today. Large number = many leagues ran."
-          />
-          <div className="rounded-lg border border-border bg-card p-3">
-            <p className="text-xs text-muted-foreground mb-1">Post-mortem ran</p>
-            <p className={`text-lg font-bold ${snapshot?.post_mortem_ran_today ? "text-emerald-500" : "text-muted-foreground"}`}>
-              {snapshot?.post_mortem_ran_today === true ? "Yes" : snapshot?.post_mortem_ran_today === false ? "No" : "—"}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">Gemini analysis of today&apos;s settled bets</p>
-          </div>
-        </Grid>
-      </Section>
-
-      {/* ⑥ Enrichment Quality */}
-      <Section
-        title="Enrichment Quality"
-        icon="📈"
-        subtitle="Pre-match data fetched per match. H2H history is pulled weekly. Injuries are checked 4×/day. Lineups only available ~1h before kick-off."
-      >
-        <Grid>
-          <Stat label="Have H2H data" value={snapshot?.matches_with_h2h} total={snapshot?.matches_today}
-            note="Stored in h2h_raw column on matches. Fetched by enrichment job." />
-          <Stat label="Have injury reports" value={snapshot?.matches_with_injuries}
-            note="Coverage-limited — AF only provides injury data for top leagues, not all 149 matches" />
-          <Stat label="Have confirmed lineups" value={snapshot?.matches_with_lineups} total={snapshot?.matches_today}
-            note="0% until ~1h before kick-off — completely normal before evening games" />
-        </Grid>
-      </Section>
-
-      {/* ⑦ Email & Alerts */}
-      <Section title="Email & Alerts" icon="✉️"
-        subtitle="Value bet alerts run at 4pm and 7pm UTC. Only sent to Pro/Elite users with notifications enabled. 0 alerts = either no qualifying bets found, or no subscribed Pro/Elite users yet."
-      >
-        <Grid>
-          <Stat label="Digests sent today" value={snapshot?.digests_sent_today} note="Morning digest to all subscribed users" />
-          <Stat label="Value bet alerts" value={snapshot?.value_bet_alerts_today}
-            note="Emails to Pro/Elite with notification opt-in. 0 = no subscribed users yet, or no qualifying bets." />
-          <Stat label="Previews generated" value={snapshot?.previews_generated_today} note="AI match previews (top 10 matches)" />
-          <Stat label="Watchlist alerts" value={snapshot?.watchlist_alerts_today} />
-          <Stat label="News checker errors" value={snapshot?.news_checker_errors_today} warn={v => v > 0} />
-        </Grid>
-      </Section>
-
-      {/* ⑧ AF API Budget */}
-      <Section
-        title="AF API Budget"
-        icon="💳"
-        subtitle="API-Football Mega plan: 150,000 calls/day. Resets at midnight UTC."
-      >
-        <Grid>
-          <Stat label="Calls today" value={snapshot?.af_calls_today} note="Across all pipeline jobs" />
-          <Stat
-            label="Remaining today"
-            value={snapshot?.af_budget_remaining}
-            warn={v => v < 10000}
-            good={v => v > 100000}
-            note="<10,000 = amber. Budget resets at midnight UTC."
-          />
-          {(() => {
-            const calls = snapshot?.af_calls_today;
-            if (calls == null) return null;
-            const pct = (calls / 150000) * 100;
-            return (
-              <div className="rounded-lg border border-border bg-card p-3 col-span-2">
-                <p className="text-xs text-muted-foreground mb-1">Usage (150k/day limit)</p>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${
-                        pct > 80 ? "bg-red-500" : pct > 50 ? "bg-amber-500" : "bg-emerald-500"
-                      }`}
-                      style={{ width: `${Math.min(100, pct).toFixed(1)}%` }}
-                    />
+        <Panel>
+          <PanelHeader title="What the jobs do" description="Every job belongs to one group. A red count is a group with a job failing now." />
+          <ul className="mt-2 divide-y divide-border/60 border-t border-border/60">
+            {groups.map((g) => {
+              const rows = byGroup.get(g.label) ?? [];
+              const bad = rows.filter((r) => r.state === "failing" || r.state === "stuck").length;
+              return (
+                <li key={g.key} className="px-4 py-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium">{g.label}</span>
+                    <StatusBadge tone={bad ? "danger" : "success"} dot={false}>
+                      {bad ? `${bad} of ${rows.length} failing` : `${rows.length} OK`}
+                    </StatusBadge>
                   </div>
-                  <span className="text-xs font-mono text-muted-foreground">
-                    {pct.toFixed(1)}%
-                  </span>
-                </div>
-              </div>
-            );
-          })()}
-        </Grid>
-      </Section>
-
-      {/* ⑨ Users */}
-      <Section title="Users" icon="👤" subtitle="All-time totals except new signups.">
-        <Grid>
-          <Stat label="Total users (all time)" value={snapshot?.total_users} />
-          <Stat label="Pro tier (all time)" value={snapshot?.pro_users} />
-          <Stat label="Elite tier (all time)" value={snapshot?.elite_users} />
-          <Stat label="New signups today" value={snapshot?.new_signups_today} good={v => v > 0} />
-        </Grid>
-      </Section>
-
-      {/* ⑩ Pipeline Runs */}
-      <Section
-        title="Pipeline Runs"
-        icon="🔁"
-        subtitle="Per-job status. Green = ran on schedule and passed. Amber = passed but older than expected. Red = last run failed. Timestamps are UTC."
-      >
-        <PipelineJobGrid jobs={jobStatuses} />
-      </Section>
-
-    </div>
-  );
-}
-
-// ─── Sub-components ──────────────────────────────────────────────────────────
-
-function Section({
-  title,
-  icon,
-  subtitle,
-  children,
-}: {
-  title: string;
-  icon: string;
-  subtitle?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-xl border border-border bg-card/50 p-5">
-      <div className="mb-4">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-          {icon} {title}
-        </h2>
-        {subtitle && (
-          <p className="text-xs text-muted-foreground/70 mt-1 leading-relaxed">{subtitle}</p>
-        )}
+                  <p className="mt-0.5 text-xs text-muted-foreground">{g.what}</p>
+                </li>
+              );
+            })}
+          </ul>
+        </Panel>
       </div>
-      {children}
-    </div>
-  );
-}
 
-function Grid({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-      {children}
-    </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  total,
-  prefix = "",
-  decimals = 0,
-  pctDecimals = 0,
-  note,
-  warn,
-  good,
-}: {
-  label: string;
-  value: number | null | undefined;
-  total?: number | null;
-  prefix?: string;
-  decimals?: number;
-  pctDecimals?: number;
-  note?: string;
-  warn?: (v: number) => boolean;
-  good?: (v: number) => boolean;
-}) {
-  const hasValue = value !== null && value !== undefined;
-  const isWarn = hasValue && warn ? warn(value!) : false;
-  const isGood = hasValue && good ? good(value!) : false;
-
-  const colorClass = isWarn
-    ? "text-amber-500"
-    : isGood
-    ? "text-emerald-500"
-    : "text-foreground";
-
-  const display = hasValue
-    ? `${prefix}${value!.toFixed(decimals)}`
-    : "—";
-
-  const pctVal = hasValue && total && total > 0 ? (value! / total) * 100 : null;
-  const pct = pctVal !== null
-    ? ` (${pctDecimals > 0 ? pctVal.toFixed(pctDecimals) : Math.round(pctVal)}%)`
-    : "";
-
-  return (
-    <div className="rounded-lg border border-border bg-card p-3 flex flex-col gap-1">
-      <p className="text-xs text-muted-foreground truncate">{label}</p>
-      <p className={`text-lg font-bold tabular-nums ${colorClass}`}>
-        {display}
-        {pct && <span className="text-xs font-normal text-muted-foreground ml-1">{pct}</span>}
-      </p>
-      {note && <p className="text-[10px] text-muted-foreground/60 leading-tight">{note}</p>}
-    </div>
-  );
-}
-
-// Per-job schedule: max expected gap in hours before flagging as stale (amber)
-// These are generous — account for time-of-day windows (e.g. settlement only runs at 9pm)
-const JOB_CONFIG: Record<string, { label: string; schedule: string; maxGapHours: number }> = {
-  fetch_fixtures:    { label: "Fixtures Fetch",      schedule: "04:00 UTC daily",           maxGapHours: 30 },
-  fetch_enrichment:  { label: "Enrichment",           schedule: "04:15 / 12:00 / 16:00 UTC", maxGapHours: 8  },
-  fetch_odds:        { label: "Odds Fetch",           schedule: "Every 30min, 07–22 UTC",    maxGapHours: 4  },
-  fetch_predictions: { label: "AF Predictions",       schedule: "05:30 UTC daily",           maxGapHours: 30 },
-  betting_pipeline:  { label: "Betting Pipeline",     schedule: "06:00 UTC daily",           maxGapHours: 30 },
-  betting_refresh:   { label: "Betting Refresh",      schedule: "11:00 / 15:00 / 19:00 UTC", maxGapHours: 10 },
-  settlement:        { label: "Settlement",           schedule: "21:00 UTC daily",           maxGapHours: 30 },
-  live_poller:       { label: "Live Poller",          schedule: "Continuous 10–23 UTC",      maxGapHours: 4  },
-  live_tracker:      { label: "Live Tracker",         schedule: "Continuous 10–23 UTC",      maxGapHours: 4  },
-  news_checker:      { label: "News Checker",         schedule: "09:00 / 12:30 / 16:30 / 19:30 UTC", maxGapHours: 10 },
-  write_ops_snapshot:{ label: "Ops Snapshot",         schedule: "Hourly",                    maxGapHours: 2  },
-};
-
-function PipelineJobGrid({ jobs }: { jobs: PipelineRun[] }) {
-  const now = Date.now();
-
-  // Build a map of job_name → latest run from jobStatuses
-  const jobMap = new Map<string, PipelineRun>();
-  for (const j of jobs) {
-    if (!jobMap.has(j.job_name)) jobMap.set(j.job_name, j);
-  }
-
-  const BACKFILL_JOBS = new Set(["hist_backfill", "backfill_coaches", "backfill_transfers"]);
-
-  // Show known jobs first in defined order, then any unknowns at the bottom (backfill jobs excluded — shown in Backfill section)
-  const knownOrder = Object.keys(JOB_CONFIG);
-  const unknownJobs = jobs.filter(j => !JOB_CONFIG[j.job_name] && !BACKFILL_JOBS.has(j.job_name));
-
-  const renderCard = (run: PipelineRun) => {
-    const config = JOB_CONFIG[run.job_name];
-    const label = config?.label ?? run.job_name;
-    const schedule = config?.schedule ?? "—";
-    const maxGapMs = (config?.maxGapHours ?? 48) * 60 * 60 * 1000;
-
-    const startedAt = new Date(run.started_at);
-    const ageMs = now - startedAt.getTime();
-    const ageMin = Math.round(ageMs / 60000);
-    const ageText = ageMin < 60
-      ? `${ageMin}m ago`
-      : ageMin < 1440
-        ? `${Math.round(ageMin / 60)}h ago`
-        : `${Math.round(ageMin / 1440)}d ago`;
-
-    const isFailed = run.status === "failed" || run.status === "error";
-    const isRunning = run.status === "running";
-    const isStaleRunning = isRunning && ageMs > 30 * 60 * 1000;
-    const isStaleOld = !isFailed && !isRunning && ageMs > maxGapMs;
-
-    const duration = run.completed_at
-      ? Math.round((new Date(run.completed_at).getTime() - startedAt.getTime()) / 1000)
-      : null;
-
-    const borderColor = isFailed
-      ? "border-red-500/40"
-      : isRunning || isStaleOld
-      ? "border-amber-500/30"
-      : "border-emerald-500/30";
-
-    const dotColor = isFailed
-      ? "bg-red-500"
-      : isRunning || isStaleOld
-      ? "bg-amber-500"
-      : "bg-emerald-500";
-
-    const statusText = isFailed
-      ? "failed"
-      : isStaleRunning
-      ? "stuck?"
-      : isRunning
-      ? "running"
-      : "ok";
-
-    return (
-      <div key={run.id} className={`rounded-lg border ${borderColor} bg-card p-3 flex flex-col gap-1.5`}>
-        <div className="flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dotColor}`} />
-          <span className="text-xs font-medium text-foreground truncate">{label}</span>
-          <span className={`ml-auto text-[10px] font-mono ${isFailed ? "text-red-400" : isRunning || isStaleOld ? "text-amber-400" : "text-emerald-500"}`}>
-            {statusText}
-          </span>
+      {/* ── Every job ── */}
+      <Panel id="runs">
+        <PanelHeader
+          title="Every scheduled job"
+          description="The latest run of each job in the last 35 days, failing first. “Failing since” counts from the first failure after the last success. The 48 half-hourly shadow scans are one row."
+          actions={
+            jobsUnknown ? (
+              <StatusBadge tone="warning">Unreadable</StatusBadge>
+            ) : (
+              <StatusBadge tone={failing.length ? "danger" : "success"}>{failing.length ? `${failing.length} failing` : "All passing"}</StatusBadge>
+            )
+          }
+        />
+        <div className="p-4 pt-3">
+          <JobsTable rows={views} now={now} />
         </div>
-        <p className="text-xs text-muted-foreground">{ageText}</p>
-        <p className="text-[10px] text-muted-foreground/60 leading-tight">{schedule}</p>
-        {(run.records_count != null || duration != null) && (
-          <p className="text-[10px] text-muted-foreground/60 font-mono">
-            {run.records_count != null ? `${run.records_count} rows` : ""}
-            {run.records_count != null && duration != null ? " · " : ""}
-            {duration != null ? `${duration}s` : ""}
-          </p>
-        )}
-        {isFailed && run.error_message && (
-          <p className="text-[10px] text-red-400/80 leading-tight break-all font-mono">{run.error_message.slice(0, 300)}</p>
-        )}
+      </Panel>
+
+      {/* ── Settlement + enrichment ── */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Panel id="settlement">
+          <PanelHeader
+            title="Settlement"
+            description="After a match ends, settlement marks each bet won or lost, updates team ratings and builds the rows the models learn from. A 15-minute sweep settles as games finish; the main run at night catches the rest."
+            actions={
+              d.stale.error ? (
+                <StatusBadge tone="warning">Unreadable</StatusBadge>
+              ) : (
+                <StatusBadge tone={staleN === 0 ? "success" : staleAlarm ? "danger" : "warning"}>{staleN ? `${staleN} overdue` : "Nothing overdue"}</StatusBadge>
+              )
+            }
+          />
+          <div className="space-y-4 p-4 pt-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+              <Meter label="Matches finished today" value={s?.matches_finished_today} note="Marked finished by the live tracker as they end." />
+              <Meter label="Model rows built today" value={s?.feature_vectors_today} note="The per-match rows the models learn from, built by settlement." />
+              <Meter label="Team rating (ELO) updates" value={s?.elo_updates_today} note="0 until the nightly run has processed today's games." />
+              <Meter
+                label="Duplicate bets"
+                value={s?.duplicate_bets}
+                tone={s?.duplicate_bets ? "danger" : "neutral"}
+                note="Same bot, match, market and pick placed twice — should always be 0."
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">{snapNote}</p>
+            <div>
+              <p className="mb-2 text-sm">
+                Bets still pending {STALE_AFTER_MIN / 60} h+ after kick-off
+                <span className="text-muted-foreground">
+                  {" "}
+                  —{" "}
+                  {staleAlarm
+                    ? "the 21:00 UTC run has passed and should have caught these."
+                    : "the 15-minute sweep usually catches these; the 21:00 UTC run is the catch-all, so before 22:00 this can be normal."}
+                </span>
+              </p>
+              {d.stale.error ? (
+                <p className="text-sm text-warning">Unreadable ({d.stale.error}) — not an all-clear.</p>
+              ) : staleN === 0 ? (
+                <p className="text-sm text-muted-foreground">None.</p>
+              ) : (
+                <StaleBetsTable rows={d.stale.v} now={now} />
+              )}
+            </div>
+          </div>
+        </Panel>
+
+        <Panel id="enrichment">
+          <PanelHeader
+            title="Match data for today's games"
+            description="What the morning load and the day's refreshes attached to today's matches — the inputs the models read. Some sources only cover big leagues, so not every row should reach 100%."
+            actions={s ? <StatusBadge tone="neutral" dot={false}>{fmtInt(s.matches_today)} matches</StatusBadge> : <StatusBadge tone="warning">No snapshot</StatusBadge>}
+          />
+          <div className="grid gap-3 p-4 pt-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+            <Meter label="API-Football prediction" value={s?.matches_with_predictions} total={s?.matches_today} tone={shareTone(s?.matches_with_predictions, s?.matches_today)} note="Their win/draw/loss chances — one model input." />
+            <Meter label="Team ratings (ELO)" value={s?.signals_with_elo} total={s?.matches_today} tone={shareTone(s?.signals_with_elo, s?.matches_today)} />
+            <Meter label="Recent form" value={s?.signals_with_form} total={s?.matches_today} tone={shareTone(s?.signals_with_form, s?.matches_today)} note="Points per game over the last 5." />
+            <Meter label="League table" value={s?.signals_with_standings} total={s?.matches_today} tone={shareTone(s?.signals_with_standings, s?.matches_today, 0.4, 0.2)} note="Cups and friendlies have none." />
+            <Meter label="Head-to-head history" value={s?.matches_with_h2h} total={s?.matches_today} tone={shareTone(s?.matches_with_h2h, s?.matches_today, 0.5, 0.25)} note="Refreshed weekly; new pairings have none." />
+            <Meter label="Injury reports" value={s?.matches_with_injuries} total={s?.matches_today} tone="neutral" note="API-Football covers injuries for a few top leagues only — a low count is normal." />
+            <Meter label="Confirmed line-ups" value={s?.matches_with_lineups} total={s?.matches_today} tone="neutral" note="Published about an hour before kick-off." />
+            <Meter
+              label="Postponed today"
+              value={s?.matches_postponed_today}
+              tone={s?.matches_postponed_today ? "warning" : "neutral"}
+              note="Will not settle — any pending bets on these need voiding."
+            />
+          </div>
+          <p className="px-4 pb-4 text-xs text-muted-foreground">{snapNote}</p>
+        </Panel>
       </div>
-    );
-  };
-
-  const knownCards = knownOrder
-    .map(name => jobMap.get(name))
-    .filter((r): r is PipelineRun => r !== undefined)
-    .map(renderCard);
-
-  const unknownCards = unknownJobs.map(renderCard);
-
-  if (knownCards.length === 0 && unknownCards.length === 0) {
-    return <p className="text-sm text-muted-foreground">No pipeline runs recorded yet.</p>;
-  }
-
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-      {knownCards}
-      {unknownCards}
     </div>
   );
 }

@@ -7,9 +7,9 @@ import { AlertTriangle, Ban, CheckCircle2, CircleDot, HelpCircle, Info, ShieldAl
 import type { Layer, Ladder } from "@/lib/bot-controls/ladder";
 
 const STATE_UI: Record<Layer["state"], { Icon: typeof Info; cls: string; word: string }> = {
-  open: { Icon: CheckCircle2, cls: "text-red-300", word: "open" },
-  blocked: { Icon: Ban, cls: "text-emerald-400", word: "blocks" },
-  unknown: { Icon: HelpCircle, cls: "text-amber-300", word: "unknown" },
+  open: { Icon: CheckCircle2, cls: "text-danger", word: "open" },
+  blocked: { Icon: Ban, cls: "text-success", word: "blocks" },
+  unknown: { Icon: HelpCircle, cls: "text-warning", word: "unknown" },
   info: { Icon: CircleDot, cls: "text-muted-foreground", word: "information" },
 };
 
@@ -43,7 +43,7 @@ export function LadderList({ ladder, compact = false }: { ladder: Ladder; compac
 export function CanStakeLine({ ladder }: { ladder: Ladder }) {
   if (ladder.canStake === "unknown") {
     return (
-      <div className="flex items-center gap-2 rounded-md bg-amber-500/10 px-2.5 py-1.5 text-sm font-semibold text-amber-300">
+      <div className="flex items-center gap-2 rounded-md bg-warning/10 px-2.5 py-1.5 text-sm font-semibold text-warning">
         <AlertTriangle size={16} aria-hidden="true" /> CAN STAKE: UNKNOWN — layer{ladder.unknownAt.length === 1 ? "" : "s"} {ladder.unknownAt.join(", ")} unreadable
         {ladder.blockedAt.length > 0 && <span className="font-normal text-muted-foreground">(also blocked at {ladder.blockedAt.join(", ")})</span>}
       </div>
@@ -51,14 +51,14 @@ export function CanStakeLine({ ladder }: { ladder: Ladder }) {
   }
   if (ladder.canStake === "yes") {
     return (
-      <div className="flex items-center gap-2 rounded-md bg-red-600/20 px-2.5 py-1.5 text-sm font-semibold text-red-300">
+      <div className="flex items-center gap-2 rounded-md bg-danger/20 px-2.5 py-1.5 text-sm font-semibold text-danger">
         <ShieldAlert size={16} aria-hidden="true" /> CAN STAKE: YES — {ladder.stakingBots.length} bot{ladder.stakingBots.length === 1 ? "" : "s"}
       </div>
     );
   }
   return (
     <div className="flex items-center gap-2 rounded-md bg-muted/40 px-2.5 py-1.5 text-sm font-semibold text-foreground">
-      <Ban size={16} className="text-emerald-400" aria-hidden="true" /> CAN STAKE: NO — blocked at layer{ladder.blockedAt.length === 1 ? "" : "s"}{" "}
+      <Ban size={16} className="text-success" aria-hidden="true" /> CAN STAKE: NO — blocked at layer{ladder.blockedAt.length === 1 ? "" : "s"}{" "}
       {ladder.blockedAt.join(", ")}
     </div>
   );

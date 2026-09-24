@@ -30,6 +30,7 @@ import {
   needsALook,
   picksTelegramMismatch,
   weekStart,
+  withUnpickedBots,
   type BotView,
   type Verdict,
 } from "@/app/(app)/admin/bots/bot-board-model";
@@ -80,6 +81,8 @@ export interface OverviewData {
   pnlByFamily: Record<string, number | string | null>[];
   realBets: { rows: WeekRealBets[]; error: string | null };
   jobs: { failed: number; total: number; error: string | null };
+  /** Active bots for the ⌘K palette (name + display name). */
+  botNames: { name: string; label: string }[];
 }
 
 /** Families judged on margin-corrected CLV (model_sim is Pinnacle-judged; in-play has no close). */
@@ -203,7 +206,9 @@ export async function loadOverview(viewerId: string | null): Promise<OverviewDat
   const weeklyBy = board.weekly.error ? null : groupBy(board.weekly.rows, (r) => r.bot_name);
   const marketsBy = board.marketStats.error ? null : groupBy(board.marketStats.rows, (r) => r.bot_name);
   const ctlRef = controlRef(sbBy.get(CONTROL_BOT), marketsBy ? marketsBy.get(CONTROL_BOT) ?? [] : null);
-  const views: BotView[] = board.scoreboard.rows
+  // + registered active bots with no pick yet (no bot_scoreboard row) — same helper as /admin/bots
+  const sbRows = withUnpickedBots(board.scoreboard.rows, board.config.rows, control.bots.error ? [] : control.bots.rows);
+  const views: BotView[] = sbRows
     .filter(isActive)
     .filter((sb) => sb.bot_name !== CONTROL_BOT)
     .map((sb) => buildView(sb.bot_name, sb, cfgBy.get(sb.bot_name), capsBy.get(sb.bot_name), { control: ctlRef, weekly: weeklyBy, markets: marketsBy, now, active: true }));
@@ -318,6 +323,7 @@ export async function loadOverview(viewerId: string | null): Promise<OverviewDat
     pnlByFamily,
     realBets: { rows: realRows, error: realBets.error },
     jobs: { failed: jobsR.v.filter((j) => j.status === "failed").length, total: jobsR.v.length, error: jobsR.error },
+    botNames: views.map((v) => ({ name: v.name, label: v.displayName })),
   };
 }
 

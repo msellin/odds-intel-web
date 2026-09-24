@@ -6,11 +6,11 @@
 import {
   Activity,
   Bot,
-  Ghost,
+  History,
+  ListChecks,
   LayoutDashboard,
   Receipt,
   Rss,
-  Wallet,
   type LucideIcon,
 } from "lucide-react";
 
@@ -32,16 +32,18 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     label: "Bots & money",
     items: [
       { href: "/admin/bots", label: "Bots", Icon: Bot },
-      { href: "/admin/shadow-bots", label: "Shadow bots", Icon: Ghost },
-      { href: "/admin/real-bets", label: "Real bets", Icon: Receipt, unused: true },
-      { href: "/admin/place", label: "Place", Icon: Wallet, unused: true },
+      // IA §3.1 (2026-09-24): "Pick queue" = today's picks to act on (URL kept: 65 smoke pins +
+      // bookmarks); "Real bets" is the money ledger, promoted from unused (IA move P5).
+      { href: "/admin/shadow-bots", label: "Pick queue", Icon: ListChecks },
+      { href: "/admin/real-bets", label: "Real bets", Icon: Receipt },
     ],
   },
   {
     label: "Data & ops",
     items: [
       { href: "/admin/feeds", label: "Feeds", Icon: Rss },
-      { href: "/admin/ops", label: "Ops", Icon: Activity },
+      { href: "/admin/ops", label: "Jobs", Icon: Activity },
+      { href: "/admin/activity", label: "Activity", Icon: History },
     ],
   },
 ];
@@ -50,6 +52,11 @@ export const ADMIN_NAV: AdminNavGroup[] = [
 export function isActiveAdminItem(href: string, pathname: string): boolean {
   if (href === "/admin") return pathname === "/admin";
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+export function activeAdminGroup(pathname: string): string | null {
+  for (const g of ADMIN_NAV) for (const i of g.items) if (isActiveAdminItem(i.href, pathname)) return g.label;
+  return null;
 }
 
 export function activeAdminItem(pathname: string): AdminNavItem | null {

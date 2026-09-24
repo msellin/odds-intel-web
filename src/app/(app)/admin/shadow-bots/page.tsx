@@ -1,83 +1,152 @@
 /**
- * /admin/shadow-bots — the OWN operator page (OWN Phase 6, 2026-09-15).
+ * /admin/shadow-bots — the Pick queue (#139 IA move P6, 2026-09-24; was "Shadow bots", OWN Phase 6).
  *
- * Three sections, in the order the operator reads them:
- *   1. Safety strip   — can anything stake real money right now?
- *   2. Today's picks  — one verdict per pending pick, with a `Place €X` action
- *                       that logs a hand-placed bet into `real_bets`.
- *   3. Which bots work — the pre-registered verdict per non-retired bot on
- *                       margin-corrected own-book CLV.
- *   4. Promotions     — active `promo_terms` with their ledger EV vs realised
- *                       (OWN Phase 2). Read-only; terms are entered with
- *                       `scripts/promo_ev.py` in the engine repo.
+ * ONE job (IA J6): what should I place by hand today? The owner places real bets by hand on these
+ * picks, then records each with `Place €X` (→ /api/admin/real-bet → record_manual_real_bet, which
+ * writes real_bets with placed_real NULL until the account check confirms it).
  *
- * Bot list is `bots WHERE retired_at IS NULL` — nothing hardcoded, so a new bot
- * appears the moment it has a `bots` row and its first `shadow_bets` write
- * (visibility invariant, dev/active/own-implementation-plan.md).
+ *   1. Four counts — picks waiting, ready to place, placed today vs the caps, old bot prices.
+ *   2. One line pointing at where the removed sections now live: the real-money switches and bot
+ *      scores are on /admin/bots (IA §2.2 duplicates), the money ledger on /admin/real-bets.
+ *   3. The queue — shared DataTable, one verdict per pending pick.
+ *   4. "How this page works" — collapsed.
  *
- * Reads: `loadShadowBotsPage()` (cached 60 s, 10 queries) + `loadSessionState()`
- * (fresh, 1 query) + per-user pick marks (1 query) + auth/profile (2).
- * Decision rules live in lib/shadow-bots/verdict.ts.
+ * Removed here on purpose: the safety strip and the scoreboard (their jobs live on /admin/bots —
+ * one owner per number), the Promotions panel (moved to /admin/real-bets).
+ *
+ * Bot list is `bots WHERE retired_at IS NULL` — nothing hardcoded, so a new bot's picks appear
+ * the moment it has a `bots` row and its first `shadow_bets` write. Decision rules live in
+ * lib/shadow-bots/verdict.ts. Reads: `loadShadowBotsPage()` (cached 60 s) + `loadSessionState()`
+ * (fresh) + the viewer's pick marks.
  */
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
+import type { Metadata } from "next";
+import { CheckCircle2, Clock, Hourglass, ListChecks } from "lucide-react";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
+import { isBotBoardDevPreview } from "@/lib/bot-board";
+import { readAdminFixture } from "@/lib/admin-fixture";
 import { fetchUserPickMarkStates } from "@/lib/upcoming-picks";
-import { loadSessionState, loadShadowBotsPage } from "@/lib/shadow-bots/queries";
-import { SafetyStrip } from "@/components/shadow-bots/safety-strip";
-import { buildPickRows, PicksTable } from "@/components/shadow-bots/picks-table";
-import { Scoreboard } from "@/components/shadow-bots/scoreboard";
+import { loadSessionState, loadShadowBotsPage, type SessionState, type ShadowBotsPageData } from "@/lib/shadow-bots/queries";
+import { DAILY_MAX_BETS, DAILY_MAX_STAKE_EUR } from "@/lib/admin-money";
+import { buildPickRows, queueCounts } from "@/components/shadow-bots/picks-table";
+import { PicksQueueTable } from "@/components/shadow-bots/picks-queue-table";
 import { HowItWorks } from "@/components/shadow-bots/how-it-works";
-import { Promotions } from "@/components/shadow-bots/promotions";
+import { PageHeader, Panel } from "@/components/oi/panel";
+import { StatCard } from "@/components/oi/stat-card";
+import { fmtEur } from "@/components/oi/format";
 
-export default async function ShadowBotsPage() {
-  const supabase = await createSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return <Denied />;
-  const db = createServerServiceClient();
-  const { data: profile } = await db.from("profiles").select("is_superadmin").eq("id", user.id).single();
-  if (!profile?.is_superadmin) return <Denied text="Superadmin only." />;
+export const metadata: Metadata = { title: "Pick queue · Admin · OddsIntel", robots: { index: false } };
 
+async function load(userId: string | null): Promise<{ data: ShadowBotsPageData; state: SessionState; marks: Record<string, 1 | 2> }> {
+  const fx = await readAdminFixture<{ page: ShadowBotsPageData; state: SessionState }>("queue");
+  if (fx) return { data: fx.page, state: fx.state, marks: {} };
   const [data, state, marks] = await Promise.all([
     loadShadowBotsPage(),
     loadSessionState(),
-    fetchUserPickMarkStates(user.id).catch(() => new Map<string, 1 | 2>()),
+    userId ? fetchUserPickMarkStates(userId).catch(() => new Map<string, 1 | 2>()) : new Map<string, 1 | 2>(),
   ]);
   const markStates: Record<string, 1 | 2> = {};
   for (const [k, v] of marks) markStates[k] = v;
+  return { data, state, marks: markStates };
+}
 
-  const rows = buildPickRows(data, state, markStates);
+export default async function PickQueuePage() {
+  let userId: string | null = null;
+  if (!isBotBoardDevPreview()) {
+    const supabase = await createSupabaseServer();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return <Denied />;
+    const db = createServerServiceClient();
+    const { data: profile } = await db.from("profiles").select("is_superadmin").eq("id", user.id).single();
+    if (!profile?.is_superadmin) return <Denied text="Superadmin only." />;
+    userId = user.id;
+  }
+
+  const { data, state, marks } = await load(userId);
+  const rows = buildPickRows(data, state, marks);
+  const c = queueCounts(rows);
+  const t = data.todayRealBets;
+  const placedToday = t.confirmedCount + t.unconfirmedCount;
+  const overCap = t.confirmedCount >= DAILY_MAX_BETS || t.confirmedStake >= DAILY_MAX_STAKE_EUR;
+  const loaded = new Date(data.loadedAt).toISOString().slice(11, 16);
 
   return (
-    <div>
-      <SafetyStrip state={state} placerBots={data.placerBots} today={data.todayRealBets} />
+    <div className="space-y-4 lg:space-y-6">
+      <PageHeader
+        eyebrow="Bots & money"
+        title="Pick queue"
+        meta={`What to place by hand today: every pending pick from the ${data.bots.length} active bots, best first. Prices checked ${loaded} UTC (refreshed every minute).`}
+      />
 
-      <header className="mb-5">
-        <div className="flex items-center justify-between gap-4">
-          <h1 className="text-xl font-semibold text-neutral-100">Shadow bots</h1>
-          <HowItWorks />
-        </div>
-        <p className="mt-1 text-xs text-neutral-500">
-          {data.bots.length} active bots · {data.upcoming.length} pending picks · data cached 60 s (loaded{" "}
-          {new Date(data.loadedAt).toLocaleTimeString("en-GB", { timeZone: "UTC" })} UTC, {data.queryCount} queries) ·
-          safety flags live
-        </p>
-      </header>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard
+          label="Picks waiting"
+          icon={ListChecks}
+          tone="info"
+          value={c.total}
+          foot={`${c.today} kick off today (UTC)${c.inplay > 0 ? ` · ${c.inplay} in-play (can't be placed)` : ""}`}
+        />
+        <StatCard
+          label="Ready to place"
+          icon={CheckCircle2}
+          tone={c.place > 0 ? "success" : "neutral"}
+          value={c.place}
+          foot={c.thin > 0 ? `+ ${c.thin} thin: above break-even, below the bot's own bar` : "Price clears the bot's own bar and is fresh"}
+        />
+        <StatCard
+          label="Placed today"
+          icon={Clock}
+          tone={overCap ? "danger" : "neutral"}
+          value={placedToday}
+          href="/admin/real-bets"
+          hrefLabel="Real bets"
+          foot={
+            // LOGGED-PICKS-INVISIBLE (2026-09-15): bets recorded by hand are real exposure, so they are in
+            // the headline number; the automatic caps count confirmed placements only.
+            `Automatic ${t.confirmedCount}/${DAILY_MAX_BETS} · ${fmtEur(t.confirmedStake)}/${fmtEur(DAILY_MAX_STAKE_EUR)}` +
+            (t.unconfirmedCount > 0 ? ` · +${t.unconfirmedCount} by hand ${fmtEur(t.unconfirmedStake)}` : "")
+          }
+        />
+        <StatCard
+          label="Old bot prices"
+          icon={Hourglass}
+          tone={c.stale > 0 ? "warning" : "neutral"}
+          value={c.stale}
+          foot="The bot decided on an old price — greyed in the table, never hidden"
+        />
+      </div>
 
-      <PicksTable rows={rows} truncatedBooks={data.truncatedBooks} />
-
-      <Scoreboard bots={data.bots} scoreboard={data.scoreboard} placerBots={data.placerBots} />
-
-      <Promotions promos={data.promos} error={data.promoError} />
-
-      <p className="mt-8 text-xs text-neutral-500">
-        <Link href="/admin/real-bets" className="underline underline-offset-4 hover:text-neutral-300">
-          real bets ledger
+      <p className="text-xs text-muted-foreground">
+        Can real money be staked right now, and by which bots?{" "}
+        <Link href="/admin/bots#real-money" className="text-primary hover:underline">
+          Real-money switches
+        </Link>{" "}
+        · Which bots are any good?{" "}
+        <Link href="/admin/bots" className="text-primary hover:underline">
+          Bot scores
+        </Link>{" "}
+        · What did we bet?{" "}
+        <Link href="/admin/real-bets" className="text-primary hover:underline">
+          Real bets
         </Link>
+        {state.placement_paused ? " · The automatic placer is paused — you can still place by hand and record it here." : ""}
       </p>
+
+      {data.truncatedBooks.length > 0 && (
+        <div className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-2 text-xs text-warning">
+          The price read hit its row limit for {data.truncatedBooks.join(", ")} — some prices may show “—” although one exists.
+        </div>
+      )}
+
+      <Panel className="p-4">
+        <PicksQueueTable rows={rows} />
+      </Panel>
+
+      <HowItWorks />
     </div>
   );
 }

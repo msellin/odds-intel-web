@@ -10,9 +10,8 @@ import {
   pickVerdict,
   quoteFreshness,
   PICK_VERDICT_RANK,
-  QUOTE_MAX_AGE_MIN,
 } from "@/lib/shadow-bots/verdict";
-import { PicksRow, type PickRowData } from "@/components/shadow-bots/picks-row";
+import type { PickRowData } from "@/components/shadow-bots/picks-row";
 
 /** Market key for the placer's per-market odds floor (engine-floors.ts). */
 function marketKey(market: string): string | null {
@@ -125,85 +124,18 @@ export function buildPickRows(
   return rows;
 }
 
-export function PicksTable({ rows, truncatedBooks }: { rows: PickRowData[]; truncatedBooks: string[] }) {
-  const counts = rows.reduce<Record<string, number>>((acc, r) => {
-    acc[r.verdict.verdict] = (acc[r.verdict.verdict] ?? 0) + 1;
-    return acc;
-  }, {});
-  const inplayCount = rows.filter((r) => r.inplay).length;
-  const leadCount = rows.filter((r) => r.track === "LEAD").length;
-  const negCount = rows.filter((r) => r.track === "NEGATIVE").length;
-  // One definition of stale — quoteFreshness(), the same call the row makes.
-  const staleCount = rows.filter((r) => quoteFreshness(r.pick.decision_quote_age_min) === "STALE").length;
-  const th = "px-2 py-1.5 text-left font-normal whitespace-nowrap";
-  return (
-    <section className="mb-8">
-      <div className="mb-2 flex flex-wrap items-baseline gap-x-4 gap-y-1">
-        <h2 className="text-xs font-mono uppercase tracking-widest text-neutral-300">Today&apos;s picks</h2>
-        <span className="font-mono text-[11px] text-neutral-500">
-          {rows.length} pending · PLACE {counts.PLACE ?? 0} · THIN {counts.THIN ?? 0} · SKIP {counts.SKIP ?? 0} · BLOCKED{" "}
-          {counts.BLOCKED ?? 0}
-          {inplayCount > 0 ? ` · in-play ${inplayCount}` : ""}
-          {staleCount > 0 ? ` · stale decision quote ${staleCount}` : ""}
-        </span>
-        <span className="font-mono text-[11px] text-neutral-500">
-          <span className="text-sky-300">LEAD {leadCount}</span>
-          {negCount > 0 ? ` · from CI<0 bots ${negCount}` : ""}
-        </span>
-      </div>
-      {truncatedBooks.length > 0 && (
-        <div className="mb-2 rounded border border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-300">
-          Price fetch hit the row cap for {truncatedBooks.join(", ")} — some cells may read “—” though a price exists.
-        </div>
-      )}
-      {rows.length === 0 ? (
-        <p className="rounded-lg border border-white/[0.08] px-4 py-6 text-sm text-neutral-500">
-          No pending picks with a future kickoff from any active bot.
-        </p>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-white/[0.08]">
-          <table className="w-full">
-            <thead className="bg-white/[0.02] text-[10px] font-mono uppercase tracking-wider text-neutral-500">
-              <tr>
-                <th className={th}>KO</th>
-                <th className={th}>Match</th>
-                <th className={th}>Pick</th>
-                <th className={th}>Bot</th>
-                <th className={`${th} text-right`} title="Best price at a book we can place at (CB/UB). EB shown greyed when nothing placeable">
-                  Best placeable
-                </th>
-                <th
-                  className={`${th} text-right`}
-                  title={`Age of the quote the BOT decided on; FRESH under ${QUOTE_MAX_AGE_MIN} min, stale rows greyed`}
-                >
-                  Decision
-                </th>
-                <th className={`${th} text-right`} title="Age of the live quote shown to the left, in minutes">
-                  Shown age
-                </th>
-                <th className={`${th} text-right`} title="1 / anchor probability">
-                  Break-even
-                </th>
-                <th className={`${th} text-right`} title="1 / (anchor prob − bot threshold), or the placer's odds floor if higher">
-                  Gate floor
-                </th>
-                <th className={`${th} text-right`} title="anchor prob − 1 / shown price">
-                  Live edge
-                </th>
-                <th className={th} title="PLACE ≥ gate & fresh · THIN ≥ break-even · SKIP below/stale/unplaceable · BLOCKED paused/off/KO<3m">
-                  Verdict
-                </th>
-                <th className={th}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <PicksRow key={r.pick.id} r={r} />
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </section>
-  );
+/** Headline counts for the StatCard row — one definition of stale (quoteFreshness, as the row). */
+export function queueCounts(rows: PickRowData[], now = Date.now()) {
+  const by = (v: PickRowData["verdict"]["verdict"]) => rows.filter((r) => r.verdict.verdict === v).length;
+  const dayEnd = new Date(now);
+  dayEnd.setUTCHours(24, 0, 0, 0);
+  return {
+    total: rows.length,
+    place: by("PLACE"),
+    thin: by("THIN"),
+    inplay: rows.filter((r) => r.inplay).length,
+    today: rows.filter((r) => Date.parse(r.pick.kickoff) < dayEnd.getTime()).length,
+    stale: rows.filter((r) => quoteFreshness(r.pick.decision_quote_age_min) === "STALE").length,
+    lead: rows.filter((r) => r.track === "LEAD").length,
+  };
 }

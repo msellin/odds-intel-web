@@ -7,6 +7,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Hourglass, Pause, Play, RotateCw } from "lucide-react";
 
 export function FeedControls({
   feedId,
@@ -64,24 +65,32 @@ export function FeedControls({
   }
 
   const btn =
-    "rounded-md border border-border px-2 py-0.5 text-xs hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed";
+    "inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2 text-xs hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50";
 
   return (
-    <div className="flex flex-wrap items-center gap-2 mt-2">
+    <div className="mt-2 flex flex-wrap items-center gap-2">
       {controls.includes("pause") &&
         (paused ? (
-          <button className={`${btn} border-emerald-500/40 text-emerald-500`} disabled={busy} onClick={() => act("resume")}>
-            ▶ Resume
+          <button className={`${btn} border-success/40 text-success`} disabled={busy} onClick={() => act("resume")}>
+            <Play size={12} aria-hidden="true" /> Resume
           </button>
         ) : (
-          <button className={`${btn} border-amber-500/40 text-amber-500`} disabled={busy} onClick={() => act("pause")}>
-            ❚❚ Pause
+          <button className={`${btn} border-warning/40 text-warning`} disabled={busy} onClick={() => act("pause")}>
+            <Pause size={12} aria-hidden="true" /> Pause
           </button>
         ))}
       {controls.includes("run_now") && (
         <button className={btn} disabled={busy || paused || runNowPending} onClick={() => act("run_now")}
           title={paused ? "Resume first" : undefined}>
-          {runNowPending ? "⏳ Run queued" : "↻ Run now"}
+          {runNowPending ? (
+            <>
+              <Hourglass size={12} aria-hidden="true" /> Run queued
+            </>
+          ) : (
+            <>
+              <RotateCw size={12} aria-hidden="true" /> Run now
+            </>
+          )}
         </button>
       )}
       {msg && <span className="text-[11px] text-muted-foreground">{msg}</span>}

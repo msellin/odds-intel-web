@@ -27,9 +27,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, Copy, History, Info, MoreHorizontal, Search, ArrowUpRight } from "lucide-react";
-import type { BotBoardData, BotLedgerRow, BotMarketStatsRow, BotWeeklyRow, RetiredInfo } from "@/lib/bot-board";
+import { usePathname, useSearchParams } from "next/navigation";
+import { AlertTriangle, Copy, History, Info, MoreHorizontal, ArrowUpRight } from "lucide-react";
+import { PageHeader } from "@/components/oi/panel";
+import { StatCard } from "@/components/oi/stat-card";
+import { StatusBadge } from "@/components/oi/status-badge";
+import type { BotBoardData, BotMarketStatsRow, BotPicksResult, BotWeeklyRow, RetiredInfo } from "@/lib/bot-board";
 import type { ControlState } from "@/lib/bot-controls/types";
 import { placementPathReason } from "@/lib/bot-controls/placement-path";
 import {
@@ -38,8 +41,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
+import { withUnpickedBots,
   CONTROL_BOT,
+  FAMILY_INFO,
   FAMILY_ORDER,
   buildView,
   controlRef,
@@ -64,19 +68,66 @@ import { ActivitySheet } from "./activity-timeline";
 import { useToast } from "./toast";
 import { HowToRead } from "./how-to-read";
 import { picksTelegramMismatch } from "./bot-controls-cell";
+import {
+  FacetChip,
+  QuickViews,
+  ResetButton,
+  SORT_DEFAULT_DIR,
+  SORT_LABEL,
+  SearchBox,
+  SortMenu,
+  type FacetOption,
+  type SortDir,
+  type SortKey,
+} from "./board-toolbar";
+import { sorter } from "./bot-sort";
 
 type Filter = "all" | "published" | "capable" | "silent" | "look";
 const FILTERS: [Filter, string][] = [
   ["all", "All"],
-  ["published", "Published"],
+  ["published", "On /picks"],
   ["capable", "Real-money capable"],
   ["silent", "Silent"],
   ["look", "Needs a look"],
 ];
 
+const VERDICT_FACET: Record<string, string> = {
+  beats: "Beats the close",
+  loses: "Loses to the close",
+  inconclusive: "Can't tell yet",
+  early: "Too early (< 30 picks)",
+  noclv: "In-play (no CLV)",
+};
+
+const listParam = (v: string | null) => (v ? v.split(",").filter(Boolean) : []);
+
+
+async function fetchPicks(name: string, offset: number): Promise<Extract<LedgerState, { loading: false }>> {
+  try {
+    const r = await fetch(`/api/admin/bot-ledger?bot=${encodeURIComponent(name)}&limit=50&offset=${offset}`);
+    const j = (await r.json()) as Partial<BotPicksResult> & { error?: string | null };
+    return {
+      loading: false,
+      rows: j.rows ?? [],
+      error: r.ok ? j.error ?? null : j.error ?? `HTTP ${r.status}`,
+      placedError: j.placedError ?? null,
+      pricesError: j.pricesError ?? null,
+      placementLinked: j.placementLinked ?? true,
+      hasMore: j.hasMore ?? false,
+    };
+  } catch (e) {
+    return { loading: false, rows: [], error: e instanceof Error ? e.message : String(e) };
+  }
+}
 
 export function BotsBoard({ data, controls }: { data: BotBoardData; controls: ControlState }) {
-  const { scoreboard, config, capabilities, now } = data;
+  const { config, capabilities, now } = data;
+  // + registered active bots that have not picked yet (no bot_scoreboard row) — withUnpickedBots
+  const scoreboard = useMemo(
+    () => ({ ...data.scoreboard, rows: withUnpickedBots(data.scoreboard.rows, config.rows, controls.bots.error ? [] : controls.bots.rows) }),
+    [data.scoreboard, config.rows, controls.bots],
+  );
+  const boardData = useMemo(() => ({ ...data, scoreboard }), [data, scoreboard]);
   const cfgBy = useMemo(() => new Map(config.rows.map((c) => [c.bot_name, c])), [config.rows]);
   const activeNames = useMemo(() => new Set(scoreboard.rows.filter(isActive).map((s) => s.bot_name)), [scoreboard.rows]);
   // Active bots with a placement path — the same rule the engine gate applies (placement-path.ts).
@@ -97,14 +148,13 @@ export function BotsBoard({ data, controls }: { data: BotBoardData; controls: Co
     <ControlsProvider state={controls} views={views} capable={capable} now={now}>
       {/* Sidebar + status come from the shared admin layout (src/app/(app)/admin/layout.tsx). */}
       <ArmedBar />
-      <Board data={data} />
+      <Board data={boardData} />
     </ControlsProvider>
   );
 }
 
 function Board({ data }: { data: BotBoardData }) {
   const { scoreboard, config, capabilities, retired, weekly, marketStats, now } = data;
-  const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
   const ctl = useControls();
@@ -114,6 +164,13 @@ function Board({ data }: { data: BotBoardData }) {
   const filter = (FILTERS.some(([k]) => k === params.get("f")) ? params.get("f") : "all") as Filter;
   const q = params.get("q") ?? "";
   const selected = params.get("bot");
+  const famParam = params.get("fam");
+  const verParam = params.get("ver");
+  const famSel = useMemo(() => listParam(famParam), [famParam]);
+  const verSel = useMemo(() => listParam(verParam), [verParam]);
+  const sortParam = params.get("sort");
+  const sortKey = (sortParam && sortParam in SORT_LABEL ? sortParam : "verdict") as SortKey;
+  const sortDir = (params.get("dir") === "asc" || params.get("dir") === "desc" ? params.get("dir") : SORT_DEFAULT_DIR[sortKey]) as SortDir;
   const sheetTab = (SHEET_TABS as readonly string[]).includes(params.get("tab") ?? "") ? (params.get("tab") as SheetTab) : "overview";
 
   const [help, setHelp] = useState(false);
@@ -126,13 +183,19 @@ function Board({ data }: { data: BotBoardData }) {
     (patch: Record<string, string | null>) => {
       const next = new URLSearchParams(params.toString());
       for (const [k, v] of Object.entries(patch)) {
-        if (v == null || v === "" || (k === "f" && v === "all") || (k === "view" && v === "active")) next.delete(k);
+        if (v == null || v === "" || (k === "f" && v === "all") || (k === "view" && v === "active") || (k === "sort" && v === "verdict")) next.delete(k);
         else next.set(k, v);
       }
       const s = next.toString();
-      router.replace(s ? `${pathname}?${s}` : pathname, { scroll: false });
+      // SPEED (owner 2026-09-24: "bots page is super slow"): the filters, search, sort, open bot
+      // and sheet tab live in the URL so links work — but router.replace() re-ran this
+      // force-dynamic page on the SERVER (every bot view + control read, ~300 KB payload) on every
+      // click and search keystroke. The native History API updates the URL and useSearchParams
+      // with no server round trip (Next.js ≥ 14.1). router.refresh() after a control write still
+      // re-reads, which is the one time fresh data is needed.
+      window.history.replaceState(null, "", s ? `${pathname}?${s}` : pathname);
     },
-    [params, pathname, router],
+    [params, pathname],
   );
 
   // Debounced search → URL.
@@ -220,7 +283,9 @@ function Board({ data }: { data: BotBoardData }) {
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return active.filter((v) => {
-      if (needle && !v.name.toLowerCase().includes(needle) && !v.displayName.toLowerCase().includes(needle)) return false;
+      if (needle && !v.name.toLowerCase().includes(needle) && !v.displayName.toLowerCase().includes(needle) && !v.identity.toLowerCase().includes(needle)) return false;
+      if (famSel.length && !famSel.includes(v.family)) return false;
+      if (verSel.length && !verSel.includes(v.verdict)) return false;
       switch (filter) {
         case "published":
           return v.caps?.publish === true;
@@ -234,17 +299,36 @@ function Board({ data }: { data: BotBoardData }) {
           return true;
       }
     });
-  }, [active, filter, q, ctl.capable, lookBots]);
+  }, [active, filter, q, ctl.capable, lookBots, famSel, verSel]);
 
   const groups = useMemo(() => {
     const m = new Map<string, BotView[]>();
     for (const v of filtered) m.set(v.family, [...(m.get(v.family) ?? []), v]);
-    const showControl = !!controlView && filter === "all" && !q;
+    const showControl = !!controlView && filter === "all" && !q && !famSel.length && !verSel.length;
+    const cmp = sortKey === "verdict" && sortDir === "asc" ? sortBots : sorter(sortKey, sortDir);
     return FAMILY_ORDER.filter((f) => m.has(f) || (f === "forward_test" && showControl)).map((f) => ({
       family: f,
-      bots: (m.get(f) ?? []).sort(sortBots),
+      bots: (m.get(f) ?? []).sort(cmp),
     }));
-  }, [filtered, controlView, filter, q]);
+  }, [filtered, controlView, filter, q, sortKey, sortDir, famSel, verSel]);
+  const noFacets = filter === "all" && !q && !famSel.length && !verSel.length;
+
+  const famOptions: FacetOption[] = useMemo(
+    () =>
+      FAMILY_ORDER.map((f) => ({ value: f as string, label: FAMILY_INFO[f].title, count: active.filter((v) => v.family === f).length })).filter((o) => o.count > 0),
+    [active],
+  );
+  const verOptions: FacetOption[] = useMemo(
+    () => Object.entries(VERDICT_FACET).map(([k, label]) => ({ value: k, label, count: active.filter((v) => v.verdict === k).length })).filter((o) => o.count > 0),
+    [active],
+  );
+  const onSort = useCallback(
+    (k: SortKey) => {
+      const dir = k === sortKey ? (sortDir === "asc" ? "desc" : "asc") : SORT_DEFAULT_DIR[k];
+      setParams({ sort: k, dir: dir === SORT_DEFAULT_DIR[k] && k === "verdict" ? null : dir });
+    },
+    [sortKey, sortDir, setParams],
+  );
 
   const exportedAt = useMemo(
     () => config.rows.reduce<string | null>((mx, c) => (c.exported_at && (!mx || c.exported_at > mx) ? c.exported_at : mx), null),
@@ -257,17 +341,35 @@ function Board({ data }: { data: BotBoardData }) {
       const cur = ledgers[name];
       if (cur && (cur.loading || !cur.error)) return; // cached (refetch only after an error)
       setLedgers((prev) => ({ ...prev, [name]: { loading: true } }));
-      fetch(`/api/admin/bot-ledger?bot=${encodeURIComponent(name)}`)
-        .then(async (r) => {
-          const j = (await r.json()) as { rows?: BotLedgerRow[]; error?: string | null };
-          setLedgers((prev) => ({
+      fetchPicks(name, 0).then((r) => setLedgers((prev) => ({ ...prev, [name]: r })));
+    },
+    [ledgers],
+  );
+
+  // "Load 50 older picks" in the sheet's Picks tab (IA move P7: the full ledger, a page at a time).
+  const loadMore = useCallback(
+    (name: string) => {
+      const cur = ledgers[name];
+      if (!cur || cur.loading || cur.loadingMore || !cur.hasMore) return;
+      setLedgers((prev) => ({ ...prev, [name]: { ...cur, loadingMore: true, moreError: null } }));
+      fetchPicks(name, cur.rows.length).then((r) =>
+        setLedgers((prev) => {
+          const base = prev[name];
+          if (!base || base.loading) return prev;
+          if (r.error) return { ...prev, [name]: { ...base, loadingMore: false, moreError: r.error } };
+          return {
             ...prev,
-            [name]: { loading: false, rows: j.rows ?? [], error: r.ok ? j.error ?? null : j.error ?? `HTTP ${r.status}` },
-          }));
-        })
-        .catch((e: unknown) => {
-          setLedgers((prev) => ({ ...prev, [name]: { loading: false, rows: [], error: e instanceof Error ? e.message : String(e) } }));
-        });
+            [name]: {
+              ...base,
+              rows: [...base.rows, ...r.rows],
+              hasMore: r.hasMore,
+              loadingMore: false,
+              placedError: base.placedError ?? r.placedError,
+              pricesError: base.pricesError ?? r.pricesError,
+            },
+          };
+        }),
+      );
     },
     [ledgers],
   );
@@ -336,61 +438,62 @@ function Board({ data }: { data: BotBoardData }) {
 
   const tabCls = (on: boolean) =>
     `min-h-10 -mb-px border-b-2 px-3 py-2 text-sm ${on ? "border-foreground font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`;
-  const pillCls = (on: boolean) =>
-    `min-h-9 rounded-full border px-3 py-1 text-sm ${on ? "border-foreground/40 bg-accent text-foreground" : "border-border text-muted-foreground hover:text-foreground"}`;
+  const actionCls =
+    "inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground";
 
   return (
     <div className="space-y-5">
-      {/* header */}
-      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
-        <div>
-          <h1 className="text-2xl font-semibold">Bots</h1>
-          <p className="text-sm text-muted-foreground tabular-nums">
+      <PageHeader
+        eyebrow="Bots & money"
+        title="Bots"
+        meta={
+          <span className="tabular-nums">
             {active.length} active{controlView ? " · 1 control" : ""}
             {exportedAt && (
               <span title={`config exported ${utcStamp(exportedAt)} (${relTime(exportedAt, now)} ago)`}> · data {hhmmUtc(exportedAt)}</span>
             )}
-            {ctl.readOnly && <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-xs text-amber-300">Design preview · controls read-only</span>}
-          </p>
-        </div>
-        <div className="flex items-center gap-1 text-sm text-muted-foreground">
-          <button type="button" onClick={() => setActivityOpen(true)} className="inline-flex min-h-9 items-center gap-1.5 rounded-md px-2 hover:bg-accent hover:text-foreground">
-            <History size={16} aria-hidden="true" /> Activity
-          </button>
-          <button
-            type="button"
-            onClick={() => setHelp((h) => !h)}
-            aria-expanded={help}
-            className="inline-flex min-h-9 items-center gap-1.5 rounded-md px-2 hover:bg-accent hover:text-foreground"
-          >
-            <Info size={16} aria-hidden="true" /> How to read this
-          </button>
-          <DropdownMenu>
-            <DropdownMenuTrigger aria-label="More" className="inline-flex h-9 w-9 items-center justify-center rounded-md hover:bg-accent hover:text-foreground">
-              <MoreHorizontal size={16} />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-60">
-              <DropdownMenuItem onClick={copyState}>
-                <Copy /> Copy page state as JSON
-              </DropdownMenuItem>
-              <DropdownMenuItem render={<Link href="/admin/feeds" />}>
-                <ArrowUpRight /> Open /admin/feeds
-              </DropdownMenuItem>
-              <DropdownMenuItem render={<Link href="/admin/shadow-bots" />}>
-                <ArrowUpRight /> Open /admin/shadow-bots
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
+            {ctl.readOnly && (
+              <span className="ml-2 align-middle">
+                <StatusBadge tone="warning">Design preview · controls read-only</StatusBadge>
+              </span>
+            )}
+          </span>
+        }
+        actions={
+          <>
+            <button type="button" onClick={() => setActivityOpen(true)} className={actionCls}>
+              <History size={13} aria-hidden="true" /> Activity
+            </button>
+            <button type="button" onClick={() => setHelp((h) => !h)} aria-expanded={help} className={actionCls}>
+              <Info size={13} aria-hidden="true" /> How to read
+            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger aria-label="More" className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted-foreground hover:bg-accent hover:text-foreground">
+                <MoreHorizontal size={14} />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-60">
+                <DropdownMenuItem onClick={copyState}>
+                  <Copy /> Copy page state as JSON
+                </DropdownMenuItem>
+                <DropdownMenuItem render={<Link href="/admin/feeds" />}>
+                  <ArrowUpRight /> Open /admin/feeds
+                </DropdownMenuItem>
+                <DropdownMenuItem render={<Link href="/admin/shadow-bots" />}>
+                  <ArrowUpRight /> Open /admin/shadow-bots
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        }
+      />
 
       {help && <HowToRead />}
 
       {viewsMissing && (
-        <div className="flex gap-3 rounded-xl border border-amber-500/50 bg-amber-500/5 px-4 py-3">
-          <AlertTriangle size={20} className="mt-0.5 shrink-0 text-amber-400" aria-hidden="true" />
+        <div className="flex gap-3 rounded-xl border border-warning/50 bg-warning/5 px-4 py-3">
+          <AlertTriangle size={20} className="mt-0.5 shrink-0 text-warning" aria-hidden="true" />
           <div className="space-y-1.5">
-            <div className="font-semibold text-amber-400">Unified bot views not deployed yet</div>
+            <div className="font-semibold text-warning">Unified bot views not deployed yet</div>
             <p className="text-sm text-muted-foreground">
               This page reads <code>bot_scoreboard</code>, <code>bot_config</code>, <code>bot_capabilities</code> and <code>bot_ledger</code>{" "}
               (engine migration 410 + <code>scripts/export_bot_config.py</code>). It fills in by itself once they exist.
@@ -404,23 +507,18 @@ function Board({ data }: { data: BotBoardData }) {
         </div>
       )}
       {configStale && (
-        <div className="flex gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm text-amber-200">
+        <div className="flex gap-2 rounded-lg border border-warning/40 bg-warning/5 px-3 py-2 text-sm text-warning">
           <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
           Config export stale ({relTime(exportedAt, now)} old). Real-money ON and /picks ON are disabled until export_bot_config runs — they depend on it.
         </div>
       )}
 
       {viewsMissing ? (
-        <section className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.08]">
-          <div className="grid grid-cols-2 gap-px md:grid-cols-3 xl:grid-cols-6">
-            {["Placement", "Real money", "Active bots", "Verdicts", "Picks · 7d", "Needs a look"].map((l) => (
-              <div key={l} className="bg-card px-4 py-3">
-                <div className="font-mono text-xs uppercase tracking-wider text-muted-foreground">{l}</div>
-                <div className="mt-1 text-2xl font-semibold text-muted-foreground">—</div>
-              </div>
-            ))}
-          </div>
-        </section>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+          {["Placement", "Real money", "Active bots", "Verdicts", "Picks · 7d", "Needs a look"].map((l) => (
+            <StatCard key={l} label={l} value="—" unknown foot="views not deployed" />
+          ))}
+        </div>
       ) : (
         <FleetStrip
           fleet={fleet}
@@ -440,8 +538,8 @@ function Board({ data }: { data: BotBoardData }) {
         <RealMoneyCard highlight={highlight} />
       </div>
 
-      {/* tabs + filters */}
-      <div className="space-y-2">
+      {/* tabs + toolbar (DataTable's look — see board-toolbar.tsx for why this is not a DataTable) */}
+      <div className="space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 border-b border-border">
           <div className="flex gap-1" role="tablist">
             <button type="button" role="tab" aria-selected={tab === "active"} onClick={() => setParams({ view: "active" })} className={tabCls(tab === "active")}>
@@ -454,23 +552,25 @@ function Board({ data }: { data: BotBoardData }) {
         </div>
         {tab === "active" && (
           <div className="flex flex-wrap items-center gap-2">
-            {FILTERS.map(([k, l]) => (
-              <button key={k} type="button" onClick={() => setParams({ f: k })} aria-pressed={filter === k} className={pillCls(filter === k)}>
-                {l}
-                {k === "look" && issues.length > 0 && <span className="ml-1 tabular-nums text-amber-300">{lookBots.size}</span>}
-              </button>
-            ))}
-            <label className="relative ml-auto w-full sm:w-64">
-              <span className="sr-only">Search bots</span>
-              <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-              <input
-                type="search"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search name…"
-                className="h-9 w-full rounded-lg border border-input bg-transparent pl-8 pr-2.5 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            <SearchBox value={search} onChange={setSearch} placeholder="Search bots…" />
+            <FacetChip label="Family" options={famOptions} selected={famSel} onChange={(n) => setParams({ fam: n.join(",") || null })} />
+            <FacetChip label="Verdict" options={verOptions} selected={verSel} onChange={(n) => setParams({ ver: n.join(",") || null })} />
+            <QuickViews
+              options={FILTERS.map(([k, l]) => ({ value: k, label: l, badge: k === "look" ? lookBots.size : undefined }))}
+              value={filter}
+              onChange={(k) => setParams({ f: k })}
+            />
+            {!noFacets && (
+              <ResetButton
+                onClick={() => {
+                  setSearch("");
+                  setParams({ q: null, f: null, fam: null, ver: null });
+                }}
               />
-            </label>
+            )}
+            <div className="ml-auto">
+              <SortMenu sort={sortKey} dir={sortDir} onChange={(k, d) => setParams({ sort: k, dir: k === "verdict" && d === "asc" ? null : d })} />
+            </div>
           </div>
         )}
       </div>
@@ -478,7 +578,7 @@ function Board({ data }: { data: BotBoardData }) {
       {tab === "active" ? (
         groups.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            {viewsMissing ? "No bots to show until the views are deployed." : filter === "all" && !q ? "bot_scoreboard has no active bots." : "No active bot matches this filter."}
+            {viewsMissing ? "No bots to show until the views are deployed." : noFacets ? "bot_scoreboard has no active bots." : "No active bot matches these filters."}
           </p>
         ) : (
           <div className="space-y-6">
@@ -488,9 +588,13 @@ function Board({ data }: { data: BotBoardData }) {
                 family={g.family}
                 bots={g.bots}
                 ctx={ctx}
-                controlBot={g.family === "forward_test" && filter === "all" && !q ? controlView : undefined}
+                controlBot={g.family === "forward_test" && noFacets ? controlView : undefined}
+                sort={{ key: sortKey, dir: sortDir, onSort }}
               />
             ))}
+            <p className="px-1 text-xs text-muted-foreground tabular-nums">
+              {filtered.length === active.length ? `${active.length} bots` : `${filtered.length} of ${active.length} bots`} · sorted by {SORT_LABEL[sortKey].replace(" (default)", "").toLowerCase()} within each family
+            </p>
           </div>
         )
       ) : (
@@ -503,7 +607,9 @@ function Board({ data }: { data: BotBoardData }) {
         onTab={(t) => setParams({ tab: t === "overview" ? null : t })}
         now={now}
         ledger={selectedView ? ledgers[selectedView.name] : undefined}
+        onMore={selectedView ? () => loadMore(selectedView.name) : undefined}
         markets={selectedView && marketsBy ? marketsBy.get(selectedView.name) ?? [] : null}
+        weekly={selectedView && weeklyBy ? weeklyBy.get(selectedView.name) ?? ([] as BotWeeklyRow[]) : null}
         fleetPaused={livePaused}
         pulse={pulse}
         onClose={close}

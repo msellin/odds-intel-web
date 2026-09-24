@@ -1,9 +1,10 @@
 /**
- * All reads for /admin/shadow-bots (OWN Phase 6, 2026-09-15).
+ * All reads for /admin/shadow-bots — the Pick queue (OWN Phase 6, 2026-09-15;
+ * re-homed as the Pick queue by #139 IA move P6, 2026-09-24).
  *
  * Two entry points:
  *   • `loadShadowBotsPage()` — everything that is safe to share across
- *     operators for 60 s, wrapped in `unstable_cache`. 10 PostgREST queries.
+ *     operators for 60 s, wrapped in `unstable_cache`. 9 PostgREST queries.
  *   • `loadSessionState()`   — the safety flags, read FRESH on every request.
  *     A 60 s-stale "placement paused" chip is a lie the operator acts on, and
  *     it is one cheap single-row read.
@@ -22,8 +23,12 @@
  * picks (a SEPARATE read, not a widened window on the pre-match one: an in-play
  * pick's fixture has already kicked off, and relaxing `matches.date >= now`
  * would let started fixtures crowd future ones out of the 1500-row limit).
- * +1 for the promotions panel, which is ONE read — `promo_terms` with
- * `promo_ledger` embedded on its FK. Nothing is fetched per row.
+ * The promotions read that was +1 here moved to src/lib/admin-money.ts with the
+ * panel (#139 P5, 2026-09-24): EV vs realised is a money question.
+ *
+ * The scoreboard read (`shadow_bot_scoreboard`) is kept for ONE thing only: the
+ * per-pick bot-track chip (lead bot / losing bot / unproven). The scoreboard
+ * SECTION is gone — bot scores live on /admin/bots (IA §2.2).
  */
 import { unstable_cache } from "next/cache";
 import { createServerServiceClient } from "@/lib/supabase-server";
@@ -119,36 +124,6 @@ export interface BotClvRow {
   odds_at_pick_live: number | null;
 }
 
-/** One active `promo_terms` row plus its `promo_ledger` aggregates. */
-export interface PromoRow {
-  id: string;
-  book: string;
-  promo_type: string;
-  title: string;
-  boost_pct: number | null;
-  boost_applies_to: string | null;
-  face_value_eur: number | null;
-  stake_returned: boolean | null;
-  min_odds: number | null;
-  max_stake_eur: number | null;
-  min_legs: number | null;
-  refund_eur: number | null;
-  refund_cash: boolean | null;
-  rollover_x: number | null;
-  deposit_eur: number | null;
-  single_use: boolean | null;
-  valid_to: string | null;
-  source_url: string | null;
-  /** promo_ledger rows pointing at this terms row. */
-  taken: number;
-  evSum: number;
-  /** Σ realised P&L over SETTLED rows only, and how many those were. */
-  realisedSum: number;
-  settled: number;
-  /** Σ EV over the SAME settled rows — the only honest comparand for realised. */
-  evSumSettled: number;
-}
-
 export interface ShadowBotsPageData {
   bots: BotRow[];
   placerBots: PlacerBotRow[];
@@ -170,9 +145,6 @@ export interface ShadowBotsPageData {
    * Callers build their own Set; nothing non-JSON may cross this boundary.
    */
   loggedPickIds: string[];
-  promos: PromoRow[];
-  /** Set when the promo read failed (e.g. PostgREST schema cache) — shown, never swallowed. */
-  promoError: string | null;
   loadedAt: string;
   queryCount: number;
 }
@@ -222,9 +194,9 @@ async function _loadShadowBotsPage(): Promise<ShadowBotsPageData> {
   const botIds = bots.map((b) => b.id);
 
   // 2 · placer toggles · 3 · today's real bets · 4 · upcoming picks
-  // 5 · in-play picks · 6 · promotions — all independent.
-  queryCount += 5;
-  const [placerRes, realRes, upcomingRes, inplayRes, promoRes] = await Promise.all([
+  // 5 · in-play picks — all independent. (Promotions moved to /admin/real-bets, #139 P5.)
+  queryCount += 4;
+  const [placerRes, realRes, upcomingRes, inplayRes] = await Promise.all([
     db.from("coolbet_placer_bots").select("bot_name, ui_place_enabled, note").order("bot_name"),
     db
       .from("real_bets")
@@ -254,20 +226,6 @@ async function _loadShadowBotsPage(): Promise<ShadowBotsPageData> {
       .not("inplay_minute", "is", null)
       .order("pick_time", { ascending: false })
       .limit(INPLAY_LIMIT),
-    // Promotions: ONE read — active terms with their ledger rows embedded on
-    // promo_ledger.promo_terms_id. Both tables are empty until the owner enters
-    // terms, so this is a few bytes in the normal case.
-    db
-      .from("promo_terms")
-      .select(
-        `id, book, promo_type, title, boost_pct, boost_applies_to, face_value_eur,
-         stake_returned, min_odds, max_stake_eur, min_legs, refund_eur, refund_cash,
-         rollover_x, deposit_eur, single_use, valid_to, source_url,
-         promo_ledger ( ev_eur, realised_pnl_eur, settled_at )`,
-      )
-      .eq("active", true)
-      .order("valid_to", { ascending: true, nullsFirst: false })
-      .limit(200),
   ]);
 
   const placerBots = (placerRes.data ?? []) as PlacerBotRow[];
@@ -453,51 +411,6 @@ async function _loadShadowBotsPage(): Promise<ShadowBotsPageData> {
     scoreboard.push(...((data ?? []) as unknown as BotScoreRow[]));
   }
 
-  // Promotions — aggregate the embedded ledger in JS (the panel shows at most a
-  // handful of terms; a per-row aggregate read would be one query per promo).
-  type PromoRaw = Omit<PromoRow, "taken" | "evSum" | "realisedSum" | "settled" | "evSumSettled"> & {
-    boost_pct: number | string | null;
-    face_value_eur: number | string | null;
-    min_odds: number | string | null;
-    max_stake_eur: number | string | null;
-    refund_eur: number | string | null;
-    rollover_x: number | string | null;
-    deposit_eur: number | string | null;
-    promo_ledger: { ev_eur: number | string | null; realised_pnl_eur: number | string | null; settled_at: string | null }[] | null;
-  };
-  const promos: PromoRow[] = ((promoRes.data ?? []) as unknown as PromoRaw[]).map((t) => {
-    const legs = t.promo_ledger ?? [];
-    let evSum = 0;
-    let realisedSum = 0;
-    let evSumSettled = 0;
-    let settled = 0;
-    for (const l of legs) {
-      const ev = Number(l.ev_eur ?? 0);
-      if (Number.isFinite(ev)) evSum += ev;
-      if (l.settled_at != null) {
-        settled++;
-        if (Number.isFinite(ev)) evSumSettled += ev;
-        const r = Number(l.realised_pnl_eur ?? 0);
-        if (Number.isFinite(r)) realisedSum += r;
-      }
-    }
-    return {
-      ...t,
-      boost_pct: num(t.boost_pct),
-      face_value_eur: num(t.face_value_eur),
-      min_odds: num(t.min_odds),
-      max_stake_eur: num(t.max_stake_eur),
-      refund_eur: num(t.refund_eur),
-      rollover_x: num(t.rollover_x),
-      deposit_eur: num(t.deposit_eur),
-      taken: legs.length,
-      evSum,
-      realisedSum,
-      evSumSettled,
-      settled,
-    };
-  });
-
   return {
     bots,
     placerBots,
@@ -507,10 +420,6 @@ async function _loadShadowBotsPage(): Promise<ShadowBotsPageData> {
     truncatedBooks,
     scoreboard,
     loggedPickIds: [...loggedPickIds],
-    promos,
-    // Surfaced, not swallowed: "no promos" and "the read failed" look identical
-    // in an empty table, and only one of them is a reason to stop trusting it.
-    promoError: promoRes.error?.message ?? null,
     loadedAt: nowIso,
     queryCount,
   };

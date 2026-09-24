@@ -18,17 +18,17 @@ const TICKS = [-0.08, -0.04, 0, 0.04, 0.08];
 const pos = (v: number) => ((Math.max(-DOMAIN, Math.min(DOMAIN, v)) + DOMAIN) / (2 * DOMAIN)) * 100;
 
 export const VERDICT_STROKE: Record<Verdict, string> = {
-  beats: "stroke-emerald-400 fill-emerald-400",
-  loses: "stroke-red-400 fill-red-400",
-  inconclusive: "stroke-amber-300 fill-amber-300",
+  beats: "stroke-success fill-success",
+  loses: "stroke-danger fill-danger",
+  inconclusive: "stroke-warning fill-warning",
   early: "stroke-muted-foreground fill-muted-foreground",
   noclv: "stroke-muted-foreground fill-muted-foreground",
 };
 
 export const VERDICT_BG: Record<Verdict, string> = {
-  beats: "bg-emerald-400",
-  loses: "bg-red-400",
-  inconclusive: "bg-amber-300",
+  beats: "bg-success",
+  loses: "bg-danger",
+  inconclusive: "bg-warning",
   early: "bg-muted-foreground/50",
   noclv: "bg-muted-foreground/25",
 };
@@ -71,7 +71,7 @@ export function ForestBar({
     <svg width="100%" height={height} role="img" aria-label={label} className="block overflow-visible">
       <title>{label}</title>
       {cLo != null && cHi != null && (
-        <rect x={`${pos(cLo)}%`} width={`${Math.max(0.3, pos(cHi) - pos(cLo))}%`} y={0} height={height} className="fill-amber-400/10" />
+        <rect x={`${pos(cLo)}%`} width={`${Math.max(0.3, pos(cHi) - pos(cLo))}%`} y={0} height={height} className="fill-warning/10" />
       )}
       <line x1={`${pos(0)}%`} x2={`${pos(0)}%`} y1={0} y2={height} strokeWidth={1} className="stroke-foreground/40" />
       {showControl && (
@@ -82,7 +82,7 @@ export function ForestBar({
           y2={height}
           strokeWidth={1}
           strokeDasharray="3 3"
-          className="stroke-amber-400/70"
+          className="stroke-warning/70"
         />
       )}
       <g className={tone} opacity={faded ? 0.4 : 1}>
@@ -189,9 +189,9 @@ export function WeeklyStrip({
         const cls = !measured
           ? "fill-muted-foreground/40"
           : (w.clvMean as number) > 0
-            ? "fill-emerald-500/80"
+            ? "fill-success/80"
             : (w.clvMean as number) < 0
-              ? "fill-red-500/80"
+              ? "fill-danger/80"
               : "fill-muted-foreground/40";
         const title =
           `w/c ${dayMonth(new Date(w.start))} · ${count(w.picks)} pick${w.picks === 1 ? "" : "s"}` +

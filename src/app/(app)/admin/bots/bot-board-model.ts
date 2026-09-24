@@ -278,7 +278,8 @@ export function buildView(
     caps,
     metric,
     verdict: verdictOf(metric),
-    silent: opts.active && (silentByCaps || silentByTime),
+    // a bot that has never picked is "no picks yet" (withUnpickedBots), not a bot that went quiet
+    silent: opts.active && (sb?.picks_total ?? 0) > 0 && (silentByCaps || silentByTime),
     weeks: opts.weekly ? weekBuckets(opts.weekly.get(name), metric.metric, opts.now) : null,
   };
   const botMarkets = opts.markets?.get(name);
@@ -388,4 +389,34 @@ export function picksUnavailable(v: BotView): { kind: "rule" | "stub"; label: st
 export function picksTelegramMismatch(v: BotView, showOnPicks: boolean | null): boolean {
   if (picksUnavailable(v) || showOnPicks == null || v.caps?.telegram == null) return false;
   return showOnPicks !== v.caps.telegram;
+}
+
+// ─── registered bots with no picks yet (2026-09-24) ──────────────────────────────────────────
+// bot_scoreboard (migration 410) is built FROM bot_ledger, so a bot that is registered, active
+// and configured but has not written a pick yet has no row — it was invisible on every admin page.
+// That happened to #141's two new 1X2 bots (bot_rating_1x2_v1, bot_combined_1x2_v1) on their first
+// day. This adds one zero-count row per such bot so it shows as "no picks yet" instead of missing.
+// Only bots with an ACTIVE, NON-RETIRED `bots` row AND a bot_config row qualify.
+
+export function withUnpickedBots(
+  rows: BotScoreboardRow[],
+  config: BotConfigRow[],
+  registry: { name: string; is_active: boolean | null; retired_at: string | null; display_name: string | null; maturity_label: string | null }[],
+): BotScoreboardRow[] {
+  const have = new Set(rows.map((r) => r.bot_name));
+  const cfgBy = new Map(config.map((c) => [c.bot_name, c]));
+  const extra: BotScoreboardRow[] = [];
+  for (const b of registry) {
+    if (have.has(b.name) || !b.is_active || b.retired_at || !cfgBy.has(b.name)) continue;
+    extra.push({
+      bot_name: b.name, display_name: b.display_name, source: null, is_active: true, retired_at: null,
+      maturity_label: b.maturity_label, family: cfgBy.get(b.name)?.family ?? null,
+      picks_total: 0, pending: 0, settled: 0, won: 0, lost: 0, void: 0, roi_unit: null,
+      clv_mc_n: 0, clv_mc_mean: null, clv_mc_se: null, clv_mc_t: null,
+      clv_pin_n: 0, clv_pin_mean: null, clv_pin_se: null, clv_pin_t: null,
+      scored_rule_version: null, earlier_version_picks: 0, clv_outlier_n: 0,
+      first_pick_at: null, last_pick_at: null, picks_7d: 0, settled_7d: 0,
+    });
+  }
+  return extra.length ? [...rows, ...extra] : rows;
 }

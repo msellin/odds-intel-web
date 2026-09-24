@@ -12,10 +12,14 @@
 // Blocks never resize; details open in one panel under the selected block's row.
 
 import { useEffect, useState } from "react";
+import { ChevronDown, ChevronUp, X } from "lucide-react";
 import type { FeedStatus, FeedBookStats } from "@/lib/engine-data";
+import { StatusBadge, TONE_DOT, TONE_TEXT } from "@/components/oi/status-badge";
 import { FeedControls } from "./feed-controls";
 
-type Tone = "green" | "amber" | "red" | "blue" | "grey";
+// #139 admin redesign (2026-09-24): colours are the admin status tokens (success / warning /
+// danger / info / neutral) instead of hard-coded emerald / amber / red / sky; logic unchanged.
+type Tone = "success" | "warning" | "danger" | "info" | "neutral";
 
 interface BlockDef {
   key: string;            // hash / state key
@@ -55,37 +59,34 @@ const SHORT: Record<string, string> = {
   database: "Database", data_api: "Data API (PostgREST)", website: "Website", disk: "Disk space", memory: "Memory",
 };
 
-const TONE_TEXT: Record<Tone, string> = {
-  green: "text-emerald-500", amber: "text-amber-500", red: "text-red-500", blue: "text-sky-500", grey: "text-muted-foreground",
-};
 const TONE_BORDER: Record<Tone, string> = {
-  green: "border-emerald-500/30", amber: "border-amber-500/60", red: "border-red-500/70", blue: "border-sky-500/50", grey: "border-border",
+  success: "border-success/30", warning: "border-warning/60", danger: "border-danger/70", info: "border-info/50", neutral: "border-border",
 };
-const TONE_DOT: Record<Tone, string> = {
-  green: "bg-emerald-500", amber: "bg-amber-500", red: "bg-red-500", blue: "bg-sky-500", grey: "bg-zinc-500",
+const RANK: Record<Tone, number> = { danger: 0, warning: 1, info: 2, neutral: 3, success: 4 };
+export const STATUS_WORD: Record<FeedStatus["status"], string> = {
+  ok: "Fresh", warn: "Needs a look", fail: "Stopped", paused: "Paused", unknown: "Unknown",
 };
-const RANK: Record<Tone, number> = { red: 0, amber: 1, blue: 2, grey: 3, green: 4 };
 
 function statusTone(f?: FeedStatus): Tone {
-  if (!f) return "grey";
-  return ({ ok: "green", warn: "amber", fail: "red", paused: "blue", unknown: "grey" } as const)[f.status];
+  if (!f) return "neutral";
+  return ({ ok: "success", warn: "warning", fail: "danger", paused: "info", unknown: "neutral" } as const)[f.status];
 }
 
 /** The headline colour: age of the last data row against this feed's own schedule. */
 function ageTone(f: FeedStatus | undefined, now: number): Tone {
-  if (!f) return "grey";
-  if (f.paused) return "blue";
+  if (!f) return "neutral";
+  if (f.paused) return "info";
   // Closing capture only writes when a paired match kicks off within 15 min, so
   // "34 min since last data" between kickoff waves is normal — colour it by the
   // job's own health instead (owner asked about exactly this, 2026-09-23).
   if (f.kind === "close") return statusTone(f);
-  if (!f.last_data_at) return f.health_basis === "data" ? "red" : statusTone(f);
+  if (!f.last_data_at) return f.health_basis === "data" ? "danger" : statusTone(f);
   const m = (now - new Date(f.last_data_at).getTime()) / 60000;
   const interval = f.interval_min ?? 30;
   const stale = f.stale_after_min ?? interval * 3;
-  if (m <= interval * 1.5 + 5) return "green";
-  if (m <= stale) return "amber";
-  return "red";
+  if (m <= interval * 1.5 + 5) return "success";
+  if (m <= stale) return "warning";
+  return "danger";
 }
 
 function ago(iso: string | null, now: number): string {
@@ -104,7 +105,7 @@ function clock(iso: string | null): string {
 }
 
 function worst(tones: Tone[]): Tone {
-  return tones.reduce<Tone>((a, t) => (RANK[t] < RANK[a] ? t : a), "green");
+  return tones.reduce<Tone>((a, t) => (RANK[t] < RANK[a] ? t : a), "success");
 }
 
 export function FeedsBoard({ feeds, books, now }: { feeds: FeedStatus[]; books: FeedBookStats[]; now: number }) {
@@ -132,7 +133,9 @@ export function FeedsBoard({ feeds, books, now }: { feeds: FeedStatus[]; books: 
     const main = b.main ? byId.get(b.main) : undefined;
     const extras = b.extra.map((id) => byId.get(id)).filter(Boolean) as FeedStatus[];
     const headTone = b.main ? ageTone(main, now) : worst(extras.map(statusTone));
-    const tone = worst([headTone, ...extras.map(statusTone)]);
+    // The headline number is coloured by data age; the block's border also carries the main feed's
+    // own verdict (e.g. "request budget spent"), so a warn is never hidden behind a fresh timestamp.
+    const tone = worst([headTone, ...(main ? [statusTone(main)] : []), ...extras.map(statusTone)]);
     const st = b.statsBook ? stats.get(b.statsBook) : undefined;
     const deps = b.deps.map((id) => byId.get(id)).filter(Boolean) as FeedStatus[];
     return { main, extras, headTone, tone, st, deps };
@@ -146,17 +149,20 @@ export function FeedsBoard({ feeds, books, now }: { feeds: FeedStatus[]; books: 
       : extras.find((e) => e.status === "fail" || e.status === "warn")?.status_reason;
     return (
       <button key={b.key} id={b.key} onClick={() => select(b.key)} aria-expanded={isSel}
-        className={`text-left rounded-lg border-2 ${TONE_BORDER[tone]} bg-card px-4 py-3 transition-colors hover:bg-accent/40 ${isSel ? "ring-2 ring-foreground/60 ring-offset-2 ring-offset-background" : ""}`}>
+        className={`rounded-xl border-2 ${TONE_BORDER[tone]} bg-card px-4 py-3 text-left transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${isSel ? "ring-2 ring-foreground/60 ring-offset-2 ring-offset-background" : ""}`}>
         <div className="flex items-center justify-between gap-2">
-          <span className={`font-semibold ${big ? "text-lg" : ""}`}>{b.title}</span>
-          <span className="text-xs text-muted-foreground">{isSel ? "▴" : "▾"}</span>
+          <span className={`flex min-w-0 items-center gap-2 font-medium ${big ? "text-base" : "text-sm"}`}>
+            <span className={`size-2 shrink-0 rounded-full ${TONE_DOT[tone]}`} aria-hidden="true" />
+            <span className="truncate">{b.title}</span>
+          </span>
+          {isSel ? <ChevronUp size={14} className="text-muted-foreground" aria-hidden="true" /> : <ChevronDown size={14} className="text-muted-foreground" aria-hidden="true" />}
         </div>
         {b.main ? (
-          <div className={`${big ? "text-2xl" : "text-lg"} font-bold tabular-nums ${TONE_TEXT[headTone]}`}>
+          <div className={`mt-1 ${big ? "text-2xl" : "text-lg"} font-semibold tabular-nums ${TONE_TEXT[headTone]}`}>
             {main?.paused ? "paused" : ago(main?.last_data_at ?? null, now)}
           </div>
         ) : (
-          <div className={`text-lg font-bold ${TONE_TEXT[headTone]}`}>
+          <div className={`mt-1 text-lg font-semibold ${TONE_TEXT[headTone]}`}>
             {extras.filter((e) => e.status === "ok").length}/{extras.length} OK
           </div>
         )}
@@ -172,13 +178,13 @@ export function FeedsBoard({ feeds, books, now }: { feeds: FeedStatus[]; books: 
           <div className="flex flex-wrap gap-2 mt-1.5">
             {extras.map((e) => (
               <span key={e.feed_id} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                <span className={`h-1.5 w-1.5 rounded-full ${TONE_DOT[statusTone(e)]}`} />
+                <span className={`h-1.5 w-1.5 rounded-full ${TONE_DOT[statusTone(e)]}`} aria-hidden="true" />
                 {SHORT[e.feed_id] ?? e.label}
               </span>
             ))}
           </div>
         )}
-        {problem && tone !== "green" && <div className={`text-xs mt-1.5 line-clamp-2 ${TONE_TEXT[tone]}`}>{problem}</div>}
+        {problem && tone !== "success" && <div className={`mt-1.5 line-clamp-2 text-xs ${TONE_TEXT[tone]}`}>{problem}</div>}
       </button>
     );
   };
@@ -186,10 +192,12 @@ export function FeedsBoard({ feeds, books, now }: { feeds: FeedStatus[]; books: 
   const panel = (b: BlockDef) => {
     const { main, extras, st, deps } = view(b);
     return (
-      <div className="rounded-lg border border-border bg-card/60 px-4 py-3 space-y-3">
+      <div className="space-y-3 rounded-xl border border-border bg-muted/20 px-4 py-3">
         <div className="flex items-center justify-between gap-2">
-          <span className="font-semibold">{b.title} — details</span>
-          <button onClick={() => select(b.key)} className="text-xs text-muted-foreground hover:underline">Close ✕</button>
+          <span className="text-sm font-medium">{b.title} — details</span>
+          <button onClick={() => select(b.key)} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+            Close <X size={12} aria-hidden="true" />
+          </button>
         </div>
         {b.note && <p className="text-xs text-muted-foreground">{b.note}</p>}
         {st && (
@@ -216,7 +224,7 @@ export function FeedsBoard({ feeds, books, now }: { feeds: FeedStatus[]; books: 
             Closing price captured:{" "}
             <span
               className={
-                (st.closing_captured_24h ?? 0) / st.closing_priced_24h < 0.8 ? "text-amber-400" : "text-foreground"
+                (st.closing_captured_24h ?? 0) / st.closing_priced_24h < 0.8 ? "text-warning" : "text-foreground"
               }
             >
               {st.closing_captured_24h ?? 0}/{st.closing_priced_24h} kickoffs
@@ -227,7 +235,7 @@ export function FeedsBoard({ feeds, books, now }: { feeds: FeedStatus[]; books: 
         {st && st.requests_24h != null && (
           <div className="text-xs text-muted-foreground" title="Every request we send this book, counted across all our processes. Over budget, requests are refused before they are sent — so one book's exit IP never gets flagged again (#110).">
             Requests this hour:{" "}
-            <span className={st.budget_1h && (st.requests_1h ?? 0) >= 0.8 * st.budget_1h ? "text-amber-400" : "text-foreground"}>
+            <span className={st.budget_1h && (st.requests_1h ?? 0) >= 0.8 * st.budget_1h ? "text-warning" : "text-foreground"}>
               {st.requests_1h ?? 0}{st.budget_1h ? ` / ${st.budget_1h}` : ""}
             </span>
             {st.budget_1h ? " budget" : ""}
@@ -246,7 +254,7 @@ export function FeedsBoard({ feeds, books, now }: { feeds: FeedStatus[]; books: 
             <span className="text-muted-foreground">Depends on:</span>
             {deps.map((d) => (
               <span key={d.feed_id} className="inline-flex items-center gap-1">
-                <span className={`h-1.5 w-1.5 rounded-full ${TONE_DOT[statusTone(d)]}`} />
+                <span className={`h-1.5 w-1.5 rounded-full ${TONE_DOT[statusTone(d)]}`} aria-hidden="true" />
                 {SHORT[d.feed_id] ?? d.label}
               </span>
             ))}
@@ -262,11 +270,11 @@ export function FeedsBoard({ feeds, books, now }: { feeds: FeedStatus[]; books: 
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {sortedBooks.map((b) => card(b, true))}
       </div>
       {selBook && panel(selBook)}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3">{OTHERS.map((b) => card(b, false))}</div>
+      <div className="grid grid-cols-1 gap-3 pt-3 sm:grid-cols-3">{OTHERS.map((b) => card(b, false))}</div>
       {selOther && panel(selOther)}
     </div>
   );
@@ -275,21 +283,23 @@ export function FeedsBoard({ feeds, books, now }: { feeds: FeedStatus[]; books: 
 function SubFeed({ f, now }: { f: FeedStatus; now: number }) {
   const tone = statusTone(f);
   return (
-    <div className="rounded-md border border-border px-3 py-2">
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-2">
-          <span className={`h-2 w-2 rounded-full ${TONE_DOT[tone]}`} />
+    <div className="rounded-lg border border-border bg-card px-3 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <span className="text-sm font-medium">{SHORT[f.feed_id] ?? f.label}</span>
           <span className="text-xs text-muted-foreground">{f.schedule}</span>
         </div>
-        <span className={`text-xs ${TONE_TEXT[tone]}`}>{f.status === "ok" ? "OK" : f.status_reason}</span>
+        <StatusBadge tone={tone} title={f.status_reason ?? undefined}>
+          {STATUS_WORD[f.status]}
+        </StatusBadge>
       </div>
+      {f.status !== "ok" && f.status_reason && <div className={`mt-1 text-xs ${TONE_TEXT[tone]}`}>{f.status_reason}</div>}
       {(f.kind === "service" || f.kind === "host") && f.service_state && (
-        <div className="text-xs text-muted-foreground mt-1">
+        <div className="mt-1 text-xs text-muted-foreground">
           {Object.values(f.service_state).join(" · ")} · checked {ago(f.updated_at, now)}
         </div>
       )}
-      <div className="text-xs text-muted-foreground mt-1 flex flex-wrap gap-x-4 gap-y-0.5">
+      <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
         {f.last_data_at !== null && <span>Last data: {ago(f.last_data_at, now)}</span>}
         {f.last_run_at && (
           <span>
@@ -302,13 +312,14 @@ function SubFeed({ f, now }: { f: FeedStatus; now: number }) {
             {f.runs_24h} runs in 24 h{(f.failures_24h ?? 0) > 0 ? `, ${f.failures_24h} failed` : ""}
           </span>
         )}
+        {f.paused && f.paused_reason && <span className="text-info">Paused: “{f.paused_reason}”</span>}
       </div>
       <FeedControls feedId={f.feed_id} label={f.label} controls={f.controls ?? []} paused={f.paused}
         runNowPending={f.run_now_pending} />
       {f.last_error && f.status !== "ok" && (
         <details className="mt-1.5">
-          <summary className="text-xs text-muted-foreground cursor-pointer">Last error</summary>
-          <pre className="mt-1 text-[11px] whitespace-pre-wrap break-words text-red-400/90">{f.last_error}</pre>
+          <summary className="cursor-pointer text-xs text-muted-foreground">Last error</summary>
+          <pre className="mt-1 whitespace-pre-wrap break-words text-[11px] text-danger/90">{f.last_error}</pre>
         </details>
       )}
     </div>

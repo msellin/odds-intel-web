@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
-import { isBotBoardDevPreview, loadBotLedger } from "@/lib/bot-board";
+import { isBotBoardDevPreview, loadBotPicks } from "@/lib/bot-board";
 
-/** GET ?bot=<bot_name> -> { rows: BotLedgerRow[], error: string | null }
+/** GET ?bot=<bot_name>[&limit=50&offset=0] -> BotPicksResult
+ *  ({ rows: BotPickRow[], error, placedError, pricesError, placementLinked, hasMore })
  *
- *  The 30 most recent `bot_ledger` picks for one bot, for the /admin/bots
- *  detail drawer (#139 phase 1). Read from `bot_ledger_display` (bot_ledger +
+ *  One page (newest first, 50 by default, ≤ 100) of a bot's `bot_ledger` picks for the
+ *  /admin/bots sheet's Picks tab (#139 phase 1; paging + "Bet made" + current prices since
+ *  IA move P7 retired /admin/shadow-bots/[bot] — see loadBotPicks in src/lib/bot-board.ts). Read from `bot_ledger_display` (bot_ledger +
  *  home/away team names, migration 411) with a fallback to plain `bot_ledger`
  *  while 411 is not deployed; in-play rows arrive with CLV nulled (spec §13). Fetched on demand so the page load does not
  *  scan the ledger for every bot. Superadmin only (bot_ledger is not anon-readable).
@@ -19,7 +21,13 @@ export async function GET(req: Request) {
   if (!bot || bot.length > 200 || !/^[a-z0-9_]+$/i.test(bot)) {
     return NextResponse.json({ error: "invalid bot" }, { status: 400 });
   }
-  const result = await loadBotLedger(bot, 30);
+  const sp = new URL(req.url).searchParams;
+  const limit = Number(sp.get("limit") ?? 50);
+  const offset = Number(sp.get("offset") ?? 0);
+  if (!Number.isInteger(limit) || !Number.isInteger(offset) || limit < 1 || limit > 100 || offset < 0 || offset > 100_000) {
+    return NextResponse.json({ error: "invalid limit/offset" }, { status: 400 });
+  }
+  const result = await loadBotPicks(bot, { limit, offset });
   return NextResponse.json(result);
 }
 

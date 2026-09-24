@@ -6,20 +6,36 @@
 // src/components/public-chrome.tsx, so this is a full-height app shell.
 //
 // Desktop (lg+): fixed sidebar column, collapsible to an icon rail (remembered per browser).
-// Below lg: a top bar with a menu button that opens the same sidebar as a drawer.
+// Top bar on every width (admin-topbar.tsx): breadcrumb, ⌘K search, attention bell; below lg it
+// also carries the menu button that opens the same sidebar as a drawer, and the status dots.
 
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, ShieldAlert, X } from "lucide-react";
+import { ShieldAlert, X } from "lucide-react";
 import type { FleetState } from "@/lib/bot-controls/types";
+import type { AttentionItem } from "@/lib/admin-attention";
 import { AdminSidebar } from "./admin-sidebar";
-import { activeAdminItem } from "./admin-nav";
-import { DOT_CLS, fleetStatus } from "./admin-status";
+import { AdminTopbar } from "./admin-topbar";
+import type { PaletteBot } from "./command-palette";
+import { activeAdminGroup, activeAdminItem } from "./admin-nav";
+import { fleetStatus } from "./admin-status";
 
 const RAIL_KEY = "admin-sidebar-rail";
 
-export function AdminShell({ fleet, children }: { fleet: FleetState | null; children: ReactNode }) {
+export function AdminShell({
+  fleet,
+  attention,
+  bots,
+  children,
+}: {
+  fleet: FleetState | null;
+  /** The Overview's attention items (null = could not be computed). */
+  attention: AttentionItem[] | null;
+  /** Active bots for the ⌘K palette. */
+  bots: PaletteBot[];
+  children: ReactNode;
+}) {
   const pathname = usePathname() ?? "";
   const status = fleetStatus(fleet);
   const [rail, setRail] = useState(false);
@@ -64,31 +80,15 @@ export function AdminShell({ fleet, children }: { fleet: FleetState | null; chil
         </aside>
 
         <div className="min-w-0 flex-1">
-          {/* below lg: top bar with the drawer button, current section and the status dots */}
-          <div className="sticky top-0 z-30 flex h-12 items-center gap-2 border-b border-border bg-background/95 px-2 backdrop-blur lg:hidden">
-            <button
-              type="button"
-              onClick={() => setDrawer(true)}
-              aria-label="Open admin menu"
-              aria-expanded={drawer}
-              aria-controls="admin-drawer"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-md hover:bg-accent"
-            >
-              <Menu size={18} aria-hidden="true" />
-            </button>
-            <div className="min-w-0 flex-1 truncate text-sm">
-              <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Admin</span>
-              {current && <span className="ml-2 font-medium">{current.label}</span>}
-            </div>
-            <ul className="flex items-center gap-1.5 pr-1" aria-label="Status">
-              {status.map((d) => (
-                <li key={d.label} title={`${d.label}: ${d.word}`}>
-                  <span className={`block h-2 w-2 rounded-full ${DOT_CLS[d.tone]}`} aria-hidden="true" />
-                  <span className="sr-only">{`${d.label}: ${d.word}`}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <AdminTopbar
+            current={current}
+            group={activeAdminGroup(pathname)}
+            attention={attention}
+            bots={bots}
+            status={status}
+            onMenu={() => setDrawer(true)}
+            drawerOpen={drawer}
+          />
 
           <main className="px-3 py-4 sm:px-4 lg:px-6 lg:py-6">{children}</main>
         </div>

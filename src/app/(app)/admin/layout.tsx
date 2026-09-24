@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { requireSuperadmin } from "@/lib/admin-auth";
 import { isBotBoardDevPreview, loadFleetStatus } from "@/lib/bot-board";
 import { AdminShell } from "@/components/admin/admin-shell";
+import { loadShellExtras } from "@/lib/admin-shell-data";
 
 // Shared admin layout (ADMIN-SHARED-SHELL, 2026-09-24). Owner: "the left navigation menu, when I
 // navigate to other pages, loses the navigation menu … the left menu should be a single component
@@ -27,8 +28,12 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     const gate = await requireSuperadmin();
     if ("error" in gate) return <Denied signedIn={gate.status === 403} />;
   }
-  const fleet = await loadFleetStatus();
-  return <AdminShell fleet={fleet.row}>{children}</AdminShell>;
+  const [fleet, extras] = await Promise.all([loadFleetStatus(), loadShellExtras()]);
+  return (
+    <AdminShell fleet={fleet.row} attention={extras.attention} bots={extras.bots}>
+      {children}
+    </AdminShell>
+  );
 }
 
 function Denied({ signedIn }: { signedIn: boolean }) {

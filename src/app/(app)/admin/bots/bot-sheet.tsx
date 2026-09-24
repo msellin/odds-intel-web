@@ -14,10 +14,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { placementPathReason } from "@/lib/bot-controls/placement-path";
 import { fetchAudit } from "@/lib/bot-controls/client";
 import { TAKES_EFFECT, type ControlChange } from "@/lib/bot-controls/types";
-import type { BotMarketStatsRow } from "@/lib/bot-board";
+import type { BotMarketStatsRow, BotWeeklyRow } from "@/lib/bot-board";
 import { METRIC_SHORT, MIN_N, otherMetric, type BotView } from "./bot-board-model";
 import { ciHalf, count, dayMonth, pct, tStat } from "./bot-board-format";
-import { DrawerHeader, Evidence, RecentPicks, WhatItBets, type LedgerState } from "./bot-drawer";
+import { DrawerHeader, Evidence, WhatItBets, type LedgerState } from "./bot-drawer";
+import { PicksTable } from "./picks-table";
+import { BotPerfCharts } from "./bot-perf-charts";
 import { VerdictChip } from "./bot-row";
 import { MoneySwitch, PicksSwitch, isRetired, picksTelegramMismatch, picksUnavailable } from "./bot-controls-cell";
 import { useControls } from "./controls-context";
@@ -36,7 +38,9 @@ export function BotSheet({
   onTab,
   now,
   ledger,
+  onMore,
   markets,
+  weekly,
   fleetPaused,
   pulse,
   onClose,
@@ -46,7 +50,11 @@ export function BotSheet({
   onTab: (t: SheetTab) => void;
   now: number;
   ledger: LedgerState | undefined;
+  /** Picks tab: load the next 50 older picks. */
+  onMore?: () => void;
   markets: BotMarketStatsRow[] | null;
+  /** This bot's bot_weekly rows (null = view unreadable) — the Performance charts. */
+  weekly: BotWeeklyRow[] | null;
   fleetPaused: boolean | null;
   pulse: boolean;
   onClose: () => void;
@@ -57,7 +65,7 @@ export function BotSheet({
       <SheetContent
         side="right"
         showCloseButton={false}
-        className="w-full gap-0 overflow-y-auto p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-2xl"
+        className="w-full gap-0 overflow-y-auto p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-3xl"
       >
         {v && (
           <>
@@ -84,12 +92,12 @@ export function BotSheet({
                   <SettingsTab v={v} now={now} />
                 </TabsContent>
                 <TabsContent value="performance">
-                  <PerformanceTab v={v} markets={markets} />
+                  <PerformanceTab v={v} markets={markets} weekly={weekly} />
                 </TabsContent>
                 <TabsContent value="picks">
                   <section className="space-y-2">
-                    <h3 className={LABEL}>Recent picks{ledger && !ledger.loading && !ledger.error ? ` (${ledger.rows.length})` : ""}</h3>
-                    <RecentPicks v={v} ledger={ledger} />
+                    <h3 className={LABEL}>Picks{ledger && !ledger.loading && !ledger.error ? ` (${ledger.rows.length} loaded)` : ""}</h3>
+                    <PicksTable v={v} ledger={ledger} onMore={onMore} />
                   </section>
                 </TabsContent>
                 <TabsContent value="activity">{tab === "activity" && <BotActivity name={v.name} now={now} />}</TabsContent>
@@ -184,7 +192,7 @@ function SettingsTab({ v, now }: { v: BotView; now: number }) {
 
       <Card
         title="1 · Collect"
-        state={retired ? <span className="text-muted-foreground">Retired</span> : <span className="text-emerald-400">Active</span>}
+        state={retired ? <span className="text-muted-foreground">Retired</span> : <span className="text-success">Active</span>}
       >
         <Line label={retired ? "Retired" : "Collecting picks"}>
           {retired
@@ -205,7 +213,7 @@ function SettingsTab({ v, now }: { v: BotView; now: number }) {
         </Line>
         <Line
           label="Telegram channel"
-          control={<span className={`text-xs ${v.caps?.telegram ? "text-sky-300" : "text-muted-foreground"}`}>{v.caps?.telegram == null ? "Unknown" : v.caps.telegram ? "Yes" : "No"}</span>}
+          control={<span className={`text-xs ${v.caps?.telegram ? "text-info" : "text-muted-foreground"}`}>{v.caps?.telegram == null ? "Unknown" : v.caps.telegram ? "Yes" : "No"}</span>}
         >
           The channel posts bots that earned the “calibrated” label (this bot: {label ?? "none"}). It does not follow the /picks switch and cannot be changed here yet.{" "}
           <span className="opacity-70">(maturity_label)</span>
@@ -215,7 +223,7 @@ function SettingsTab({ v, now }: { v: BotView; now: number }) {
           <span className="opacity-70">(maturity_label · I12)</span>
         </Line>
         {mismatch && (
-          <div className="flex gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-200">
+          <div className="flex gap-2 rounded-md border border-warning/40 bg-warning/10 px-2.5 py-1.5 text-xs text-warning">
             <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
             /picks and Telegram disagree: {showOnPicks ? "shown on /picks but not sent to Telegram" : "sent to Telegram but hidden from /picks"}.
             Customers see different things in the two places. <span className="opacity-70">(migration 356, “Ludogorets”)</span>
@@ -229,7 +237,7 @@ function SettingsTab({ v, now }: { v: BotView; now: number }) {
           pathWhy ? (
             <span className="inline-flex items-center gap-1 text-muted-foreground"><CircleSlash size={12} aria-hidden="true" /> No placement path</span>
           ) : (
-            <span className="inline-flex items-center gap-1 text-amber-300"><CheckCircle2 size={12} aria-hidden="true" /> Has a placement path</span>
+            <span className="inline-flex items-center gap-1 text-warning"><CheckCircle2 size={12} aria-hidden="true" /> Has a placement path</span>
           )
         }
       >
@@ -240,7 +248,7 @@ function SettingsTab({ v, now }: { v: BotView; now: number }) {
         </Line>
         <Line label="Real-money eligible (€)" control={<MoneySwitch v={v} now={now} showWord />}>
           {row?.locked_reason ? (
-            <span className="inline-flex items-start gap-1 text-amber-200">
+            <span className="inline-flex items-start gap-1 text-warning">
               <Lock size={12} className="mt-0.5 shrink-0" aria-hidden="true" /> Locked: {row.locked_reason}
             </span>
           ) : row ? (
@@ -268,11 +276,13 @@ function SettingsTab({ v, now }: { v: BotView; now: number }) {
   );
 }
 
-function PerformanceTab({ v, markets }: { v: BotView; markets: BotMarketStatsRow[] | null }) {
+function PerformanceTab({ v, markets, weekly }: { v: BotView; markets: BotMarketStatsRow[] | null; weekly: BotWeeklyRow[] | null }) {
   const other = otherMetric(v.sb, v.metric.metric);
   const weeks = v.weeks ?? [];
+  const inplay = v.metric.metric === "lift";
   return (
     <div className="space-y-4">
+      <BotPerfCharts v={v} weekly={weekly} />
       {other && other.n != null && other.n > 0 ? (
         <section className="space-y-1">
           <h3 className={LABEL}>Other metrics</h3>
@@ -281,7 +291,7 @@ function PerformanceTab({ v, markets }: { v: BotView; markets: BotMarketStatsRow
           </div>
           <p className="text-xs text-muted-foreground">Not used for the verdict — this family is judged on {METRIC_SHORT[v.metric.metric]}.</p>
         </section>
-      ) : (
+      ) : inplay ? null : (
         <p className="text-sm text-muted-foreground">No second CLV metric recorded for this bot.</p>
       )}
 
@@ -294,7 +304,8 @@ function PerformanceTab({ v, markets }: { v: BotView; markets: BotMarketStatsRow
                 <th className="py-1 pr-2 font-normal">Market</th>
                 <th className="py-1 pr-2 text-right font-normal">Settled</th>
                 <th className="py-1 pr-2 text-right font-normal">Hit</th>
-                <th className="py-1 text-right font-normal">mc-CLV</th>
+                {/* bot_market_stats carries mc-CLV only: shown for mc-CLV families, never as a second metric */}
+                {v.metric.metric === "clv_mc" && <th className="py-1 text-right font-normal">mc-CLV</th>}
               </tr>
             </thead>
             <tbody>
@@ -303,7 +314,7 @@ function PerformanceTab({ v, markets }: { v: BotView; markets: BotMarketStatsRow
                   <td className="py-1 pr-2">{m.market ?? "—"}</td>
                   <td className="py-1 pr-2 text-right">{count(m.settled)}</td>
                   <td className="py-1 pr-2 text-right">{m.settled ? `${Math.round(((m.won ?? 0) / m.settled) * 100)}%` : "—"}</td>
-                  <td className="py-1 text-right">{m.clv_mc_n ? pct(m.clv_mc_mean) : "—"}</td>
+                  {v.metric.metric === "clv_mc" && <td className="py-1 text-right">{m.clv_mc_n ? pct(m.clv_mc_mean) : "—"}</td>}
                 </tr>
               ))}
             </tbody>
@@ -319,8 +330,8 @@ function PerformanceTab({ v, markets }: { v: BotView; markets: BotMarketStatsRow
               <tr className="text-left text-muted-foreground">
                 <th className="py-1 pr-2 font-normal">Week of</th>
                 <th className="py-1 pr-2 text-right font-normal">Picks</th>
-                <th className="py-1 pr-2 text-right font-normal">CLV n</th>
-                <th className="py-1 text-right font-normal">{METRIC_SHORT[v.metric.metric]}</th>
+                {!inplay && <th className="py-1 pr-2 text-right font-normal">CLV n</th>}
+                {!inplay && <th className="py-1 text-right font-normal">{METRIC_SHORT[v.metric.metric]}</th>}
               </tr>
             </thead>
             <tbody>
@@ -328,8 +339,8 @@ function PerformanceTab({ v, markets }: { v: BotView; markets: BotMarketStatsRow
                 <tr key={w.start} className="border-t border-border">
                   <td className="py-1 pr-2">{dayMonth(new Date(w.start))}</td>
                   <td className="py-1 pr-2 text-right">{count(w.picks)}</td>
-                  <td className="py-1 pr-2 text-right">{count(w.clvN)}</td>
-                  <td className="py-1 text-right">{w.clvMean == null ? "—" : pct(w.clvMean)}</td>
+                  {!inplay && <td className="py-1 pr-2 text-right">{count(w.clvN)}</td>}
+                  {!inplay && <td className="py-1 text-right">{w.clvMean == null ? "—" : pct(w.clvMean)}</td>}
                 </tr>
               ))}
             </tbody>

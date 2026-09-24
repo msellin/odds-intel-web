@@ -6,6 +6,7 @@
 // switches with opposite failure defaults).
 
 import { Button } from "@/components/ui/button";
+import { Panel, PanelHeader } from "@/components/oi/panel";
 import { heartbeatStatus, PLACER_LABEL } from "@/lib/bot-controls/ladder";
 import { TAKES_EFFECT } from "@/lib/bot-controls/types";
 import { useControls } from "./controls-context";
@@ -24,19 +25,18 @@ export function RealMoneyCard({ highlight }: { highlight: boolean }) {
   const unknownFleet = paused === null || armed === null;
   const open = ladder.canStake === "yes";
   return (
-    <section
+    // Panel (design system §4) with the danger edge kept: a red border always, whole-card red when
+    // CAN STAKE is yes, and a ring while the fleet cards' "jump" highlights it.
+    <Panel
       id="real-money"
-      aria-labelledby="real-money-title"
-      className={`scroll-mt-20 rounded-xl border p-4 transition-shadow ${open ? "border-red-500/70 bg-red-500/10" : "border-red-500/40 bg-card/40"} ${highlight ? "ring-2 ring-red-400/70" : ""}`}
+      className={`transition-shadow ${open ? "border-destructive! bg-destructive/10!" : "border-danger/40!"} ${highlight ? "ring-2 ring-danger/70" : ""}`}
     >
-      <header className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <div>
-          <h2 id="real-money-title" className="text-base font-semibold">Real money</h2>
-          <p className="text-xs text-muted-foreground">Six gates in order, plus one information line (7). Money moves only when every gate is open.</p>
-        </div>
-      </header>
+      <PanelHeader
+        title={<span id="real-money-title">Real money</span>}
+        description="Six gates in order, plus one information line (7). Money moves only when every gate is open."
+      />
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,19rem)]">
+      <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,19rem)]">
         <LadderList ladder={ladder} />
 
         <div className="space-y-3">
@@ -44,7 +44,7 @@ export function RealMoneyCard({ highlight }: { highlight: boolean }) {
           <div className="rounded-lg border border-border bg-background/40 p-3">
             <div className="flex items-center justify-between gap-2">
               <div className="text-sm font-medium">3 · Placement</div>
-              <span className={`text-xs ${paused === null ? "text-amber-300" : paused ? "text-sky-300" : "text-amber-400"}`}>
+              <span className={`text-xs ${paused === null ? "text-warning" : paused ? "text-info" : "text-warning"}`}>
                 {paused === null ? "Unknown" : paused ? "Paused" : "Running"}
                 {pausePending && " …"}
               </span>
@@ -80,7 +80,7 @@ export function RealMoneyCard({ highlight }: { highlight: boolean }) {
           <div className="rounded-lg border border-border bg-background/40 p-3">
             <div className="flex items-center justify-between gap-2">
               <div className="text-sm font-medium">4 · Armed</div>
-              <span className={`text-xs ${armed === null ? "text-amber-300" : armed ? "font-semibold text-red-400" : "text-muted-foreground"}`}>
+              <span className={`text-xs ${armed === null ? "text-warning" : armed ? "font-semibold text-danger" : "text-muted-foreground"}`}>
                 {armed === null ? "Unknown" : armed ? "ARMED" : "Not armed"}
                 {disarmPending && " …"}
               </span>
@@ -102,7 +102,7 @@ export function RealMoneyCard({ highlight }: { highlight: boolean }) {
                   <Button
                     size="sm"
                     variant="outline"
-                    className="border-red-500/60 text-red-300 disabled:opacity-80"
+                    className="border-danger/60 text-danger disabled:opacity-80"
                     disabled={armed === null}
                     title={armed === null ? "state unreadable" : "Owner only — two steps: typed phrase, then a reason"}
                     onClick={ctl.openArm}
@@ -113,14 +113,14 @@ export function RealMoneyCard({ highlight }: { highlight: boolean }) {
                   <span className="text-xs text-muted-foreground" title="Arming is owner-only (OWNER_USER_IDS)">Arm: owner only</span>
                 ))}
             </div>
-            {unknownFleet && <p className="mt-1.5 text-xs text-amber-300">Fleet state unreadable — starting anything is disabled; stopping still works.</p>}
+            {unknownFleet && <p className="mt-1.5 text-xs text-warning">Fleet state unreadable — starting anything is disabled; stopping still works.</p>}
           </div>
 
           {/* Layer 5 — the Mac executors (display only; the web cannot reach launchd) */}
           <Executors />
         </div>
       </div>
-    </section>
+    </Panel>
   );
 }
 
@@ -131,7 +131,7 @@ function Executors() {
     <div className="rounded-lg border border-border bg-background/40 p-3 text-xs">
       <div className="text-sm font-medium">5 · Executors on the Mac <span className="font-normal text-muted-foreground">(read-only)</span></div>
       {state.heartbeats.error ? (
-        <p className="mt-1 text-amber-300">Heartbeat unreadable — Unknown.</p>
+        <p className="mt-1 text-warning">Heartbeat unreadable — Unknown.</p>
       ) : rows.length === 0 ? (
         <p className="mt-1 text-muted-foreground">
           Not reported — no placer on the Mac has checked in yet. <span className="opacity-70">(placer_heartbeats; on the Mac: coolbet_control --status)</span>
@@ -143,7 +143,7 @@ function Executors() {
             return (
               <li key={h.placer} className="flex flex-wrap items-baseline justify-between gap-x-2">
                 <span>{PLACER_LABEL[h.placer] ?? h.placer}</span>
-                <span className={st === "alive" ? (h.execute_requested ? "text-red-300" : "text-foreground") : "text-muted-foreground"} title={h.last_seen_at ? utcStamp(h.last_seen_at) : undefined}>
+                <span className={st === "alive" ? (h.execute_requested ? "text-danger" : "text-foreground") : "text-muted-foreground"} title={h.last_seen_at ? utcStamp(h.last_seen_at) : undefined}>
                   {st === "alive" ? "Alive" : "Stale"} · {h.execute_requested ? "--execute" : "dry-run"} · {relTime(h.last_seen_at, now)} ago
                 </span>
                 {h.refused_reason && <span className="basis-full truncate text-muted-foreground" title={h.refused_reason}>gate: {h.refused_reason}</span>}

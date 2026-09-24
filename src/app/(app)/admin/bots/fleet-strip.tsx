@@ -1,71 +1,69 @@
 "use client";
 
-// /admin/bots — fleet KPI strip (#139, bots-board-ux-spec §3). Six tiles in the
-// /performance hero style: placement, real money (a whole red tile when ARMED — must be
-// impossible to miss), active bots, the verdict mix, picks in 7 days, and "needs a look".
-// Unknown fleet state is shown as Unknown, never as Off (honesty rule 6).
+// /admin/bots — fleet KPI strip (#139, bots-board-ux-spec §3; design system §5 since 2026-09-24:
+// six StatCards). Placement, real money (the WHOLE card goes red when ARMED — must be impossible
+// to miss), active bots, the verdict mix, picks in 7 days, and "needs a look".
+// Unknown fleet state is shown as Unknown, never as Off (honesty rule 6). The Placement and Real
+// money cards scroll to the Real money card — they never toggle anything.
 
-import { useState, type ReactNode } from "react";
+import { useState, type KeyboardEvent, type ReactNode } from "react";
 import {
   AlertTriangle,
+  Bot,
   CheckCircle2,
   HelpCircle,
+  ListChecks,
   PauseCircle,
   PlayCircle,
   ShieldAlert,
   ShieldOff,
+  Zap,
 } from "lucide-react";
+import { Sparkline, StatCard } from "@/components/oi/stat-card";
+import { TONE_TEXT, type Tone } from "@/components/oi/status-badge";
 import type { BotCapabilitiesRow } from "@/lib/bot-board";
 import type { BotView, Issue, Verdict } from "./bot-board-model";
 import { count } from "./bot-board-format";
 import { useControls } from "./controls-context";
 import { VERDICT_BG, VerdictStackBar } from "./bot-viz";
 
-const LABEL = "font-mono text-xs uppercase tracking-wider text-muted-foreground";
-
-function Tile({
-  label,
-  children,
-  sub,
-  className = "",
-  onClick,
-}: {
-  label: string;
-  children: ReactNode;
-  sub?: ReactNode;
-  className?: string;
-  /** #139 phase A: the Placement / Real money tiles jump to the Real money card — they never toggle anything. */
-  onClick?: () => void;
-}) {
-  const body = (
-    <>
-      <div className={LABEL}>{label}</div>
-      <div className="mt-1 flex items-center gap-1.5 text-2xl font-semibold tabular-nums">{children}</div>
-      {sub != null && <div className="mt-1 text-xs text-muted-foreground">{sub}</div>}
-    </>
-  );
-  if (onClick) {
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        title="Show the controls for this — nothing is toggled"
-        className={`bg-card px-4 py-3 text-left outline-none hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${className}`}
-      >
-        {body}
-      </button>
-    );
-  }
-  return <div className={`bg-card px-4 py-3 ${className}`}>{body}</div>;
-}
-
 const VERDICT_WORD: Record<Verdict, string> = {
   beats: "beat",
   loses: "lose",
-  inconclusive: "inconclusive",
+  inconclusive: "can't tell",
   early: "too early",
   noclv: "no CLV",
 };
+
+/** A StatCard that jumps to the Real money card. Nothing is toggled. */
+function Jump({ onJump, children }: { onJump?: () => void; children: ReactNode }) {
+  if (!onJump) return <>{children}</>;
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onJump();
+    }
+  };
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onJump}
+      onKeyDown={onKey}
+      title="Show the controls for this — nothing is toggled"
+      className="cursor-pointer rounded-xl outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring [&>*]:h-full"
+    >
+      {children}
+    </div>
+  );
+}
+
+const Word = ({ tone, icon, children }: { tone: Tone; icon: ReactNode; children: ReactNode }) => (
+  <span className={`inline-flex items-center gap-1.5 ${TONE_TEXT[tone]}`}>
+    {icon}
+    {children}
+  </span>
+);
 
 export function FleetStrip({
   fleet,
@@ -116,57 +114,98 @@ export function FleetStrip({
 
   const picks7 = active.reduce((s, v) => s + (v.sb?.picks_7d ?? 0), 0);
   const firing = active.filter((v) => (v.sb?.picks_7d ?? 0) > 0).length;
+  // Picks per week across the active fleet (bot_weekly) — null when 411 is not readable.
+  const weekTotals = active.some((v) => v.weeks)
+    ? Array.from({ length: 12 }, (_, i) => active.reduce((s, v) => s + (v.weeks?.[i]?.picks ?? 0), 0))
+    : null;
   const danger = issues.some((i) => i.severity === "danger");
+  const icon20 = (I: typeof HelpCircle) => <I size={20} aria-hidden="true" />;
 
   return (
-    <section className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.08]">
-      <div className="grid grid-cols-2 gap-px md:grid-cols-3 xl:grid-cols-6">
-        <Tile label="Placement" onClick={onJump} sub={paused == null ? "state unreadable" : placerWord}>
-          {paused == null ? (
-            <span className="inline-flex items-center gap-1.5 text-muted-foreground"><HelpCircle size={20} aria-hidden="true" />Unknown</span>
-          ) : paused ? (
-            <span className="inline-flex items-center gap-1.5 text-sky-400"><PauseCircle size={20} aria-hidden="true" />Paused</span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 text-amber-400"><PlayCircle size={20} aria-hidden="true" />Running</span>
-          )}
-        </Tile>
-        <Tile
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <Jump onJump={onJump}>
+        <StatCard
+          label="Placement"
+          icon={paused ? PauseCircle : PlayCircle}
+          tone={paused == null ? "warning" : paused ? "info" : "warning"}
+          unknown={paused == null}
+          value={
+            paused ? (
+              <Word tone="info" icon={icon20(PauseCircle)}>Paused</Word>
+            ) : (
+              <Word tone="warning" icon={icon20(PlayCircle)}>Running</Word>
+            )
+          }
+          foot={paused == null ? "state unreadable" : placerWord}
+        />
+      </Jump>
+      <Jump onJump={onJump}>
+        <StatCard
           label="Real money"
-          onClick={onJump}
-          className={armed ? "bg-red-500/10 ring-1 ring-inset ring-red-500/50" : ""}
-          sub={elig ? (elig.state === "unknown" ? "selection unreadable" : `${elig.value} for real money`) : "—"}
-        >
-          {armed == null ? (
-            <span className="inline-flex items-center gap-1.5 text-muted-foreground"><HelpCircle size={20} aria-hidden="true" />Unknown</span>
-          ) : armed ? (
-            <span className="inline-flex items-center gap-1.5 text-red-400"><ShieldAlert size={20} aria-hidden="true" />ARMED</span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 text-muted-foreground"><ShieldOff size={20} aria-hidden="true" />Off</span>
-          )}
-        </Tile>
-        <Tile label="Active bots" sub={known ? `${n("publish")} published · ${n("telegram")} on Telegram` : "—"}>
-          {active.length}
-          {hasControl && <span className="text-sm font-normal text-muted-foreground">+ control</span>}
-        </Tile>
-        <Tile label="Verdicts" sub={legend} className="order-5 col-span-2 md:col-span-1 xl:order-none">
-          <div className="w-full py-2"><VerdictStackBar counts={verdicts} /></div>
-        </Tile>
-        <Tile label="Picks · 7d" sub={`across ${firing} bot${firing === 1 ? "" : "s"}`}>
-          {count(picks7)}
-        </Tile>
-        <div className="order-6 col-span-2 bg-card px-4 py-3 md:col-span-1 xl:order-none">
-          <div className={LABEL}>Needs a look</div>
-          {issues.length === 0 ? (
-            <div className="mt-1 inline-flex items-center gap-1.5 text-2xl font-semibold text-emerald-400">
-              <CheckCircle2 size={20} aria-hidden="true" />All clear
-            </div>
-          ) : (
-            <>
-              <div className={`mt-1 inline-flex items-center gap-1.5 text-2xl font-semibold tabular-nums ${danger ? "text-red-400" : "text-amber-400"}`}>
-                <AlertTriangle size={20} aria-hidden="true" />
-                {issues.length}
-              </div>
-              <div className="mt-1 text-xs">
+          icon={armed ? ShieldAlert : ShieldOff}
+          tone={armed == null ? "warning" : armed ? "danger" : "neutral"}
+          danger={armed === true}
+          unknown={armed == null}
+          value={
+            armed ? (
+              <Word tone="danger" icon={icon20(ShieldAlert)}>ARMED</Word>
+            ) : (
+              <Word tone="neutral" icon={icon20(ShieldOff)}>Off</Word>
+            )
+          }
+          foot={elig ? (elig.state === "unknown" ? "selection unreadable" : `${elig.value} for real money`) : "—"}
+        />
+      </Jump>
+      <StatCard
+        label="Active bots"
+        icon={Bot}
+        tone="info"
+        value={
+          <>
+            {active.length}
+            {hasControl && <span className="ml-1.5 text-sm font-normal text-muted-foreground">+ control</span>}
+          </>
+        }
+        foot={known ? `${n("publish")} on /picks · ${n("telegram")} on Telegram` : "capabilities unreadable"}
+      />
+      <div className="order-5 col-span-2 md:col-span-1 xl:order-none [&>*]:h-full">
+        <StatCard
+          label="Verdicts"
+          icon={ListChecks}
+          tone="success"
+          value={
+            <span>
+              {verdicts.beats ?? 0}
+              <span className="ml-1 text-sm font-normal text-muted-foreground">of {active.length} beat the close</span>
+            </span>
+          }
+          spark={<div className="w-full min-w-24 flex-1 pb-1.5"><VerdictStackBar counts={verdicts} /></div>}
+          foot={legend}
+        />
+      </div>
+      <StatCard
+        label="Picks · 7d"
+        icon={Zap}
+        tone="model"
+        value={count(picks7)}
+        spark={weekTotals ? <Sparkline values={weekTotals} tone="model" kind="bars" /> : undefined}
+        foot={`across ${firing} bot${firing === 1 ? "" : "s"}${weekTotals ? " · bars = 12 weeks" : ""}`}
+      />
+      <div className="order-6 col-span-2 md:col-span-1 xl:order-none [&>*]:h-full">
+        <StatCard
+          label="Needs a look"
+          icon={issues.length === 0 ? CheckCircle2 : AlertTriangle}
+          tone={issues.length === 0 ? "success" : danger ? "danger" : "warning"}
+          value={
+            issues.length === 0 ? (
+              <Word tone="success" icon={icon20(CheckCircle2)}>All clear</Word>
+            ) : (
+              <Word tone={danger ? "danger" : "warning"} icon={icon20(AlertTriangle)}>{issues.length}</Word>
+            )
+          }
+          foot={
+            issues.length === 0 ? undefined : (
+              <>
                 <IssueText issue={issues[0]} onOpenBot={onOpenBot} />
                 {issues.length > 1 && (
                   <button
@@ -178,24 +217,24 @@ export function FleetStrip({
                     {showIssues ? "less" : `+${issues.length - 1} more`}
                   </button>
                 )}
-              </div>
-              {showIssues && (
-                <ul className="mt-1 space-y-0.5 text-xs">
-                  {issues.slice(1).map((i) => (
-                    <li key={i.text}><IssueText issue={i} onOpenBot={onOpenBot} /></li>
-                  ))}
-                </ul>
-              )}
-            </>
-          )}
-        </div>
+                {showIssues && (
+                  <ul className="mt-1 space-y-0.5">
+                    {issues.slice(1).map((i) => (
+                      <li key={i.text}><IssueText issue={i} onOpenBot={onOpenBot} /></li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            )
+          }
+        />
       </div>
-    </section>
+    </div>
   );
 }
 
 function IssueText({ issue, onOpenBot }: { issue: Issue; onOpenBot: (name: string) => void }) {
-  const cls = issue.severity === "danger" ? "text-red-400" : "text-amber-300";
+  const cls = issue.severity === "danger" ? "text-danger" : "text-warning";
   if (!issue.bot) return <span className={cls}>{issue.text}</span>;
   return (
     <button type="button" onClick={() => onOpenBot(issue.bot as string)} className={`text-left underline-offset-2 hover:underline ${cls}`}>
