@@ -6494,6 +6494,27 @@ export async function getFeedBookStats(): Promise<FeedBookStats[]> {
 /** Everything /admin/feeds needs, plus the render clock. The clock is read HERE,
  *  in the data layer, not in the component (react-hooks/purity) — same
  *  convention as forward-test-picks.ts. */
+// #120/#121 — data-quality checks (board_guard at write time, board_audit read-back,
+// results_check). Rows the checks refused or moved are in odds_snapshots_quarantined.
+export interface DataQualityFinding {
+  id: number;
+  check_name: string;
+  match_id: string | null;
+  bookmaker: string | null;
+  detail: Record<string, unknown> | null;
+  rows_moved: number;
+  found_at: string;
+}
+
+export async function getDataQualityFindings(days = 7): Promise<DataQualityFinding[]> {
+  const admin = createSupabaseAdmin();
+  const since = new Date(Date.now() - days * 86_400_000).toISOString();
+  const { data, error } = await admin.from("data_quality_findings").select("*")
+    .gte("found_at", since).order("found_at", { ascending: false }).limit(100);
+  if (error) return [];   // table not migrated yet → empty, never a crash
+  return (data ?? []) as DataQualityFinding[];
+}
+
 export async function getFeedDashboard(): Promise<{
   feeds: FeedStatus[];
   books: FeedBookStats[];
