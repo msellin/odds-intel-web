@@ -32,6 +32,8 @@ const BOOKS: BlockDef[] = [
   { key: "epicbet", title: "Epicbet", main: "epicbet_prematch", extra: ["epicbet_inplay"], deps: ["zone_egress"], statsBook: "Epicbet" },
   { key: "unibet", title: "Unibet", main: "unibet_prematch", extra: [], deps: ["unibet_chrome", "zone_egress"], statsBook: "Unibet-Site" },
   { key: "tonybet", title: "Tonybet", main: "tonybet_prematch", extra: ["tonybet_live", "tonybet_results"], deps: ["zone_egress"], statsBook: "Tonybet" },
+  { key: "betfair", title: "Betfair Exchange", main: "betfair_exchange", extra: [], deps: ["betfair_egress"], statsBook: "Betfair-Exchange",
+    note: "Reference only — a second sharp price beside Pinnacle, never bet and never published. Back/lay prices plus matched money every 15 min through the London exit (the exchange shows no markets to our Finnish server). Thin markets are placeholders, so only liquid ones (spread ≤5%, ≥€1,000 matched) count as a price." },
 ];
 const OTHERS: BlockDef[] = [
   { key: "api-football", title: "API-Football", main: "af_odds", extra: ["af_closing", "af_live", "af_fixtures"], deps: [],
@@ -39,7 +41,7 @@ const OTHERS: BlockDef[] = [
   { key: "closing", title: "Closing prices", main: "direct_close", extra: [], deps: [],
     note: "Runs every 5 min, but only captures when one of our paired matches kicks off within the next 15 min — so a gap between kickoff waves is normal. Colour follows the job's health, not the age of the last capture." },
   { key: "infra", title: "Infrastructure",
-    extra: ["zone_egress", "unibet_chrome", "flaresolverr", "scheduler", "database", "data_api", "website", "disk", "memory"],
+    extra: ["zone_egress", "betfair_egress", "unibet_chrome", "flaresolverr", "scheduler", "database", "data_api", "website", "disk", "memory"],
     deps: [], note: "Everything the sweepers and the website run on, on the VPS." },
 ];
 
@@ -48,6 +50,7 @@ const SHORT: Record<string, string> = {
   tonybet_prematch: "Pre-match odds", tonybet_live: "Live score, corners, cards", tonybet_results: "Results",
   epicbet_inplay: "In-play odds", af_odds: "Bulk odds", af_closing: "Closing snapshots", af_live: "Live scores",
   af_fixtures: "Fixtures", direct_close: "Closing prices", zone_egress: "Estonian exit",
+  betfair_exchange: "Back/lay + liquidity", betfair_egress: "London exit (Betfair)",
   unibet_chrome: "Unibet Chrome", flaresolverr: "FlareSolverr", scheduler: "Engine scheduler",
   database: "Database", data_api: "Data API (PostgREST)", website: "Website", disk: "Disk space", memory: "Memory",
 };
