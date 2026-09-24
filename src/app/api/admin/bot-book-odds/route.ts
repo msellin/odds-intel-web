@@ -83,7 +83,8 @@ export async function POST(req: Request) {
     .from("odds_snapshots")
     .select("match_id, market, selection, bookmaker, odds, timestamp")
     .in("match_id", matchIds)
-    .in("bookmaker", ["Coolbet", "Unibet", "Bet365"])
+    // 'Unibet-Site' — the placeable feed; 'Unibet' was AF's dead phantom feed (audit 2026-09-24).
+    .in("bookmaker", ["Coolbet", "Unibet-Site", "Bet365"])
     .order("timestamp", { ascending: false })
     .range(0, 19999);
 
@@ -105,7 +106,7 @@ export async function POST(req: Request) {
       continue;
     }
     const coolbet = snapMap.get(snapKey(b.match_id, k.market, k.selection, "Coolbet")) ?? null;
-    const unibet  = snapMap.get(snapKey(b.match_id, k.market, k.selection, "Unibet"))  ?? null;
+    const unibet  = snapMap.get(snapKey(b.match_id, k.market, k.selection, "Unibet-Site"))  ?? null;
     out[b.id] = {
       unibet: coolbet ?? unibet,
       bet365: snapMap.get(snapKey(b.match_id, k.market, k.selection, "Bet365")) ?? null,

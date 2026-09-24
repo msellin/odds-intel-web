@@ -870,7 +870,10 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
       .from("odds_snapshots")
       .select("match_id, market, selection, bookmaker, odds, handicap_line, timestamp")
       .in("match_id", matchIds)
-      .in("bookmaker", ["Coolbet", "Unibet", "Bet365", "Pinnacle"])
+      // Sweeper-odds audit 2026-09-24: 'Unibet' here was API-Football's dead feed
+      // (33% phantom-high, no data since 09-12) and it was the live-price FALLBACK
+      // on this real-money surface. The placeable Unibet price is 'Unibet-Site'.
+      .in("bookmaker", ["Coolbet", "Unibet-Site", "Bet365", "Pinnacle"])
       .order("timestamp", { ascending: false })
       .order("id", { ascending: false })
       .range(from, to) as unknown as PromiseLike<{ data: SnapFetchRow[] | null; error: unknown }>,
@@ -1017,7 +1020,7 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
     let pinnacleOdds: number | null = null;
     if (k) {
       coolbetOdds = snapMap.get(snapKey(b.match_id, k.market, k.selection, "Coolbet")) ?? null;
-      unibetOdds = snapMap.get(snapKey(b.match_id, k.market, k.selection, "Unibet")) ?? null;
+      unibetOdds = snapMap.get(snapKey(b.match_id, k.market, k.selection, "Unibet-Site")) ?? null;
       bet365Odds = snapMap.get(snapKey(b.match_id, k.market, k.selection, "Bet365")) ?? null;
       pinnacleOdds = snapMap.get(snapKey(b.match_id, k.market, k.selection, "Pinnacle")) ?? null;
     } else if ((b.market || "").toLowerCase() === "asian_handicap") {
@@ -1026,7 +1029,7 @@ export async function getPlaceableBets(): Promise<PlaceableBet[]> {
         const ahSel = ahMatch[1];
         const ahHl = parseFloat(ahMatch[2]);
         coolbetOdds = ahSnapMap.get(ahSnapKey(b.match_id, ahSel, ahHl, "Coolbet")) ?? null;
-        unibetOdds = ahSnapMap.get(ahSnapKey(b.match_id, ahSel, ahHl, "Unibet")) ?? null;
+        unibetOdds = ahSnapMap.get(ahSnapKey(b.match_id, ahSel, ahHl, "Unibet-Site")) ?? null;
         bet365Odds = ahSnapMap.get(ahSnapKey(b.match_id, ahSel, ahHl, "Bet365")) ?? null;
         pinnacleOdds = ahSnapMap.get(ahSnapKey(b.match_id, ahSel, ahHl, "Pinnacle")) ?? null;
       }
@@ -1547,7 +1550,12 @@ export async function getPublicCohortBotNames(): Promise<Set<string>> {
 //
 // Measured 2026-09-21 on the published cohort: all books +8.17% (n=697),
 // excluding Kambi +7.25% (n=657). That 0.92pp is the honest correction.
-const UNOBTAINABLE_BOOKMAKERS = ["Unibet-Kambi"] as const;
+// 'Unibet' ADDED 2026-09-24 (sweeper-odds audit, #125): API-Football's Unibet feed read
+// 33% phantom-high against the site and the engine's `_NON_OFFERS` already excludes it.
+// 87 settled rows in the cohort since 2026-05-04 were priced off it, returning ~+23%;
+// removing them moves the published obtainable ROI from about +10.3% (n=438) to
+// +7.1% (n=351). A visible drop on a public page, and the honest direction.
+const UNOBTAINABLE_BOOKMAKERS = ["Unibet-Kambi", "Unibet"] as const;
 
 const _getCalibratedHeadlineStatsUncached =
   async (): Promise<CalibratedHeadlineStats> => {

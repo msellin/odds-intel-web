@@ -439,7 +439,7 @@ export default async function ShadowBotDetailPage({
       .select("match_id, market, selection, odds, timestamp, bookmaker")
       .in("match_id", pendingMatchIds)
       .in("market", pendingMarkets)
-      .in("bookmaker", ["Coolbet", "Unibet-Site", "Epicbet"])
+      .in("bookmaker", ["Coolbet", "Unibet-Site", "Epicbet", "Tonybet"])
       .eq("is_live", false)
       .gte("timestamp", new Date(Date.now() - 12 * 3600 * 1000).toISOString())
       .order("timestamp", { ascending: false })

@@ -181,7 +181,8 @@ export interface ShadowBotsPageData {
 // starve another under the PostgREST row cap. `Unibet-Site` only — never
 // `Unibet` or `Unibet-Kambi` (UB-COLUMN-NOT-PLACEABLE): unibet.ee left the
 // Kambi API on 2026-09-06 and Kambi disagrees with the site on 91% of quotes.
-const SNAPSHOT_BOOKS = ["Coolbet", "Unibet-Site", "Epicbet"] as const;
+// Tonybet ADDED 2026-09-24 (sweeper-odds audit) — our fourth own book since 09-23.
+const SNAPSHOT_BOOKS = ["Coolbet", "Unibet-Site", "Epicbet", "Tonybet"] as const;
 const SNAPSHOT_ROW_CAP = 3000;
 const SNAPSHOT_WINDOW_H = 12;
 const UPCOMING_LIMIT = 1500;
