@@ -2474,6 +2474,11 @@ export async function getPicksForwardTestSummary(
   // [[#095]] the consensus arm is TWO bots, one per grade — pass the grade to
   // get one bot's record. Omitted = the whole arm (the live arm has no grade).
   grade?: "B" | "C" | "D",
+  // [[#122]] the sharp (live) arm is TWO bots, one per market — pass the market to
+  // get one half's record. It reads `picks_forward_test_summary_by_market`
+  // (migration 402); without it the per-arm view the stopping rules use is read,
+  // unchanged.
+  market?: "1x2" | "over_under_25",
 ): Promise<{
   current: PicksForwardTestSummary;
   closed: PicksForwardTestSummary[];
@@ -2481,10 +2486,10 @@ export async function getPicksForwardTestSummary(
 } | null> {
   const supabase = createSupabasePublic();
   const { data, error } = await supabase
-    .from("picks_forward_test_summary")
+    .from(market ? "picks_forward_test_summary_by_market" : "picks_forward_test_summary")
     .select("*")
     .eq("arm", arm)
-    .match(grade ? { grade } : {})
+    .match({ ...(grade ? { grade } : {}), ...(market ? { market } : {}) })
     .order("started_at", { ascending: false });
   if (error || !data || data.length === 0) return null;
   const rows = (data as Record<string, unknown>[]).map(mapForwardTestRow);
@@ -2558,6 +2563,8 @@ export async function getPicksForwardTestBets(
   // [[#095]] the consensus arm is TWO bots, one per grade — pass the grade to
   // get one bot's record. Omitted = the whole arm (the live arm has no grade).
   grade?: "B" | "C" | "D",
+  // [[#122]] one market's picks — the sharp arm's two halves are separate bots.
+  market?: "1x2" | "over_under_25",
 ): Promise<Array<{
   id: string; match: string; league: string; placedAt: string; market: string;
   selection: string; odds: number; stake: number | null; result: string;
@@ -2569,7 +2576,7 @@ export async function getPicksForwardTestBets(
     .from("picks_forward_test_public")
     .select("*")
     .eq("arm", arm)
-    .match(grade ? { grade } : {})
+    .match({ ...(grade ? { grade } : {}), ...(market ? { market } : {}) })
     .order("published_at", { ascending: true });
   if (error || !data) return [];
 

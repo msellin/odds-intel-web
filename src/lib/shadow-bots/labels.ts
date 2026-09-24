@@ -24,6 +24,8 @@ export const BOT_SHORT_LABELS: Record<string, string> = {
   bot_v10_ou: "v10 O/U",
   bot_high_roi_global_v2: "high-ROI global",
   bot_sharp_forward_test_v1: "PICKS forward test",
+  bot_sharp_1x2_v1: "PICKS sharp 1x2",
+  bot_sharp_ou_v1: "PICKS sharp O/U",
 };
 
 export function botShortLabel(name: string): string {

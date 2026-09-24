@@ -359,7 +359,9 @@ export const PUBLIC_MATURITY_LABELS: ReadonlySet<string> = new Set([
  * ([[#095]], 2026-09-23): 16 settled in one row, zero in its duplicate.
  */
 export const LEDGER_BACKED_BOTS: ReadonlySet<string> = new Set([
-  "bot_sharp_forward_test_v1",
+  "bot_sharp_forward_test_v1",   // retired parent (migration 402) — kept so its name never double-counts
+  "bot_sharp_1x2_v1",
+  "bot_sharp_ou_v1",
   "bot_consensus_b_v1",
   "bot_consensus_c_v1",
   "bot_consensus_d_v1",

@@ -219,8 +219,11 @@ async function LoggedInPerformanceSection({
   // prevent. The bot names match migration 372's CASE on `arm`.
   const picksBets = (
     await Promise.all([
-      getPicksForwardTestBets("live").then((rows) =>
-        rows.map((b) => ({ ...b, bot: "bot_sharp_forward_test_v1" }))),
+      // [[#122]] split by market — the sharp arm's 1x2 and O/U halves are separate bots.
+      getPicksForwardTestBets("live", undefined, "1x2").then((rows) =>
+        rows.map((b) => ({ ...b, bot: "bot_sharp_1x2_v1" }))),
+      getPicksForwardTestBets("live", undefined, "over_under_25").then((rows) =>
+        rows.map((b) => ({ ...b, bot: "bot_sharp_ou_v1" }))),
       // [[#095]] split by grade — B (beta) and C (testing) are separate bots.
       getPicksForwardTestBets("consensus_anchor", "B").then((rows) =>
         rows.map((b) => ({ ...b, bot: "bot_consensus_b_v1" }))),
@@ -389,14 +392,20 @@ export default async function PerformancePage() {
   // appear by adding it to the list, not by remembering this file exists.
   // [[#095]] 2026-09-23: the consensus arm is split into one bot per grade —
   // same ledger arm, different `grade`, so each reads its own record.
-  const PUBLISHED_ARM_BOTS: Array<{ arm: string; bot: string; grade?: "B" | "C" | "D" }> = [
-    { arm: "live", bot: "bot_sharp_forward_test_v1" },
+  // [[#122]] 2026-09-24: the sharp arm is split by MARKET the same way — one
+  // pre-registered rule, two records, so a flat O/U half cannot hide inside a
+  // positive 1x2 average (the bot_v10_all lesson).
+  const PUBLISHED_ARM_BOTS: Array<{
+    arm: string; bot: string; grade?: "B" | "C" | "D"; market?: "1x2" | "over_under_25";
+  }> = [
+    { arm: "live", market: "1x2", bot: "bot_sharp_1x2_v1" },
+    { arm: "live", market: "over_under_25", bot: "bot_sharp_ou_v1" },
     { arm: "consensus_anchor", grade: "B", bot: "bot_consensus_b_v1" },
     { arm: "consensus_anchor", grade: "C", bot: "bot_consensus_c_v1" },
     { arm: "consensus_anchor", grade: "D", bot: "bot_consensus_d_v1" },
   ];
-  for (const { arm, bot, grade } of PUBLISHED_ARM_BOTS) {
-  const picksSummary = (await getPicksForwardTestSummary(arm, grade))?.pooled ?? null;
+  for (const { arm, bot, grade, market } of PUBLISHED_ARM_BOTS) {
+  const picksSummary = (await getPicksForwardTestSummary(arm, grade, market))?.pooled ?? null;
   if (picksSummary && picksSummary.published > 0) {
     const mc = picksSummary.clvMarginCorrected;
     // BOT-NAMES-AND-LABELS (migration 375, [[#069]]). Both the display name and

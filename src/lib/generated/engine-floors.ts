@@ -131,13 +131,21 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "anchor": "model",
     "market": "O/U 3.5"
   },
-  "bot_sharp_forward_test_v1": {
+  "bot_sharp_1x2_v1": {
     "edgeFloor": 0.03,
     "oddsFloor": null,
     "oddsCap": null,
     "realMoney": false,
     "anchor": "sharp",
-    "market": "1x2 + O/U 2.5"
+    "market": "1x2 (forward test)"
+  },
+  "bot_sharp_ou_v1": {
+    "edgeFloor": 0.03,
+    "oddsFloor": null,
+    "oddsCap": null,
+    "realMoney": false,
+    "anchor": "sharp",
+    "market": "O/U 2.5 (forward test)"
   },
   "bot_trigger_1x2_sharp_tight_v1": {
     "edgeFloor": 0.02,
@@ -194,14 +202,6 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "realMoney": false,
     "anchor": "model",
     "market": "1x2"
-  },
-  "bot_v10_ou": {
-    "edgeFloor": null,
-    "oddsFloor": null,
-    "oddsCap": null,
-    "realMoney": false,
-    "anchor": "model",
-    "market": "O/U 2.5"
   }
 };
 
