@@ -377,6 +377,10 @@ export interface BotRecord {
    *  SETTLED picks only — its pending picks are the paid product, delivered
    *  privately before kickoff. RLS hides them from anon/authenticated too. */
   isVip: boolean;
+  /** #148 (migration 421): pending rows hidden from public reads — the VIP bot
+   *  AND its unlisted EV8 twin (bot_combined_1x2_ev8_v1), whose pending picks are
+   *  exactly the VIP bot's EV8 picks. Not a VIP card by itself. */
+  hidePending: boolean;
 }
 
 // PERF-VPS-2026-07-07: switched from createSupabaseServer (cookies) to admin
@@ -386,7 +390,7 @@ const _getAllBotsFromDBUncached = async (): Promise<BotRecord[]> => {
   const admin = createSupabaseAdmin();
   const { data, error } = await admin
     .from("bots")
-    .select("id, name, display_name, strategy, description, strategy_description, starting_bankroll, current_bankroll, is_active, retired_at, maturity_label, vip")
+    .select("id, name, display_name, strategy, description, strategy_description, starting_bankroll, current_bankroll, is_active, retired_at, maturity_label, vip, hide_pending")
     .order("name");
   if (error || !data) {
     console.error("[getAllBotsFromDB] query failed:", error?.message ?? "no data");
@@ -405,6 +409,7 @@ const _getAllBotsFromDBUncached = async (): Promise<BotRecord[]> => {
     retiredAt: (r.retired_at as string | null) ?? null,
     maturityLabel: (r.maturity_label as string) ?? 'active',
     isVip: r.vip === true,
+    hidePending: r.hide_pending === true || r.vip === true,
   }));
 };
 
@@ -412,8 +417,8 @@ export const getAllBotsFromDB = unstable_cache(
   _getAllBotsFromDBUncached,
   // v2: the row shape gained display_name (migration 375) — the key must
   // change or 30 minutes of cached rows come back without it.
-  // v3: gained `vip` (migration 420, #148).
-  ["getAllBotsFromDB_v3"],
+  // v3: gained `vip` (migration 420, #148); v4: `hide_pending` (migration 421).
+  ["getAllBotsFromDB_v4"],
   { revalidate: 1800 }
 );
 

@@ -210,8 +210,10 @@ async function LoggedInPerformanceSection({
   // (migration 420) already hides them from anon/authenticated; this drops them
   // again server-side, before BOTH the display array and the raw aggregate
   // array are serialised to the client, so a future switch of getAllBets to a
-  // service-role client cannot leak them.
-  const vipBotNames = new Set(botsDB.filter((b) => isVipBot(b)).map((b) => b.name));
+  // service-role client cannot leak them. Includes hide_pending bots (migration
+  // 421): the unlisted EV8 twin's pending picks ARE the VIP bot's EV8 picks.
+  const vipBotNames = new Set(
+    botsDB.filter((b) => isVipBot(b) || b.hidePending).map((b) => b.name));
   const allBetsRaw = dropVipUnsettled(allBetsUnfiltered, vipBotNames);
   const sanitizedBets = sanitizeBets(allBetsRaw, isElite);
   // PICKS-BOT-ACTS-LIKE-THE-OTHERS-2026-09-14: its bets come from
