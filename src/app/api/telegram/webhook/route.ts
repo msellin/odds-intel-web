@@ -258,7 +258,8 @@ async function handlePausePicksCommand(
   }
   await sendReply(
     chatId,
-    `📴 Pick publishing PAUSED. Nothing further reaches @oddsintelpicks until /resumepicks.\n` +
+    `📴 Pick publishing PAUSED. Nothing further is SENT to @oddsintelpicks until /resumepicks.\n` +
+    `Picks are still RECORDED (the pre-registered test and /picks keep running) — picks made while paused are not sent later.\n` +
     `Real-money placement is unaffected — use /pause for that.\n` +
     `Reason logged: ${reason || "(none)"}`,
   );
@@ -293,7 +294,7 @@ async function handleHelpCommand(chatId: number): Promise<void> {
       "/today         — real_bets placed in last 24h + stake + PnL",
       "/pause <reason>— halt REAL-MONEY placement until /resume (does not touch picks)",
       "/resume        — re-enable real-money placement",
-      "/pausepicks <reason> — stop posting picks to @oddsintelpicks",
+      "/pausepicks <reason> — stop SENDING picks to @oddsintelpicks (recording continues)",
       "/resumepicks   — resume posting picks to @oddsintelpicks",
       "/help          — this message",
       "",
