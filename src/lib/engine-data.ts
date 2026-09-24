@@ -2669,6 +2669,10 @@ export interface FeedBookStats {
   // Exchange only (migration 403): fixtures whose latest 1X2 is liquid, not merely listed
   liquid_today?: number | null;
   liquid_yesterday?: number | null;
+  // #107 C (migration 408): of the fixtures that kicked off in the last 24 h and this book
+  // priced pre-match, how many carry a price in the final 15 minutes (its close)
+  closing_priced_24h?: number | null;
+  closing_captured_24h?: number | null;
   // BOOK-FOOTPRINT (#110): requests we sent this clock hour vs the book's budget
   requests_1h: number | null;
   budget_1h: number | null;

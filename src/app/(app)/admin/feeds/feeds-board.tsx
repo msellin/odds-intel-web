@@ -208,6 +208,22 @@ export function FeedsBoard({ feeds, books, now }: { feeds: FeedStatus[]; books: 
             {" · "}{st.market_families} market types
           </div>
         )}
+        {st && st.closing_priced_24h != null && st.closing_priced_24h > 0 && (
+          <div
+            className="text-xs text-muted-foreground"
+            title="Of the fixtures that kicked off in the last 24 h and this book priced before kickoff, how many have a price in the final 15 minutes. Without a close, CLV at this book is measured against a price hours old (#107 C)."
+          >
+            Closing price captured:{" "}
+            <span
+              className={
+                (st.closing_captured_24h ?? 0) / st.closing_priced_24h < 0.8 ? "text-amber-400" : "text-foreground"
+              }
+            >
+              {st.closing_captured_24h ?? 0}/{st.closing_priced_24h} kickoffs
+            </span>{" "}
+            ({Math.round((100 * (st.closing_captured_24h ?? 0)) / st.closing_priced_24h)}%, last 24 h)
+          </div>
+        )}
         {st && st.requests_24h != null && (
           <div className="text-xs text-muted-foreground" title="Every request we send this book, counted across all our processes. Over budget, requests are refused before they are sent — so one book's exit IP never gets flagged again (#110).">
             Requests this hour:{" "}
