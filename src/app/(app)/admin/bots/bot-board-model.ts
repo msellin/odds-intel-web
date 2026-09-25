@@ -350,22 +350,25 @@ export interface Issue {
 const marketGroup = (m: string) => (/^(o\/?u|over_under)/i.test(m) ? "ou" : m.toLowerCase());
 
 /**
- * A model-paper bot whose probability SOURCE is gone: it prices off the picks of bots with a given
- * maturity label (gate `source_maturity`, e.g. ["calibrated"]), and no active customer-model bot
+ * A model-paper bot whose probability SOURCE is gone: it prices off the picks of named bots (gate
+ * `source_bots`, e.g. ["bot_v10_1x2"] — #162 W4.4; older exports: `source_maturity`, a label list), and no active customer-model bot
  * with that label covers any of its markets any more — so it CANNOT pick. Example (2026-09-24):
  * bot_coolbet_ou_model_v1 reads calibrated O/U picks, and the calibrated O/U bot (bot_v10_ou) was
  * retired. `active` = the active fleet the page shows.
  */
 export function sourceRetired(v: BotView, active: BotView[]): boolean {
-  const src = (v.cfg?.gates ?? []).find((g) => g.name === "source_maturity")?.value;
-  if (!Array.isArray(src) || src.length === 0) return false;
+  const gates = v.cfg?.gates ?? [];
+  const byName = gates.find((g) => g.name === "source_bots")?.value;
+  const byLabel = gates.find((g) => g.name === "source_maturity")?.value;
+  const src = Array.isArray(byName) ? byName : Array.isArray(byLabel) ? byLabel : null;
+  if (!src || src.length === 0) return false;
   const want = new Set((v.cfg?.markets ?? []).map(marketGroup));
   if (want.size === 0) return false;
   return !active.some(
     (a) =>
       a.name !== v.name &&
       a.family === "model_sim" &&
-      src.includes(a.sb?.maturity_label ?? "") &&
+      (byName ? src.includes(a.name) : src.includes(a.sb?.maturity_label ?? "")) &&
       (a.cfg?.markets ?? []).some((m) => want.has(marketGroup(m))),
   );
 }

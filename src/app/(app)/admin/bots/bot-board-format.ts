@@ -330,6 +330,7 @@ const GATE_LABEL: Record<string, string> = {
   outlier_cap_max_odds_mult: "Outlier cap (× odds)",
   own_outlier_mult_vs_anchor: "Own-price outlier cap vs anchor",
   source_maturity: "Source maturity",
+  source_bots: "Source bots",
 };
 
 export function gateLabel(name: string): string {
