@@ -368,6 +368,9 @@ export const LEDGER_BACKED_BOTS: ReadonlySet<string> = new Set([
   "bot_consensus_b_v1",
   "bot_consensus_c_v1",
   "bot_consensus_d_v1",
+  // #161 twin arms — recorded, never published (EXPERIMENTAL); listed so no fleet path counts them
+  "bot_sharp_aligned_v1",
+  "bot_consensus_pinconf_v1",
 ]);
 
 /** Whether a bot's maturity label earns it a place on the public leaderboard. */
