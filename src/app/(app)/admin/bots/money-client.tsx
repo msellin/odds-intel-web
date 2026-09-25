@@ -1,6 +1,7 @@
 "use client";
 
-// Client half of /admin/real-bets (#139 P5): the charts and the tables. Client-side because recharts,
+// Client half of the Real money view on /admin/bots (money-view.tsx; was /admin/real-bets, #139 P5,
+// moved by #162 W6.8): the charts and the tables. Client-side because recharts,
 // the DataTable and the formatter functions cannot cross the server/client boundary.
 
 import type { ColumnDef } from "@tanstack/react-table";

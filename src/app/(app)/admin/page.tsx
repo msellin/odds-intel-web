@@ -72,8 +72,8 @@ export default async function AdminIndexPage() {
         : { label: "Real money", text: f?.real_money_armed ? "Armed, but nothing can bet right now" : "Off — nothing can bet automatically", sub: d.moneyBlockers.length ? `blocked by: ${d.moneyBlockers.join(", ")}` : undefined, tone: f?.real_money_armed ? "danger" : "neutral", icon: ShieldAlert, href: "/admin/bots#real-money" },
     // same window + rules as the Real bets page ("last 30 days")
     rb
-      ? { label: "Real bets · 30 days", text: `${fmtEur(rbPnl, { signed: true })} on ${fmtInt(rbBets)} bets`, tone: rbPnl > 0 ? "success" : rbPnl < 0 ? "danger" : "neutral", alarm: false, icon: Euro, href: "/admin/real-bets" }
-      : { label: "Real bets · 30 days", text: "couldn't load the real-bet ledger", tone: "warning", icon: Euro, href: "/admin/real-bets" },
+      ? { label: "Real bets · 30 days", text: `${fmtEur(rbPnl, { signed: true })} on ${fmtInt(rbBets)} bets`, tone: rbPnl > 0 ? "success" : rbPnl < 0 ? "danger" : "neutral", alarm: false, icon: Euro, href: "/admin/bots?section=money" }
+      : { label: "Real bets · 30 days", text: "couldn't load the real-bet ledger", tone: "warning", icon: Euro, href: "/admin/bots?section=money" },
     d.coolbetRisk.level === "high"
       ? { label: "Odds feeds", text: "Coolbet block risk: high", sub: d.coolbetRisk.sub, tone: "danger", icon: Rss, href: "/admin/feeds#coolbet-footprint" }
       : d.feedsAnswer.tone !== "success"

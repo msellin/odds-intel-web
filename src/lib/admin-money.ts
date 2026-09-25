@@ -1,5 +1,5 @@
 /**
- * Reads for /admin/real-bets — the Real bets money ledger (#139 IA move P5, 2026-09-24).
+ * Reads for the Real money view (/admin/bots?section=money, was /admin/real-bets) — the Real bets money ledger (#139 IA move P5, 2026-09-24).
  *
  * The page used `getRealBets()` from engine-data.ts. This is a page-local copy with two
  * differences, both needed by the IA's jobs for this page:
@@ -15,7 +15,7 @@ import { createServerServiceClient } from "@/lib/supabase-server";
 import { readAdminFixture } from "@/lib/admin-fixture";
 import type { RealBet } from "@/lib/engine-data";
 import { confirmState } from "@/lib/admin-money-format";
-// Pure helpers live in admin-money-format.ts so the client half of /admin/real-bets can use them
+// Pure helpers live in admin-money-format.ts so the client half of the Real money view (/admin/bots?section=money, was /admin/real-bets) can use them
 // without importing this module's server-only reads; re-exported here as the one import point.
 // RECONCILE_FROM (= MANUAL_RECONCILE_SINCE, the Overview's constant) and RECONCILE_AFTER_H moved
 // there with confirmState() (2026-09-25) so the to-do and the ledger column share one rule.
@@ -215,7 +215,7 @@ export async function loadMoney(): Promise<MoneyData> {
 }
 
 /**
- * The recent real-money window — ONE definition shared by /admin/real-bets and the Overview card
+ * The recent real-money window — ONE definition shared by the Real money view (/admin/bots?section=money, was /admin/real-bets) and the Overview card
  * (UX fix round, 2026-09-24: the two pages showed "last 30 days" and "4 weeks" for the same idea).
  *
  *   • window  = placed_at >= now − days × 24 h (a rolling window, not calendar weeks);

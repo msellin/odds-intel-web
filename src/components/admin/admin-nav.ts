@@ -9,7 +9,6 @@ import {
   History,
   ListChecks,
   LayoutDashboard,
-  Receipt,
   Rss,
   type LucideIcon,
 } from "lucide-react";
@@ -33,9 +32,10 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     items: [
       { href: "/admin/bots", label: "Bots", Icon: Bot },
       // IA §3.1 (2026-09-24): "Pick queue" = today's picks to act on (URL kept: 65 smoke pins +
-      // bookmarks); "Real bets" is the money ledger, promoted from unused (IA move P5).
+      // bookmarks). "Real bets" (/admin/real-bets) was dropped 2026-09-26 (#162 W6.8, owner: not
+      // used): the money ledger is the "Real money" tab of Bots (/admin/bots?section=money, also in
+      // the ⌘K Actions); the old URL redirects there.
       { href: "/admin/shadow-bots", label: "Pick queue", Icon: ListChecks },
-      { href: "/admin/real-bets", label: "Real bets", Icon: Receipt },
     ],
   },
   {

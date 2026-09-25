@@ -7,12 +7,12 @@
  *
  *   1. Four counts — picks waiting, ready to place, placed today vs the caps, old bot prices.
  *   2. One line pointing at where the removed sections now live: the real-money switches and bot
- *      scores are on /admin/bots (IA §2.2 duplicates), the money ledger on /admin/real-bets.
+ *      scores are on /admin/bots (IA §2.2 duplicates), the money ledger on the Real money view (/admin/bots?section=money, was /admin/real-bets).
  *   3. The queue — shared DataTable, one verdict per pending pick.
  *   4. "How this page works" — collapsed.
  *
  * Removed here on purpose: the safety strip and the scoreboard (their jobs live on /admin/bots —
- * one owner per number), the Promotions panel (moved to /admin/real-bets).
+ * one owner per number), the Promotions panel (moved to the Real money view (/admin/bots?section=money, was /admin/real-bets)).
  *
  * Bot list is `bots WHERE retired_at IS NULL` — nothing hardcoded, so a new bot's picks appear
  * the moment it has a `bots` row and its first `shadow_bets` write. Decision rules live in
@@ -112,8 +112,8 @@ export default async function PickQueuePage() {
           icon={Clock}
           tone={overCap ? "danger" : "neutral"}
           value={placedToday}
-          href="/admin/real-bets"
-          hrefLabel="Real bets"
+          href="/admin/bots?section=money"
+          hrefLabel="Real money"
           foot={
             // LOGGED-PICKS-INVISIBLE (2026-09-15): bets recorded by hand are real exposure, so they are in
             // the headline number; the automatic caps count confirmed placements only.
@@ -157,7 +157,7 @@ export default async function PickQueuePage() {
             Bot scores
           </Link>{" "}
           ·{" "}
-          <Link href="/admin/real-bets" className="text-primary hover:underline">
+          <Link href="/admin/bots?section=money" className="text-primary hover:underline">
             Real bets
           </Link>
         </span>

@@ -166,7 +166,7 @@ async function handleTodayCommand(
   ];
 
   // Show up to 10 most-recent entries — beyond that we'd exceed Telegram's
-  // 4096-char ceiling. Older ones are visible via the /admin/real-bets page.
+  // 4096-char ceiling. Older ones are visible via the Real money view (/admin/bots?section=money).
   for (const b of bets.slice(0, 10)) {
     const ts = new Date(b.placed_at).toISOString().slice(11, 16); // HH:MM
     const slip = b.actual_odds && b.captured_odds
@@ -182,7 +182,7 @@ async function handleTodayCommand(
   }
 
   if (bets.length > 10) {
-    lines.push("", `…and ${bets.length - 10} more — see /admin/real-bets`);
+    lines.push("", `…and ${bets.length - 10} more — see /admin/bots?section=money`);
   }
   await sendReply(chatId, lines.join("\n"));
 }

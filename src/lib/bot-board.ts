@@ -27,7 +27,15 @@
  * PostgREST answers with an error. Each read returns `{ rows, error }` instead
  * of throwing, so the page can show "unified views not deployed yet" rather
  * than crashing.
+ *
+ * Speed (#162 W7.4, 2026-09-26): a cold /admin/bots render ran loadBotBoard (7 reads) and the
+ * control reads (5) TWICE — once for the admin shell's attention bell (admin-shell-data.ts →
+ * loadOverview) and once for the page — plus the fleet row a third time for the shell's status
+ * block. They are now wrapped in React.cache (`cache` from "react"): one fetch per request,
+ * shared by the layout, the Overview loader and the page. React.cache is per request, so nothing
+ * is shared across users or renders. bot_config is read by a named column list (BOT_CONFIG_COLS).
  */
+import { cache } from "react";
 import { createServerServiceClient } from "@/lib/supabase-server";
 import { ownerIds } from "@/lib/admin-auth";
 import type {
@@ -125,9 +133,6 @@ export interface BotConfigRow {
   books: string[] | null;
   books_source: string | null;
   anchor: string | null;
-  placeable: boolean | null;
-  published: boolean | null;
-  telegram: boolean | null;
   admissible_metric: string | null;
   exported_at: string | null;
 }
@@ -260,6 +265,18 @@ export interface BotBoardData {
   now: number;
 }
 
+/**
+ * The bot_config columns the board, the sheet and the Overview actually read (#162 W7.4) — not "*".
+ * Left out: placeable / published / telegram, which nothing on the web reads (bot_capabilities
+ * carries the live channel flags). A column the engine adds later stays off the wire until a
+ * surface needs it and adds it here. `gates` (about 2/3 of the table's bytes) and `description`
+ * stay: the board reads rule_version / edge_unit / excluded books from gates on load, and the
+ * sheet's Configuration shows both.
+ */
+export const BOT_CONFIG_COLS =
+  "bot_name, family, description, ledger, writer_job, cadence, markets, prob_source, edge_floor, " +
+  "edge_floor_source, odds_min, odds_max, gates, books, books_source, anchor, admissible_metric, exported_at";
+
 async function readAll<T>(relation: string, columns = "*"): Promise<Read<T>> {
   try {
     const db = createServerServiceClient();
@@ -309,8 +326,13 @@ async function readFixture(): Promise<BotBoardFixture> {
   return JSON.parse(await readFile(process.env.BOT_BOARD_FIXTURE as string, "utf8")) as BotBoardFixture;
 }
 
-/** Everything /admin/bots renders on load (the ledger is fetched per bot on demand). */
-export async function loadBotBoard(): Promise<BotBoardData> {
+/**
+ * Everything /admin/bots renders on load (the ledger is fetched per bot on demand).
+ * React.cache'd: the shell's Overview loader and the page share ONE set of reads per request.
+ */
+export const loadBotBoard = cache(loadBotBoardUncached);
+
+async function loadBotBoardUncached(): Promise<BotBoardData> {
   if (isBotBoardDevPreview()) {
     const f = await readFixture();
     const ok = <T,>(rows: T[]): Read<T> => ({ rows, error: null });
@@ -329,7 +351,7 @@ export async function loadBotBoard(): Promise<BotBoardData> {
   }
   const [scoreboard, config, capabilities, retired, weekly, marketStats, reviewFlags, funnel] = await Promise.all([
     readAll<BotScoreboardRow>("bot_scoreboard"),
-    readAll<BotConfigRow>("bot_config"),
+    readAll<BotConfigRow>("bot_config", BOT_CONFIG_COLS),
     readAll<BotCapabilitiesRow>("bot_capabilities"),
     // `bots` exists today; only the reason text is taken from it (the contract's
     // scoreboard carries retired_at but not the reason).
@@ -451,9 +473,21 @@ async function readRows<T>(relation: string, columns: string, order?: { col: str
   }
 }
 
-/** Everything the controls render. `viewerUserId` decides the owner-only Arm button. */
+/**
+ * Everything the controls render. `viewerUserId` decides the owner-only Arm button — and ONLY that,
+ * so the reads themselves are cached without it (#162 W7.4): the shell's Overview loader passes
+ * null and the page passes the viewer, and both now hit the same one-per-request reads.
+ */
 export async function loadControlState(viewerUserId: string | null): Promise<ControlState> {
   if (isBotBoardDevPreview()) return previewControlState(await readFixture(), await readActivityChanges());
+  const rows = await loadControlRows();
+  return {
+    ...rows,
+    viewer: { isOwner: !!viewerUserId && ownerIds().has(viewerUserId), readOnly: false, readOnlyReason: null },
+  };
+}
+
+const loadControlRows = cache(async (): Promise<Omit<ControlState, "viewer">> => {
   const [fleet, placers, bots, heartbeats, changes] = await Promise.all([
     readFleet(),
     readRows<PlacerRow>("coolbet_placer_bots", "bot_name, ui_place_enabled, locked_reason, note, updated_at"),
@@ -468,15 +502,8 @@ export async function loadControlState(viewerUserId: string | null): Promise<Con
       50,
     ),
   ]);
-  return {
-    fleet,
-    placers,
-    bots,
-    heartbeats,
-    changes,
-    viewer: { isOwner: !!viewerUserId && ownerIds().has(viewerUserId), readOnly: false, readOnlyReason: null },
-  };
-}
+  return { fleet, placers, bots, heartbeats, changes };
+});
 
 /**
  * Just the fleet switches — the shared admin shell's STATUS block (src/app/(app)/admin/layout.tsx)
@@ -487,7 +514,10 @@ export async function loadFleetStatus(): Promise<ControlState["fleet"]> {
   return readFleet();
 }
 
-async function readFleet(): Promise<ControlState["fleet"]> {
+// cached: the shell's status block (loadFleetStatus) and the control state read the same row
+const readFleet = cache(readFleetUncached);
+
+async function readFleetUncached(): Promise<ControlState["fleet"]> {
   try {
     const db = createServerServiceClient();
     const { data, error } = await db.from("coolbet_session_state").select(FLEET_COLS).eq("id", 1).maybeSingle();

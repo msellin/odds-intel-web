@@ -196,7 +196,7 @@ async function _loadShadowBotsPage(): Promise<ShadowBotsPageData> {
   const botIds = bots.map((b) => b.id);
 
   // 2 · placer toggles · 3 · today's real bets · 4 · upcoming picks
-  // 5 · in-play picks — all independent. (Promotions moved to /admin/real-bets, #139 P5.)
+  // 5 · in-play picks — all independent. (Promotions moved to the Real money view (/admin/bots?section=money, was /admin/real-bets), #139 P5.)
   queryCount += 4;
   const [placerRes, realRes, upcomingRes, inplayRes] = await Promise.all([
     db.from("coolbet_placer_bots").select("bot_name, ui_place_enabled, note").order("bot_name"),

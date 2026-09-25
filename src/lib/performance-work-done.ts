@@ -18,14 +18,16 @@
  */
 import { createClient } from "@supabase/supabase-js";
 import { unstable_cache } from "next/cache";
+import { publicPostgrestUrl, serverPostgrestOptions } from "@/lib/postgrest-server-url";
 
+// POSTGREST_INTERNAL_URL (server-only, optional) is honoured the same way (#162 W7.4).
 function createServerServiceClient() {
-  const url = process.env.NEXT_PUBLIC_POSTGREST_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const url = publicPostgrestUrl();
   const key =
     process.env.POSTGREST_SERVICE_KEY ??
     process.env.SUPABASE_SECRET_KEY ??
     process.env.SUPABASE_SERVICE_ROLE_KEY!;
-  return createClient(url, key);
+  return createClient(url, key, serverPostgrestOptions(url));
 }
 
 export interface RetiredRecord {

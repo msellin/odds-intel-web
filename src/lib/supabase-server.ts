@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
+import { publicPostgrestUrl, serverPostgrestOptions } from "@/lib/postgrest-server-url";
 
 /**
  * Server-side service-role client for the data layer.
@@ -13,16 +14,18 @@ import { cookies } from "next/headers";
  * `.eq('id', session.user.id)` filters for per-user queries.
  *
  * Server-only. Never send this client or its key to the browser.
+ *
+ * #162 W7.4: when the optional server-only POSTGREST_INTERNAL_URL is set (e.g.
+ * http://127.0.0.1:3012), requests go straight to PostgREST on the same box instead of out
+ * through Cloudflare and back — see src/lib/postgrest-server-url.ts. Unset = the public URL.
  */
 export function createServerServiceClient() {
-  const url =
-    process.env.NEXT_PUBLIC_POSTGREST_URL ??
-    process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const url = publicPostgrestUrl();
   const key =
     process.env.POSTGREST_SERVICE_KEY ??
     process.env.SUPABASE_SECRET_KEY ??
     process.env.SUPABASE_SERVICE_ROLE_KEY!;
-  return createClient(url, key);
+  return createClient(url, key, serverPostgrestOptions(url));
 }
 
 export async function createSupabaseServer() {

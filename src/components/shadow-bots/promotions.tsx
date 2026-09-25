@@ -22,7 +22,7 @@ function termsSummary(p: PromoRow): string {
 }
 
 /**
- * Promotions (OWN Phase 2). Rendered on /admin/real-bets since #139 IA move P5 (2026-09-24):
+ * Promotions (OWN Phase 2). Rendered on the Real money view (/admin/bots?section=money, was /admin/real-bets) since #139 IA move P5 (2026-09-24):
  * EV against realised is a money question. Collapsed to ONE line while `promo_terms` is empty.
  *
  * Original note — Promotions — the one OWN lever with a positive expectation that

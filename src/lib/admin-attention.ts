@@ -234,7 +234,7 @@ export function buildAttention(i: AttentionInputs): AttentionItem[] {
     out.push({ id: `bot-${b.bot}-${b.text}`, severity: b.severity, area: "bots", title: b.text, href: `/admin/bots?bot=${encodeURIComponent(b.bot)}` });
   }
   out.push(...jobItems(i));
-  if (i.unconfirmedError) out.push(unreadable("manual-unreadable", "money", "Real-bet ledger", i.unconfirmedError, "/admin/real-bets"));
+  if (i.unconfirmedError) out.push(unreadable("manual-unreadable", "money", "Real-bet ledger", i.unconfirmedError, "/admin/bots?section=money"));
   else if (i.unconfirmedManual > 0) {
     const from = i.unconfirmedOldest ? new Date(i.unconfirmedOldest).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }) : null;
     out.push({
@@ -244,7 +244,7 @@ export function buildAttention(i: AttentionInputs): AttentionItem[] {
       title: `${i.unconfirmedManual} real bet${i.unconfirmedManual === 1 ? "" : "s"} placed by hand${from ? ` (from ${from})` : ""} still not matched to your Coolbet account — check ${i.unconfirmedManual === 1 ? "it" : "them"}`,
       detail: "Logged from the Pick queue; the bookmaker-account check has not found them yet",
       since: i.unconfirmedOldest,
-      href: "/admin/real-bets",
+      href: "/admin/bots?section=money#todo",
     });
   }
   if (i.dqError) out.push(unreadable("dq-unreadable", "data", "Data-quality findings", i.dqError, "/admin/feeds#dq"));

@@ -17,17 +17,19 @@
  */
 import { createClient } from "@supabase/supabase-js";
 import { unstable_cache } from "next/cache";
+import { publicPostgrestUrl, serverPostgrestOptions } from "@/lib/postgrest-server-url";
 
 // Service client built here rather than imported from supabase-server: engine-data.ts (which a
 // client component imports for constants) reaches this module, and supabase-server pulls in
 // next/headers, which a client bundle cannot contain. Same env as createServerServiceClient.
+// POSTGREST_INTERNAL_URL (server-only, optional) is honoured the same way (#162 W7.4).
 function createServerServiceClient() {
-  const url = process.env.NEXT_PUBLIC_POSTGREST_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const url = publicPostgrestUrl();
   const key =
     process.env.POSTGREST_SERVICE_KEY ??
     process.env.SUPABASE_SECRET_KEY ??
     process.env.SUPABASE_SERVICE_ROLE_KEY!;
-  return createClient(url, key);
+  return createClient(url, key, serverPostgrestOptions(url));
 }
 
 /** Flat stake every /performance figure is stated at (the header says so). */
