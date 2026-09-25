@@ -131,6 +131,14 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "anchor": "model",
     "market": "1x2"
   },
+  "bot_high_roi_global_v2_newplus_v1": {
+    "edgeFloor": null,
+    "oddsFloor": null,
+    "oddsCap": null,
+    "realMoney": false,
+    "anchor": "model",
+    "market": "1x2"
+  },
   "bot_inplay_slowstate_afctl_v1": {
     "edgeFloor": null,
     "oddsFloor": null,
