@@ -51,9 +51,8 @@ import type { LiveBet, ModelV2Stats, CalibratedHeadlineStats } from "@/lib/engin
 import { PerformanceClient } from "@/components/performance-client";
 import type { PublicBotStat, SanitizedBotBet } from "@/components/performance-leaderboard";
 import {
-  getPicksForwardTestSummary,
   getPicksForwardTestBets,
-  getForwardTestAnchorClv,
+  getForwardTestBotRecord,
   PICKS_FORWARD_TEST_STAKE_EUR,
   PICKS_FORWARD_TEST_START_BANKROLL,
 } from "@/lib/engine-data";
@@ -438,22 +437,24 @@ export default async function PerformancePage() {
   //    private view picks_forward_test_anchor_clv. The own-book margin-corrected figure is
   //    negative by construction for these rules (ANALYSIS_GOTCHAS §85) and is shown only as
   //    the labelled secondary.
-  const armRecords = await Promise.all(PUBLISHED_ARM_BOTS.map(async (x) => {
-    const [summary, anchor] = await Promise.all([
-      getPicksForwardTestSummary(x.arm, x.grade, x.market),
-      getForwardTestAnchorClv(x.arm, x.grade, x.market),
-    ]);
-    return { ...x, summary, anchor };
-  }));
+  // [[#158]] (2026-09-25, owner-approved) — the CURRENT record also counts earlier-rule picks
+  //    that PASSED the current rule on pick-time data (engine re-check → pick_rule_recheck);
+  //    those that failed sit in the "earlier" line as "didn't meet today's rule". One private
+  //    view (picks_forward_test_bot_record, migration 431) carries figures AND sharp-anchor
+  //    CLV, so the row, its CLV and its bet list (scoped on record_rule_version) share one
+  //    basis. The pre-registered test's own counts are unaffected (summary views).
+  const armRecords = await Promise.all(PUBLISHED_ARM_BOTS.map(async (x) => ({
+    ...x, record: await getForwardTestBotRecord(x.arm, x.grade, x.market),
+  })));
   const shortRule = (rv: string) => {
     const m = /_v(\d+)_/.exec(rv);
     return m ? `v${m[1]}` : rv;
   };
-  for (const { bot, summary, anchor } of armRecords) {
-  const picksSummary = summary?.current ?? null;
+  for (const { bot, record } of armRecords) {
+  const picksSummary = record?.current ?? null;
   if (picksSummary && picksSummary.published > 0) {
-    const a = anchor?.get(picksSummary.ruleVersion) ?? null;
-    const sharp = a && a.nAnchor > 0 ? a.clvAnchor : null;
+    const a = picksSummary;
+    const sharp = a.nAnchor > 0 ? a.clvAnchor : null;
     // own-book margin-corrected — the SECONDARY figure now
     const mc = picksSummary.clvMarginCorrected;
     // BOT-NAMES-AND-LABELS (migration 375, [[#069]]). Both the display name and
@@ -487,22 +488,19 @@ export default async function PerformancePage() {
         ruleVersion: picksSummary.ruleVersion,
         rule: shortRule(picksSummary.ruleVersion),
         sharpClv: sharp,
-        nSharp: a?.nAnchor ?? 0,
-        nPinnacle: a?.nPinnacle ?? 0,
-        nConsensus: a?.nConsensus ?? 0,
+        nSharp: a.nAnchor,
+        nPinnacle: a.nPinnacle,
+        nConsensus: a.nConsensus,
         ownClv: mc,
         nOwn: picksSummary.nClvMc,
-        earlier: (summary?.closed ?? [])
-          .filter((c) => c.published > 0)
-          .map((c) => {
-            const e = anchor?.get(c.ruleVersion);
-            return {
-              rule: shortRule(c.ruleVersion),
-              settled: c.settled,
-              sharpClv: e && e.nAnchor > 0 ? e.clvAnchor : null,
-              nSharp: e?.nAnchor ?? 0,
-            };
-          }),
+        nRechecked: picksSummary.nRechecked,
+        earlier: (record?.earlier ?? []).map((e) => ({
+          rule: shortRule(e.ruleVersion),
+          settled: e.settled,
+          sharpClv: e.nAnchor > 0 ? e.clvAnchor : null,
+          nSharp: e.nAnchor,
+          failedRecheck: e.failedRecheck,
+        })),
       },
       // Same basis as every other row: EUR 1000 start, EUR 10 flat. The rule
       // stakes 1 unit; showing 1.03 next to EUR 1,339 would make the newest

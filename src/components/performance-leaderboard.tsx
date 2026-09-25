@@ -95,8 +95,14 @@ export interface ForwardTestRecord {
   nConsensus: number;
   ownClv: number | null;
   nOwn: number;
-  /** Earlier rule versions — kept visible, never pooled into the row. */
-  earlier: Array<{ rule: string; settled: number; sharpClv: number | null; nSharp: number }>;
+  /** [[#158]] earlier-rule picks counted in this record because they passed the current
+   *  rule on pick-time data (engine re-check). Shown in the detail view only. */
+  nRechecked: number;
+  /** Earlier rule versions — kept visible, never pooled into the row. `failedRecheck` =
+   *  re-checked against the current rule and failed ("didn't meet today's rule"). */
+  earlier: Array<{
+    rule: string; settled: number; sharpClv: number | null; nSharp: number; failedRecheck: boolean;
+  }>;
 }
 
 function clvPct(v: number | null): string {
@@ -118,13 +124,21 @@ function ForwardTestClvLine({ ft }: { ft: ForwardTestRecord }) {
           </span>
         )}
       </p>
+      {ft.nRechecked > 0 && (
+        <p className="text-[10px] text-muted-foreground/60">
+          rule {ft.rule} · incl. {ft.nRechecked} earlier pick{ft.nRechecked === 1 ? "" : "s"}{" "}
+          re-checked under {ft.rule} (judged only on what was known when published)
+        </p>
+      )}
       {ft.earlier.length > 0 && (
         <p className="text-[10px] text-muted-foreground/60">
-          rule {ft.rule} only · earlier{" "}
+          {ft.nRechecked > 0 ? "not counted · " : `rule ${ft.rule} only · earlier `}
           {ft.earlier
-            .map((e) => `${e.rule}: ${e.settled} settled, vs sharp close ${clvPct(e.sharpClv)}`)
-            .join("; ")}{" "}
-          — not counted
+            .map((e) =>
+              `${e.rule}: ${e.settled} settled, vs sharp close ${clvPct(e.sharpClv)}` +
+              (e.failedRecheck ? ` — didn't meet today's rule` : ""))
+            .join("; ")}
+          {ft.earlier.every((e) => e.failedRecheck) ? "" : " — not counted"}
         </p>
       )}
     </>

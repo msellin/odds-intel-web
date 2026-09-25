@@ -2521,60 +2521,100 @@ export async function getPicksForwardTestSummary(
 //
 // Sharp-anchor CLV = `clv_sharp` (fresh Shin-de-vigged Pinnacle close) where present,
 // else `clv_cons` (>=5-book consensus close); thin 3–4-book consensus is excluded.
-// `leg_clv_sharp` is PRIVATE (anon least-privilege, migration 404), so this reads the
-// aggregate view `picks_forward_test_anchor_clv` (migration 430, service_role only)
-// server-side. No anon grant exists or is needed.
-export type ForwardTestAnchorClv = {
+// `leg_clv_sharp` is PRIVATE (anon least-privilege, migration 404), so this reads a
+// private aggregate view server-side (430: `picks_forward_test_anchor_clv`; since #158:
+// `picks_forward_test_bot_record`, same CLV definition). No anon grant exists or is needed.
+//
+// [[#158]] (2026-09-25, owner-approved) the row's record also counts EARLIER-rule picks that
+// pass the CURRENT rule on pick-time data (engine: scripts/recheck_forward_test_picks.py →
+// table pick_rule_recheck). The verdict is data, not page logic: this reads the private
+// view `picks_forward_test_bot_record` (migration 431, service_role only), which carries each
+// pick's record_rule_version / record_state. is_current rows = native + rechecked_pass;
+// the rest is the "earlier" line — rechecked_fail = "didn't meet today's rule".
+// The pre-registered test's own counts (picks_forward_test_summary) are NOT affected.
+export type ForwardTestBotRecord = {
   ruleVersion: string;
+  published: number;
+  pending: number;
   settled: number;
+  won: number;
+  pnlUnits: number;
+  roi: number | null;
   nAnchor: number;
   nPinnacle: number;
   nConsensus: number;
   clvAnchor: number | null;
   nClvMc: number;
   clvMarginCorrected: number | null;
+  /** Earlier-rule picks counted here because they passed the current rule (published count). */
+  nRechecked: number;
 };
 
-/** Per rule_version, markets combined (n-weighted). Null when the view is unreachable. */
-export async function getForwardTestAnchorClv(
+export type ForwardTestBotRecordEarlier = {
+  ruleVersion: string;
+  /** true = re-checked against the current rule and failed ("didn't meet today's rule"). */
+  failedRecheck: boolean;
+  settled: number;
+  nAnchor: number;
+  clvAnchor: number | null;
+};
+
+/** One forward-test bot's record. Null when the view is unreachable or the bot has no picks. */
+export async function getForwardTestBotRecord(
   arm: string,
   grade?: "B" | "C" | "D",
   market?: "1x2" | "over_under_25",
-): Promise<Map<string, ForwardTestAnchorClv> | null> {
+): Promise<{ current: ForwardTestBotRecord | null; earlier: ForwardTestBotRecordEarlier[] } | null> {
   const db = createSupabaseAdmin();
   const { data, error } = await db
-    .from("picks_forward_test_anchor_clv")
+    .from("picks_forward_test_bot_record")
     .select("*")
     .eq("arm", arm)
     .match({ ...(grade ? { grade } : {}), ...(market ? { market } : {}) });
-  if (error || !data) return null;
-  const out = new Map<string, ForwardTestAnchorClv>();
-  const sums = new Map<string, { a: number; mc: number }>();
-  for (const r of data as Record<string, unknown>[]) {
-    const rv = String(r.rule_version ?? "");
-    const cur = out.get(rv) ?? {
-      ruleVersion: rv, settled: 0, nAnchor: 0, nPinnacle: 0, nConsensus: 0,
-      clvAnchor: null, nClvMc: 0, clvMarginCorrected: null,
+  if (error || !data || data.length === 0) return null;
+  const rows = data as Record<string, unknown>[];
+  const n = (v: unknown) => Number(v ?? 0);
+  // n-weighted means, never an average of ratios (ANALYSIS_GOTCHAS 9a(h)).
+  const fold = (rs: Record<string, unknown>[]) => {
+    let a = 0, mc = 0;
+    const o = {
+      published: 0, pending: 0, settled: 0, won: 0, pnlUnits: 0,
+      nAnchor: 0, nPinnacle: 0, nConsensus: 0, nClvMc: 0, nRechecked: 0,
     };
-    const s = sums.get(rv) ?? { a: 0, mc: 0 };
-    const nA = Number(r.n_anchor ?? 0);
-    const nM = Number(r.n_clv_mc ?? 0);
-    cur.settled += Number(r.settled ?? 0);
-    cur.nAnchor += nA;
-    cur.nPinnacle += Number(r.n_pinnacle ?? 0);
-    cur.nConsensus += Number(r.n_consensus ?? 0);
-    cur.nClvMc += nM;
-    if (r.clv_anchor != null) s.a += Number(r.clv_anchor) * nA;
-    if (r.clv_margin_corrected != null) s.mc += Number(r.clv_margin_corrected) * nM;
-    out.set(rv, cur);
-    sums.set(rv, s);
+    for (const r of rs) {
+      o.published += n(r.published); o.pending += n(r.pending); o.settled += n(r.settled);
+      o.won += n(r.won); o.pnlUnits += n(r.pnl_units);
+      o.nAnchor += n(r.n_anchor); o.nPinnacle += n(r.n_pinnacle); o.nConsensus += n(r.n_consensus);
+      o.nClvMc += n(r.n_clv_mc);
+      if (r.record_state === "rechecked_pass") o.nRechecked += n(r.published);
+      if (r.clv_anchor != null) a += Number(r.clv_anchor) * n(r.n_anchor);
+      if (r.clv_margin_corrected != null) mc += Number(r.clv_margin_corrected) * n(r.n_clv_mc);
+    }
+    return {
+      ...o,
+      roi: o.settled > 0 ? o.pnlUnits / o.settled : null,
+      clvAnchor: o.nAnchor > 0 ? a / o.nAnchor : null,
+      clvMarginCorrected: o.nClvMc > 0 ? mc / o.nClvMc : null,
+    };
+  };
+  const cur = rows.filter((r) => r.is_current === true);
+  const current = cur.length
+    ? { ruleVersion: String(cur[0].record_rule_version ?? ""), ...fold(cur) }
+    : null;
+  const groups = new Map<string, Record<string, unknown>[]>();
+  for (const r of rows.filter((x) => x.is_current !== true)) {
+    const k = `${r.record_rule_version}|${r.record_state === "rechecked_fail"}`;
+    groups.set(k, [...(groups.get(k) ?? []), r]);
   }
-  for (const [rv, c] of out) {
-    const s = sums.get(rv)!;
-    c.clvAnchor = c.nAnchor > 0 ? s.a / c.nAnchor : null;
-    c.clvMarginCorrected = c.nClvMc > 0 ? s.mc / c.nClvMc : null;
-  }
-  return out;
+  const earlier = [...groups.entries()].map(([k, rs]) => {
+    const f = fold(rs);
+    return {
+      ruleVersion: k.split("|")[0],
+      failedRecheck: k.endsWith("|true"),
+      settled: f.settled, nAnchor: f.nAnchor, clvAnchor: f.clvAnchor,
+    };
+  });
+  return { current, earlier };
 }
 
 // PICKS-BOT-ACTS-LIKE-THE-OTHERS-2026-09-14. The leaderboard row for
@@ -2622,7 +2662,8 @@ export async function getPicksForwardTestBets(
     .match({
       ...(grade ? { grade } : {}),
       ...(market ? { market } : {}),
-      ...(ruleVersion ? { rule_version: ruleVersion } : {}),
+      // [[#158]] the rule the pick COUNTS under (re-checked earlier picks included).
+      ...(ruleVersion ? { record_rule_version: ruleVersion } : {}),
     })
     .order("published_at", { ascending: true });
   if (error || !data) return [];
