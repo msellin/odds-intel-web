@@ -12,6 +12,10 @@
  *     guessed name must not read their ledger through this public route.
  *   * VIP + hide_pending bots: SETTLED legs only. Their pending picks are the paid product
  *     (#148); this route reads with service_role, so this filter is what keeps them private.
+ *   * EXPERIMENTAL bots are never listed (unless VIP) — the #161 twin arms are ledger-backed
+ *     but admin-only ([[#164]]).
+ *   * a free bot's HELD-BACK pending pick (VIP holds it or would take it, [[#164]]) is dropped
+ *     until kickoff — `bot_ledger_display.held_back`, decided once by the engine.
  *   * stake / edge only for Elite (superadmin), as before.
  */
 import { NextResponse, type NextRequest } from "next/server";
@@ -30,9 +34,15 @@ export async function GET(req: NextRequest) {
   }
   const bots = await getAllBotsFromDB();
   const b = bots.find((x) => x.name === bot);
+  // [[#164]] (flagged by #162): an EXPERIMENTAL bot is admin-only (#155) even when it is ledger-backed
+  // — the #161 twin arms (bot_sharp_aligned_v1, bot_consensus_pinconf_v1) are LEDGER_BACKED_BOTS and
+  // were readable here, pending legs included. VIP bots are listed whatever their status (settled only).
+  const experimental = b?.maturityLabel === "experimental";
   const listed =
     !!b && !b.retiredAt &&
-    (isPublicBot(b.maturityLabel) || isVipBot(b) || b.showOnPerformance === true || LEDGER_BACKED_BOTS.has(b.name));
+    (isVipBot(b) ||
+      (!experimental &&
+        (isPublicBot(b.maturityLabel) || b.showOnPerformance === true || LEDGER_BACKED_BOTS.has(b.name))));
   if (!b || !listed) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
@@ -46,7 +56,8 @@ export async function GET(req: NextRequest) {
     isElite = false;
   }
 
-  const legs = await getBotLegs(bot, { settledOnly: isVipBot(b) || b.hidePending, isElite });
+  // Held-back free picks ([[#164]] VIP FIRST) are dropped inside getBotLegs for every bot.
+  const legs = await getBotLegs(bot, { settledOnly: isVipBot(b) || b.hidePending || experimental, isElite });
   return NextResponse.json(
     { legs },
     { headers: { "Cache-Control": "private, no-store" } },

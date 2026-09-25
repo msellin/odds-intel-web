@@ -126,7 +126,17 @@ export interface BotLeg {
 }
 
 const LEG_COLUMNS =
-  "pick_id, bot_name, home_team, away_team, league, country, pick_time, market, selection, odds_public, result, pnl_unit_public, clv_anchor_public, clv_anchor_source, model_prob, stake, edge, strategy_profile";
+  "pick_id, bot_name, home_team, away_team, league, country, pick_time, market, selection, odds_public, result, pnl_unit_public, clv_anchor_public, clv_anchor_source, model_prob, stake, edge, strategy_profile, held_back";
+
+/**
+ * [[#164]] VIP FIRST — a free bot's pending pick that VIP holds (or would take at that price) is
+ * HELD BACK until kickoff: recorded and counted, but never shown before then. The engine decides it
+ * once (workers/utils/vip_guard.py) and stores it on the row; `bot_ledger_display.held_back` (migration
+ * 439) is true while it lasts. Every pending view here drops those legs — nothing re-derives the rule.
+ */
+function isVisibleLeg(r: Record<string, unknown>): boolean {
+  return !(r.held_back === true && !SETTLED.includes(String(r.result)));
+}
 
 function toLeg(r: Record<string, unknown>, isElite: boolean): BotLeg {
   const clv = numOrNull(r.clv_anchor_public);
@@ -178,7 +188,7 @@ export async function getBotLegs(
     console.error("[getBotLegs] read failed:", error?.message ?? "no data");
     return [];
   }
-  return (data as Record<string, unknown>[]).map((r) => toLeg(r, opts.isElite));
+  return (data as Record<string, unknown>[]).filter(isVisibleLeg).map((r) => toLeg(r, opts.isElite));
 }
 
 /**
@@ -216,6 +226,7 @@ export async function getCohortLegs(opts: {
   }
   return rows
     .filter((r) => !opts.hidePendingBots.has(String(r.bot_name)) || SETTLED.includes(String(r.result)))
+    .filter(isVisibleLeg)
     .map((r) => toLeg(r, opts.isElite));
 }
 

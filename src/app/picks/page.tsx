@@ -657,10 +657,14 @@ export default async function PicksPage() {
             Get picks as they post
           </h2>
           <p className="text-sm text-neutral-400">
-            Every pick here goes to the free Telegram channel at the same moment,
-            with the same price and the same edge. Nothing is held back or
-            posted late.
+            Picks go to the free Telegram channel as they post, with the same
+            price and the same edge. One exception: when our paid VIP picks
+            already hold the same bet, the free copy is recorded but only
+            shows up here at kickoff — it is never sent early.
           </p>
+          {/* [[#164]] VIP FIRST: held-back free picks (bots' held_back_until = kickoff) are filtered
+              out of picks_public_all until kickoff and never sent — the old "nothing is held back"
+              line stopped being true. */}
           <div className="mt-4">
             <Link
               href="https://t.me/oddsintelpicks"
