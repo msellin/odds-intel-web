@@ -23,7 +23,7 @@ import { createSupabaseServer } from "@/lib/supabase-server";
 import { getUserTier } from "@/lib/get-user-tier";
 import { getAllBotsFromDB } from "@/lib/engine-data";
 import { isPublicBot, isVipBot, LEDGER_BACKED_BOTS } from "@/lib/bot-aggregates";
-import { getBotLegs } from "@/lib/bot-performance";
+import { getBotLegs, getBotPerformanceFresh, getBotEvBands } from "@/lib/bot-performance";
 
 export const dynamic = "force-dynamic";
 
@@ -57,9 +57,16 @@ export async function GET(req: NextRequest) {
   }
 
   // Held-back free picks ([[#164]] VIP FIRST) are dropped inside getBotLegs for every bot.
-  const legs = await getBotLegs(bot, { settledOnly: isVipBot(b) || b.hidePending || experimental, isElite });
+  // [[#155]] the header reads the bot's bot_performance row from THIS request (uncached), so it
+  // always describes the same legs as the chart and table below it. VIP bots also get the
+  // EV8 / EV5 split of the same record (bot_performance_ev_band — sums back to the row).
+  const [legs, perf, evBands] = await Promise.all([
+    getBotLegs(bot, { settledOnly: isVipBot(b) || b.hidePending || experimental, isElite }),
+    getBotPerformanceFresh(bot),
+    isVipBot(b) ? getBotEvBands(bot) : Promise.resolve([]),
+  ]);
   return NextResponse.json(
-    { legs },
+    { legs, perf, evBands },
     { headers: { "Cache-Control": "private, no-store" } },
   );
 }

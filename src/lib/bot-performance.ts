@@ -48,8 +48,6 @@ export interface BotPerformance {
   roi: number | null;
   /** Settled legs priced at the recorded odds for want of any quote at pick time. */
   nRecordedPrice: number;
-  /** SECONDARY: the bot's own stakes at the same price (fraction). */
-  roiStaked: number | null;
   /** Sharp-anchor CLV (fraction) + its n and source mix. */
   clv: number | null;
   clvN: number;
@@ -60,39 +58,99 @@ export interface BotPerformance {
 const num = (v: unknown): number => (v == null ? 0 : Number(v));
 const numOrNull = (v: unknown): number | null => (v == null ? null : Number(v));
 
+// [[#155]] FLAT STAKES EVERYWHERE (migration 441): every stored stake is the flat unit, so the
+// stake-weighted `roi_staked` is no longer a separate figure — it is not read (it used to sit in
+// the detail-view header as "at the bot's own stakes", EV5 −53.8% beside a flat −3%).
+const PERF_COLUMNS =
+  "bot_name, picks_total, pending, settled, won, lost, pnl_units_public, roi_public, n_public_recorded, clv_public, clv_n, clv_n_pinnacle, clv_n_consensus";
+
+function toPerformance(r: Record<string, unknown>): BotPerformance {
+  return {
+    bot: String(r.bot_name),
+    picksTotal: num(r.picks_total),
+    pending: num(r.pending),
+    settled: num(r.settled),
+    won: num(r.won),
+    lost: num(r.lost),
+    pnlUnits: num(r.pnl_units_public),
+    roi: numOrNull(r.roi_public),
+    nRecordedPrice: num(r.n_public_recorded),
+    clv: numOrNull(r.clv_public),
+    clvN: num(r.clv_n),
+    clvNPinnacle: num(r.clv_n_pinnacle),
+    clvNConsensus: num(r.clv_n_consensus),
+  };
+}
+
 async function _getBotPerformance(): Promise<Record<string, BotPerformance>> {
   const db = createServerServiceClient();
-  const { data, error } = await db
-    .from("bot_performance")
-    .select(
-      "bot_name, picks_total, pending, settled, won, lost, pnl_units_public, roi_public, n_public_recorded, roi_staked, clv_public, clv_n, clv_n_pinnacle, clv_n_consensus",
-    )
-    .limit(5000);
+  const { data, error } = await db.from("bot_performance").select(PERF_COLUMNS).limit(5000);
   if (error || !data) {
     console.error("[getBotPerformance] bot_performance read failed:", error?.message ?? "no data");
     return {};
   }
   const out: Record<string, BotPerformance> = {};
-  for (const r of data as Record<string, unknown>[]) {
-    const bot = String(r.bot_name);
-    out[bot] = {
-      bot,
-      picksTotal: num(r.picks_total),
-      pending: num(r.pending),
+  for (const r of data as Record<string, unknown>[]) out[String(r.bot_name)] = toPerformance(r);
+  return out;
+}
+
+/**
+ * ONE bot's bot_performance row, UNCACHED — the detail view's header ([[#155]]). The table rows
+ * read the 2-minute cached copy; the detail view's legs are fetched fresh, so a header from the
+ * cache could lag its own chart ("3 settled" in the chart title vs "2 settled" in the header).
+ * Header and legs now come from the SAME request, so they always describe the same legs.
+ */
+export async function getBotPerformanceFresh(bot: string): Promise<BotPerformance | null> {
+  const db = createServerServiceClient();
+  const { data, error } = await db.from("bot_performance").select(PERF_COLUMNS).eq("bot_name", bot).limit(1);
+  if (error || !data || data.length === 0) {
+    if (error) console.error("[getBotPerformanceFresh] read failed:", error.message);
+    return null;
+  }
+  return toPerformance(data[0] as Record<string, unknown>);
+}
+
+/** One EV band of a bot's record — engine view bot_performance_ev_band (migration 441). */
+export interface BotEvBand {
+  band: "EV8" | "EV5";
+  settled: number;
+  won: number;
+  lost: number;
+  pnlUnits: number;
+  roi: number | null;
+  clv: number | null;
+  clvN: number;
+}
+
+/**
+ * [[#155]] owner 2026-09-25: the VIP bot's record split EV8 (EV ≥ 8%) vs EV5 (5–8%) — it replaces
+ * the retired bot_combined_1x2_ev8_v1 (a strict subset of the VIP bot's picks). The SAME legs and
+ * aggregate expressions as bot_performance, grouped by band; smoke ONE-ROI-CLV-PARITY asserts the
+ * bands sum back to the bot's row, so this is not a second ROI path.
+ */
+export async function getBotEvBands(bot: string): Promise<BotEvBand[]> {
+  const db = createServerServiceClient();
+  const { data, error } = await db
+    .from("bot_performance_ev_band")
+    .select("ev_band, settled, won, lost, pnl_units_public, roi_public, clv_public, clv_n")
+    .eq("bot_name", bot);
+  if (error || !data) {
+    if (error) console.error("[getBotEvBands] read failed:", error.message);
+    return [];
+  }
+  return (data as Record<string, unknown>[])
+    .filter((r) => r.ev_band === "EV8" || r.ev_band === "EV5")
+    .map((r) => ({
+      band: r.ev_band as "EV8" | "EV5",
       settled: num(r.settled),
       won: num(r.won),
       lost: num(r.lost),
       pnlUnits: num(r.pnl_units_public),
       roi: numOrNull(r.roi_public),
-      nRecordedPrice: num(r.n_public_recorded),
-      roiStaked: numOrNull(r.roi_staked),
       clv: numOrNull(r.clv_public),
       clvN: num(r.clv_n),
-      clvNPinnacle: num(r.clv_n_pinnacle),
-      clvNConsensus: num(r.clv_n_consensus),
-    };
-  }
-  return out;
+    }))
+    .sort((a, b) => (a.band === "EV8" ? -1 : 1) - (b.band === "EV8" ? -1 : 1));
 }
 
 /** Per-bot figures, keyed by bot name. 2-minute cache (the view is ~0.2 s). */

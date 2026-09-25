@@ -3,7 +3,7 @@
 import { CALIBRATED_SINCE } from "@/lib/engine-data";
 import { useEffect, useState } from "react";
 import { TrendingUp, TrendingDown, Minus, ChevronRight } from "lucide-react";
-import { isLiveBot, vipEvLabel, VIP_LIVE_SINCE } from "@/lib/bot-aggregates";
+import { isLiveBot, pickEv, vipEvLabel, VIP_LIVE_SINCE } from "@/lib/bot-aggregates";
 import {
   Dialog,
   DialogContent,
@@ -78,14 +78,13 @@ export interface PublicBotStat {
 
 /** [[#159]] What the detail view states about a row's numbers — the same for every bot.
  *  CLV = the pick's price against the sharp-anchor close (fresh de-vigged Pinnacle, else a 5+
- *  bookmaker consensus); a raw fraction. roiStaked = the bot's own stakes (percent), the
- *  labelled secondary to the flat ROI. */
+ *  bookmaker consensus); a raw fraction. ([[#155]]: no stake-weighted secondary any more — every
+ *  stored stake is the flat unit, migration 441.) */
 export interface BotRecordDetail {
   clv: number | null;
   clvN: number;
   clvNPinnacle: number;
   clvNConsensus: number;
-  roiStaked: number | null;
   /** Settled picks priced at the recorded odds — no quote at pick time. */
   nRecordedPrice: number;
   pending: number;
@@ -375,6 +374,59 @@ function ClvLine({ bot }: { bot: PublicBotStat }) {
   );
 }
 
+/** The flat unit every /performance figure is stated at (lib/bot-performance PERF_FLAT_STAKE_EUR —
+ *  not imported: that module is server-only). */
+const FLAT_EUR = 10;
+
+/** The detail view's header row — the bot's bot_performance row, fetched with its legs ([[#155]]). */
+interface DetailPerf {
+  settled: number;
+  won: number;
+  lost: number;
+  pnlUnits: number;
+  roi: number | null;
+}
+
+/** One EV band of a VIP bot's record (engine view bot_performance_ev_band, [[#155]]). */
+interface DetailEvBand {
+  band: "EV8" | "EV5";
+  settled: number;
+  won: number;
+  lost: number;
+  pnlUnits: number;
+  roi: number | null;
+  clv: number | null;
+  clvN: number;
+}
+
+/** [[#155]] owner 2026-09-25: the VIP bot's record split EV8 (EV ≥ 8%) vs EV5 (5–8%), each with n
+ *  settled, flat ROI and sharp-anchor CLV — the same basis as the header (the bands sum to it).
+ *  Replaces the retired EV8 bot, whose picks were a strict subset of these. */
+function EvBandSplit({ bands }: { bands: DetailEvBand[] }) {
+  return (
+    <div className="rounded-lg border border-yellow-400/20 px-4 py-2 text-xs">
+      <p className="text-[10px] text-muted-foreground mb-1">By expected value at the price (model probability × odds − 1)</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
+        {bands.map((b) => (
+          <p key={b.band} className="tabular-nums">
+            <EvBandChip label={b.band} />
+            <span className="ml-1.5 text-muted-foreground">{b.band === "EV8" ? "EV ≥ 8%" : "EV 5–8%"}</span>
+            <span className="ml-2">{b.settled} settled</span>
+            {b.settled > 0 && (
+              <>
+                <span className={`ml-2 ${pnlColor(b.roi ?? 0)}`}>ROI {fmtPct(b.roi == null ? null : b.roi * 100)}</span>
+                <span className="ml-2 text-muted-foreground">
+                  vs sharp close {b.clvN > 0 ? clvPct(b.clv) : "—"}{b.clvN > 0 ? ` (${b.clvN})` : ""}
+                </span>
+              </>
+            )}
+          </p>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function BotModal({
   bot,
   isElite,
@@ -385,15 +437,33 @@ function BotModal({
   onClose: () => void;
 }) {
   const [legs, setLegs] = useState<BotLegView[] | null>(null);
+  const [perf, setPerf] = useState<DetailPerf | null>(null);
+  const [evBands, setEvBands] = useState<DetailEvBand[]>([]);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     let alive = true;
     fetch(`/api/performance/bot-legs?bot=${encodeURIComponent(bot.name)}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((j: { legs: BotLegView[] }) => { if (alive) setLegs(j.legs ?? []); })
+      .then((j: { legs: BotLegView[]; perf?: DetailPerf | null; evBands?: DetailEvBand[] }) => {
+        if (!alive) return;
+        setLegs(j.legs ?? []);
+        setPerf(j.perf ?? null);
+        setEvBands(j.evBands ?? []);
+      })
       .catch(() => { if (alive) setFailed(true); });
     return () => { alive = false; };
   }, [bot.name]);
+
+  // [[#155]] The header reads the bot's bot_performance row from the SAME request as the legs
+  // (the row's cached copy until it arrives), so "N settled" in the header and in the chart title
+  // always count the same legs. Flat €10 at the public price — the table row's figure.
+  const hdr = perf
+    ? { settled: perf.settled, won: perf.won, lost: perf.lost,
+        pnl: perf.settled > 0 ? perf.pnlUnits * FLAT_EUR : null,
+        roi: perf.roi == null ? null : perf.roi * 100 }
+    : { settled: bot.settled, won: bot.won, lost: bot.lost, pnl: bot.pnl, roi: bot.roi };
+  // [[#155]] EV-unit bots (their own gate is EV = p × odds − 1) show the pick's EV, not a pp edge.
+  const evBot = ENGINE_BOT_FLOORS[bot.name]?.edgeUnit === "ev";
 
   // MATCH-DUPES-CLEANUP: voided picks are not history (pnl 0 by definition, price often garbage).
   // VIP-PERFORMANCE-SETTLED-ONLY (#148): the route already drops a VIP bot's unsettled rows;
@@ -420,14 +490,14 @@ function BotModal({
             {bot.displayName && (
               <span className="font-mono text-xs text-muted-foreground">{bot.name}</span>
             )}
-            {bot.settled > 0 && bot.pnl != null && (
-              <span className={`text-base font-semibold ${pnlColor(bot.pnl)}`}>
-                {fmt(bot.pnl)}€
+            {hdr.settled > 0 && hdr.pnl != null && (
+              <span className={`text-base font-semibold ${pnlColor(hdr.pnl)}`}>
+                {fmt(hdr.pnl)}€
               </span>
             )}
             <span className="text-sm text-muted-foreground font-normal">
-              {bot.settled > 0
-                ? `${bot.settled} settled · ${bot.won} W / ${bot.lost} L · ROI ${fmtPct(bot.roi)}`
+              {hdr.settled > 0
+                ? `${hdr.settled} settled · ${hdr.won} W / ${hdr.lost} L · ROI ${fmtPct(hdr.roi)}`
                 : "Accumulating data…"}
             </span>
             {bot.isVip && (
@@ -440,9 +510,6 @@ function BotModal({
         <div className="rounded-lg border border-border/40 px-4 py-3 text-xs space-y-0.5">
           <p className="text-[10px] text-muted-foreground">
             ROI at the best price available when each pick was made (all books) · flat €10 per pick
-            {bot.record?.roiStaked != null && bot.settled > 0 && (
-              <span className="text-muted-foreground/60"> · at the bot&apos;s own stakes {fmtPct(bot.record.roiStaked)}</span>
-            )}
             {(bot.record?.nRecordedPrice ?? 0) > 0 && (
               <span className="text-muted-foreground/60">
                 {" "}· {bot.record?.nRecordedPrice} pick{bot.record?.nRecordedPrice === 1 ? "" : "s"} priced at the recorded odds (no quote stored at pick time)
@@ -451,6 +518,7 @@ function BotModal({
           </p>
           <ClvLine bot={bot} />
         </div>
+        {bot.isVip && evBands.length > 0 && <EvBandSplit bands={evBands} />}
 
         {/* Chart */}
         {legs == null && !failed ? (
@@ -536,7 +604,9 @@ function BotModal({
                     {isElite && <th className="py-2 px-2 text-right">Stake</th>}
                     <th className="py-2 px-2 text-center">Result</th>
                     <th className="py-2 px-2 text-right" title="Flat €10 per pick">P&L</th>
-                    {isElite && <th className="py-2 px-2 text-right">Edge</th>}
+                    {evBot ? (
+                      <th className="py-2 px-2 text-right" title="Expected value at this price: model probability × odds − 1 — the unit this bot's own rule is set in">EV</th>
+                    ) : isElite && <th className="py-2 px-2 text-right">Edge</th>}
                     <th className="py-2 pr-3 text-right" title="Against the sharp closing line">CLV</th>
                   </tr>
                 </thead>
@@ -566,7 +636,18 @@ function BotModal({
                       <td className={`py-2 px-2 text-right tabular-nums ${b.result !== "pending" ? pnlColor(b.pnl) : "text-muted-foreground"}`}>
                         {b.result !== "pending" ? fmt(b.pnl) : "—"}
                       </td>
-                      {isElite && (
+                      {evBot ? (
+                        <td className="py-2 px-2 text-right tabular-nums">
+                          {(() => {
+                            const ev = pickEv(b.modelProb, b.odds);
+                            return ev == null ? <span className="text-muted-foreground">—</span> : (
+                              <span className={ev > 0 ? "text-emerald-400" : ev < 0 ? "text-red-400" : "text-muted-foreground"}>
+                                {ev >= 0 ? "+" : ""}{(ev * 100).toFixed(1)}%
+                              </span>
+                            );
+                          })()}
+                        </td>
+                      ) : isElite && (
                         <td className="py-2 px-2 text-right tabular-nums">
                           {b.edge != null ? (
                             <span className={b.edge > 0 ? "text-emerald-400" : b.edge < 0 ? "text-red-400" : "text-muted-foreground"}>

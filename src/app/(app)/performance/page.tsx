@@ -110,7 +110,6 @@ function rowFromPerformance(
       clvN: p?.clvN ?? 0,
       clvNPinnacle: p?.clvNPinnacle ?? 0,
       clvNConsensus: p?.clvNConsensus ?? 0,
-      roiStaked: p?.roiStaked == null ? null : p.roiStaked * 100,
       nRecordedPrice: p?.nRecordedPrice ?? 0,
       pending: p?.pending ?? 0,
     },

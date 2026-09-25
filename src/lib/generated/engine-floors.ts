@@ -41,6 +41,7 @@ export const ENGINE_BOT_FLOORS: Record<string, {
   realMoney: boolean;
   anchor: string;
   market: string;
+  edgeUnit: "ev" | "pp";
 }> =
   {
   "bot_combined_1x2_ev5_v1": {
@@ -49,7 +50,8 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "oddsCap": null,
     "realMoney": false,
     "anchor": "model",
-    "market": "1x2"
+    "market": "1x2",
+    "edgeUnit": "ev"
   },
   "bot_combined_1x2_v1": {
     "edgeFloor": null,
@@ -57,7 +59,8 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "oddsCap": null,
     "realMoney": false,
     "anchor": "model",
-    "market": "1x2"
+    "market": "1x2",
+    "edgeUnit": "pp"
   },
   "bot_consensus_b_v1": {
     "edgeFloor": 0.03,
@@ -65,7 +68,8 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "oddsCap": null,
     "realMoney": false,
     "anchor": "consensus",
-    "market": "1x2 + O/U 2.5"
+    "market": "1x2 + O/U 2.5",
+    "edgeUnit": "pp"
   },
   "bot_consensus_c_v1": {
     "edgeFloor": 0.03,
@@ -73,7 +77,8 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "oddsCap": null,
     "realMoney": false,
     "anchor": "consensus",
-    "market": "1x2 + O/U 2.5"
+    "market": "1x2 + O/U 2.5",
+    "edgeUnit": "pp"
   },
   "bot_consensus_d_v1": {
     "edgeFloor": 0.03,
@@ -81,7 +86,8 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "oddsCap": null,
     "realMoney": false,
     "anchor": "consensus",
-    "market": "1x2 + O/U 2.5"
+    "market": "1x2 + O/U 2.5",
+    "edgeUnit": "pp"
   },
   "bot_consensus_pinconf_v1": {
     "edgeFloor": 0.03,
@@ -89,7 +95,8 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "oddsCap": null,
     "realMoney": false,
     "anchor": "consensus",
-    "market": "1x2 + O/U 2.5 (twin)"
+    "market": "1x2 + O/U 2.5 (twin)",
+    "edgeUnit": "pp"
   },
   "bot_coolbet_1x2_model_v1": {
     "edgeFloor": 0.1,
@@ -97,7 +104,8 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "oddsCap": null,
     "realMoney": true,
     "anchor": "model",
-    "market": "1x2"
+    "market": "1x2",
+    "edgeUnit": "pp"
   },
   "bot_coolbet_ou_model_v1": {
     "edgeFloor": 0.08,
@@ -105,7 +113,8 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "oddsCap": null,
     "realMoney": true,
     "anchor": "model",
-    "market": "O/U 2.5"
+    "market": "O/U 2.5",
+    "edgeUnit": "pp"
   },
   "bot_coolbet_trigger_sharp_1x2_v1": {
     "edgeFloor": 0.03,
@@ -113,7 +122,8 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "oddsCap": null,
     "realMoney": false,
     "anchor": "sharp",
-    "market": "1x2"
+    "market": "1x2",
+    "edgeUnit": "pp"
   },
   "bot_coolbet_trigger_sharp_ou_v1": {
     "edgeFloor": 0.03,
@@ -121,7 +131,8 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "oddsCap": null,
     "realMoney": false,
     "anchor": "sharp",
-    "market": "O/U 2.5"
+    "market": "O/U 2.5",
+    "edgeUnit": "pp"
   },
   "bot_high_roi_global_v2": {
     "edgeFloor": null,
@@ -129,7 +140,8 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "oddsCap": null,
     "realMoney": false,
     "anchor": "model",
-    "market": "1x2"
+    "market": "1x2",
+    "edgeUnit": "pp"
   },
   "bot_inplay_slowstate_afctl_v1": {
     "edgeFloor": null,
@@ -137,7 +149,8 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "oddsCap": null,
     "realMoney": false,
     "anchor": "none",
-    "market": "in-play O/U 2.5 + 1x2"
+    "market": "in-play O/U 2.5 + 1x2",
+    "edgeUnit": "pp"
   },
   "bot_inplay_slowstate_v1": {
     "edgeFloor": null,
@@ -145,7 +158,8 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "oddsCap": null,
     "realMoney": false,
     "anchor": "none",
-    "market": "in-play O/U 2.5 + 1x2"
+    "market": "in-play O/U 2.5 + 1x2",
+    "edgeUnit": "pp"
   },
   "bot_ou_sharp_2anchor_v1": {
     "edgeFloor": null,
@@ -153,7 +167,8 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "oddsCap": null,
     "realMoney": false,
     "anchor": "sharp",
-    "market": "ou"
+    "market": "ou",
+    "edgeUnit": "ev"
   },
   "bot_ou_sharp_early_v1": {
     "edgeFloor": null,
@@ -161,7 +176,8 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "oddsCap": null,
     "realMoney": false,
     "anchor": "sharp",
-    "market": "ou"
+    "market": "ou",
+    "edgeUnit": "ev"
   },
   "bot_rating_1x2_v1": {
     "edgeFloor": null,
@@ -169,7 +185,8 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "oddsCap": null,
     "realMoney": false,
     "anchor": "model",
-    "market": "1x2"
+    "market": "1x2",
+    "edgeUnit": "pp"
   },
   "bot_sharp_1x2_v1": {
     "edgeFloor": 0.03,
@@ -177,7 +194,8 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "oddsCap": null,
     "realMoney": false,
     "anchor": "sharp",
-    "market": "1x2 (forward test)"
+    "market": "1x2 (forward test)",
+    "edgeUnit": "pp"
   },
   "bot_sharp_aligned_v1": {
     "edgeFloor": 0.03,
@@ -185,7 +203,8 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "oddsCap": null,
     "realMoney": false,
     "anchor": "sharp",
-    "market": "1x2 + O/U 2.5 (twin)"
+    "market": "1x2 + O/U 2.5 (twin)",
+    "edgeUnit": "pp"
   },
   "bot_sharp_ou_v1": {
     "edgeFloor": 0.03,
@@ -193,7 +212,8 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "oddsCap": null,
     "realMoney": false,
     "anchor": "sharp",
-    "market": "O/U 2.5 (forward test)"
+    "market": "O/U 2.5 (forward test)",
+    "edgeUnit": "pp"
   },
   "bot_trigger_1x2_sharp_tight_v1": {
     "edgeFloor": 0.02,
@@ -201,7 +221,8 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "oddsCap": 2.5,
     "realMoney": false,
     "anchor": "sharp",
-    "market": "1x2"
+    "market": "1x2",
+    "edgeUnit": "pp"
   },
   "bot_trigger_1x2_sharp_v1": {
     "edgeFloor": 0.03,
@@ -209,7 +230,8 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "oddsCap": null,
     "realMoney": false,
     "anchor": "sharp",
-    "market": "1x2"
+    "market": "1x2",
+    "edgeUnit": "pp"
   },
   "bot_trigger_ou_sharp_v1": {
     "edgeFloor": 0.03,
@@ -217,7 +239,8 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "oddsCap": null,
     "realMoney": false,
     "anchor": "sharp",
-    "market": "O/U 2.5"
+    "market": "O/U 2.5",
+    "edgeUnit": "pp"
   },
   "bot_unibet_trigger_sharp_1x2_v1": {
     "edgeFloor": 0.03,
@@ -225,7 +248,8 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "oddsCap": null,
     "realMoney": false,
     "anchor": "sharp",
-    "market": "1x2"
+    "market": "1x2",
+    "edgeUnit": "pp"
   },
   "bot_unibet_trigger_sharp_ou_v1": {
     "edgeFloor": 0.03,
@@ -233,7 +257,8 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "oddsCap": null,
     "realMoney": false,
     "anchor": "sharp",
-    "market": "O/U 2.5"
+    "market": "O/U 2.5",
+    "edgeUnit": "pp"
   },
   "bot_unified_gate_1x2_paper_v1": {
     "edgeFloor": 0.1,
@@ -241,7 +266,8 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "oddsCap": null,
     "realMoney": false,
     "anchor": "model",
-    "market": "1x2"
+    "market": "1x2",
+    "edgeUnit": "pp"
   },
   "bot_v10_1x2": {
     "edgeFloor": null,
@@ -249,7 +275,8 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "oddsCap": null,
     "realMoney": false,
     "anchor": "model",
-    "market": "1x2"
+    "market": "1x2",
+    "edgeUnit": "pp"
   },
   "bot_v10_1x2_newplus_v1": {
     "edgeFloor": null,
@@ -257,7 +284,8 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "oddsCap": null,
     "realMoney": false,
     "anchor": "model",
-    "market": "1x2"
+    "market": "1x2",
+    "edgeUnit": "ev"
   },
   "bot_v10_ou_comb_v1": {
     "edgeFloor": null,
@@ -265,7 +293,8 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "oddsCap": null,
     "realMoney": false,
     "anchor": "model",
-    "market": "ou"
+    "market": "ou",
+    "edgeUnit": "ev"
   }
 };
 
