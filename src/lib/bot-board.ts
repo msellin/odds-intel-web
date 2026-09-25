@@ -398,7 +398,7 @@ async function readLedger(relation: string, botName: string, limit: number): Pro
 const FLEET_COLS =
   "placement_paused, placement_paused_at, placement_paused_reason, real_money_armed, real_money_armed_at, " +
   "real_money_armed_reason, publishing_paused, publishing_paused_at, publishing_paused_reason, daemons_paused, " +
-  "daemons_paused_at, daemons_paused_reason";
+  "daemons_paused_at, daemons_paused_reason, money_gate_contract";
 
 async function readRows<T>(relation: string, columns: string, order?: { col: string; asc: boolean }, limit = 5000): Promise<CRead<T>> {
   try {

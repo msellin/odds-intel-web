@@ -117,6 +117,7 @@ const BLOCKER_WORDS: Record<string, string> = {
   pause: "placement paused",
   armed: "not armed",
   executors: "Mac placer not running",
+  gate: "real money locked until the placement checks are unified",
 };
 
 /** Families judged on margin-corrected CLV (model_sim is Pinnacle-judged; in-play has no close). */

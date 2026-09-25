@@ -24,7 +24,7 @@ export type LayerState = "open" | "blocked" | "unknown" | "info";
 
 export interface Layer {
   n: number;
-  key: "path" | "eligible" | "pause" | "armed" | "executors" | "perpick" | "footprint";
+  key: "path" | "eligible" | "pause" | "armed" | "executors" | "perpick" | "footprint" | "gate";
   title: string;
   state: LayerState;
   value: string;
@@ -161,7 +161,7 @@ export function computeLadder(
 
   // 7 — Coolbet footprint pause (information only, owner decision 2026-09-24). It stops the Coolbet
   // odds SWEEPS, and the feed watchdog — never a real-money placer:
-  // placement_gate.assert_run_may_place() reads only the kill switch and arming. Shown so an
+  // placement_gate.assert_run_may_place() reads the kill switch, arming and money_gate_ready (mig 436). Shown so an
   // operator who paused sweeping for Imperva does not believe that also stopped real bets.
   const foot = fleet?.daemons_paused ?? null;
   layers.push({
@@ -173,10 +173,24 @@ export function computeLadder(
     detail: "The footprint pause stops odds sweeping only. To stop real bets use the kill switch (layer 3).",
   });
 
+  // 8 — #162 W0.2 (engine migration 436): real money stays locked until the placement checks are
+  // unified (one per-bot floor, one daily cap across books). The DB refuses a switch ON / arming and
+  // the engine gate refuses a run while it is FALSE — so CAN STAKE must never read YES here.
+  const contract = fleet?.money_gate_contract ?? null;
+  const gateReady = contract == null ? null : contract >= 1;
+  layers.push({
+    n: 8,
+    key: "gate",
+    title: "Placement checks unified",
+    state: gateReady == null ? "unknown" : gateReady ? "open" : "blocked",
+    value: gateReady == null ? "Unknown" : gateReady ? "Ready" : "Locked",
+    detail: gateReady ? undefined : "Real money is locked until the placement checks are unified (bot refactor #162, step W4). Switching a bot on or arming is refused until then.",
+  });
+
   const unknownAt = layers.filter((l) => l.state === "unknown").map((l) => l.n);
   const blockedAt = layers.filter((l) => l.state === "blocked").map((l) => l.n);
   const rawOn = s.placers.error ? null : s.placers.rows.filter((p) => p.ui_place_enabled && !p.locked_reason).length;
-  const hardBlock = paused === true || armed === false || rawOn === 0;
+  const hardBlock = paused === true || armed === false || rawOn === 0 || gateReady === false;
   const canStakeStrict = unknownAt.length > 0 ? "unknown" : blockedAt.length > 0 ? "no" : "yes";
   const canStake = hardBlock ? "no" : canStakeStrict;
   return { layers, canStake, canStakeStrict, hardBlock, blockedAt, unknownAt, stakingBots: canStake === "yes" ? staking : [] };

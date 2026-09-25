@@ -44,6 +44,10 @@ export interface FleetState {
   daemons_paused: boolean | null;
   daemons_paused_at: string | null;
   daemons_paused_reason: string | null;
+  /** #162 W0.2 (engine migration 436): the placement-check contract the DB has signed off; 0 until the
+   *  placement checks are unified (#162 W4) — the DB refuses a real-money switch ON or arming while it is 0.
+   *  Optional: absent before the migration. */
+  money_gate_contract?: number | null;
 }
 
 export interface PlacerRow {

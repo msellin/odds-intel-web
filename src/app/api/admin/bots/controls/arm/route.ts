@@ -54,6 +54,8 @@ export async function POST(req: Request) {
     p_expected: false,
     p_request_id: requestId,
   });
+  // #162 W0.2 (engine migration 436): the money-gate lock is a deliberate refusal, not a crash
+  if (error && /placement checks are unified/.test(error.message)) return bad(error.message, 409);
   if (error) return bad(`admin_arm_real_money: ${error.message}`, 500);
   const res = (data ?? {}) as { outcome?: string };
 
