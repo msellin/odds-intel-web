@@ -19,7 +19,7 @@ export interface JobLatestRow {
   failing_since: string | null;
 }
 
-export type JobState = "failing" | "stuck" | "running" | "quiet" | "ok";
+export type JobState = "failing" | "stuck" | "late" | "running" | "quiet" | "ok";
 
 export interface JobView {
   job: string;
@@ -35,6 +35,9 @@ export interface JobView {
   error: string | null;
   /** How many schedule slots this row stands for (shadow_HHMM collapses 48 into one). */
   slots: number;
+  /** Its usual gap between runs and usual run time, from its own recent history (null = not enough runs). */
+  usualGapMs: number | null;
+  usualRunMs: number | null;
 }
 
 /** A job still "running" after this long almost certainly died without recording it (same as the Overview's rule). */
@@ -173,12 +176,12 @@ export const JOB_LABELS: Record<string, string> = {
   results_check: "Results cross-check",
   retrain_healthcheck: "Model retrain check",
   settlement: "Nightly settlement",
-  settlement_blend: "Settlement: model blend refit",
-  settlement_dc_rho: "Settlement: low-score adjustment refit",
-  settlement_ml_etl: "Settlement: model training rows",
-  settlement_platt: "Settlement: probability recalibration",
+  settlement_blend: "Settlement: re-weighs the models against each other",
+  settlement_dc_rho: "Settlement: re-tunes how often low scores (0-0, 1-1) happen",
+  settlement_ml_etl: "Settlement: stores results for the models to learn from",
+  settlement_platt: "Settlement: re-tunes the models' win chances",
   settlement_prune: "Settlement: clean-up",
-  settle_ready: "15-minute settlement sweep",
+  settle_ready: "Settles finished matches (every 15 min)",
   settle_reconcile: "Settlement cross-check",
   shadow_HHMM: "Half-hourly pick scan",
   standings_nightly: "Nightly league tables",
@@ -214,12 +217,119 @@ export function humanJob(name: string): string {
     .join(" ");
 }
 
-export const STATE_RANK: Record<JobState, number> = { failing: 0, stuck: 1, running: 2, quiet: 3, ok: 4 };
+export const STATE_RANK: Record<JobState, number> = { failing: 0, stuck: 1, late: 2, running: 3, quiet: 4, ok: 5 };
 
-function stateOf(j: { status: string; started_at: string }, now: number): JobState {
+// ── Late and stuck, judged against each job's OWN history (round 6, 2026-09-25) ────────────────
+//
+// The tester saw "Feed status check · OK · ran 83 min ago" while Feeds and the Overview said that
+// check had stopped: "OK" only meant "its last run did not fail". A job that normally runs every
+// 5 min and has not run for 83 min is LATE. The usual gap and run time come from the job's own
+// pipeline_runs (jobCadence, loader: loadJobCadence in admin-jobs.ts), so there is no per-job
+// schedule table to keep in sync with workers/scheduler.py.
+
+/** One pipeline_runs row, as the cadence rule reads it. */
+export interface CadenceRun {
+  job_name: string;
+  started_at: string;
+  completed_at: string | null;
+  /** 'completed' / 'failed' / 'running' — optional: older fixtures lack it (then every finished run counts). */
+  status?: string | null;
+}
+
+export interface JobCadence {
+  /** median gap between consecutive run starts */
+  gapMs: number | null;
+  /**
+   * Its usual LONGEST gap: the k-th largest gap, k = days of history. A pause that happens every day
+   * (settlement's 01:00→21:00, a feed that sleeps at night) occurs k times and sets this; a one-off
+   * outage occurs once and does not, so an earlier outage never hides the next one. A job with fewer
+   * gaps than days (runs less than daily) gets its largest gap.
+   */
+  longGapMs: number | null;
+  /** median run time of runs that finished */
+  runMs: number | null;
+  runs: number;
+}
+
+/** Only jobs that normally run more often than this are judged late; daily/weekly jobs are judged by failing. */
+export const LATE_MAX_GAP_H = 24;
+/** A job needs at least this many gaps in its history before its usual gap is trusted. */
+export const CADENCE_MIN_GAPS = 3;
+
+const median = (xs: number[]): number | null => {
+  if (!xs.length) return null;
+  const s = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+};
+
+/** Usual gap and run time per job_name, from its runs (any order). */
+export function jobCadence(runs: CadenceRun[]): Record<string, JobCadence> {
+  const by = new Map<string, CadenceRun[]>();
+  for (const r of runs) {
+    const list = by.get(r.job_name);
+    if (list) list.push(r);
+    else by.set(r.job_name, [r]);
+  }
+  const out: Record<string, JobCadence> = {};
+  for (const [job, rs] of by) {
+    const t = rs.map((r) => new Date(r.started_at).getTime()).sort((a, b) => a - b);
+    const gaps = t.slice(1).map((x, i) => x - t[i]).filter((g) => g > 0);
+    // run time from SUCCESSFUL runs only — a fast failure would drag it down (review 2026-09-25)
+    const durs = rs
+      .filter((r) => r.completed_at && (r.status == null || r.status === "completed"))
+      .map((r) => new Date(r.completed_at as string).getTime() - new Date(r.started_at).getTime())
+      .filter((d) => d >= 0);
+    const spanMs = t[t.length - 1] - t[0];
+    const days = Math.max(1, Math.floor(spanMs / 86_400_000));
+    const desc = [...gaps].sort((a, b) => b - a);
+    // Not enough history to judge lateness (review 2026-09-25): under a day of runs, or fewer gaps than
+    // days (a weekly job's burst of 4 runs read "every few minutes" and went Late an hour later).
+    const judgeable = gaps.length >= CADENCE_MIN_GAPS && spanMs >= 86_400_000 && gaps.length >= days;
+    out[job] = {
+      gapMs: judgeable ? median(gaps) : null,
+      // fewer gaps than days = it runs less than daily on average (a weekly job's cluster of runs):
+      // then its longest gap is simply the largest one, which puts it out of reach of Late
+      longGapMs: gaps.length >= CADENCE_MIN_GAPS ? (desc.length >= days ? desc[days - 1] : desc[0]) : null,
+      // the LONGEST normal run, not the median: settlement's 21:00 run is ~10× its 23:30 / 01:00 runs, and a
+      // median-based limit called the normal 21:00 run Stuck every night (review 2026-09-25)
+      runMs: durs.length >= CADENCE_MIN_GAPS ? Math.max(...durs) : null,
+      runs: rs.length,
+    };
+  }
+  return out;
+}
+
+/**
+ * Late after max(3 × the usual gap, the usual gap + 30 min, 1.5 × its usual longest gap) — slack for a
+ * slow run or a restart, and a job with a daily pause (settlement: 20 h from 01:00 to 21:00) is only
+ * late 1.5 × that pause later (30 h, the same as the page's "nightly settlement overdue" rule).
+ * Measured 2026-09-25 on 4 days of runs: without the longest-gap term, nightly settlement, the
+ * pre-kick-off odds job and the first-half paper picks all read Late in the afternoon.
+ */
+export const lateAfterMs = (gapMs: number, longGapMs: number | null = null) => Math.max(3 * gapMs, gapMs + 30 * 60_000, 1.5 * (longGapMs ?? 0));
+/** Stuck after max(6 × its longest normal run, that + 30 min), and always after JOB_STUCK_H. */
+export const stuckAfterMs = (runMs: number | null) => Math.min(JOB_STUCK_H * 3600_000, runMs == null ? Infinity : Math.max(6 * runMs, runMs + 30 * 60_000));
+
+/**
+ * THE late rule (exported so the Overview inherits it through jobsAnswer): the last run finished (not
+ * failed, not running), the job normally runs more often than every LATE_MAX_GAP_H hours, and it is
+ * now past lateAfterMs(usual gap, usual longest gap) since that run started, and under JOB_QUIET_D.
+ */
+export function isLate(j: { status: string; started_at: string }, cad: Pick<JobCadence, "gapMs" | "longGapMs"> | null | undefined, now: number): boolean {
+  if (j.status === "failed" || j.status === "error" || j.status === "running") return false;
+  const gap = cad?.gapMs;
+  if (gap == null || gap >= LATE_MAX_GAP_H * 3600_000) return false;
+  const age = now - new Date(j.started_at).getTime();
+  // 8+ days quiet is "probably switched off" (Retired, under Old jobs), not late
+  return age <= JOB_QUIET_D * 86_400_000 && age > lateAfterMs(gap, cad?.longGapMs ?? null);
+}
+
+function stateOf(j: { status: string; started_at: string }, cad: JobCadence | undefined, now: number): JobState {
   if (j.status === "failed" || j.status === "error") return "failing";
   const age = now - new Date(j.started_at).getTime();
-  if (j.status === "running") return age > JOB_STUCK_H * 3600_000 ? "stuck" : "running";
+  if (j.status === "running") return age > stuckAfterMs(cad?.runMs ?? null) ? "stuck" : "running";
+  if (isLate(j, cad, now)) return "late";
   if (age > JOB_QUIET_D * 86_400_000) return "quiet";
   return "ok";
 }
@@ -227,8 +337,10 @@ function stateOf(j: { status: string; started_at: string }, now: number): JobSta
 /**
  * The 48 half-hourly shadow scans (shadow_0010 … shadow_2340) are one job to the operator — collapse
  * them into one row that is failing if ANY slot is, with the newest run and the longest streak.
+ * `cadence` (optional, from jobCadence over recent pipeline_runs) turns on the Late state and the
+ * run-time based Stuck rule; without it only the fixed 3 h Stuck rule applies.
  */
-export function buildJobViews(rows: JobLatestRow[], now: number): JobView[] {
+export function buildJobViews(rows: JobLatestRow[], now: number, cadence?: Record<string, JobCadence> | null): JobView[] {
   const byKey = new Map<string, JobLatestRow[]>();
   for (const r of rows) {
     const key = /^shadow_\d{4}$/.test(r.job_name) ? "shadow_HHMM" : r.job_name;
@@ -236,19 +348,21 @@ export function buildJobViews(rows: JobLatestRow[], now: number): JobView[] {
   }
   const out: JobView[] = [];
   for (const [key, rs] of byKey) {
-    const states = rs.map((r) => stateOf(r, now));
+    const states = rs.map((r) => stateOf(r, cadence?.[r.job_name], now));
     const worstI = states.reduce((a, s, i) => (STATE_RANK[s] < STATE_RANK[states[a]] ? i : a), 0);
     const worst = rs[worstI];
     const newest = rs.reduce((a, r) => (r.started_at > a.started_at ? r : a), rs[0]);
     const failing = rs.filter((r) => r.status === "failed" || r.status === "error");
     const since = failing.map((r) => r.failing_since).filter((x): x is string => !!x).sort()[0] ?? null;
     const lastOk = rs.map((r) => r.last_ok_at).filter((x): x is string => !!x).sort().pop() ?? null;
+    const cad = cadence?.[worst.job_name];
     out.push({
       job: key,
       label: key === "shadow_HHMM" ? `${JOB_LABELS.shadow_HHMM} (${rs.length} slots)` : humanJob(key),
       group: jobGroup(key === "shadow_HHMM" ? "shadow_0000" : key),
       state: states[worstI],
-      lastRun: newest.started_at,
+      // a late/stuck row shows the run it is judged on, not a newer slot's
+      lastRun: states[worstI] === "late" || states[worstI] === "stuck" ? worst.started_at : newest.started_at,
       lastOk,
       failingSince: since,
       sinceFloor: !!since && failing.some((r) => r.last_ok_at == null),
@@ -256,29 +370,49 @@ export function buildJobViews(rows: JobLatestRow[], now: number): JobView[] {
       // the raw error usually repeats the job name ("line_velocity failed: exit 1") — keep the useful tail
       error: states[worstI] === "failing" ? (worst.error_message ?? "").replace(new RegExp(`^${worst.job_name}\\s*failed:?\\s*`, "i"), "").trim() || null : null,
       slots: rs.length,
+      usualGapMs: cad?.gapMs ?? null,
+      usualRunMs: cad?.runMs ?? null,
     });
   }
   return out.sort((a, b) => STATE_RANK[a.state] - STATE_RANK[b.state] || b.streak - a.streak || a.label.localeCompare(b.label));
 }
 
 /**
- * Four status words only (answer-first fix round, 2026-09-25). "Running · 8 min ago" read as
- * "executing now" — a job in progress is OK until it has run 3 h (then Stuck), and says "running now"
- * in its last-run text instead. "Retired" = its last run was fine but nothing for 8+ days; those sit
- * under the collapsed "Old jobs". Jobs unregistered on purpose (engine table retired_jobs, migration
- * 426) never reach this page at all.
+ * Five status words (answer-first fix round, 2026-09-25; "Late" added in round 6). "Running · 8 min
+ * ago" read as "executing now" — a job in progress is OK until it has run far longer than it usually
+ * takes (then Stuck), and says "running now" in its last-run text instead. "Late" = its last run
+ * finished but it is well past its usual gap (isLate). "Retired" = its last run was fine but nothing
+ * for 8+ days; those sit under the collapsed "Old jobs". Jobs unregistered on purpose (engine table
+ * retired_jobs, migration 426) never reach this page at all.
  */
 export const STATE_WORD: Record<JobState, string> = {
   failing: "Failing",
   stuck: "Stuck",
+  late: "Late",
   running: "OK",
   quiet: "Retired",
   ok: "OK",
 };
 
-/** The ⓘ text that defines the four words. */
+/** The ⓘ text that defines the five words. */
 export const STATE_WORDS_HELP =
-  "OK: its last run finished (or is running now, for under 3 h). Failing: its last run failed. Stuck: still marked running after 3 h — it probably died without saying so. Retired: its last run was fine but it has not run for over 8 days — probably no longer scheduled; listed under Old jobs.";
+  "OK: its last run finished on time (or is running now, for a normal length of time). Failing: its last run failed. Late: its last run was fine, but it normally runs every few minutes or hours and is now well overdue (3 × its usual gap, at least 30 min over) — it may have stopped being started. Stuck: still marked running far longer than its runs usually take (always after 3 h) — it probably died without saying so. Retired: its last run was fine but it has not run for over 8 days — probably no longer scheduled; listed under Old jobs. The usual gap and run time come from each job's own last few days of runs; jobs that run daily or less often are judged only by failing.";
+
+/** "every 5 min" / "every 2 h" from a gap in ms. */
+export function everyGap(ms: number | null | undefined): string | null {
+  if (ms == null) return null;
+  const m = Math.max(1, Math.round(ms / 60_000));
+  if (m < 90) return `every ${m} min`;
+  return `every ${Math.round(m / 60)} h`;
+}
+
+/** "a few seconds" / "2 min" / "1 h" — a job's usual run time. */
+function runSpan(ms: number | null | undefined): string | null {
+  if (ms == null) return null;
+  if (ms < 60_000) return "under a minute";
+  const m = Math.round(ms / 60_000);
+  return m < 90 ? `${m} min` : `${Math.round(m / 60)} h`;
+}
 
 /** A failure whose last run is within this many days is "failing now" (red); older = amber. Same rule as the Overview. */
 export const RECENT_FAILURE_D = 7;
@@ -303,21 +437,40 @@ export function failingText(v: Pick<JobView, "state" | "failingSince" | "lastRun
   return `${since} · ${v.streak} failed runs in a row`;
 }
 
-/** "ran 8 min ago" / "running now · started 8 min ago" (`ago` = a timeAgo-style formatter). */
-export function lastRunText(v: Pick<JobView, "state" | "lastRun">, ago: (iso: string) => string): string {
-  return v.state === "running" ? `running now · started ${ago(v.lastRun)}` : `ran ${ago(v.lastRun)}`;
+/**
+ * "ran 8 min ago" / "running now · started 8 min ago" (`ago` = a timeAgo-style formatter). A late job
+ * adds its usual gap ("ran 83 min ago · usually every 5 min"), a stuck one its usual run time.
+ */
+export function lastRunText(v: Pick<JobView, "state" | "lastRun"> & Partial<Pick<JobView, "usualGapMs" | "usualRunMs">>, ago: (iso: string) => string): string {
+  if (v.state === "running") return `running now · started ${ago(v.lastRun)}`;
+  if (v.state === "stuck") return `running since ${ago(v.lastRun)}${runSpan(v.usualRunMs) ? ` · usually takes ${runSpan(v.usualRunMs)}` : ""}`;
+  if (v.state === "late") return `ran ${ago(v.lastRun)}${everyGap(v.usualGapMs) ? ` · usually ${everyGap(v.usualGapMs)}` : ""}`;
+  return `ran ${ago(v.lastRun)}`;
+}
+
+/** "2 jobs haven't run for over a week — probably switched off" (the collapsed Old jobs line; neutral, not a question). */
+export function oldJobsText(n: number): string {
+  return `${n} job${n === 1 ? " hasn't" : "s haven't"} run for over a week — probably switched off`;
 }
 
 /**
  * The Jobs answer, shared with the Overview (Rule 1: never "All running" while a failure is listed):
  *   any job failing → "1 job failing — <plain name>", sub "since 1 Sep"; RED if any failing job's last
- *   run is within RECENT_FAILURE_D days, else AMBER (a rarely-run job's old failure);
- *   else stuck → amber; else green "All running".
+ *   run is within RECENT_FAILURE_D days, else AMBER (a rarely-run job's old failure); a late/stuck job
+ *   alongside is added to the sub;
+ *   else late or stuck → amber "1 job late — Feed status check", sub "last run 83 min ago, usually every 5 min";
+ *   else green "All running".
+ * The late/stuck rule is buildJobViews' (isLate / stuckAfterMs) — pass views built WITH the cadence
+ * (loadJobCadence) or Late never fires.
  */
-export function jobsAnswer(views: JobView[], now: number): { tone: "danger" | "warning" | "success"; text: string; sub: string; failing: JobView[] } {
+export function jobsAnswer(
+  views: JobView[],
+  now: number,
+): { tone: "danger" | "warning" | "success"; text: string; sub: string; failing: JobView[]; late: JobView[] } {
   const failing = views.filter((v) => v.state === "failing");
-  const stuck = views.filter((v) => v.state === "stuck");
+  const late = views.filter((v) => v.state === "late" || v.state === "stuck");
   const active = views.filter((v) => v.state !== "quiet").length;
+  const lateWord = (vs: JobView[]) => (vs.every((v) => v.state === "stuck") ? "stuck" : vs.every((v) => v.state === "late") ? "late" : "late or stuck");
   if (failing.length) {
     const first = [...failing].sort((a, b) => Number(isRecentFailure(b, now)) - Number(isRecentFailure(a, now)) || b.streak - a.streak)[0];
     const more = failing.length > 1 ? ` and ${failing.length - 1} more` : "";
@@ -325,12 +478,28 @@ export function jobsAnswer(views: JobView[], now: number): { tone: "danger" | "w
     return {
       tone: failing.some((v) => isRecentFailure(v, now)) ? "danger" : "warning",
       text: `${failing.length} job${failing.length === 1 ? "" : "s"} failing — ${first.label}${more}`,
-      sub: since,
+      sub: late.length ? `${since} · also ${late.length} ${lateWord(late)}` : since,
       failing,
+      late,
     };
   }
-  if (stuck.length) return { tone: "warning", text: `${stuck.length} job${stuck.length === 1 ? "" : "s"} stuck — ${stuck[0].label}`, sub: "still marked running after 3 h", failing };
-  return { tone: "success", text: "All running", sub: `${active} jobs, last runs fine`, failing };
+  if (late.length) {
+    const first = late[0];
+    const ago = Math.max(1, Math.round((now - new Date(first.lastRun).getTime()) / 60_000));
+    const agoText = ago < 90 ? `${ago} min` : ago < 36 * 60 ? `${Math.round(ago / 60)} h` : `${Math.round(ago / 1440)} d`;
+    const sub =
+      first.state === "stuck"
+        ? `running for ${agoText}${runSpan(first.usualRunMs) ? `, usually takes ${runSpan(first.usualRunMs)}` : ""}`
+        : `last run ${agoText} ago${everyGap(first.usualGapMs) ? `, usually ${everyGap(first.usualGapMs)}` : ""}`;
+    return {
+      tone: "warning",
+      text: `${late.length} job${late.length === 1 ? "" : "s"} ${lateWord(late)} — ${first.label}${late.length > 1 ? ` and ${late.length - 1} more` : ""}`,
+      sub,
+      failing,
+      late,
+    };
+  }
+  return { tone: "success", text: "All running", sub: `${active} jobs, last runs fine`, failing, late };
 }
 
 // ── #139 UX fix round (2026-09-24) ──────────────────────────────────────────────────────────────

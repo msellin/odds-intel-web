@@ -84,7 +84,10 @@ export default async function AdminIndexPage() {
     // the Jobs page's own answer (jobsAnswer), so "1 job failing" reads the same on both pages
     !d.jobsAnswer
       ? { label: "Scheduled jobs", text: "Can't tell — job history unreadable", tone: "warning", icon: AlertTriangle, href: "/admin/ops" }
-      : {
+      : d.jobsAnswer.tone === "success" && d.jobsCadenceError
+        ? // failures are known, lateness is not: never a green "All running" (review 2026-09-25)
+          { label: "Scheduled jobs", text: "No failures — can't tell if any job is late", sub: "run history unreadable", tone: "warning", icon: AlertTriangle, href: "/admin/ops" }
+        : {
           label: "Scheduled jobs",
           text: d.jobsAnswer.text,
           sub: d.jobsAnswer.sub,

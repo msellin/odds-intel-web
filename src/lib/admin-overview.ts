@@ -21,8 +21,11 @@ import { placementPathReason } from "@/lib/bot-controls/placement-path";
 import { isBotBoardDevPreview, loadBotBoard, loadControlState, type BotWeeklyRow } from "@/lib/bot-board";
 import { MANUAL_RECONCILE_SINCE, buildAttention, type AttentionItem } from "@/lib/admin-attention";
 import { RETIRED_SERIES } from "@/lib/admin-overview-shared";
-import { buildJobViews, jobsAnswer } from "@/lib/admin-jobs-model";
-import { STATUS_STALE_MIN, allBlockStates, budgetView, coolbetBlockRisk, feedsAnswer, type BlockRisk, type BudgetView, type FootprintHour } from "@/lib/admin-feeds-model";
+import { buildJobViews, jobsAnswer, type CadenceRun, jobCadence } from "@/lib/admin-jobs-model";
+import { loadJobCadenceCached, loadPostponedOpen } from "@/lib/admin-jobs";
+import { loadDqFindings } from "@/lib/admin-feeds";
+import type { DataQualityFinding } from "@/lib/engine-data";
+import { STATUS_STALE_MIN, allBlockStates, budgetView, coolbetBlockRisk, dqAdvice, dqLast24h, dqProblems, feedsAnswer, type BlockRisk, type BudgetView, type FootprintHour } from "@/lib/admin-feeds-model";
 import {
   CONTROL_BOT,
   FAMILY_INFO,
@@ -84,7 +87,7 @@ export interface OverviewData {
   /** picks per week per family (families as keys, + one 'retired' series). */
   picksByFamily: Record<string, number | string>[];
   families: string[];
-  /** mc-CLV per week per pre-match family (weighted by CLV rows within the family); null = < 5 rows. */
+  /** Sharp-anchor CLV per week per pre-match family (weighted by CLV rows within the family); null = < 5 rows. [[#159]] was mc-CLV. */
   clvByFamily: Record<string, number | string | null>[];
   clvFamilies: string[];
   canStake: "yes" | "no" | "unknown";
@@ -96,6 +99,8 @@ export interface OverviewData {
   feedsAnswer: ReturnType<typeof feedsAnswer>;
   /** The Jobs page's own headline (jobsAnswer over the same non-quiet job views); null = history unreadable. */
   jobsAnswer: ReturnType<typeof jobsAnswer> | null;
+  /** Run history unreadable → lateness NOT checked; the jobs answer must not read "All running". */
+  jobsCadenceError: string | null;
   /** Cumulative flat 1-unit P/L per family (+ one 'retired' series). */
   pnlByFamily: Record<string, number | string | null>[];
   realBets: { rows: WeekRealBets[]; error: string | null; last30: RealWindow | null };
@@ -115,7 +120,7 @@ const BLOCKER_WORDS: Record<string, string> = {
 };
 
 /** Families judged on margin-corrected CLV (model_sim is Pinnacle-judged; in-play has no close). */
-const MC_FAMILIES = ["forward_test", "sharp_trigger", "sharp_generator", "model_shadow"];
+const MC_FAMILIES = ["forward_test", "sharp_trigger", "sharp_generator", "model_shadow", "model_sim"];  // [[#159]] sharp CLV covers model_sim too
 
 const WEEKS = 12;
 const MIN_CLV_N = 5;
@@ -124,7 +129,11 @@ interface OverviewFixture {
   feeds?: FeedStatus[];
   jobs?: JobLatest[];
   stale_pending?: number;
-  dq_24h?: { check_name: string; n: number }[];
+  /** data_quality_findings, last 7 days (same read as /admin/feeds — loadDqFindings). */
+  dq_findings?: DataQualityFinding[];
+  /** pipeline_runs start/finish times for each job's usual gap (same as the jobs fixture's cadence_runs). */
+  cadence_runs?: CadenceRun[];
+  postponed_open?: number;
   unconfirmed_manual?: number;
   unconfirmed_manual_oldest?: string | null;
   real_bets_weekly?: WeekRealBets[];
@@ -192,10 +201,10 @@ async function readLive(now: number) {
   const db = createServerServiceClient();
   const since24 = new Date(now - 86_400_000).toISOString();
   const since2h = new Date(now - 2 * 3_600_000).toISOString();
-  const [feeds, jobs, dq, pending, manual, cbCap, footprint] = await Promise.all([
+  const [feeds, jobs, dq, pending, manual, cbCap, footprint, cadenceR, postponedR] = await Promise.all([
     read<FeedStatus[]>("feed_status", () => db.from("feed_status").select("*"), []),
     read<JobLatest[]>("pipeline_job_latest", () => db.from("pipeline_job_latest").select("*"), []),
-    read<{ check_name: string; match_id: string | null; bookmaker: string | null }[]>("data_quality_findings", () => db.from("data_quality_findings").select("check_name, match_id, bookmaker").gte("found_at", since24).limit(5000), []),
+    loadDqFindings(db, now),
     read<{ match: { date: string } | null }[]>(
       "simulated_bets",
       () => db.from("simulated_bets").select("match:match_id(date)").eq("result", "pending").limit(5000),
@@ -208,22 +217,22 @@ async function readLive(now: number) {
     ),
     read<{ budget_1h: number | null }[]>("feed_book_stats", () => db.from("feed_book_stats").select("budget_1h").eq("book", "Coolbet"), []),
     read<FootprintHour[]>("book_footprint", () => db.from("book_footprint").select("book, hour, requests, refused, challenges, errors").eq("book", "Coolbet").gte("hour", since2h), []),
+    loadJobCadenceCached(),
+    // THE postponed-leftovers count (simulated + shadow, 6 h grace) — the same as /admin/ops
+    loadPostponedOpen(db, now),
   ]);
   const cutoff = now - 2.5 * 3600_000; // same 150-min rule as getStalePendingBets (settlement sweep races below it)
   const stale = pending.v.filter((b) => b.match?.date && new Date(b.match.date).getTime() < cutoff).length;
-  // DISTINCT problems (UX test 2026-09-25: "74 findings" was mostly the same two Tonybet prices
-  // re-flagged every 30 minutes): one per check × match × book.
-  const dqSeen = new Map<string, Set<string>>();
-  for (const r of dq.v) {
-    const k = `${r.match_id ?? ""}|${r.bookmaker ?? ""}`;
-    dqSeen.set(r.check_name, (dqSeen.get(r.check_name) ?? new Set()).add(k));
-  }
-  const dqMap = new Map<string, number>([...dqSeen.entries()].map(([c, set]) => [c, set.size]));
+  // each job's usual gap / run time: the Jobs page's own (cached) read, so "late" means the same on both pages
+  const cadence = jobs.error ? { v: {}, error: jobs.error } : cadenceR;
   return {
     feeds,
     jobs,
     stale: { v: stale, error: pending.error },
-    dq: { v: [...dqMap.entries()].map(([check_name, n]) => ({ check_name, n })), error: dq.error },
+    postponedOpen: postponedR.v,
+    postponedError: postponedR.error,
+    dq: { v: dq.v, error: dq.error },
+    cadence,
     manual: { v: manual.v.length, oldest: manual.v.reduce<string | null>((m, r) => (!m || r.placed_at < m ? r.placed_at : m), null), error: manual.error },
     coolbet: { cap: cbCap.v[0]?.budget_1h ?? null, footprint: footprint.v, error: cbCap.error ?? footprint.error },
   };
@@ -242,7 +251,10 @@ export async function loadOverview(viewerId: string | null): Promise<OverviewDat
           feeds: { v: fx.feeds ?? [], error: fx.feeds ? null : "feed_status: not in fixture" },
           jobs: { v: fx.jobs ?? [], error: fx.jobs ? null : "pipeline_job_latest: not in fixture" },
           stale: { v: fx.stale_pending ?? 0, error: null },
-          dq: { v: fx.dq_24h ?? [], error: null },
+          postponedOpen: fx.postponed_open ?? 0,
+          postponedError: null as string | null,
+          dq: { v: fx.dq_findings ?? [], error: fx.dq_findings ? null : "data_quality_findings: not in fixture" },
+          cadence: fx.cadence_runs ? { v: jobCadence(fx.cadence_runs), error: null } : { v: {}, error: "pipeline_runs: not in fixture" },
           manual: { v: fx.unconfirmed_manual ?? 0, oldest: fx.unconfirmed_manual_oldest ?? null, error: null },
           coolbet: { cap: fx.coolbet_cap ?? null, footprint: fx.footprint ?? [], error: fx.footprint ? null : "book_footprint: not in fixture" },
         })
@@ -251,7 +263,13 @@ export async function loadOverview(viewerId: string | null): Promise<OverviewDat
       ? Promise.resolve({ rows: fx.real_bets_weekly ?? [], error: fx.real_bets_weekly ? null : "real_bets: not in fixture", last30: fx.real_bets_30d ?? null })
       : realBetsWeekly(now),
   ]);
-  const { feeds: feedsR, jobs: jobsR, stale: staleR, dq: dqR, manual: manualR, coolbet: cbR } = live;
+  const { feeds: feedsR, jobs: jobsR, stale: staleR, dq: dqR, manual: manualR, coolbet: cbR, cadence: cadR, postponedOpen, postponedError } = live;
+  // ONE job-state computation for the jobs answer AND the attention list (late/stuck from each job's usual gap)
+  const jobViews = jobsR.error ? [] : buildJobViews(jobsR.v, now, cadR.error ? null : cadR.v);
+  // ONE odds-problem rule with /admin/feeds: distinct problems, last sighting in 24 h, needs a look only if not set aside
+  const dqProbs = dqProblems(dqR.v);
+  const dqA = dqAdvice(dqProbs, now);
+  const dqGroups = [...dqLast24h(dqProbs, now).reduce((m, p) => m.set(p.group, (m.get(p.group) ?? 0) + 1), new Map<string, number>())].map(([group, n]) => ({ group, n }));
 
   // ── bots: the same view model as /admin/bots ──
   const cfgBy = new Map(board.config.rows.map((c) => [c.bot_name, c]));
@@ -348,8 +366,12 @@ export async function loadOverview(viewerId: string | null): Promise<OverviewDat
     jobsError: jobsR.error,
     stalePending: staleR.v,
     staleError: staleR.error,
-    dqLast24h: dqR.v,
+    dq: { ...dqA, groups: dqGroups },
     dqError: dqR.error,
+    cadenceError: jobsR.error ? null : cadR.error,
+    lateJobs: jobViews.filter((v) => v.state === "late" || v.state === "stuck").map((v) => ({ job: v.job, label: v.label, state: v.state as "late" | "stuck", lastRun: v.lastRun })),
+    postponedOpen,
+    postponedError,
     unconfirmedManual: manualR.v,
     unconfirmedOldest: manualR.oldest,
     unconfirmedError: manualR.error,
@@ -382,11 +404,9 @@ export async function loadOverview(viewerId: string | null): Promise<OverviewDat
     clvFamilies,
     canStake: ladder.canStake,
     feedsStale,
-    jobsAnswer: jobsR.error ? null : (() => {
-      const views = buildJobViews(jobsR.v, now);
-      return jobsAnswer(views.filter((v) => v.state !== "quiet"), now);
-    })(),
-    coolbetRisk: coolbetBlockRisk(cbBudget),
+    jobsCadenceError: jobsR.error ? null : cadR.error,
+    jobsAnswer: jobsR.error ? null : jobsAnswer(jobViews.filter((v) => v.state !== "quiet"), now),
+    coolbetRisk: coolbetBlockRisk(cbBudget, feedsStale),
     feedsAnswer: feedsAnswer(
       allBlockStates(feedsR.v, new Map<string, BudgetView>(cbBudget ? [["Coolbet", cbBudget]] : []), now, feedsStale),
       { error: !!feedsR.error, stale: feedsStale },

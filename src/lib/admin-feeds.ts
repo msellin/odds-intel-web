@@ -12,7 +12,7 @@
 import { createServerServiceClient } from "@/lib/supabase-server";
 import { readAdminFixture } from "@/lib/admin-fixture";
 import type { DataQualityFinding, FeedBookStats, FeedStatus, OpsSnapshot } from "@/lib/engine-data";
-import type { FootprintHour } from "@/lib/admin-feeds-model";
+import { DQ_WINDOW_D, type FootprintHour } from "@/lib/admin-feeds-model";
 export type { FootprintHour } from "@/lib/admin-feeds-model";
 
 export interface R<T> {
@@ -57,6 +57,24 @@ async function read<T>(label: string, q: () => PromiseLike<{ data: unknown; erro
 
 const ok = <T,>(v: T): R<T> => ({ v, error: null });
 
+/** Row cap for the findings read. Was 100 — a busy week re-finds problems every 30 min, so 100 raw rows could miss today's. */
+export const DQ_READ_LIMIT = 5000;
+
+/**
+ * THE data-quality read (round 6, 2026-09-25) — /admin/feeds and the Overview both call this, then
+ * dqProblems → dqAdvice, so "N odds problems in the last 24 h" is one number on both. The last
+ * DQ_WINDOW_D days: the table covers them, the 24 h count is taken from their last sightings.
+ */
+export async function loadDqFindings(db: ReturnType<typeof createServerServiceClient>, now: number): Promise<R<DataQualityFinding[]>> {
+  const since = new Date(now - DQ_WINDOW_D * 86_400_000).toISOString();
+  // ~80 rows a week in Sept 2026, so the cap is far off
+  return read<DataQualityFinding[]>(
+    "data_quality_findings",
+    () => db.from("data_quality_findings").select("*").gte("found_at", since).order("found_at", { ascending: false }).order("id", { ascending: false }).limit(DQ_READ_LIMIT),
+    [],
+  );
+}
+
 export async function loadFeedsPage(): Promise<FeedsPageData> {
   const now = Date.now();
   const fx = await readAdminFixture<FeedsFixture>("feeds");
@@ -74,16 +92,11 @@ export async function loadFeedsPage(): Promise<FeedsPageData> {
   }
   const db = createServerServiceClient();
   const today = new Date(now).toISOString().slice(0, 10);
-  const since7 = new Date(now - 7 * 86_400_000).toISOString();
   const since25h = new Date(now - 25 * 3_600_000).toISOString();
   const [feeds, books, dq, snap, live, footprint] = await Promise.all([
     read<FeedStatus[]>("feed_status", () => db.from("feed_status").select("*"), []),
     read<FeedBookStats[]>("feed_book_stats", () => db.from("feed_book_stats").select("*"), []),
-    read<DataQualityFinding[]>(
-      "data_quality_findings",
-      () => db.from("data_quality_findings").select("*").gte("found_at", since7).order("found_at", { ascending: false }).limit(100),
-      [],
-    ),
+    loadDqFindings(db, now),
     read<OpsSnapshot[]>(
       "ops_snapshots",
       () => db.from("ops_snapshots").select("*").eq("snapshot_date", today).order("created_at", { ascending: false }).limit(1),
@@ -113,4 +126,7 @@ export async function loadFeedsPage(): Promise<FeedsPageData> {
 
 // Pure, client-safe helpers live in admin-feeds-model.ts (a client component cannot import this
 // server module); re-exported so callers can import either.
-export { budgetView, budgetSentence, BUDGET_REASON_RE, STATUS_STALE_MIN, DQ_GROUPS, dqGroupLabel, coolbetBlockRisk, dqProblems, type BudgetView, type BlockRisk } from "@/lib/admin-feeds-model";
+export {
+  budgetView, budgetSentence, BUDGET_REASON_RE, STATUS_STALE_MIN, DQ_GROUPS, dqGroupLabel, coolbetBlockRisk, dqProblems, dqLast24h, dqAdvice, DQ_WINDOW_D,
+  type BudgetView, type BlockRisk,
+} from "@/lib/admin-feeds-model";

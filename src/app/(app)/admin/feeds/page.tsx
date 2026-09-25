@@ -65,7 +65,8 @@ export default async function FeedsPage() {
   const cb = d.books.v.find((b) => b.book === "Coolbet");
   const cbBudget = budgets.get("Coolbet") ?? null;
   const cbShare = cbBudget?.cap ? cbBudget.requests / cbBudget.cap : null;
-  const risk = coolbetBlockRisk(cbBudget);
+  // round 6: while the feed check is late the risk is "Unknown", not "Low" (same rule on the Overview — pass its feedsStale)
+  const risk = coolbetBlockRisk(cbBudget, statusStale);
   const s = d.snapshot.v;
   const afCalls = s?.af_calls_today ?? null;
   const afShare = afCalls != null ? afCalls / AF_DAILY_BUDGET : null;
@@ -89,7 +90,7 @@ export default async function FeedsPage() {
       icon: fa.tone === "danger" ? CircleStop : fa.tone === "warning" ? AlertTriangle : CheckCircle2,
     },
     feedsUnknown
-      ? { label: "Paused by us", text: "Can't tell — feed status unreadable", tone: "warning", icon: CirclePause }
+      ? { label: "Paused by us", text: d.feeds.error ? "Can't tell — feed status unreadable" : "Can't tell — the feed check is late", tone: "warning", icon: CirclePause }
       : paused
         ? { label: "Paused by us", text: `${paused} feed${paused === 1 ? "" : "s"} paused on purpose`, tone: "info", icon: CirclePause }
         : { label: "Paused by us", text: "Nothing paused", tone: "neutral", icon: CirclePause },
@@ -174,7 +175,7 @@ export default async function FeedsPage() {
               }
               value={cbBudget?.requests}
               total={cbBudget?.cap}
-              tone={cbShare == null ? "neutral" : cbShare >= 1 ? "danger" : cbShare >= 0.8 ? "warning" : "success"}
+              tone={cbShare == null ? "neutral" : cbShare >= 1 ? "danger" : cbShare >= 0.8 ? "warning" : statusStale ? "neutral" : "success"}
             />
             <Meter
               label={
@@ -185,7 +186,7 @@ export default async function FeedsPage() {
               }
               value={cb?.closing_captured_24h}
               total={cb?.closing_priced_24h}
-              tone={shareTone(cb?.closing_captured_24h, cb?.closing_priced_24h, 0.8, 0.5)}
+              tone={statusStale ? "neutral" : shareTone(cb?.closing_captured_24h, cb?.closing_priced_24h, 0.8, 0.5)}
             />
           </div>
           {d.footprint.error ? (
@@ -203,7 +204,7 @@ export default async function FeedsPage() {
           <PanelHeader
             title="Odds for today's matches"
             description="Pre-match odds for today's matches, all books together. Bookmakers open prices through the day, so early-morning shares are low; about 75–80% by evening is typical — youth, reserve and small leagues are rarely priced."
-            actions={s ? <StatusBadge tone="neutral" dot={false}>{fmtInt(s.matches_today)} matches</StatusBadge> : <StatusBadge tone="warning">No snapshot</StatusBadge>}
+            actions={s ? <StatusBadge tone="neutral" dot={false}>{fmtInt(s.matches_today)} matches</StatusBadge> : <StatusBadge tone="warning">No summary yet</StatusBadge>}
           />
           <div className="grid gap-3 p-4 pt-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
             <Meter label="Have odds" value={s?.matches_with_odds} total={s?.matches_today} tone={shareTone(s?.matches_with_odds, s?.matches_today)} note="At least one book prices the match." />

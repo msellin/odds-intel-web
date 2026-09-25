@@ -20,7 +20,7 @@
 
 import type { ColumnDef } from "@tanstack/react-table";
 import type { DataQualityFinding } from "@/lib/engine-data";
-import { dqProblems, type DqProblem } from "@/lib/admin-feeds-model";
+import { dqAdvice, dqLast24h, dqProblems, DQ_WINDOW_D, type DqProblem } from "@/lib/admin-feeds-model";
 import { DataTable } from "@/components/oi/data-table";
 import { Panel, PanelHeader } from "@/components/oi/panel";
 import { StatusBadge } from "@/components/oi/status-badge";
@@ -28,9 +28,10 @@ import { StatusBadge } from "@/components/oi/status-badge";
 const stamp = (iso: string) => iso.slice(5, 16).replace("T", " ").replace(/^(\d\d)-(\d\d)/, "$2/$1");
 
 export function DqFindings({ findings, now, error }: { findings: DataQualityFinding[]; now: number; error: string | null }) {
+  // round 6 (2026-09-25): ONE rule with the Overview — dqLast24h (last sighting in 24 h) + dqAdvice
   const problems = dqProblems(findings);
-  const day = problems.filter((p) => now - new Date(p.last).getTime() < 86_400_000);
-  const open = day.filter((p) => !p.handled);
+  const day = dqLast24h(problems, now);
+  const advice = dqAdvice(problems, now);
   const counts = new Map<string, { n: number; open: number; books: Set<string> }>();
   for (const p of day) {
     const g = counts.get(p.group) ?? { n: 0, open: 0, books: new Set<string>() };
@@ -79,35 +80,26 @@ export function DqFindings({ findings, now, error }: { findings: DataQualityFind
     <StatusBadge tone="warning">Unreadable</StatusBadge>
   ) : day.length === 0 ? (
     <StatusBadge tone="success">None in 24 h</StatusBadge>
-  ) : open.length ? (
-    <StatusBadge tone="warning">{open.length} need{open.length === 1 ? "s" : ""} a look · last 24 h</StatusBadge>
+  ) : advice.needsLook ? (
+    <StatusBadge tone="warning">{advice.open} need{advice.open === 1 ? "s" : ""} a look · last 24 h</StatusBadge>
   ) : (
-    <StatusBadge tone="neutral" dot={false}>{day.length} in 24 h · set aside automatically</StatusBadge>
+    <StatusBadge tone="neutral" dot={false}>{advice.count} in 24 h · set aside automatically</StatusBadge>
   );
   return (
     <Panel id="dq">
       <PanelHeader
-        title="Data quality"
-        description="Prices and results the checks caught: another match's prices under ours, home and away swapped, a price far from every other book, scores that disagree between sources. Wrong prices are set aside (and can be restored); wrong results are corrected. Checked when prices are stored and every 30 min; the list covers 7 days, one row per problem however often it was re-found."
+        title={`Odds problems found · last ${DQ_WINDOW_D} days`}
+        description={`Prices and results the checks caught: another match's prices under ours, home and away swapped, a price far from every other book, scores that disagree between sources. Wrong prices are set aside (and can be restored); wrong results are corrected. Checked when prices are stored and every 30 min. The list covers the last ${DQ_WINDOW_D} days, one row per problem however often it was re-found; the 24 h count takes only problems last seen in the last 24 h — the same count as the Overview.`}
         actions={badge}
       />
       <div className="space-y-3 p-4 pt-3">
         {error ? (
           <p className="text-sm text-warning">Could not read the data-quality findings ({error}) — this is not an all-clear.</p>
         ) : problems.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nothing found in the last 7 days.</p>
+          <p className="text-sm text-muted-foreground">Nothing found in the last {DQ_WINDOW_D} days.</p>
         ) : (
           <>
-            {day.length > 0 && (
-              <p className="text-sm">
-                {day.length} problem{day.length === 1 ? "" : "s"} in the last 24 h —{" "}
-                {open.length === 0 ? (
-                  <span className="text-muted-foreground">set aside automatically, no action needed.</span>
-                ) : (
-                  <span className="text-warning">{open.length} not dealt with automatically — see “Needs a look” below.</span>
-                )}
-              </p>
-            )}
+            <p className={`text-sm ${advice.needsLook ? "text-warning" : "text-muted-foreground"}`}>{advice.text}.</p>
             {counts.size > 0 && (
               <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                 {[...counts.entries()]

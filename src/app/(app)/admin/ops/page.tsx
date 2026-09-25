@@ -9,7 +9,9 @@ import { FailuresChart } from "./jobs-charts";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
 import { isBotBoardDevPreview } from "@/lib/bot-board";
 import { loadJobsPage, STALE_AFTER_MIN } from "@/lib/admin-jobs";
-import { buildJobViews, isRecentFailure, JOB_GROUPS, jobsAnswer, OTHER_GROUP, STATE_WORDS_HELP, type JobView } from "@/lib/admin-jobs-model";
+import { buildJobViews, isRecentFailure, JOB_GROUPS, jobsAnswer, lastRunText, OTHER_GROUP, STATE_WORDS_HELP, type JobView } from "@/lib/admin-jobs-model";
+import { timeAgo } from "@/lib/rel-time";
+import { InfoTip } from "@/components/oi/info-tip";
 import { PageHeader, Panel, PanelHeader } from "@/components/oi/panel";
 import { AnswerStrip, type Answer } from "@/components/oi/answer-strip";
 import { StatusBadge } from "@/components/oi/status-badge";
@@ -52,13 +54,16 @@ export default async function OpsDashboardPage() {
 
   const d = await loadJobsPage();
   const { now } = d;
-  const views = buildJobViews(d.jobs.v, now);
+  // with each job's usual gap (d.cadence) so a job well past it reads Late, not OK (round 6)
+  const views = buildJobViews(d.jobs.v, now, d.cadence.error ? null : d.cadence.v);
   const jobsUnknown = !!d.jobs.error;
   // Retired-looking jobs (last run fine, nothing for 8+ days) sit under a collapsed "Old jobs", not in the counts.
   const current = views.filter((v) => v.state !== "quiet");
   const old = views.filter((v) => v.state === "quiet");
   const failing = current.filter((v) => v.state === "failing");
-  const stuck = current.filter((v) => v.state === "stuck");
+  // Late (well past its usual gap) and Stuck (running far longer than usual) are one answer: "Late or stuck"
+  const stuck = current.filter((v) => v.state === "stuck" || v.state === "late");
+  const postponedN = d.postponedPending.v;
   // ONE rule for the headline, the group badges and the list badge (answer-first fix round 2026-09-25):
   // any failing job makes the answer amber and names it; red when its last run was in the last 7 days.
   const ja = jobsAnswer(current, now);
@@ -81,6 +86,8 @@ export default async function OpsDashboardPage() {
   const answers: Answer[] = [
     jobsUnknown
       ? { label: "Jobs", text: "Can't tell — job history unreadable", tone: "warning", icon: AlertOctagon }
+      : ja.tone === "success" && d.cadence.error
+        ? { label: "Jobs", text: "No job failing — lateness can't be checked", sub: "run history unreadable", tone: "warning", icon: AlertOctagon, href: "#runs" }
       : {
           label: "Jobs",
           text: ja.text,
@@ -91,19 +98,30 @@ export default async function OpsDashboardPage() {
           href: "#runs",
         },
     jobsUnknown
-      ? { label: "Stuck", text: "Can't tell — job history unreadable", tone: "warning", icon: Hourglass }
+      ? { label: "Late or stuck", text: "Can't tell — job history unreadable", tone: "warning", icon: Hourglass }
       : stuck.length
-      ? { label: "Stuck", text: `${stuck.length} still marked running after 3 h`, sub: stuck.map((x) => x.label).join(", "), tone: "warning", icon: Hourglass, href: "#runs" }
-      : { label: "Stuck", text: "Nothing hanging", tone: "success", icon: Hourglass },
+      ? {
+          label: "Late or stuck",
+          text: `${stuck.length} job${stuck.length === 1 ? "" : "s"} ${stuck.every((x) => x.state === "late") ? "late" : stuck.every((x) => x.state === "stuck") ? "stuck" : "late or stuck"} — ${stuck[0].label}`,
+          sub: `${lastRunText(stuck[0], (iso) => timeAgo(iso, now))}${stuck.length > 1 ? ` · also ${stuck.slice(1).map((x) => x.label).join(", ")}` : ""}`,
+          tone: "warning",
+          icon: Hourglass,
+          href: "#runs",
+        }
+      : d.cadence.error
+        // without the usual gaps only "running over 3 h" can be judged — never a green all-clear
+        ? { label: "Late or stuck", text: "Can't tell if any job is late", sub: "run history unreadable — only jobs running over 3 h are checked", tone: "warning", icon: Hourglass }
+        : { label: "Late or stuck", text: "Nothing late", sub: "every job ran within its usual gap", tone: "success", icon: Hourglass },
     {
       label: "Settlement",
       // review 2026-09-25: an unreadable pending-bet read left staleN at 0 and read "Up to date"; and a
       // nightly run that stopped succeeding days ago stayed green — both must not look calm.
       text: jobsUnknown || d.stale.error
         ? "Can't tell — settlement data unreadable"
-        : !settleOk ? "No successful run found" : settleLate ? `Last full run ${ago(settleOk, now)} ago — overdue` : staleN ? `${staleN} bet${staleN === 1 ? "" : "s"} overdue` : "Up to date",
+        : !settleOk ? "No successful run found" : settleLate ? `Last full run ${ago(settleOk, now)} ago — overdue` : staleN ? `${staleN} bet${staleN === 1 ? "" : "s"} overdue`
+        : postponedN ? `${postponedN} pick${postponedN === 1 ? "" : "s"} on postponed matches never closed` : "Up to date",
       sub: settleOk ? `last full run ${ago(settleOk, now)} ago · ${fmtInt(d.pendingTotal)} bets waiting for results` : undefined,
-      tone: jobsUnknown || d.stale.error ? "warning" : !settleOk ? "warning" : settleLate ? "danger" : staleN === 0 ? "success" : staleAlarm ? "danger" : "warning",
+      tone: jobsUnknown || d.stale.error ? "warning" : !settleOk ? "warning" : settleLate ? "danger" : staleN ? (staleAlarm ? "danger" : "warning") : postponedN ? "warning" : "success",
       icon: Scale,
       href: "#settlement",
     },
@@ -143,12 +161,12 @@ export default async function OpsDashboardPage() {
             {groups.map((g) => {
               const rows = byGroup.get(g.label) ?? [];
               const bad = rows.filter((r) => r.state === "failing");
-              const hung = rows.filter((r) => r.state === "stuck");
+              const hung = rows.filter((r) => r.state === "stuck" || r.state === "late");
               return (
                 <li key={g.key} className="flex items-center justify-between gap-2 px-4 py-2">
                   <span className="text-sm">{g.label}</span>
                   <StatusBadge tone={bad.length ? failTone(bad) : hung.length ? "warning" : "success"} dot={false}>
-                    {bad.length ? `${bad.length} of ${rows.length} failing` : hung.length ? `${hung.length} stuck` : `${rows.length} OK`}
+                    {bad.length ? `${bad.length} of ${rows.length} failing` : hung.length ? `${hung.length} late` : `${rows.length} OK`}
                   </StatusBadge>
                 </li>
               );
@@ -177,7 +195,7 @@ export default async function OpsDashboardPage() {
               <StatusBadge tone="warning">Unreadable</StatusBadge>
             ) : (
               <StatusBadge tone={failing.length ? failTone(failing) : stuck.length ? "warning" : "success"}>
-                {failing.length ? `${failing.length} failing` : stuck.length ? `${stuck.length} stuck` : "All OK"}
+                {failing.length ? `${failing.length} failing` : stuck.length ? `${stuck.length} late or stuck` : "All OK"}
               </StatusBadge>
             )
           }
@@ -192,7 +210,7 @@ export default async function OpsDashboardPage() {
         <Panel id="settlement">
           <PanelHeader
             title="Settlement"
-            description="After a match ends, settlement marks each bet won or lost, updates team ratings and builds the rows the models learn from. A 15-minute sweep settles as games finish; the main run at night catches the rest."
+            description="After a match ends, settlement marks each bet won or lost, updates team ratings and stores the results the models learn from. A check every 15 minutes settles games as they finish; the main run at night catches the rest."
             actions={
               d.stale.error ? (
                 <StatusBadge tone="warning">Unreadable</StatusBadge>
@@ -204,7 +222,7 @@ export default async function OpsDashboardPage() {
           <div className="space-y-4 p-4 pt-3">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
               <Meter label="Matches finished today" value={s?.matches_finished_today} note="Marked finished by the live tracker as they end." />
-              <Meter label="Model rows built today" value={s?.feature_vectors_today} note="The per-match rows the models learn from, built by settlement." />
+              <Meter label="Match results stored for the models" value={s?.feature_vectors_today} note="Today — what the models learn from, stored by settlement." />
               <Meter label="Team rating updates" value={s?.elo_updates_today} note="0 until the nightly run has processed today's games" />
               <Meter
                 label="Duplicate bets"
@@ -215,15 +233,14 @@ export default async function OpsDashboardPage() {
             </div>
             <p className="text-xs text-muted-foreground">{snapNote}</p>
             <div>
-              <p className="mb-2 text-sm">
-                Bets still pending {STALE_AFTER_MIN / 60} h+ after kick-off
-                <span className="text-muted-foreground">
-                  {" "}
-                  —{" "}
+              {/* round 6: one line; the why is in the ⓘ */}
+              <p className="mb-2 flex items-center gap-1 text-sm">
+                Bets still waiting for a result {STALE_AFTER_MIN / 60} h+ after kick-off
+                <InfoTip>
                   {staleAlarm
-                    ? "the 21:00 UTC run has passed and should have caught these."
-                    : "the 15-minute sweep usually catches these; the 21:00 UTC run is the catch-all, so before 22:00 this can be normal."}
-                </span>
+                    ? "The 21:00 UTC settlement run has passed and should have caught these — they need a look."
+                    : "The 15-minute settlement check usually catches these; the 21:00 UTC run catches the rest, so before 22:00 UTC a few here can be normal."}
+                </InfoTip>
               </p>
               {d.stale.error ? (
                 <p className="text-sm text-warning">Unreadable ({d.stale.error}) — not an all-clear.</p>
@@ -240,7 +257,7 @@ export default async function OpsDashboardPage() {
           <PanelHeader
             title="Match data for today's games"
             description="What the morning load and the day's refreshes attached to today's matches — the inputs the models read. Some sources only cover big leagues, so not every row should reach 100%."
-            actions={s ? <StatusBadge tone="neutral" dot={false}>{fmtInt(s.matches_today)} matches</StatusBadge> : <StatusBadge tone="warning">No snapshot</StatusBadge>}
+            actions={s ? <StatusBadge tone="neutral" dot={false}>{fmtInt(s.matches_today)} matches</StatusBadge> : <StatusBadge tone="warning">No summary yet</StatusBadge>}
           />
           <div className="grid gap-3 p-4 pt-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
             <Meter label="API-Football prediction" value={s?.matches_with_predictions} total={s?.matches_today} tone={shareTone(s?.matches_with_predictions, s?.matches_today)} note="Their win/draw/loss chances — one model input." />
@@ -250,11 +267,23 @@ export default async function OpsDashboardPage() {
             <Meter label="Head-to-head history" value={s?.matches_with_h2h} total={s?.matches_today} tone={shareTone(s?.matches_with_h2h, s?.matches_today, 0.5, 0.25)} note="Refreshed weekly; new pairings have none." />
             <Meter label="Injury reports" value={s?.matches_with_injuries} total={s?.matches_today} tone="neutral" note="API-Football covers injuries for a few top leagues only — a low count is normal." />
             <Meter label="Confirmed line-ups" value={s?.matches_with_lineups} total={s?.matches_today} tone="neutral" note="Published about an hour before kick-off." />
+            {/* round 6: settlement voids bets on postponed matches by itself (settlement.py SETTLE-VOID-POSTPONED);
+                only a bet it missed is an action, and then it says so */}
             <Meter
               label="Postponed today"
               value={s?.matches_postponed_today}
-              tone={s?.matches_postponed_today ? "warning" : "neutral"}
-              note="Will not settle — any pending bets on these need voiding."
+              tone={postponedN ? "warning" : "neutral"}
+              note={
+                d.postponedPending.error ? (
+                  <span className="text-warning">Can&apos;t tell whether bets on them were voided (bets unreadable)</span>
+                ) : postponedN ? (
+                  <span className="text-warning">
+                    {postponedN} paper pick{postponedN === 1 ? "" : "s"} on postponed matches never closed — settlement doesn&apos;t void these yet
+                  </span>
+                ) : (
+                  "None left open"
+                )
+              }
             />
           </div>
           <p className="px-4 pb-4 text-xs text-muted-foreground">{snapNote}</p>

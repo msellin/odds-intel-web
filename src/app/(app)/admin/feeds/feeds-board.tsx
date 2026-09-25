@@ -36,6 +36,7 @@ import { ChevronDown, ChevronUp, X } from "lucide-react";
 import type { FeedStatus, FeedBookStats } from "@/lib/engine-data";
 import { StatusBadge, TONE_DOT, TONE_TEXT } from "@/components/oi/status-badge";
 import { FeedControls } from "./feed-controls";
+import { InfoTip } from "@/components/oi/info-tip";
 import { ToastProvider } from "../bots/toast";
 import { relSpan, timeAgo } from "@/lib/rel-time";
 import {
@@ -169,11 +170,13 @@ export function FeedsBoard({
           </div>
         ) : (
           <div className={`mt-1 text-lg font-semibold ${TONE_TEXT[headTone]}`}>
-            {extras.every((e) => e.status === "ok") ? `All ${extras.length} OK` : `${extras.filter((e) => e.status === "ok").length} of ${extras.length} OK`}
+            {/* round 6: a late check's "All 10 OK" is not a claim we can make — it reads Unknown */}
+            {stale ? "Unknown" : extras.every((e) => e.status === "ok") ? `All ${extras.length} OK` : `${extras.filter((e) => e.status === "ok").length} of ${extras.length} OK`}
           </div>
         )}
         <div className="mt-0.5 text-xs text-muted-foreground">
           {every ?? (main?.kind === "close" ? "at each kick-off" : null)}
+          {every && headTone === "warning" ? <span className="text-warning"> · late</span> : null}
         </div>
         {badExtras.length > 0 && (
           <div className="mt-1.5 flex flex-wrap gap-2">
@@ -273,10 +276,12 @@ export function FeedsBoard({
     <ToastProvider>
       <div className="space-y-3">
         {stale && (
-          <p className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-            {statusAgeMin == null
-              ? "No status check recorded yet, so every block is grey — unknown, not healthy."
-              : `The status check is ${statusAgeMin} min old (it should run every 5 min), so every block is grey — unknown, not healthy. The times shown are the last ones it saw.`}
+          <p className="flex items-center gap-1 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+            {statusAgeMin == null ? "No feed check recorded yet — blocks are grey (unknown)." : `Feed check ${statusAgeMin} min late — blocks are grey (unknown).`}
+            <InfoTip>
+              The engine checks every feed every 5 minutes; while that check is late we cannot say a feed is healthy, so every block is grey. Times
+              shown are the last ones it saw. A book that was already late when the check last looked stays amber.
+            </InfoTip>
           </p>
         )}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">

@@ -1,7 +1,8 @@
 "use client";
 
 // /admin/ops (Jobs) chart (#139 admin redesign, 2026-09-24): failed job runs per day, 14 days, split
-// fixed-later (grey) vs still failing (red)
+// fixed-later (grey) vs still failing (red). Round 6 (2026-09-25): the title carries its period
+// ("· last 14 days", via the range's `long`).
 // (pipeline_runs keeps about two weeks). Client-side because recharts and the formatters cannot
 // cross the server/client boundary.
 
@@ -17,7 +18,7 @@ export function FailuresChart({ days, error, truncated }: { days: FailDay[]; err
   // run that is still part of a job's current failure.
   return (
     <ChartCard
-      title="Failed runs, most fixed on their next try"
+      title="Failed runs per day"
       description="Scheduled runs that failed each day. Grey: the job worked again on a later run — nothing to do. Red: part of a job that is still failing now (see the list below). Today is still running."
       kind="bar"
       stacked
@@ -28,8 +29,8 @@ export function FailuresChart({ days, error, truncated }: { days: FailDay[]; err
         { key: "still", label: "Still failing", color: "var(--color-danger)" },
       ]}
       ranges={[
-        { value: "7d", label: "7d", last: 7 },
-        { value: "14d", label: "14d", last: 14 },
+        { value: "7d", label: "7d", last: 7, long: "last 7 days" },
+        { value: "14d", label: "14d", last: 14, long: "last 14 days" },
       ]}
       defaultRange="14d"
       xFmt={day}

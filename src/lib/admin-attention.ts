@@ -21,7 +21,7 @@
 import { humanJob, jobAnchor } from "./admin-jobs-model";
 import type { ControlState } from "./bot-controls/types";
 import { HEARTBEAT_STALE_MIN } from "./bot-controls/types";
-import { dqGroupLabel, feedHealth } from "./admin-feeds-model";
+import { feedHealth } from "./admin-feeds-model";
 
 export type Severity = "danger" | "warn" | "info";
 
@@ -58,8 +58,16 @@ export interface AttentionInputs {
   jobsError: string | null;
   stalePending: number;
   staleError: string | null;
-  dqLast24h: { check_name: string; n: number }[];
+  /** The Feeds page's own advice (dqAdvice over dqProblems) + its 24 h problems for the one-line summary. */
+  dq: { count: number; open: number; needsLook: boolean; text: string; groups: { group: string; n: number }[] };
   dqError: string | null;
+  /** Jobs the Jobs page calls Late or Stuck (buildJobViews with each job's usual gap) — one rule, both pages. */
+  lateJobs?: { job: string; label: string; state: "late" | "stuck"; lastRun: string }[];
+  /** Run history (usual gaps) unreadable — lateness is NOT checked, which must be said, not implied OK. */
+  cadenceError?: string | null;
+  /** Pending bets on postponed/cancelled matches that settlement has NOT voided (postponedNeedingVoid). */
+  postponedOpen?: number;
+  postponedError?: string | null;
   /** Manual real bets with placed_real NULL, placed since MANUAL_RECONCILE_SINCE, older than 24 h. */
   unconfirmedManual: number;
   /** placed_at of the oldest of them (ISO) — the owner needs to know WHICH bets, not "over a day". */
@@ -76,18 +84,16 @@ const AREA_ORDER: Record<AttentionItem["area"], number> = { money: 0, picks: 1, 
 /** feed_status is rewritten every 5 min by the engine; older than this = the status job is stuck. */
 const FEED_STATUS_STALE_MIN = 15;
 /** A job still 'running' after this long has almost certainly died without recording it. */
-const JOB_STUCK_H = 3;
 /** Distinct data-quality problems in 24 h before the inbox asks for a look (they are set aside automatically). */
-const DQ_ATTENTION_MIN = 10;
 /** First day every NULL placed_real row means "unconfirmed manual", not "legacy" (see header). */
 export const MANUAL_RECONCILE_SINCE = "2026-09-10";
 
 /** "league_draw_rate" → "League draw rate". */
 // Data-quality groups: the SAME plain labels as the /admin/feeds summary (admin-feeds-model.ts).
-function dqSummary(rows: { check_name: string; n: number }[]): string {
+function dqSummary(rows: { group: string; n: number }[]): string {
   const g = new Map<string, number>();
   for (const r of rows) {
-    const label = dqGroupLabel(r.check_name).toLowerCase();
+    const label = r.group.toLowerCase();
     g.set(label, (g.get(label) ?? 0) + r.n);
   }
   return [...g.entries()].sort((a, b) => b[1] - a[1]).map(([l, n]) => `${n} ${l}`).join(" · ");
@@ -194,9 +200,26 @@ function jobItems(i: AttentionInputs): AttentionItem[] {
         sinceFloor: j.last_ok_at == null,
         href: `/admin/ops#${jobAnchor(j.job_name)}`,
       });
-    } else if (j.status === "running" && i.now - new Date(j.started_at).getTime() > JOB_STUCK_H * 60 * MIN) {
-      out.push({ id: `job-stuck-${j.job_name}`, severity: "warn", area: "jobs", title: `${humanJob(j.job_name)}: "running" for over ${JOB_STUCK_H}\u00a0hours — probably died`, since: j.started_at, href: `/admin/ops#${jobAnchor(j.job_name)}` });
     }
+  }
+  if (i.cadenceError) out.push(unreadable("job-cadence", "jobs", "Job run history", i.cadenceError, "/admin/ops"));
+  // Late / stuck: the Jobs page's own rule (each job's usual gap and run time — admin-jobs-model isLate /
+  // stuckAfterMs), so the Overview never calls a check "stopped" while Jobs says OK, or the reverse.
+  for (const v of i.lateJobs ?? []) {
+    out.push({
+      id: `job-${v.state}-${v.job}`,
+      severity: "warn",
+      area: "jobs",
+      title: v.state === "stuck" ? `${v.label}: still marked running — probably died` : `${v.label}: late — has not run on its usual schedule`,
+      since: v.lastRun,
+      href: `/admin/ops#${jobAnchor(v.job)}`,
+    });
+  }
+  if (i.postponedError) out.push(unreadable("postponed-unreadable", "jobs", "Postponed-match check", i.postponedError, "/admin/ops#settlement"));
+  else if (i.postponedOpen) {
+    // honest wording (review 2026-09-25): settlement voids postponed REAL bets and forward-test picks, but
+    // not paper/shadow picks — so these stay open until the engine fix (#162), not "normally by itself"
+    out.push({ id: "postponed-open", severity: "warn", area: "jobs", title: `${i.postponedOpen} pick${i.postponedOpen === 1 ? "" : "s"} on postponed matches never closed`, detail: "Paper picks — no money. Settlement doesn't void these yet (engine fix queued)", href: "/admin/ops#settlement" });
   }
   if (i.staleError) out.push(unreadable("stale-unreadable", "jobs", "Pending-bet check", i.staleError, "/admin/ops"));
   else if (i.stalePending > 0) {
@@ -225,11 +248,10 @@ export function buildAttention(i: AttentionInputs): AttentionItem[] {
     });
   }
   if (i.dqError) out.push(unreadable("dq-unreadable", "data", "Data-quality findings", i.dqError, "/admin/feeds#dq"));
-  // Distinct problems; bad rows are already set aside automatically, so this only asks for a look when
-  // there are many (UX test 2026-09-25: "74 findings" asked nothing of the owner).
-  const dq = i.dqLast24h.reduce((a, d) => a + d.n, 0);
-  if (dq >= DQ_ATTENTION_MIN) {
-    out.push({ id: "dq", severity: "warn", area: "data", title: `${dq} odds problems in the last 24\u00a0hours — set aside automatically, worth a look`, detail: dqSummary(i.dqLast24h), href: "/admin/feeds#dq" });
+  // ONE rule with /admin/feeds (dqAdvice): only problems NOT set aside automatically ask for a look
+  // (strict owner test 2026-09-25: Overview said "14 … worth a look", Feeds "12 … no action needed").
+  else if (i.dq.needsLook) {
+    out.push({ id: "dq", severity: "warn", area: "data", title: i.dq.text.replace(" 24 h", " 24\u00a0hours"), detail: dqSummary(i.dq.groups), href: "/admin/feeds#dq" });
   }
   return out.sort((a, b) => SEV_ORDER[a.severity] - SEV_ORDER[b.severity] || AREA_ORDER[a.area] - AREA_ORDER[b.area]);
 }

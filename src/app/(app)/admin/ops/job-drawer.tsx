@@ -14,14 +14,14 @@ import { useEffect, useState } from "react";
 import { Hourglass, RotateCw } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { StatusBadge, type Tone } from "@/components/oi/status-badge";
-import { failingText, isRecentFailure, JOB_FEED, lastRunText, STATE_WORD, type JobRun, type JobState, type JobView } from "@/lib/admin-jobs-model";
+import { everyGap, failingText, isRecentFailure, JOB_FEED, lastRunText, STATE_WORD, type JobRun, type JobState, type JobView } from "@/lib/admin-jobs-model";
 import type { JobFeed } from "@/lib/admin-jobs";
 import { ConfirmControlDialog } from "../bots/confirm-control-dialog";
 import { utcStamp } from "../bots/bot-board-format";
 import { timeAgo } from "@/lib/rel-time";
 import { feedActionSpec, useFeedAction } from "../feeds/feed-controls";
 
-const STATE_TONE: Record<JobState, Tone> = { failing: "danger", stuck: "warning", running: "success", quiet: "neutral", ok: "success" };
+const STATE_TONE: Record<JobState, Tone> = { failing: "danger", stuck: "warning", late: "warning", running: "success", quiet: "neutral", ok: "success" };
 const RUN_TONE: Record<string, Tone> = { completed: "success", failed: "danger", error: "danger", running: "info", skipped: "neutral" };
 const RUN_WORD: Record<string, string> = { completed: "OK", failed: "Failed", error: "Failed", running: "Running", skipped: "Skipped" };
 
@@ -37,9 +37,9 @@ function duration(a: string, b: string | null): string {
 
 /** How a job without a Run-now button gets run again, in plain words. */
 function rerunText(job: string): string {
-  if (/^settlement_|^settle/.test(job)) return "It is part of settlement: the 15-minute sweep and the nightly run (21:00 UTC) run it again on their own.";
+  if (/^settlement_|^settle/.test(job)) return "It is part of settlement: the 15-minute settlement check and the nightly run (21:00 UTC) run it again on their own.";
   if (/^fetch_|^betting_pipeline$|^morning_pipeline$/.test(job))
-    return "It is a step of the morning pipeline (04:00 UTC), which runs it again tomorrow; the hourly betting refresh covers the day.";
+    return "It is a step of the morning data load (04:00 UTC), which runs it again tomorrow; the hourly picks refresh covers the day.";
   if (job === "shadow_HHMM") return "The pick scan runs every 30 minutes, so the next one re-runs it within half an hour.";
   return "It runs again at its next scheduled time. To run it sooner, ask the developer to re-run it.";
 }
@@ -89,7 +89,14 @@ function Body({ v, feeds, now, preview }: { v: JobView; feeds: JobFeed[]; now: n
             {v.group} · {lastRunText(v, (iso) => ago(iso, now))} · last success {v.lastOk ? ago(v.lastOk, now) : "none in the last 35 days"}
           </span>
           {failingText(v) && <span className="block text-foreground">{failingText(v)}</span>}
-          <span className="block font-mono text-[10px] text-muted-foreground/70">{v.job}</span>
+          {v.usualGapMs != null && (
+            <span className="block">
+              Usually runs {everyGap(v.usualGapMs)}
+              {v.state === "late" ? " — now well overdue" : ""} (from its last few days of runs)
+            </span>
+          )}
+          {/* the job's code name lives here only (round 6: none on the page's face) — for telling the developer */}
+          <span className="block font-mono text-[10px] text-muted-foreground/70">Job id: {v.job}</span>
         </SheetDescription>
       </SheetHeader>
       <div className="space-y-4 px-4 pb-6">

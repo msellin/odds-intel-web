@@ -14,7 +14,7 @@ import { useEffect, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "@/components/oi/data-table";
 import { StatusBadge, type Tone } from "@/components/oi/status-badge";
-import { failingText, isRecentFailure, jobAnchor, lastRunText, STATE_RANK, STATE_WORD, type JobState, type JobView } from "@/lib/admin-jobs-model";
+import { failingText, isRecentFailure, jobAnchor, lastRunText, oldJobsText, STATE_RANK, STATE_WORD, type JobState, type JobView } from "@/lib/admin-jobs-model";
 import { marketLabel } from "@/lib/admin-feeds-model";
 import type { JobFeed } from "@/lib/admin-jobs";
 import { ToastProvider } from "../bots/toast";
@@ -24,11 +24,12 @@ import { timeAgo } from "@/lib/rel-time";
 
 // answer-first fix round (2026-09-25): four words (OK / Failing / Stuck / Retired, STATE_WORD); a failure
 // older than 7 days is amber, not red — the same rule as the page's answer and the Overview.
-const STATE_TONE: Record<JobState, Tone> = { failing: "danger", stuck: "warning", running: "success", quiet: "neutral", ok: "success" };
+const STATE_TONE: Record<JobState, Tone> = { failing: "danger", stuck: "warning", late: "warning", running: "success", quiet: "neutral", ok: "success" };
 const STATE_TITLE: Record<JobState, string> = {
   failing: "Its last run failed",
-  stuck: "Still marked running after 3 hours — it probably died without saying so",
-  running: "Running now (for under 3 hours)",
+  stuck: "Still marked running far longer than its runs usually take — it probably died without saying so",
+  late: "Its last run was fine, but it is well past its usual gap between runs — it may have stopped being started",
+  running: "Running now, for a normal length of time",
   quiet: "Its last run was fine but it has not run for over 8 days — probably no longer scheduled",
   ok: "Its last run finished",
 };
@@ -61,8 +62,8 @@ export function JobsTable({ rows, old = [], now, feeds, preview }: { rows: JobVi
       meta: { label: "Job", csv: (r) => r.job },
       cell: ({ row }) => (
         <div id={jobAnchor(row.original.job)} className="min-w-[12rem] scroll-mt-24">
+          {/* round 6: no code names on the face — the job id is in the drawer (and the CSV) */}
           <span className="block text-sm underline-offset-2 group-hover:underline">{row.original.label}</span>
-          <span className="block font-mono text-[10px] text-muted-foreground/70">{row.original.job}</span>
         </div>
       ),
     },
@@ -135,20 +136,19 @@ export function JobsTable({ rows, old = [], now, feeds, preview }: { rows: JobVi
           setOpen(r);
           window.history.replaceState(window.history.state, "", `#${jobAnchor(r.job)}`);
         }}
-        rowClassName={(r) => `group ${r.state === "failing" ? (toneOf(r, now) === "danger" ? "bg-danger/5" : "bg-warning/5") : ""}`}
+        rowClassName={(r) => `group ${r.state === "failing" ? (toneOf(r, now) === "danger" ? "bg-danger/5" : "bg-warning/5") : r.state === "late" || r.state === "stuck" ? "bg-warning/5" : ""}`}
       />
       <p className="mt-2 text-xs text-muted-foreground">Click a job for its last runs and how to run it again.</p>
       {old.length > 0 && (
         <details className="mt-3 rounded-lg border border-border">
           <summary className="cursor-pointer px-3 py-2 text-xs text-muted-foreground hover:text-foreground">
-            Old jobs ({old.length}) — last run fine, but nothing for over 8 days: not running any more?
+            {oldJobsText(old.length)}
           </summary>
           <ul className="divide-y divide-border/60 border-t border-border/60">
             {old.map((v) => (
               <li key={v.job} id={jobAnchor(v.job)} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-xs">
                 <button type="button" className="text-left hover:underline" onClick={() => setOpen(v)}>
                   <span className="block text-sm">{v.label}</span>
-                  <span className="block font-mono text-[10px] text-muted-foreground/70">{v.job}</span>
                 </button>
                 <span className="flex items-center gap-2 text-muted-foreground">
                   ran {ago(v.lastRun, now)}

@@ -180,11 +180,16 @@ export interface BlockRisk {
  *   High   — at/over the limit, or BLOCK_CHECKS_HIGH+ block checks.
  * Pass budgetView("Coolbet", cap, footprintHours, now) — null when book_footprint is unreadable.
  */
-export function coolbetBlockRisk(b: Pick<BudgetView, "requests" | "cap" | "challenges"> | null): BlockRisk {
+export function coolbetBlockRisk(b: Pick<BudgetView, "requests" | "cap" | "challenges"> | null, stale = false): BlockRisk {
   if (!b || b.cap == null) return { level: "unknown", tone: "neutral", word: "Unknown", sub: "request counts unreadable" };
   const share = b.requests / b.cap;
   const ch = b.challenges ?? 0;
   const sub = `${b.requests.toLocaleString("en-US")} of ${b.cap.toLocaleString("en-US")} requests this hour · ${ch} block check${ch === 1 ? "" : "s"}`;
+  // round 6 (2026-09-25): while the feed check is late the page is "unknown" everywhere — a quiet hour
+  // may only mean collection stopped, so "Low" is not a claim we can make. High stays High: requests
+  // at the limit or block checks are counted facts whatever the check says — and so is Medium (review
+  // 2026-09-25: 1–4 block checks read grey "Unknown"); only a would-be "Low" becomes Unknown.
+  if (stale && share < BLOCK_RISK_SHARE && ch === 0) return { level: "unknown", tone: "neutral", word: "Unknown", sub: `the feed check is late · ${sub}` };
   if (share >= 1 || ch >= BLOCK_CHECKS_HIGH) return { level: "high", tone: "danger", word: "High", sub };
   if (share >= BLOCK_RISK_SHARE || ch > 0) return { level: "medium", tone: "warning", word: "Medium", sub };
   return { level: "low", tone: "success", word: "Low", sub };
@@ -309,12 +314,30 @@ export interface BlockState {
   problem: string | null;
 }
 
+/**
+ * While the feed check is late every colour is grey (unknown) — EXCEPT a book that was ALREADY past
+ * its own schedule when the check last looked (round 6, 2026-09-25: "2 h ago · every 60 min" sat grey
+ * and calm). Measured from the check's own time (updated_at), not from now: counting the check's delay
+ * would turn every book amber the moment the check is late (tried on the 25 Sep fixture: all six books
+ * amber at 83 min late), which is alarm without information. "Late when last seen" is a fact.
+ */
+export function staleLate(f: FeedStatus | undefined): boolean {
+  if (!f || f.paused || f.kind === "close" || !f.last_data_at || !f.updated_at) return false;
+  return (new Date(f.updated_at).getTime() - new Date(f.last_data_at).getTime()) / 60000 > freshLimitMin(f);
+}
+
 export function blockState(def: BlockDef, byId: Map<string, FeedStatus>, now: number, stale: boolean, budget: BudgetView | null): BlockState {
   const main = def.main ? byId.get(def.main) : undefined;
   const extras = def.extra.map((id) => byId.get(id)).filter(Boolean) as FeedStatus[];
-  const headTone = def.main ? ageTone(main, now, stale) : worstTone(extras.map((e) => statusTone(e, stale)));
-  const tone = stale ? "neutral" : worstTone([headTone, ...(main ? [statusTone(main)] : []), ...extras.map((e) => statusTone(e))]);
+  const headTone = def.main
+    ? stale && staleLate(main) ? "warning" : ageTone(main, now, stale)
+    : worstTone(extras.map((e) => statusTone(e, stale)));
+  const tone = stale ? (headTone === "warning" ? "warning" : "neutral") : worstTone([headTone, ...(main ? [statusTone(main)] : []), ...extras.map((e) => statusTone(e))]);
   let problem: string | null = null;
+  if (stale && headTone === "warning" && main?.last_data_at) {
+    const m = Math.round((now - new Date(main.last_data_at).getTime()) / 60000);
+    problem = `Already late when last checked — no new odds for ${m >= 90 ? `${Math.round(m / 60)} h` : `${m} min`}, normally ${everyText(main.interval_min)}`;
+  }
   if (!stale && tone !== "success") {
     const raw = main && feedHealth(main) !== "ok" && feedHealth(main) !== "paused"
       ? main.status_reason
@@ -336,7 +359,14 @@ export function blockState(def: BlockDef, byId: Map<string, FeedStatus>, now: nu
  */
 export function feedsAnswer(blocks: BlockState[], unknown: { error: boolean; stale: boolean }, hrefBase = ""): { tone: "danger" | "warning" | "success"; text: string; sub?: string; href: string } {
   if (unknown.error || unknown.stale) {
-    return { tone: "warning", text: unknown.stale && !unknown.error ? "Can't tell — the feed check itself is late" : "Can't tell — feed status unreadable", href: hrefBase || "#" };
+    // round 6: a book already past its schedule stays amber while the check is late (staleLate) — name it
+    const late = unknown.error ? [] : blocks.filter((b) => b.tone === "warning");
+    return {
+      tone: "warning",
+      text: unknown.stale && !unknown.error ? "Can't tell — the feed check itself is late" : "Can't tell — feed status unreadable",
+      sub: late.length ? `${late.map((b) => b.def.title).join(", ")} ${late.length === 1 ? "was" : "were"} already late when last checked` : undefined,
+      href: late.length ? `${hrefBase}#book-${late[0].def.key}` : hrefBase || "#",
+    };
   }
   const red = blocks.filter((b) => b.tone === "danger");
   const amber = blocks.filter((b) => b.tone === "warning");
@@ -444,4 +474,30 @@ export function dqProblems(findings: DataQualityFinding[]): DqProblem[] {
     }
   }
   return [...by.values()].sort((a, b) => (a.last < b.last ? 1 : -1));
+}
+
+// ── ONE odds-problem count (round 6, 2026-09-25) ─────────────────────────────────────────────────
+// Feeds said "12 in 24 h … no action needed" while the Overview said "14 … worth a look": the
+// Overview counted per raw check over a 24 h read, the page per problem over a 7-day read. The rule
+// is now these two functions, over the SAME read (loadDqFindings in admin-feeds.ts, 7 days):
+//   count     = distinct problems (dqProblems) whose LAST sighting is in the last 24 h;
+//   needsLook = any of those the checks did not set aside or correct themselves (dqHandled).
+// No size threshold: 30 problems all set aside need nothing; one not set aside needs a look.
+
+/** How many days of findings every surface reads — the problems table covers exactly this. */
+export const DQ_WINDOW_D = 7;
+
+/** Problems whose last sighting is in the last 24 h (older rows stay in the 7-day table, never in this count). */
+export function dqLast24h(problems: DqProblem[], now: number): DqProblem[] {
+  return problems.filter((p) => now - new Date(p.last).getTime() < 86_400_000);
+}
+
+export function dqAdvice(problems: DqProblem[], now: number): { count: number; open: number; needsLook: boolean; text: string } {
+  const day = dqLast24h(problems, now);
+  const open = day.filter((p) => !p.handled).length;
+  const n = day.length;
+  const what = `${n} odds problem${n === 1 ? "" : "s"} in the last 24 h`;
+  if (n === 0) return { count: 0, open: 0, needsLook: false, text: "No odds problems in the last 24 h" };
+  if (open) return { count: n, open, needsLook: true, text: `${what} — ${open} not set aside automatically, needs a look` };
+  return { count: n, open: 0, needsLook: false, text: `${what} — all set aside automatically, no action needed` };
 }
