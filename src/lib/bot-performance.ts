@@ -15,8 +15,20 @@
  *
  * Units: ROI / CLV are FRACTIONS (0.081 = +8.1%). P&L is EUR at the flat stake.
  */
+import { createClient } from "@supabase/supabase-js";
 import { unstable_cache } from "next/cache";
-import { createServerServiceClient } from "@/lib/supabase-server";
+
+// Service client built here rather than imported from supabase-server: engine-data.ts (which a
+// client component imports for constants) reaches this module, and supabase-server pulls in
+// next/headers, which a client bundle cannot contain. Same env as createServerServiceClient.
+function createServerServiceClient() {
+  const url = process.env.NEXT_PUBLIC_POSTGREST_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const key =
+    process.env.POSTGREST_SERVICE_KEY ??
+    process.env.SUPABASE_SECRET_KEY ??
+    process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  return createClient(url, key);
+}
 
 /** Flat stake every /performance figure is stated at (the header says so). */
 export const PERF_FLAT_STAKE_EUR = 10;
