@@ -383,8 +383,8 @@ export interface BotRecord {
    *  privately before kickoff. RLS hides them from anon/authenticated too. */
   isVip: boolean;
   /** #148 (migration 421): pending rows hidden from public reads — the VIP bot
-   *  AND its unlisted EV8 twin (bot_combined_1x2_ev8_v1), whose pending picks are
-   *  exactly the VIP bot's EV8 picks. Not a VIP card by itself. */
+   *  AND twins whose pending picks are the VIP bot's own (bot_ou_sharp_2anchor_v1; the EV8
+   *  twin bot_combined_1x2_ev8_v1 was retired 2026-09-25). Not a VIP card by itself. */
   hidePending: boolean;
   showOnPerformance?: boolean;
 }

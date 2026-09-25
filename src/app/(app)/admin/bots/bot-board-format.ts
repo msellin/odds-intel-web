@@ -157,7 +157,8 @@ export function fmtBooksShort(cfg: BotConfigRow | undefined): string {
   if (!b || b.length === 0) return "";
   if (b.includes("*")) {
     const ex = excludedBooks(cfg?.gates);
-    return ex ? `any book except ${ex.length}` : "any book";
+    // "any book except 9" read as a riddle; the 9 are non-bookmaker feeds, listed in the detail view.
+    return ex ? "all publishable books" : "any book";
   }
   return b.map(bookOne).join(", ");
 }
@@ -240,18 +241,23 @@ function range(vals: number[]): string {
   return lo === hi ? pctPlain(lo) : `${pctPlain(lo).replace("%", "")}–${pctPlain(hi)}`;
 }
 
-/** Row text: "edge ≥ 3%", "edge ≥ 10–13%", "edge ≥ 3–12% by tier"; "" for no floor. */
-export function floorShort(f: Floor): string {
+/** Row text: "edge ≥ 3%", "edge ≥ 10–13%", "edge ≥ 3–12% by tier"; "" for no floor.
+ *  `unit` "ev" (#155, 2026-09-25): the floor is expected value p × odds − 1, so it reads "EV ≥ 5%";
+ *  a tiered floor with ONE value across tiers is flat and does not say "by tier". */
+export function floorShort(f: Floor, unit: "edge" | "EV" = "edge"): string {
   switch (f.kind) {
     case "none":
       return "";
     case "flat":
-      return f.value <= 0 ? "any edge" : `edge ≥ ${pctPlain(f.value)}`;
+      return f.value <= 0 ? `any ${unit}` : `${unit} ≥ ${pctPlain(f.value)}`;
     case "selection":
-      return `edge ≥ ${range(f.lines.map((l) => l.value))}`;
+      return `${unit} ≥ ${range(f.lines.map((l) => l.value))}`;
     case "tiered": {
       const vals = f.tables.flatMap((t) => t.rows.flatMap((r) => r.cells.filter((c): c is number => c != null)));
-      return vals.length ? `edge ≥ ${range(vals)} by tier` : "custom floor";
+      if (!vals.length) return "custom floor";
+      return Math.min(...vals) === Math.max(...vals)
+        ? `${unit} ≥ ${range(vals)}`
+        : `${unit} ≥ ${range(vals)} by tier`;
     }
     case "raw":
       return "custom floor";
@@ -267,13 +273,19 @@ export function fmtOddsBand(min: number | null | undefined, max: number | null |
   return "";
 }
 
+/** "EV" when the bot's floor is expected value (pipeline `edge_unit: "ev"`, exported as a gate). */
+export function edgeUnit(cfg: BotConfigRow | undefined): "edge" | "EV" {
+  const g = (cfg?.gates ?? []).find((x) => x.name === "edge_unit");
+  return g?.value === "ev" ? "EV" : "edge";
+}
+
 /** The row's line 2: "1×2 · any book · edge ≥ 3% · odds ≤ 4.00". */
 export function identityLine(cfg: BotConfigRow | undefined): string {
   if (!cfg) return "";
   const parts = [
     fmtMarkets(cfg.markets),
     fmtBooksShort(cfg),
-    floorShort(parseFloor(cfg.edge_floor)),
+    floorShort(parseFloor(cfg.edge_floor), edgeUnit(cfg)),
     fmtOddsBand(cfg.odds_min, cfg.odds_max),
   ].filter(Boolean);
   return parts.join(" · ");
