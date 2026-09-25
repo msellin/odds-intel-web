@@ -127,6 +127,7 @@ export const JOB_LABELS: Record<string, string> = {
   corners_paper_settle: "Corners picks settlement (paper)",
   daily_real_perf_email: "Daily real-money e-mail",
   dashboard_cache_refresh: "Public site numbers refresh",
+  dashboard_cache_prune: "Public site numbers — prune old snapshots (keeps 7 days)",
   enrichment_full: "Full match-data refresh",
   epicbet_odds_freshness: "Epicbet odds freshness check",
   epicbet_odds_snapshot: "Epicbet odds",
