@@ -61,6 +61,9 @@ import {
 import { PerformanceHistory } from "@/components/performance-history";
 import type { FullBetItem } from "@/components/performance-history";
 import { PerformanceExtras } from "@/components/performance-extras";
+// [[#157]] "the work behind it" + the collapsed retired section — separate from the active headline.
+import { getWorkDone } from "@/lib/performance-work-done";
+import { PerformanceWorkDone } from "@/components/performance-work-done";
 
 // ── Leaderboard rows: ONE source ([[#159]]) ──────────────────────────────────
 //
@@ -178,7 +181,7 @@ async function LoggedInHistorySection({ isElite, botsDB }: LoggedInSectionProps)
 
 export default async function PerformancePage() {
   // All fast fetches run in parallel — botsDB moved here since it doesn't need isPro.
-  const [authResult, trackStats, cache, extras, modelV2Stats, botsDB, calibrated, perf] = await Promise.all([
+  const [authResult, trackStats, cache, extras, modelV2Stats, botsDB, calibrated, perf, workDone] = await Promise.all([
     (async () => {
       const supabase = await createSupabaseServer();
       const {
@@ -196,6 +199,8 @@ export default async function PerformancePage() {
     getCalibratedHeadlineStats(),
     // [[#159]] THE per-bot source for every row below.
     getBotPerformance(),
+    // [[#157]] every strategy ever scored (retired included) — NEVER feeds the headline above.
+    getWorkDone(),
   ]);
 
   const { userId, isPro, isElite } = authResult as {
@@ -284,6 +289,13 @@ export default async function PerformancePage() {
     cachedBots.push(row);
   }
 
+  // [[#157]] owner answer 1: a listed bot whose picks were priced 2026-05-10..09-14 (the 1X2 model
+  // was partly home/away-swapped, #065) carries the count into its detail view.
+  for (const row of cachedBots) {
+    const sw = workDone?.swapWindowByBot[row.name];
+    if (sw && sw.n > 0 && row.record) row.record.swapWindow = sw;
+  }
+
   const clientProps = {
     trackStats,
     cache,
@@ -301,6 +313,7 @@ export default async function PerformancePage() {
       {/* PANELS REMOVED 2026-09-22 (owner): the graph and the numbers first; the published arms
           are rows in the leaderboard like every other bot (PUBLISHED-ARM-HAS-A-RECORD). */}
       <PerformanceClient {...clientProps} />
+      <PerformanceWorkDone data={workDone} />
       <PerformanceExtras data={extras} cache={cache} />
       {isLoggedIn ? (
         <Suspense

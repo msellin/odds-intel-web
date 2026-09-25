@@ -150,10 +150,16 @@ export default function MethodologyPage() {
             <strong>Active</strong> — paper-only, observation tier.
           </li>
           <li>
-            <strong>Retired</strong> — failed experiments. Excluded from
-            headline numbers but kept in shadow_bets so they continue to
-            be evaluated — reactivation gated on shadow performance
-            recovery.
+            <strong>Retired</strong> — strategies we stopped running.
+            Excluded from the headline ROI (today&apos;s proven
+            strategies only), but never deleted: their picks count in the
+            &ldquo;work behind it&rdquo; totals on /performance, and the
+            collapsed &ldquo;Show retired strategies&rdquo; section lists
+            each family&apos;s full record, losers included, on the same
+            basis as every other row (flat 1 unit at the best price
+            available when the pick was made; CLV against the sharp
+            closing line). Named examples are chosen by sample size, never
+            by result.
           </li>
         </ul>
 

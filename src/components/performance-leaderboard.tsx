@@ -88,6 +88,8 @@ export interface BotRecordDetail {
   /** Settled picks priced at the recorded odds — no quote at pick time. */
   nRecordedPrice: number;
   pending: number;
+  /** [[#157]] picks priced 2026-05-10..09-14 while the served 1X2 model was partly home/away-swapped (#065). */
+  swapWindow?: { n: number; picks: number };
 }
 
 /** [[#156]] (2026-09-25). A forward-test bot's CLV, shown to every reader.
@@ -519,6 +521,12 @@ function BotModal({
             )}
           </p>
           <ClvLine bot={bot} />
+          {bot.record?.swapWindow && (
+            <p className="text-[10px] text-amber-500/80">
+              {bot.record.swapWindow.n} of {bot.record.swapWindow.picks} picks were made 10 May–14 Sep, while our
+              match-result model partly mixed up home and away (fixed 14 Sep). They are counted, not removed.
+            </p>
+          )}
         </div>
         {bot.isVip && evBands.length > 0 && <EvBandSplit bands={evBands} />}
 
