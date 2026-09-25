@@ -91,13 +91,10 @@ export const BOT_EDGE_THRESHOLDS: Record<string, number> = {
   bot_sweep_btts_yes_v1: 0.05,
   bot_coolbet_value_v1: 0.03,
   // COOLBET-MODEL-OU-SHADOW-BOT-2026-09-08: model-edge O/U fires at an 8%
-  // calibrated edge (mirrors _MIN_EDGE_BY_MARKET['o/u'] and the placer's
-  // BOT_THRESHOLDS). Keep in lockstep with scripts/place_coolbet_ui.py.
+  // calibrated edge (mirrors _MIN_EDGE_BY_MARKET['o/u']).
   bot_coolbet_ou_model_v1: 0.08,
   // FAVLONG-CUTS-2026-09-09: the real-money model-edge 1x2 bot now bets HOME-UNDERDOGS
   // only at a 10% calibrated edge (odds>=2.80). See BETTING_GATE_DECISIONS "1x2 by type".
-  // (was 13%; mirrors the placer's per-bot threshold BOT_THRESHOLDS['bot_coolbet_1x2_model_v1'])
-  // BOT_THRESHOLDS). Keep in lockstep with scripts/place_coolbet_ui.py.
   bot_coolbet_1x2_model_v1: 0.10,
   bot_sweep_ou25_v1: 0.03,
   bot_sweep_ou35_v1: 0.03,
@@ -117,6 +114,10 @@ export const BOT_EDGE_THRESHOLDS: Record<string, number> = {
   bot_trigger_ou_sharp_v1: 0.03,
   bot_trigger_1x2_sharp_tight_v1: 0.02,
   bot_ou35_model_v1: 0.08,
+  // #162 W4.3 (2026-09-25): was missing, so the Pick queue computed this bot's floor at the 0.08
+  // fallback while it fires at a flat 10% (bot_configs.py). Smoke PLACEMENT-FLOOR-ONE-RULE now pins
+  // every real-money-capable bot's entry here to its generator's own floor.
+  bot_unified_gate_1x2_paper_v1: 0.10,
 };
 
 /** Edge threshold for a shadow bot. Unknown bots fall back to 0.08, matching

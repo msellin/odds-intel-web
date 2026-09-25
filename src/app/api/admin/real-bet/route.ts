@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
+import { normalizeMarket } from "@/lib/market-vocab";
 
 function admin() {
   const url =
@@ -36,6 +37,8 @@ export async function POST(req: Request) {
     simulatedBetId?: string;
     /** OWN Phase 6: the shadow_bets row this hand-placed bet came from (mig 354). */
     shadowBetId?: string;
+    /** #162 W4.5: the /picks forward-test pick this bet backed (engine migration 448). */
+    forwardTestPickId?: string;
     botId?: string;
     matchId?: string;
     market?: string;
@@ -52,7 +55,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
 
-  const { matchId, market, selection, bookmaker, capturedOdds, actualOdds, stake, notes, botId, simulatedBetId, shadowBetId } = body;
+  const { matchId, bookmaker, capturedOdds, actualOdds, stake, notes, botId, simulatedBetId, shadowBetId, forwardTestPickId } = body;
+  // #162 W4.5: store the ONE canonical spelling, as the engine's store_real_bet does
+  // (canonicalize_for_storage) — 'o/u' + 'over 2.5' becomes 'over_under_25' + 'over', so the
+  // placers' exposure and the same-day dedupe see this bet. Asian handicap / combo keep their
+  // selection (the line lives there); unrecognised vocabulary passes through unchanged.
+  const canon = normalizeMarket(body.market, body.selection);
+  const keepSel = canon && (canon.family === "asian_handicap" || canon.family === "combo");
+  const market = canon?.market ? canon.market : body.market;
+  const selection = canon?.market && !keepSel ? canon.selection : body.selection;
 
   if (!matchId || !market || !selection || !bookmaker) {
     return NextResponse.json({ error: "missing required fields" }, { status: 400 });
@@ -96,6 +107,8 @@ export async function POST(req: Request) {
     p_bot_id: botId || null,
     p_simulated_bet_id: simulatedBetId ?? null,
     p_shadow_bet_id: shadowBetId ?? null,
+    // Only sent when set, so this route keeps working against the pre-448 function signature.
+    ...(forwardTestPickId ? { p_forward_test_pick_id: forwardTestPickId } : {}),
   });
   const res = (rpc ?? {}) as { id?: string; error?: string; existing_id?: string };
   if (res.error === "already_placed") {
