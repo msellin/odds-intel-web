@@ -350,7 +350,9 @@ export default async function PerformancePage() {
   // VIP-PERFORMANCE-SETTLED-ONLY (#148): the VIP bot is listed too, whatever its
   // maturity label — dashboard_cache.bot_breakdown carries settled counts only.
   const cachedBots = buildCachedBotStats(cache, botsDB, isPro, isElite)
-    .filter(b => isPublicBot(b.maturityLabel) || b.isVip === true)
+    // #152: plus owner-chosen TESTING bots (bots.show_on_performance) — they keep their 'testing' chip.
+    .filter(b => isPublicBot(b.maturityLabel) || b.isVip === true
+      || botsDB.some(d => d.name === b.name && d.showOnPerformance === true))
     .filter(b => !liveRetiredNames.has(b.name))
     // Ledger-backed bots are pushed below from picks_forward_test; a beta one
     // (grade B) would otherwise ALSO arrive here from dashboard_cache with 0 bets.

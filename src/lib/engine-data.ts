@@ -381,6 +381,7 @@ export interface BotRecord {
    *  AND its unlisted EV8 twin (bot_combined_1x2_ev8_v1), whose pending picks are
    *  exactly the VIP bot's EV8 picks. Not a VIP card by itself. */
   hidePending: boolean;
+  showOnPerformance?: boolean;
 }
 
 // PERF-VPS-2026-07-07: switched from createSupabaseServer (cookies) to admin
@@ -390,7 +391,7 @@ const _getAllBotsFromDBUncached = async (): Promise<BotRecord[]> => {
   const admin = createSupabaseAdmin();
   const { data, error } = await admin
     .from("bots")
-    .select("id, name, display_name, strategy, description, strategy_description, starting_bankroll, current_bankroll, is_active, retired_at, maturity_label, vip, hide_pending")
+    .select("id, name, display_name, strategy, description, strategy_description, starting_bankroll, current_bankroll, is_active, retired_at, maturity_label, vip, hide_pending, show_on_performance")
     .order("name");
   if (error || !data) {
     console.error("[getAllBotsFromDB] query failed:", error?.message ?? "no data");
@@ -410,6 +411,8 @@ const _getAllBotsFromDBUncached = async (): Promise<BotRecord[]> => {
     maturityLabel: (r.maturity_label as string) ?? 'active',
     isVip: r.vip === true,
     hidePending: r.hide_pending === true || r.vip === true,
+    // #152: owner-chosen TESTING bots listed on /performance (migration 427) — label stays 'testing'.
+    showOnPerformance: r.show_on_performance === true,
   }));
 };
 
@@ -418,7 +421,8 @@ export const getAllBotsFromDB = unstable_cache(
   // v2: the row shape gained display_name (migration 375) — the key must
   // change or 30 minutes of cached rows come back without it.
   // v3: gained `vip` (migration 420, #148); v4: `hide_pending` (migration 421).
-  ["getAllBotsFromDB_v4"],
+  // v5: `show_on_performance` (migration 427, #152).
+  ["getAllBotsFromDB_v5"],
   { revalidate: 1800 }
 );
 

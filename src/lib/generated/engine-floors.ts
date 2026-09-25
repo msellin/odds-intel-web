@@ -250,6 +250,14 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "realMoney": false,
     "anchor": "model",
     "market": "1x2"
+  },
+  "bot_v10_1x2_newplus_v1": {
+    "edgeFloor": null,
+    "oddsFloor": null,
+    "oddsCap": null,
+    "realMoney": false,
+    "anchor": "model",
+    "market": "1x2"
   }
 };
 

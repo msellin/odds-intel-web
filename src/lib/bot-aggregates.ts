@@ -114,6 +114,7 @@ interface BotDbRow {
   retiredAt?: string | null;
   maturityLabel?: string;
   isVip?: boolean;
+  showOnPerformance?: boolean;
 }
 
 // ── Filtering ────────────────────────────────────────────────────────────────
@@ -446,7 +447,8 @@ export function buildPublicBotStats(
   // VIP-PERFORMANCE-SETTLED-ONLY (#148): plus the VIP bot, whose bets arrive
   // here already stripped of unsettled rows (dropVipUnsettled in page.tsx).
   const activeBots = botsDB.filter((b) =>
-    !b.retiredAt && (isPublicBot(b.maturityLabel) || isVipBot(b)) && !LEDGER_BACKED_BOTS.has(b.name));
+    !b.retiredAt && (isPublicBot(b.maturityLabel) || isVipBot(b) || b.showOnPerformance === true)
+    && !LEDGER_BACKED_BOTS.has(b.name));
   const rows: PublicBotStatShape[] = activeBots.map((dbBot): PublicBotStatShape => {
     const botBets = betsByBot[dbBot.name] || [];
     const settled = botBets.filter((b) => b.result !== "pending" && b.result !== "void");
