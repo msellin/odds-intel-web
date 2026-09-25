@@ -52,7 +52,7 @@ export const FAMILY_INFO: Record<string, FamilyInfo> = {
   model_sim: { title: "Model · simulated", subtitle: "Our model, best accessible price (behind /performance).", metric: "clv_pinnacle", accent: "sky", icon: "brain" },
   inplay: { title: "In-play", subtitle: "Picks during the match. No closing line → no CLV.", metric: "lift", accent: "amber", icon: "timer" },
   control: { title: "Junk control", subtitle: "A deliberately junk-anchored arm — the forward test's noise floor.", metric: "clv_mc", accent: "amber", icon: "control" },
-  unknown: { title: "Unresolved config", subtitle: "The export could not describe these — fix export_bot_config.py.", metric: "clv_mc", accent: "amberStrong", icon: "alert" },
+  unknown: { title: "Settings unknown", subtitle: "The nightly settings list could not describe these (scripts/export_bot_config.py).", metric: "clv_mc", accent: "amberStrong", icon: "alert" },
 };
 
 export const METRIC_LABEL: Record<Metric, string> = {
@@ -404,7 +404,7 @@ export function needsALook(
     out.push({ bot: v.name, text: `${v.displayName} silent · last pick ${timeAgo(v.sb?.last_pick_at, now)}`, severity: "warn" });
   }
   for (const v of active) {
-    if (v.family === "unknown") out.push({ bot: v.name, text: `${v.displayName}: settings missing from the daily config export`, severity: "warn" });
+    if (v.family === "unknown") out.push({ bot: v.name, text: `${v.displayName}: its settings are not in the nightly settings list yet`, severity: "warn" });
   }
   return out;
 }

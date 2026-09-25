@@ -178,6 +178,8 @@ export interface RangeOption {
   label: string;
   /** How many trailing rows of `data` this range shows. */
   last: number;
+  /** Spelled-out period shown after the title ("last 4 weeks") — every figure carries its period. */
+  long?: string;
 }
 
 /**
@@ -254,7 +256,10 @@ export function ChartCard({
   return (
     <Panel id={id}>
       <PanelHeader
-        title={title}
+        title={(() => {
+          const long = ranges?.find((o) => o.value === range)?.long;
+          return long ? <>{title}<span className="font-normal text-muted-foreground"> · {long}</span></> : title;
+        })()}
         description={footer ? <>{description}{description ? <><br /><br /></> : null}{footer}</> : description}
         actions={ranges && <Segmented label="Range" options={ranges} value={range} onChange={setRange} />}
       />

@@ -210,7 +210,7 @@ export function AdminTopbar({
           )}
         </div>
       </header>
-      <CommandPalette open={palette} onClose={() => setPalette(false)} bots={bots} fleet={fleet} />
+      <CommandPalette open={palette} onClose={() => setPalette(false)} bots={bots} fleet={fleet} attention={attention} />
     </>
   );
 }

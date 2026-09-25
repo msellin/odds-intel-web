@@ -8,8 +8,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Bot, CornerDownLeft, Search, Zap } from "lucide-react";
+import { AlertTriangle, ArrowRight, Bot, CornerDownLeft, Search, Zap } from "lucide-react";
 import { ADMIN_NAV } from "./admin-nav";
+import type { AttentionItem } from "@/lib/admin-attention";
 
 export interface PaletteBot {
   name: string;
@@ -18,7 +19,7 @@ export interface PaletteBot {
 
 interface Entry {
   id: string;
-  section: "Pages" | "Bots" | "Actions";
+  section: "Needs attention" | "Pages" | "Bots" | "Actions";
   label: string;
   hint?: string;
   href: string;
@@ -43,7 +44,7 @@ function actions(f: PaletteFleet): Entry[] {
   {
     id: "a-pause",
     section: "Actions",
-    label: f.placementPaused ? "Real-money placement is already paused (kill switch) — open to resume" : "Pause real-money placement (kill switch)",
+    label: f.placementPaused ? "Real-money betting is stopped — open to restart it" : "Stop all real-money betting now",
     hint: "Bots · Real money",
     href: "/admin/bots#real-money",
     keywords: "stop kill emergency halt off turn off real money betting automatic placement switch",
@@ -51,7 +52,7 @@ function actions(f: PaletteFleet): Entry[] {
   {
     id: "a-arm",
     section: "Actions",
-    label: f.armed ? "Disarm real money (it is ARMED)" : "Arm real money (owner only; it is off)",
+    label: f.armed ? "Switch real money off (it is ON)" : "Switch real money on (owner only; it is off)",
     hint: "Bots · Real money",
     href: "/admin/bots#real-money",
     keywords: "arm disarm stop money on off",
@@ -79,7 +80,7 @@ function actions(f: PaletteFleet): Entry[] {
   ];
 }
 
-export function CommandPalette({ open, onClose, bots, fleet }: { open: boolean; onClose: () => void; bots: PaletteBot[]; fleet: PaletteFleet }) {
+export function CommandPalette({ open, onClose, bots, fleet, attention = null }: { open: boolean; onClose: () => void; bots: PaletteBot[]; fleet: PaletteFleet; attention?: AttentionItem[] | null }) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
@@ -96,8 +97,18 @@ export function CommandPalette({ open, onClose, bots, fleet }: { open: boolean; 
       hint: b.label === b.name ? undefined : b.name,
       href: `/admin/bots?bot=${encodeURIComponent(b.name)}`,
     }));
-    return [...pages, ...actions(fleet), ...botEntries];
-  }, [bots, fleet]);
+    // the open problems (the Overview's attention items) are searchable too: "failing", "unibet", "money"
+    // (strict owner test 2026-09-25: "failing" found nothing)
+    const problems: Entry[] = (attention ?? []).map((a) => ({
+      id: `n-${a.id}`,
+      section: "Needs attention",
+      label: a.title,
+      hint: a.area.charAt(0).toUpperCase() + a.area.slice(1),
+      href: a.href,
+      keywords: `problem issue attention ${a.severity === "danger" ? "urgent" : "check"} failing failed down stopped broken ${a.detail ?? ""}`,
+    }));
+    return [...problems, ...pages, ...actions(fleet), ...botEntries];
+  }, [bots, fleet, attention]);
 
   const filtered = useMemo(() => {
     // "1x2" must find "1×2 NEW+ EV5": fold the multiplication sign (and case) on both sides
@@ -106,7 +117,7 @@ export function CommandPalette({ open, onClose, bots, fleet }: { open: boolean; 
     // every word must match somewhere in label / hint / keywords / id ("ev5" finds "1x2 NEW+ EV5")
     const words = n.split(/\s+/).filter(Boolean);
     const hay = (e: Entry) => fold(`${e.label} ${e.hint ?? ""} ${e.keywords ?? ""} ${e.id}`);
-    const hits = n ? entries.filter((e) => words.every((w) => hay(e).includes(w))) : entries.filter((e) => e.section !== "Bots");
+    const hits = n ? entries.filter((e) => words.every((w) => hay(e).includes(w))) : entries.filter((e) => e.section !== "Bots" && e.section !== "Needs attention");
     return hits.slice(0, 40);
   }, [entries, q]);
 
@@ -165,7 +176,7 @@ export function CommandPalette({ open, onClose, bots, fleet }: { open: boolean; 
           {filtered.map((e, i) => {
             const header = e.section !== lastSection ? e.section : null;
             lastSection = e.section;
-            const Icon = e.section === "Bots" ? Bot : e.section === "Actions" ? Zap : ArrowRight;
+            const Icon = e.section === "Bots" ? Bot : e.section === "Actions" ? Zap : e.section === "Needs attention" ? AlertTriangle : ArrowRight;
             return (
               <li key={e.id} role="presentation">
                 {header && <div className="px-2 pb-1 pt-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">{header}</div>}

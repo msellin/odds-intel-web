@@ -185,10 +185,11 @@ function jobItems(i: AttentionInputs): AttentionItem[] {
         severity: old ? "warn" : "danger",
         area: "jobs",
         title: old
-          ? `${humanJob(j.job_name)}: failed on its last run, ${Math.round((i.now - new Date(j.started_at).getTime()) / H24)} days ago — it runs rarely; the next run shows whether it is fixed`
+          ? `${humanJob(j.job_name)}: failed ${Math.round((i.now - new Date(j.started_at).getTime()) / H24)} days ago`
           : streak > 1 ? `${humanJob(j.job_name)}: failed ${streak} runs in a row` : `${humanJob(j.job_name)}: failed on its last run`,
         // the raw error is technical — the Jobs page shows it behind "technical detail"
-        detail: err ? "See the Jobs page for the technical detail" : undefined,
+        // one-line title (it wrapped to 7 lines on a phone); the why goes in the small print
+        detail: old ? "It runs rarely — its next run shows whether it is fixed" : err ? "Technical detail on the Jobs page" : undefined,
         since: j.failing_since ?? j.started_at,
         sinceFloor: j.last_ok_at == null,
         href: `/admin/ops#${jobAnchor(j.job_name)}`,

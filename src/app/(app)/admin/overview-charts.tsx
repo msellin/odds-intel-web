@@ -36,9 +36,9 @@ function fitRange(rows: Record<string, number | string | null>[], keys: string[]
 const ZERO_IN_VIEW: [(m: number) => number, (M: number) => number] = [(m) => Math.min(0, m), (M) => Math.max(0, M)];
 
 const RANGES = [
-  { value: "4w", label: "4w", last: 4 },
-  { value: "8w", label: "8w", last: 8 },
-  { value: "12w", label: "12w", last: 12 },
+  { value: "4w", label: "4w", last: 4, long: "last 4 weeks" },
+  { value: "8w", label: "8w", last: 8, long: "last 8 weeks" },
+  { value: "12w", label: "12w", last: 12, long: "last 12 weeks" },
 ];
 
 const wk = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
@@ -99,14 +99,14 @@ export function OverviewCharts({ d }: { d: OverviewData }) {
           description="Does each active bot get better prices than the market closes at? Same rule as /admin/bots."
           slices={verdictSlices}
           center={`${beats}/${d.bots.active}`}
-          centerLabel="beat the close"
+          centerLabel="better than the final price"
         />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <ChartCard
-            title="Are our prices better than the closing price?"
+            title="Are our prices better than the final price?"
             description="Each week, how much better (above 0) or worse (below 0) than the closing price the active pre-match bots of each family got — the fairest single test of a betting edge. Weeks with fewer than 5 closing prices are left blank."
             kind="line"
             data={d.clvByFamily}
@@ -123,7 +123,7 @@ export function OverviewCharts({ d }: { d: OverviewData }) {
             footer="Margin-corrected CLV, weighted by picks within a family (high-volume bots weigh more). Model · simulated bots are judged on Pinnacle's price instead and in-play bots have no closing price, so neither is drawn. This week is still running."
           />
         </div>
-        <DonutCard title="Feeds right now" description="Every odds sweeper and data feed, checked every 5 minutes." slices={feedSlices} center={d.feedsStale ? "?" : `${feedCount("ok")}/${d.feeds.rows.length}`} centerLabel={d.feedsStale ? "status check stale" : "fresh"} />
+        <DonutCard title="Feeds right now" description="Every odds collector and data feed, checked every 5 minutes." slices={feedSlices} center={d.feedsStale ? "?" : `${feedCount("ok")}/${d.feeds.rows.length}`} centerLabel={d.feedsStale ? "status check stale" : "fresh"} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
