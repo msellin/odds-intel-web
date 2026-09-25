@@ -31,6 +31,8 @@ export interface FootprintHour {
   /** Block checks (bot-check / 403 / 429 answers) that hour. Optional: older fixtures lack it. */
   challenges?: number | null;
   errors?: number | null;
+  /** #151 (engine migration 445): distinct "host/proc/pid" of every process that refused this hour. */
+  refused_by?: string[] | null;
 }
 
 // ── Request budget, in plain words (#139 UX fix round, 2026-09-24) ─────────────────────────────
@@ -61,7 +63,7 @@ export interface BudgetView {
   /** The most recent earlier hour (last 24 h) whose requests reached the budget. */
   lastSpent: { hourStart: string; requests: number } | null;
   /** Refusals booked in an hour below budget; `late` = they belong to the spent hour just before. */
-  strayRefusals: { n: number; late: boolean } | null;
+  strayRefusals: { n: number; late: boolean; by: string[] } | null;
   /** Block checks and errors this clock hour, from the SAME book_footprint row as `requests`. */
   challenges: number;
   errors: number;
@@ -93,7 +95,7 @@ export function budgetView(book: string, cap: number | null | undefined, hours: 
     spentNow,
     resetAt: new Date(hourStart.getTime() + 3_600_000).toISOString(),
     lastSpent: earlier ? { hourStart: new Date(earlier.hour).toISOString(), requests: earlier.requests } : null,
-    strayRefusals: !spentNow && refused > 0 ? { n: refused, late: prevSpent } : null,
+    strayRefusals: !spentNow && refused > 0 ? { n: refused, late: prevSpent, by: cur?.refused_by ?? [] } : null,
     challenges: Number(cur?.challenges ?? 0),
     errors: Number(cur?.errors ?? 0),
     requests24h: mine.filter((h) => key(h.hour) > key(hourStart.toISOString()) - 24).reduce((a, h) => a + Number(h.requests ?? 0), 0),
@@ -117,7 +119,9 @@ export function budgetSentence(b: BudgetView): string {
     parts.push(
       b.strayRefusals.late
         ? `The ${b.strayRefusals.n} refusals booked this hour happened at the end of the hour before and were logged a moment late.`
-        : `${b.strayRefusals.n} requests were refused this hour although only ${b.requests} of ${b.cap} are used — the hourly limit is not what refused them (cause not yet known).`,
+        : b.strayRefusals.by.length
+          ? `${b.strayRefusals.n} requests were refused this hour although only ${b.requests} of ${b.cap} are used — refused by ${b.strayRefusals.by.join(", ")}.`
+          : `${b.strayRefusals.n} requests were refused this hour although only ${b.requests} of ${b.cap} are used — the hourly limit is not what refused them (cause not yet known).`,
     );
   }
   return parts.join(" ");

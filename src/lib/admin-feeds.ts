@@ -109,7 +109,7 @@ export async function loadFeedsPage(): Promise<FeedsPageData> {
     ),
     read<FootprintHour[]>(
       "book_footprint",
-      () => db.from("book_footprint").select("book, hour, requests, refused, challenges, errors").gte("hour", since25h).order("hour", { ascending: true }),
+      () => db.from("book_footprint").select("book, hour, requests, refused, challenges, errors, refused_by").gte("hour", since25h).order("hour", { ascending: true }),
       [],
     ),
   ]);
