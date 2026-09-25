@@ -17,7 +17,7 @@
 import { createServerServiceClient } from "@/lib/supabase-server";
 import type { FeedStatus } from "@/lib/engine-data";
 import { computeLadder } from "@/lib/bot-controls/ladder";
-import { placementPathReason } from "@/lib/bot-controls/placement-path";
+import { placementPathReason, splitStaleConfig } from "@/lib/bot-controls/placement-path";
 import { isBotBoardDevPreview, loadBotBoard, loadControlState, type BotWeeklyRow } from "@/lib/bot-board";
 import { MANUAL_RECONCILE_SINCE, buildAttention, type AttentionItem } from "@/lib/admin-attention";
 import { RETIRED_SERIES } from "@/lib/admin-overview-shared";
@@ -311,7 +311,9 @@ export async function loadOverview(viewerId: string | null): Promise<OverviewDat
 
   // The real-money ladder, computed exactly as /admin/bots does (capable = placement-path rule).
   const capable = board.config.error ? null : views.filter((v) => placementPathReason(v.family, v.cfg?.ledger, v.cfg?.books) == null).map((v) => v.name);
-  const ladder = computeLadder(control, capable, now);
+  // #162 W8.4: the ladder also drops bots whose bot_config export is 36 h+ old — the engine does.
+  const { fresh, stale } = splitStaleConfig(capable, (b) => views.find((v) => v.name === b)?.cfg?.exported_at, now);
+  const ladder = computeLadder(control, fresh, now, stale);
   const capSet = capable ? new Set(capable) : null;
   const switchedOn = control.placers.error
     ? null

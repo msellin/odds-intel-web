@@ -22,6 +22,7 @@ import { useToast } from "./toast";
 import { specFor } from "./control-specs";
 import { newRequestId, postArm, postControl } from "@/lib/bot-controls/client";
 import { computeLadder, type Ladder } from "@/lib/bot-controls/ladder";
+import { splitStaleConfig } from "@/lib/bot-controls/placement-path";
 import {
   TAKES_EFFECT,
   isStartDirection,
@@ -102,7 +103,12 @@ export function ControlsProvider({
   const nameBy = useMemo(() => new Map(views.map((v) => [v.name, v.displayName])), [views]);
   const viewBy = useMemo(() => new Map(views.map((v) => [v.name, v])), [views]);
   const capableSet = useMemo(() => (capable ? new Set(capable) : null), [capable]);
-  const ladder = useMemo(() => computeLadder(state, capable, now), [state, capable, now]);
+  // #162 W8.4: the ladder drops bots whose bot_config export is 36 h+ old, as the engine does. The €
+  // switch keeps `capableSet` (the path rule) — switching on is not what staleness blocks.
+  const ladder = useMemo(() => {
+    const { fresh, stale } = splitStaleConfig(capable, (b) => viewBy.get(b)?.cfg?.exported_at, now);
+    return computeLadder(state, fresh, now, stale);
+  }, [state, capable, viewBy, now]);
 
   const serverValue = useCallback(
     (control: PageControl, bot: string | null): boolean | null => {

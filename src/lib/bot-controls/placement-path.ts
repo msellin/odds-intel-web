@@ -34,3 +34,30 @@ export function placementPathReason(
   }
   return null;
 }
+
+/**
+ * #162 W8.4 — the engine's config-staleness rule (`placement_gate.CONFIG_MAX_AGE_H`). An exported
+ * `bot_config` row older than this cannot vouch for a placement path: `placement_path_bots()` keeps
+ * only `exported_at > NOW() - 36 h`, so the placers refuse a bot whose row is older. The export runs
+ * daily, so a missed export makes every bot stale at once. A missing timestamp is stale (the engine's
+ * comparison is false on NULL). Smoke LADDER-CONFIG-STALENESS pins the two constants together.
+ */
+export const CONFIG_MAX_AGE_H = 36;
+
+export function configIsStale(exportedAt: string | null | undefined, now: number): boolean {
+  if (!exportedAt) return true;
+  const t = new Date(exportedAt).getTime();
+  return !Number.isFinite(t) || now - t >= CONFIG_MAX_AGE_H * 3_600_000;
+}
+
+/** Split the capable set into what the engine would still place (fresh) and what it refuses (stale).
+ *  null in → null out (config unreadable). Used for the ladder only — the € switch keeps the path rule. */
+export function splitStaleConfig(
+  capable: string[] | null,
+  exportedAt: (bot: string) => string | null | undefined,
+  now: number,
+): { fresh: string[] | null; stale: string[] | null } {
+  if (capable == null) return { fresh: null, stale: null };
+  const stale = capable.filter((b) => configIsStale(exportedAt(b), now));
+  return { fresh: capable.filter((b) => !stale.includes(b)), stale };
+}

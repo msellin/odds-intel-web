@@ -17,14 +17,20 @@
  * reports) are NOT hard: with any layer unreadable they give UNKNOWN, as before. `canStakeStrict`
  * keeps the original conservative order (any unknown → UNKNOWN) for views that show the ladder while
  * OPENING a gate (the confirmation dialogs), where the hard block is the very gate being opened.
+ *
+ * #162 W8.4: layer 9 mirrors the engine's config-staleness rule — `placement_path_bots()` drops every
+ * bot whose exported `bot_config` is older than 36 h (CONFIG_MAX_AGE_H), so callers pass `capable`
+ * already WITHOUT those bots and name them in `staleConfig` (placement-path.ts `splitStaleConfig`). When staleness leaves NO capable bot the
+ * engine places nothing on any run (fail-closed) → a hard block, CAN STAKE reads NO. Only tightens.
  */
 import { HEARTBEAT_STALE_MIN, isStrategicPause, type ControlState, type PlacerHeartbeat } from "./types";
+import { CONFIG_MAX_AGE_H } from "./placement-path";
 
 export type LayerState = "open" | "blocked" | "unknown" | "info";
 
 export interface Layer {
   n: number;
-  key: "path" | "eligible" | "pause" | "armed" | "executors" | "perpick" | "footprint" | "gate";
+  key: "path" | "eligible" | "pause" | "armed" | "executors" | "perpick" | "footprint" | "gate" | "config";
   title: string;
   state: LayerState;
   value: string;
@@ -62,6 +68,8 @@ export function computeLadder(
   s: ControlState,
   capable: string[] | null,
   now: number,
+  /** Active bots WITH a placement path whose bot_config export is 36 h+ old (null = unreadable). */
+  staleConfig: string[] | null,
 ): Ladder {
   const layers: Layer[] = [];
   const fleet = s.fleet.row;
@@ -187,10 +195,28 @@ export function computeLadder(
     detail: gateReady ? undefined : "Real money is locked until the placement checks are unified (bot refactor #162, step W4). Switching a bot on or arming is refused until then.",
   });
 
+  // 9 — #162 W8.4: config freshness. The engine trusts an exported bot_config for at most
+  // CONFIG_MAX_AGE_H (36 h); an older row reads as "no placement path" and that bot never stakes.
+  const configStale = capable != null && staleConfig != null && staleConfig.length > 0 && capable.length === 0;
+  layers.push(
+    capable == null || staleConfig == null
+      ? { n: 9, key: "config", title: "Bot config fresh", state: "unknown", value: "config unreadable" }
+      : staleConfig.length === 0
+        ? { n: 9, key: "config", title: "Bot config fresh", state: "open", value: `Exported within ${CONFIG_MAX_AGE_H} h` }
+        : {
+            n: 9,
+            key: "config",
+            title: "Bot config fresh",
+            state: configStale ? "blocked" : "info",
+            value: `${staleConfig.length} bot${staleConfig.length === 1 ? "" : "s"} older than ${CONFIG_MAX_AGE_H} h — the engine refuses ${staleConfig.length === 1 ? "it" : "them"}`,
+            detail: `The engine trusts a bot's exported config for ${CONFIG_MAX_AGE_H} h only (job export_bot_config, daily 03:40 UTC — check it on Jobs, or run scripts/export_bot_config.py).`,
+          },
+  );
+
   const unknownAt = layers.filter((l) => l.state === "unknown").map((l) => l.n);
   const blockedAt = layers.filter((l) => l.state === "blocked").map((l) => l.n);
   const rawOn = s.placers.error ? null : s.placers.rows.filter((p) => p.ui_place_enabled && !p.locked_reason).length;
-  const hardBlock = paused === true || armed === false || rawOn === 0 || gateReady === false;
+  const hardBlock = paused === true || armed === false || rawOn === 0 || gateReady === false || configStale;
   const canStakeStrict = unknownAt.length > 0 ? "unknown" : blockedAt.length > 0 ? "no" : "yes";
   const canStake = hardBlock ? "no" : canStakeStrict;
   return { layers, canStake, canStakeStrict, hardBlock, blockedAt, unknownAt, stakingBots: canStake === "yes" ? staking : [] };
