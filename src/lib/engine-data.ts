@@ -1,3 +1,4 @@
+import { HEADLINE_STATUSES } from "@/lib/bot-status";
 import { createClient } from "@supabase/supabase-js";
 import { unstable_cache } from "next/cache";
 import { createSupabasePublic } from "./supabase-public";
@@ -1496,7 +1497,11 @@ export const CALIBRATED_SINCE = "2026-05-04";
 // strategy, excluding retired bots so failed experiments do not drag the
 // number. The anonymous picks cohort lives in upcoming-picks.ts and stays
 // narrower on purpose (PICKS-USER-GATE).
-export const HEADLINE_MATURITY_LABELS = ["calibrated", "beta", "active"] as const;
+// [[#155]] (2026-09-25): the headline is BETA + CALIBRATED only — TESTING bots are sent and keep
+// their own record but are NOT in the headline, VIP bots never are (getPublicCohortBotNames drops
+// them). `active` is gone: it is not an allowed status (bots_maturity_label_check). One source:
+// lib/bot-status.ts HEADLINE_STATUSES = engine bot_distribution.in_headline.
+export const HEADLINE_MATURITY_LABELS = HEADLINE_STATUSES;
 export const CALIBRATED_PUBLIC_MARKETS = ["1x2", "o/u", "over_under_25", "btts"] as const;
 
 // FLAT-ROI-EVERYWHERE (2026-08-21): all public-facing ROI numbers use €10
@@ -1532,6 +1537,7 @@ export async function getPublicCohortBotNames(): Promise<Set<string>> {
     .select("name")
     .is("retired_at", null)
     .in("maturity_label", HEADLINE_MATURITY_LABELS as unknown as string[])
+    .eq("vip", false) // [[#155]] VIP bots have their own record, never the headline
     .not("name", "like", "inplay_%");
   if (error || !data) return new Set();
   return new Set((data as Array<{ name: string }>).map((r) => r.name));

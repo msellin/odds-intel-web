@@ -22,7 +22,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { getUserTier } from "@/lib/get-user-tier";
 import { getAllBotsFromDB } from "@/lib/engine-data";
-import { isPublicBot, isVipBot, LEDGER_BACKED_BOTS } from "@/lib/bot-aggregates";
+import { isPublicBot, isVipBot } from "@/lib/bot-aggregates";
 import { getBotLegs, getBotPerformanceFresh, getBotEvBands } from "@/lib/bot-performance";
 
 export const dynamic = "force-dynamic";
@@ -37,12 +37,10 @@ export async function GET(req: NextRequest) {
   // [[#164]] (flagged by #162): an EXPERIMENTAL bot is admin-only (#155) even when it is ledger-backed
   // — the #161 twin arms (bot_sharp_aligned_v1, bot_consensus_pinconf_v1) are LEDGER_BACKED_BOTS and
   // were readable here, pending legs included. VIP bots are listed whatever their status (settled only).
-  const experimental = b?.maturityLabel === "experimental";
-  const listed =
-    !!b && !b.retiredAt &&
-    (isVipBot(b) ||
-      (!experimental &&
-        (isPublicBot(b.maturityLabel) || b.showOnPerformance === true || LEDGER_BACKED_BOTS.has(b.name))));
+  // [[#155]] ONE STATUS DECIDES DISTRIBUTION: listed iff the STATUS is TESTING / BETA / CALIBRATED
+  // (VIP bots too, settled only) — the same rule as the /performance table. No second switch
+  // (show_on_performance, "ledger-backed", "VIP whatever its label") any more.
+  const listed = !!b && !b.retiredAt && isPublicBot(b.maturityLabel);
   if (!b || !listed) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
@@ -61,7 +59,7 @@ export async function GET(req: NextRequest) {
   // always describes the same legs as the chart and table below it. VIP bots also get the
   // EV8 / EV5 split of the same record (bot_performance_ev_band — sums back to the row).
   const [legs, perf, evBands] = await Promise.all([
-    getBotLegs(bot, { settledOnly: isVipBot(b) || b.hidePending || experimental, isElite }),
+    getBotLegs(bot, { settledOnly: isVipBot(b) || b.hidePending, isElite }),
     getBotPerformanceFresh(bot),
     isVipBot(b) ? getBotEvBands(bot) : Promise.resolve([]),
   ]);

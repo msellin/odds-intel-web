@@ -33,6 +33,7 @@ import {
   controlRef,
   isActive,
   needsALook,
+  reviewFlagIssues,
   picksTelegramMismatch,
   weekStart,
   withUnpickedBots,
@@ -301,6 +302,10 @@ export async function loadOverview(viewerId: string | null): Promise<OverviewDat
       issues.push({ bot: v.name, text: `${v.displayName}: /picks ≠ Telegram`, severity: "warn" });
     }
   }
+  // [[#155]] "review this bot" (bot_review_flag: n >= 50, sharp-anchor CLV CI entirely < 0) — a flag
+  // for the owner, never an automatic retirement. Same helper as /admin/bots.
+  if (board.reviewFlags.error) issues.push({ text: `Review flags unreadable (${board.reviewFlags.error})`, severity: "warn" });
+  else issues.push(...reviewFlagIssues(board.reviewFlags.rows, (bot) => views.find((v) => v.name === bot)?.displayName ?? bot));
   const verdicts: Record<Verdict, number> = { beats: 0, loses: 0, inconclusive: 0, early: 0, noclv: 0 };
   for (const v of views) verdicts[v.verdict] += 1;
 

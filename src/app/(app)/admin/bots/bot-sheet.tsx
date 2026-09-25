@@ -21,7 +21,7 @@ import { DrawerHeader, Evidence, WhatItBets, type LedgerState } from "./bot-draw
 import { PicksTable } from "./picks-table";
 import { BotPerfCharts } from "./bot-perf-charts";
 import { VerdictChip } from "./bot-row";
-import { MoneySwitch, PicksSwitch, isRetired, picksTelegramMismatch, picksUnavailable } from "./bot-controls-cell";
+import { MoneySwitch, PicksSwitch, isRetired, picksTelegramMismatch } from "./bot-controls-cell";
 import { useControls } from "./controls-context";
 import { LadderList } from "./ladder-list";
 import { ActivityTimeline } from "./activity-timeline";
@@ -189,7 +189,6 @@ function SettingsTab({ v, now }: { v: BotView; now: number }) {
   const retired = isRetired(v);
   const writing = v.caps?.writing_7d === true;
   const showOnPicks = ctl.current("show_on_picks", v.name);
-  const picksNa = picksUnavailable(v);
   const mismatch = picksTelegramMismatch(v, showOnPicks);
   const vip = (ctl.state.bots.rows.find((b) => b.name === v.name) as (BotControlRow & { vip?: boolean | null }) | undefined)?.vip ?? null;
   const lines = channelLines(v, { showOnPicks, vip, publishingPaused: ctl.current("publishing_paused", null) });
@@ -220,8 +219,9 @@ function SettingsTab({ v, now }: { v: BotView; now: number }) {
       </Card>
 
       <Card title="2 · Publish" state={<EvidenceChip v={v} />}>
-        <Line label="Show on /picks" control={<PicksSwitch v={v} now={now} showWord />}>
-          {lines.picks.text} {picksNa ? null : <>The switch changes only what customers see on /picks. {TAKES_EFFECT.show_on_picks}</>}
+        {/* [[#155]] /picks is decided by the STATUS (no per-bot switch any more). */}
+        <Line label="/picks" control={<PicksSwitch v={v} now={now} showWord />}>
+          {lines.picks.text}
         </Line>
         <Line label="Telegram channel" control={<ChannelState line={lines.telegram} />}>
           {lines.telegram.text} <span className="opacity-70">Not a switch on this page.</span>

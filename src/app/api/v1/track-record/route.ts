@@ -121,9 +121,10 @@ export async function GET(req: Request) {
        matches!inner ( date, home_team_id, away_team_id, score_home, score_away,
          leagues ( name, country )
        ),
-       bots!inner ( name, maturity_label )`
+       bots!inner ( name, maturity_label, vip )`
     )
     .in("bots.maturity_label", PUBLIC_MATURITY_LABELS)
+    .eq("bots.vip", false) // [[#155]] the headline cohort never includes VIP bots
     .not("bots.name", "like", "inplay_%")
     .in("market", PRE_MATCH_MARKETS)
     .in("result", ["won", "lost"])

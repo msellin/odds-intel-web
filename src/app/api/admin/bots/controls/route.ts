@@ -66,6 +66,9 @@ export async function POST(req: Request) {
   }
 
   const control = body.control as PageControl;
+  // [[#155]] ONE STATUS DECIDES DISTRIBUTION: /picks follows the bot's status; bots.show_on_picks is
+  // derived by the engine (migration 442) and an update against the status is rejected there too.
+  if (control === "show_on_picks") return bad("/picks is decided by the bot's status (#155) — change the status instead", 409);
   if (!PAGE_CONTROLS.includes(control)) return bad("unknown control");
   if (typeof body.value !== "boolean") return bad("value must be a boolean");
   const value = body.value;
@@ -85,7 +88,7 @@ export async function POST(req: Request) {
     // Pausing the customer channel is typed + reasoned but still a stop for the channel: allowed unread.
     if (expected === null && control !== "publishing_paused") return bad("the current state must be readable to start anything");
     if (reason.length < MIN_REASON) return bad(`a written reason of at least ${MIN_REASON} characters is required`);
-    if ((control === "placer_enabled" || control === "show_on_picks") && confirm !== botName) {
+    if (control === "placer_enabled" && confirm !== botName) {
       return bad("type the bot name to confirm");
     }
     if (control === "placement_paused" && confirm !== PHRASE_RESUME && confirm !== PHRASE_RESUME_STRATEGIC) {

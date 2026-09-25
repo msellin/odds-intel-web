@@ -219,14 +219,16 @@ function MaturityChip({ label }: { label: string }) {
 
 /** VIP-PERFORMANCE-SETTLED-ONLY (#148). The paid-tier bot: its live picks go to
  *  paying members before kickoff; this page shows its record once settled. */
-function VipChip({ isVip }: { isVip?: boolean }) {
+// [[#155]] a VIP bot reads "VIP · TESTING" (VIP is a channel on top of its status), so `status` is
+// shown inside the chip when given; the detail view passes none and shows plain "VIP".
+function VipChip({ isVip, status }: { isVip?: boolean; status?: string | null }) {
   if (!isVip) return null;
   return (
     <span
-      title="Our paid-tier bot — its picks appear here once settled."
+      title="Our paid-tier bot — its picks appear here once settled. The second word is its status."
       className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-yellow-400/15 text-yellow-300 border border-yellow-400/40"
     >
-      VIP
+      {status ? `VIP · ${status}` : "VIP"}
     </span>
   );
 }
@@ -688,8 +690,8 @@ function BotModal({
 /** [[#159]] (f) rows are grouped by STATUS — how much evidence backs them — never by ROI. */
 type GroupKey = "live" | "testing" | "vip" | "developing";
 const GROUP_TITLE: Record<GroupKey, string> = {
-  live: "Calibrated & beta — live results",
-  testing: "Testing — still collecting",
+  live: "Calibrated & beta — counted in the headline totals",
+  testing: "Testing — sent to you, own record, not in the headline",
   vip: "VIP — paid tier, shown once settled",
   developing: "In development — fewer than 5 settled",
 };
@@ -776,10 +778,10 @@ export function PerformanceLeaderboard({ bots, isElite, retiredBotCount = 0 }: P
                 <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-400">beta</span>early results
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <span className="rounded bg-zinc-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-zinc-400">testing</span>collecting
+                <span className="rounded bg-zinc-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-zinc-400">testing</span>sent, not in the headline
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <span className="rounded border border-yellow-400/40 bg-yellow-400/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-yellow-300">VIP</span>paid, shown once settled
+                <span className="rounded border border-yellow-400/40 bg-yellow-400/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-yellow-300">VIP · testing</span>paid, shown once settled
               </span>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
@@ -797,8 +799,12 @@ export function PerformanceLeaderboard({ bots, isElite, retiredBotCount = 0 }: P
               <summary className="cursor-pointer select-none text-foreground/80 hover:text-foreground">How to read this</summary>
               <div className="mt-2 max-w-3xl space-y-2 leading-relaxed">
                 <p>
-                  The square tag says how much live evidence backs a strategy. VIP is our paid-tier bot: its
-                  picks appear here once settled, each marked EV8 (expected value ≥ 8%) or EV5 (5–8%).
+                  The square tag is the strategy&apos;s status, and the status alone decides where its picks
+                  go. Testing, beta and calibrated strategies all send their picks to /picks and our Telegram
+                  channel, and every pick sent is counted in that strategy&apos;s own record here. Only beta and
+                  calibrated strategies count in the headline totals; a testing strategy has to earn that.
+                  VIP is our paid-tier channel on top of a status (&quot;VIP · testing&quot;): its picks appear
+                  here once settled, each marked EV8 (expected value ≥ 8%) or EV5 (5–8%).
                 </p>
                 <p>
                   The round tag says what sets the fair price: our own probability model, the sharpest single
@@ -863,8 +869,9 @@ export function PerformanceLeaderboard({ bots, isElite, retiredBotCount = 0 }: P
                             live
                           </Badge>
                         )}
-                        <MaturityChip label={bot.maturityLabel ?? "active"} />
-                        <VipChip isVip={bot.isVip} />
+                        {bot.isVip
+                          ? <VipChip isVip status={bot.maturityLabel} />
+                          : <MaturityChip label={bot.maturityLabel ?? "active"} />}
                         <AnchorChip bot={bot.name} />
                       </div>
                       {/* 2026-09-25 (owner): the list shows name + labels only; technical name, VIP start
@@ -953,8 +960,9 @@ export function PerformanceLeaderboard({ bots, isElite, retiredBotCount = 0 }: P
                             live
                           </Badge>
                         )}
-                        <MaturityChip label={bot.maturityLabel ?? 'active'} />
-                        <VipChip isVip={bot.isVip} />
+                        {bot.isVip
+                          ? <VipChip isVip status={bot.maturityLabel} />
+                          : <MaturityChip label={bot.maturityLabel ?? 'active'} />}
                         <AnchorChip bot={bot.name} />
                       </div>
                       {/* 2026-09-25 (owner): name + labels only — details are in the click-open view. */}

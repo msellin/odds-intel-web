@@ -77,11 +77,24 @@ export function moneyOnBlocked(v: BotView, now: number, capable: Set<string> | n
   return null;
 }
 
-export function PicksSwitch({ v, now, showWord = false }: { v: BotView; now: number; showWord?: boolean }) {
+/** [[#155]] ONE STATUS DECIDES DISTRIBUTION: /picks is no longer a per-bot switch — the bot's STATUS
+ *  decides it (bots.show_on_picks is derived by the engine and an update against the status is
+ *  rejected). Read-only chip with the same one-line reason the sheet shows. `now`/`showWord` kept
+ *  so callers need no change. */
+export function PicksSwitch({ v }: { v: BotView; now?: number; showWord?: boolean }) {
+  const ctl = useControls();
   const na = picksUnavailable(v);
-  if (na) return <InfoChip label={na.label} text={na.text} codeRef={na.ref} tone={na.kind === "rule" ? "teal" : "muted"} />;
-  const onBlocked = isRetired(v) ? "Retired bots are not shown on /picks." : configStale(v, now) ? `The bot settings snapshot is older than ${STALE_H} h. (bot_config export)` : null;
-  return <ControlSwitch control="show_on_picks" bot={v.name} label={`Show ${v.displayName} on /picks`} disabledReason={onBlocked} size="sm" showWord={showWord} />;
+  if (na && v.family !== "forward_test") return <InfoChip label={na.label} text={na.text} codeRef={na.ref} tone={na.kind === "rule" ? "teal" : "muted"} />;
+  const vip = (ctl.state.bots.rows.find((b) => b.name === v.name) as (BotControlRow & { vip?: boolean | null }) | undefined)?.vip ?? null;
+  const line = channelLines(v, { vip, publishingPaused: ctl.current("publishing_paused", null) }).picks;
+  return (
+    <InfoChip
+      label={line.on == null ? "Unknown" : line.on ? "Yes · by status" : "No · by status"}
+      text={line.text}
+      codeRef="bot_distribution.sent_public (status)"
+      tone={line.on ? "teal" : "muted"}
+    />
+  );
 }
 
 export function MoneySwitch({ v, now, showWord = false }: { v: BotView; now: number; showWord?: boolean }) {

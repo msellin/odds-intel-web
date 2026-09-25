@@ -218,6 +218,18 @@ export interface Read<T> {
   error: string | null;
 }
 
+/** [[#155]] engine view bot_review_flag (migration 437): the retirement FLAG — never automatic. */
+export interface BotReviewFlagRow {
+  bot_name: string;
+  settled: number | null;
+  clv_n_public: number | null;
+  clv_public: number | null;
+  clv_public_upper95: number | null;
+  review_flag: boolean | null;
+  reason: string | null;
+  min_n: number | null;
+}
+
 export interface BotBoardData {
   scoreboard: Read<BotScoreboardRow>;
   config: Read<BotConfigRow>;
@@ -227,6 +239,8 @@ export interface BotBoardData {
   weekly: Read<BotWeeklyRow>;
   /** Optional (migration 411). */
   marketStats: Read<BotMarketStatsRow>;
+  /** [[#155]] bot_review_flag (migration 437); `error` set when unreadable. */
+  reviewFlags: Read<BotReviewFlagRow>;
   /** Render clock, read in the data layer (react-hooks/purity convention). */
   now: number;
 }
@@ -257,6 +271,7 @@ interface BotBoardFixture {
   ledger: Record<string, BotLedgerRow[]>;
   weekly?: Record<string, BotWeeklyRow[]>;
   market_stats?: BotMarketStatsRow[];
+  review_flags?: BotReviewFlagRow[];
   /** IA move P7: real_bets placed rows per bot and current prices (dump_bot_board_fixture.py). */
   placed?: Record<string, PlacedRaw[]>;
   prices?: PriceRaw[];
@@ -290,10 +305,13 @@ export async function loadBotBoard(): Promise<BotBoardData> {
     const marketStats: Read<BotMarketStatsRow> = f.market_stats
       ? ok(f.market_stats)
       : { rows: [], error: "bot_market_stats: not in fixture" };
+    const reviewFlags: Read<BotReviewFlagRow> = f.review_flags
+      ? ok(f.review_flags)
+      : { rows: [], error: "bot_review_flag: not in fixture" };
     return redactInplay({ scoreboard: ok(f.scoreboard), config: ok(f.config), capabilities: ok(f.capabilities),
-             retired: ok(f.retired), weekly, marketStats, now: Date.now() });
+             retired: ok(f.retired), weekly, marketStats, reviewFlags, now: Date.now() });
   }
-  const [scoreboard, config, capabilities, retired, weekly, marketStats] = await Promise.all([
+  const [scoreboard, config, capabilities, retired, weekly, marketStats, reviewFlags] = await Promise.all([
     readAll<BotScoreboardRow>("bot_scoreboard"),
     readAll<BotConfigRow>("bot_config"),
     readAll<BotCapabilitiesRow>("bot_capabilities"),
@@ -303,8 +321,9 @@ export async function loadBotBoard(): Promise<BotBoardData> {
     // 12 weeks × ~90 bots stays far under the 5000-row cap.
     readAll<BotWeeklyRow>("bot_weekly"),
     readAll<BotMarketStatsRow>("bot_market_stats"),
+    readAll<BotReviewFlagRow>("bot_review_flag"),
   ]);
-  return redactInplay({ scoreboard, config, capabilities, retired, weekly, marketStats, now: Date.now() });
+  return redactInplay({ scoreboard, config, capabilities, retired, weekly, marketStats, reviewFlags, now: Date.now() });
 }
 
 /** In-play bots are judged on lift, never CLV — drop their CLV before it leaves the server. */

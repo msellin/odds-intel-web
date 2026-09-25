@@ -211,16 +211,16 @@ export default async function PerformancePage() {
   // history via the streaming section below — no need to fetch the small feed.
   const recentSettled = !isLoggedIn ? await getRecentSettledBets(10) : null;
 
-  // Which bots are listed (unchanged rules, only the NUMBERS moved to bot_performance):
-  //  * PERF-PUBLIC-IS-CALIBRATED-OR-BETA (2026-09-16, owner): `calibrated` / `beta` — bots with
-  //    live results behind them. Experimental shadow bots are admin-only by design (#155).
-  //  * #148: the VIP bot, whatever its label (its rows reach the page settled-only).
-  //  * #152: owner-chosen TESTING bots (bots.show_on_performance).
+  // Which bots are listed — [[#155]] ONE STATUS DECIDES DISTRIBUTION (2026-09-25): the STATUS
+  // alone. TESTING / BETA / CALIBRATED are listed (lib/bot-status.ts = engine bot_distribution.
+  // on_performance); EXPERIMENTAL is admin-only; VIP bots need a public status too ("VIP · TESTING",
+  // settled rows only). The old second switches (bots.show_on_performance, "VIP whatever its label")
+  // are gone — show_on_performance is now derived from the status by an engine trigger.
   //  * never retired bots (live state, not the 30-min cache); never an in-play bot.
-  //  * ledger-backed (forward-test) bots are added below from PUBLISHED_ARM_BOTS.
+  //  * ledger-backed (forward-test) bots are added below from PUBLISHED_ARM_BOTS, same status rule.
   const cachedBots: PublicBotStat[] = botsDB
     .filter((b) => !b.retiredAt && !LEDGER_BACKED_BOTS.has(b.name))
-    .filter((b) => isPublicBot(b.maturityLabel) || isVipBot(b) || b.showOnPerformance === true)
+    .filter((b) => isPublicBot(b.maturityLabel))
     .map((b) => rowFromPerformance(b.name, perf[b.name], b, isElite));
 
   // PICKS-BOT-IN-LEADERBOARD-2026-09-14 / [[#068]] / [[#095]] / [[#122]]: one row per PUBLISHED
@@ -259,7 +259,9 @@ export default async function PerformancePage() {
     const p = perf[bot];
     if (!cur || cur.published === 0 || !p) continue;
     const armBot = botsDB.find((db) => db.name === bot);
-    // legend: "TESTING (still collecting)" if the bot row is missing, so the chip is never empty.
+    // [[#155]] the arm's bot is listed only when its STATUS is public — bot_consensus_d_v1 is
+    // EXPERIMENTAL (recorded, never sent), so it is admin-only like every other experimental bot.
+    if (!armBot || armBot.retiredAt || !isPublicBot(armBot.maturityLabel)) continue;
     const row = rowFromPerformance(bot, p, armBot, isElite, "testing");
     row.forwardTest = {
       ruleVersion: cur.ruleVersion,

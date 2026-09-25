@@ -54,6 +54,7 @@ import { withUnpickedBots,
   type BotView,
   type Issue,
   type RetiredView,
+  reviewFlagIssues,
 } from "./bot-board-model";
 import { hhmmUtc, relTime, timeAgo, utcStamp } from "./bot-board-format";
 import { FamilySection, type RowCtx } from "./bot-row";
@@ -160,7 +161,7 @@ export function BotsBoard({ data, controls }: { data: BotBoardData; controls: Co
 }
 
 function Board({ data }: { data: BotBoardData }) {
-  const { scoreboard, config, capabilities, retired, weekly, marketStats, now } = data;
+  const { scoreboard, config, capabilities, retired, weekly, marketStats, reviewFlags, now } = data;
   const pathname = usePathname();
   const params = useSearchParams();
   const ctl = useControls();
@@ -290,8 +291,13 @@ function Board({ data }: { data: BotBoardData }) {
         base.push({ bot: v.name, text: `${v.displayName}: /picks ≠ Telegram`, severity: "warn" });
       }
     }
+    // [[#155]] "review this bot" — n >= 50 settled, sharp-anchor CLV CI entirely below 0 (a flag, the
+    // owner decides; never automatic retirement). Same helper as the Overview inbox.
+    const nameOf = (bot: string) => active.find((v) => v.name === bot)?.displayName ?? bot;
+    if (reviewFlags.error) base.push({ text: `Review flags unreadable (${reviewFlags.error})`, severity: "warn" });
+    else base.push(...reviewFlagIssues(reviewFlags.rows, nameOf));
     return base;
-  }, [active, fleet, scoreboard.error, config.error, capabilities.error, now, ctl, lockedBots]);
+  }, [active, fleet, scoreboard.error, config.error, capabilities.error, now, ctl, lockedBots, reviewFlags]);
   const lookBots = useMemo(() => new Set(issues.map((i) => i.bot).filter(Boolean) as string[]), [issues]);
 
   const filtered = useMemo(() => {

@@ -13,6 +13,7 @@ import type {
   BotScoreboardRow,
   BotMarketStatsRow,
   BotWeeklyRow,
+  BotReviewFlagRow,
   RetiredInfo,
 } from "@/lib/bot-board";
 import { fmtRuleVersion, identityLine, prettyDisplayName } from "./bot-board-format";
@@ -473,4 +474,21 @@ export function withUnpickedBots(
     });
   }
   return extra.length ? [...rows, ...extra] : rows;
+}
+
+/** [[#155]] owner rule: a bot with >= min_n settled legs whose sharp-anchor CLV 95% interval lies
+ *  entirely below 0 gets a "review this bot" item — on /admin/bots and in the Overview inbox. The
+ *  owner decides; nothing is retired automatically. ONE helper for both pages. */
+export function reviewFlagIssues(
+  rows: BotReviewFlagRow[],
+  nameOf: (bot: string) => string,
+): { bot: string; text: string; severity: "warn" }[] {
+  const pct = (x: number | null) => (x == null ? "?" : `${(x * 100).toFixed(1)}%`);
+  return rows
+    .filter((r) => r.review_flag === true)
+    .map((r) => ({
+      bot: r.bot_name,
+      text: `${nameOf(r.bot_name)}: review this bot — sharp-anchor CLV ${pct(r.clv_public)} (95% upper ${pct(r.clv_public_upper95)}) over ${r.clv_n_public ?? 0} settled`,
+      severity: "warn" as const,
+    }));
 }

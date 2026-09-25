@@ -13,6 +13,7 @@
  * down by ~15% on the typical dashboard load.
  */
 
+import { PUBLIC_STATUSES } from "@/lib/bot-status";
 import type { LiveBet } from "./engine-data";
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -329,10 +330,12 @@ export const isLiveBot = (botName: string): boolean => botName.startsWith("inpla
  * picks readers actually receive, and its record is the one thing on the page a
  * reader can check against what was published.
  */
-export const PUBLIC_MATURITY_LABELS: ReadonlySet<string> = new Set([
-  "calibrated",
-  "beta",
-]);
+// [[#155]] ONE STATUS DECIDES DISTRIBUTION (2026-09-25): the /performance set is TESTING, BETA and
+// CALIBRATED (lib/bot-status.ts PUBLIC_STATUSES = engine bot_distribution.on_performance). TESTING
+// bots are listed marked TESTING (they are sent, so they are counted in their own record) but never
+// counted in the headline (HEADLINE_MATURITY_LABELS). The old second switch `show_on_performance`
+// is now derived from the status and is not read. VIP bots need a public status too ("VIP · TESTING").
+export const PUBLIC_MATURITY_LABELS: ReadonlySet<string> = new Set<string>(PUBLIC_STATUSES);
 
 /**
  * Bots whose record lives in `picks_forward_test`, NOT `simulated_bets`. They
