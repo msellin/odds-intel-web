@@ -14,7 +14,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { placementPathReason } from "@/lib/bot-controls/placement-path";
 import { fetchAudit } from "@/lib/bot-controls/client";
 import { TAKES_EFFECT, type BotControlRow, type ControlChange } from "@/lib/bot-controls/types";
-import type { BotMarketStatsRow, BotWeeklyRow } from "@/lib/bot-board";
+import type { BotFunnelRow, BotMarketStatsRow, BotWeeklyRow } from "@/lib/bot-board";
+import { FunnelPanel } from "./funnel-panel";
 import { METRIC_SHORT, MIN_N, otherMetric, type BotView } from "./bot-board-model";
 import { ciHalf, count, dayMonth, pct, tStat } from "./bot-board-format";
 import { DrawerHeader, Evidence, WhatItBets, type LedgerState } from "./bot-drawer";
@@ -44,6 +45,7 @@ export function BotSheet({
   onPlacedOnly,
   markets,
   weekly,
+  funnel,
   fleetPaused,
   pulse,
   onClose,
@@ -61,6 +63,8 @@ export function BotSheet({
   markets: BotMarketStatsRow[] | null;
   /** This bot's bot_weekly rows (null = view unreadable) — the Performance charts. */
   weekly: BotWeeklyRow[] | null;
+  /** #162 W7.5 this bot's candidate_funnel_7d rows (null = view unreadable) — "Why not picked". */
+  funnel: BotFunnelRow[] | null;
   fleetPaused: boolean | null;
   pulse: boolean;
   onClose: () => void;
@@ -97,7 +101,13 @@ export function BotSheet({
               <div role="tabpanel" aria-label={TAB_LABEL[tab]} className="px-4 py-4 sm:px-5">
                 {tab === "overview" && <Evidence v={v} now={now} withOther={false} />}
                 {tab === "settings" && <SettingsTab v={v} now={now} />}
-                {tab === "performance" && <PerformanceTab v={v} markets={markets} weekly={weekly} />}
+                {tab === "performance" && (
+                  <div className="space-y-4">
+                    <PerformanceTab v={v} markets={markets} weekly={weekly} />
+                    {/* Why not picked (last 7 days) — the first reader of candidate_funnel (#162 W7.5) */}
+                    <FunnelPanel rows={funnel} />
+                  </div>
+                )}
                 {tab === "picks" && (
                   <section className="space-y-2">
                     <h3 className={LABEL}>Picks</h3>

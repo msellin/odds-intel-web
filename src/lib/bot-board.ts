@@ -230,6 +230,19 @@ export interface BotReviewFlagRow {
   min_n: number | null;
 }
 
+/** #162 W7.5 engine view candidate_funnel_7d (migration 456): why candidates were or were
+ *  not picked, per (bot, source, step), last 7 UTC days. Admin-only — never anon (#072). */
+export interface BotFunnelRow {
+  bot: string;
+  /** pipeline | pipeline_shadow | publisher_live | publisher_consensus | ou_sharp — never pool two. */
+  source: string;
+  /** accepted / selected, or the drop reason (drop_edge, drop_no_pinnacle, below_floor, …). */
+  step: string;
+  n: number;
+  n_matches: number;
+  last_seen: string | null;
+}
+
 export interface BotBoardData {
   scoreboard: Read<BotScoreboardRow>;
   config: Read<BotConfigRow>;
@@ -241,6 +254,8 @@ export interface BotBoardData {
   marketStats: Read<BotMarketStatsRow>;
   /** [[#155]] bot_review_flag (migration 437); `error` set when unreadable. */
   reviewFlags: Read<BotReviewFlagRow>;
+  /** #162 W7.5 candidate_funnel_7d (migration 456); `error` set when unreadable. */
+  funnel: Read<BotFunnelRow>;
   /** Render clock, read in the data layer (react-hooks/purity convention). */
   now: number;
 }
@@ -308,10 +323,11 @@ export async function loadBotBoard(): Promise<BotBoardData> {
     const reviewFlags: Read<BotReviewFlagRow> = f.review_flags
       ? ok(f.review_flags)
       : { rows: [], error: "bot_review_flag: not in fixture" };
+    const funnel: Read<BotFunnelRow> = { rows: [], error: "candidate_funnel_7d: not in fixture" };
     return redactInplay({ scoreboard: ok(f.scoreboard), config: ok(f.config), capabilities: ok(f.capabilities),
-             retired: ok(f.retired), weekly, marketStats, reviewFlags, now: Date.now() });
+             retired: ok(f.retired), weekly, marketStats, reviewFlags, funnel, now: Date.now() });
   }
-  const [scoreboard, config, capabilities, retired, weekly, marketStats, reviewFlags] = await Promise.all([
+  const [scoreboard, config, capabilities, retired, weekly, marketStats, reviewFlags, funnel] = await Promise.all([
     readAll<BotScoreboardRow>("bot_scoreboard"),
     readAll<BotConfigRow>("bot_config"),
     readAll<BotCapabilitiesRow>("bot_capabilities"),
@@ -322,8 +338,11 @@ export async function loadBotBoard(): Promise<BotBoardData> {
     readAll<BotWeeklyRow>("bot_weekly"),
     readAll<BotMarketStatsRow>("bot_market_stats"),
     readAll<BotReviewFlagRow>("bot_review_flag"),
+    // An aggregate (bots × sources × steps — a few hundred rows), so the whole thing ships with
+    // the board and the sheet needs no extra round-trip.
+    readAll<BotFunnelRow>("candidate_funnel_7d"),
   ]);
-  return redactInplay({ scoreboard, config, capabilities, retired, weekly, marketStats, reviewFlags, now: Date.now() });
+  return redactInplay({ scoreboard, config, capabilities, retired, weekly, marketStats, reviewFlags, funnel, now: Date.now() });
 }
 
 /** In-play bots are judged on lift, never CLV — drop their CLV before it leaves the server. */

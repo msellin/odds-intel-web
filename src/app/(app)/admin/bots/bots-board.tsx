@@ -32,7 +32,7 @@ import { AlertTriangle, Copy, History, Info, MoreHorizontal, ArrowUpRight } from
 import { PageHeader } from "@/components/oi/panel";
 import { StatCard } from "@/components/oi/stat-card";
 import { StatusBadge } from "@/components/oi/status-badge";
-import type { BotBoardData, BotMarketStatsRow, BotPicksResult, BotWeeklyRow, RetiredInfo } from "@/lib/bot-board";
+import type { BotBoardData, BotFunnelRow, BotMarketStatsRow, BotPicksResult, BotWeeklyRow, RetiredInfo } from "@/lib/bot-board";
 import type { ControlState } from "@/lib/bot-controls/types";
 import { placementPathReason } from "@/lib/bot-controls/placement-path";
 import {
@@ -161,7 +161,7 @@ export function BotsBoard({ data, controls }: { data: BotBoardData; controls: Co
 }
 
 function Board({ data }: { data: BotBoardData }) {
-  const { scoreboard, config, capabilities, retired, weekly, marketStats, reviewFlags, now } = data;
+  const { scoreboard, config, capabilities, retired, weekly, marketStats, reviewFlags, funnel, now } = data;
   const pathname = usePathname();
   const params = useSearchParams();
   const ctl = useControls();
@@ -227,6 +227,12 @@ function Board({ data }: { data: BotBoardData }) {
     for (const r of marketStats.rows) m.set(r.bot_name, [...(m.get(r.bot_name) ?? []), r]);
     return m;
   }, [marketStats]);
+  const funnelBy = useMemo(() => {
+    if (funnel.error) return null; // migration 456 not deployed → the panel says so
+    const m = new Map<string, BotFunnelRow[]>();
+    for (const r of funnel.rows) m.set(r.bot, [...(m.get(r.bot) ?? []), r]);
+    return m;
+  }, [funnel]);
   const control = useMemo(
     () => controlRef(sbBy.get(CONTROL_BOT), marketsBy ? marketsBy.get(CONTROL_BOT) ?? [] : null),
     [sbBy, marketsBy],
@@ -663,6 +669,7 @@ function Board({ data }: { data: BotBoardData }) {
         onPlacedOnly={setPlacedOnly}
         markets={selectedView && marketsBy ? marketsBy.get(selectedView.name) ?? [] : null}
         weekly={selectedView && weeklyBy ? weeklyBy.get(selectedView.name) ?? ([] as BotWeeklyRow[]) : null}
+        funnel={selectedView && funnelBy ? funnelBy.get(selectedView.name) ?? [] : null}
         fleetPaused={livePaused}
         pulse={pulse}
         onClose={close}
