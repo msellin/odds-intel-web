@@ -584,9 +584,10 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
           <div>
             <h2 className="text-sm font-semibold">Bot Leaderboard</h2>
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              {isPro
-                ? `${activeBots.length} proven · click any row for bankroll chart`
-                : `${activeBots.length} proven strategies · Pro unlocks W/L, P&L, charts`}
+              {/* 2026-09-25 (owner): no separate "N proven" count — the status labels and their legend
+                  below say how much evidence each bot has; a second, ROI-based judgement contradicted them
+                  (4 picks at +29% read as "proven"). */}
+              {isPro ? "Click any row for its bankroll chart" : "Pro unlocks W/L, P&L, charts"}
             </p>
             {/* PERF-STATE-THE-PERIOD (2026-09-17). Every ROI on this table is
                 cumulative since CALIBRATED_SINCE, and until now the page never
@@ -615,10 +616,7 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
               <p className="text-[11px] text-muted-foreground/70 mt-1">
                 Tested to date:{" "}
                 <span className="text-foreground">{activeBots.length + underperformingBots.length + developingBots.length + retiredBotCount}</span>{" "}
-                strategies · <span className="text-emerald-400/80">{activeBots.length} proven</span> ·{" "}
-                <span className="text-red-400/70">{underperformingBots.length} underperforming</span> ·{" "}
-                <span className="text-muted-foreground">{developingBots.length} maturing</span> ·{" "}
-                <span className="text-muted-foreground">{retiredBotCount} retired</span>
+                strategies · <span className="text-muted-foreground">{retiredBotCount} retired</span>
               </p>
             )}
             {/* Chip legend prose (2026-07-06) — replaces the previous
