@@ -352,7 +352,12 @@ export function botVerdict(s: BotStats): BotVerdictResult {
  * pointing the operator AT one is a suggestion about where to look, not a claim
  * that it works. The page must never render LEAD as an endorsement.
  */
-export type BotTrack = "LEAD" | "CANDIDATE" | "NEGATIVE" | "OPEN";
+export type BotTrack = "LEAD" | "CANDIDATE" | "NEGATIVE" | "OPEN" | "WAITING";
+
+/** Families whose fair value IS Pinnacle: a Pinnacle close cannot judge them fairly (#150) — "can't judge yet". */
+export const UNJUDGEABLE_FAMILIES = new Set(["sharp_trigger", "sharp_generator"]);
+/** Forward-test arms priced off the de-vigged Pinnacle line (bot_config family 'forward_test') — same reason. */
+export const UNJUDGEABLE_BOTS = new Set(["bot_sharp_1x2_v1", "bot_sharp_ou_v1", "bot_sharp_aligned_v1"]);
 
 /**
  * Below this many CLV legs the sign of the mean is noise, so a bot cannot be

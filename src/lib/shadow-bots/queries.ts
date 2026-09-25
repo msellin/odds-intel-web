@@ -101,20 +101,20 @@ export interface Quote {
   ts: string;
 }
 
+/**
+ * One bot's score for the per-pick track chip — #162 W6.1 (owner 4C + (d), 2026-09-25): the SAME per-bot
+ * numbers as /performance and /admin/bots (engine view bot_performance, #159: sharp-anchor CLV = fresh
+ * Pinnacle close, else ≥5-book consensus). Was shadow_bot_scoreboard's own-book mc-CLV, a fourth version of
+ * the number that is negative BY CONSTRUCTION for outlier strategies (ANALYSIS_GOTCHAS #85).
+ * `family` (bot_config): the Pinnacle-anchored families (sharp_trigger, sharp_generator) are NOT judged here
+ * until #150's grader exists — their fair value IS Pinnacle, so a Pinnacle close flatters them.
+ */
 export interface BotScoreRow {
-  bot_id: string;
   bot_name: string;
-  /** EVERY settled pick — the honest ROI denominator. */
-  settled_n: number;
-  settled_won: number;
-  settled_pnl_eur: number | string | null;
-  settled_roi: number | string | null;
-  /** Own-book-closed subset — the pre-registered CLV/verdict population. */
   clv_n: number;
-  clv_mc_mean: number | string | null;
-  clv_mc_sd: number | string | null;
-  decision_fresh_n: number;
-  decision_age_known_n: number;
+  clv_mean: number | string | null;
+  clv_sd: number | string | null;
+  family: string | null;
 }
 
 export interface BotClvRow {
@@ -394,23 +394,23 @@ async function _loadShadowBotsPage(): Promise<ShadowBotsPageData> {
     }
   }
 
-  // 10 · the scoreboard, from the ENGINE's view (migration 360). It was a paged
-  // fetch of every own-book-closed row, aggregated here — which computed ROI
-  // over the subset that HAPPENS to have a closing anchor and flipped the sign
-  // on 4 of 11 bots (bot_ou35_model_v1: true −11.3% over n=226 rendered as
-  // +30.0% over n=23). The view keeps the two populations separate and labelled,
-  // and one row per bot replaces a full-ledger fetch.
+  // 10 · per-bot scores for the track chip: bot_performance (#159, the one per-bot computation) + each
+  // bot's family from bot_config (#162 W6.1). Replaces shadow_bot_scoreboard (own-book mc-CLV).
   const scoreboard: BotScoreRow[] = [];
-  if (botIds.length > 0) {
-    queryCount++;
-    const { data } = await db
-      .from("shadow_bot_scoreboard")
-      .select(
-        "bot_id, bot_name, settled_n, settled_won, settled_pnl_eur, settled_roi, " +
-          "clv_n, clv_mc_mean, clv_mc_sd, decision_fresh_n, decision_age_known_n",
-      )
-      .in("bot_id", botIds);
-    scoreboard.push(...((data ?? []) as unknown as BotScoreRow[]));
+  const botNames = bots.map((b) => b.name);
+  if (botNames.length > 0) {
+    queryCount += 2;
+    const [perf, cfg] = await Promise.all([
+      db.from("bot_performance").select("bot_name, clv_n, clv_public, clv_public_sd").in("bot_name", botNames),
+      db.from("bot_config").select("bot_name, family").in("bot_name", botNames),
+    ]);
+    // FAIL CLOSED (review 2026-09-25): without the families a Pinnacle-anchored bot would be judged and could
+    // become the lead; without the scores nothing can be judged. Either read failing → no scores → every bot
+    // reads "unproven", no lead.
+    const famBy = new Map(((cfg.data ?? []) as { bot_name: string; family: string | null }[]).map((c) => [c.bot_name, c.family]));
+    if (!perf.error && !cfg.error) for (const r of (perf.data ?? []) as { bot_name: string; clv_n: number | null; clv_public: number | null; clv_public_sd: number | null }[]) {
+      scoreboard.push({ bot_name: r.bot_name, clv_n: Number(r.clv_n ?? 0), clv_mean: r.clv_public, clv_sd: r.clv_public_sd, family: famBy.get(r.bot_name) ?? null });
+    }
   }
 
   return {

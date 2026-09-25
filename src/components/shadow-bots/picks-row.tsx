@@ -162,6 +162,14 @@ function BotName({ r }: { r: PickRowData }) {
             losing bot
           </span>
         )}
+        {r.track === "WAITING" && (
+          <span
+            className={`${CHIP} border-dashed border-border text-muted-foreground`}
+            title="Can't judge this bot yet. It picks bets by comparing against Pinnacle's price, and Pinnacle is also what we would grade it against, so the score would flatter it. A fair test is being built; until then it is neither a lead nor a losing bot."
+          >
+            can&apos;t judge yet
+          </span>
+        )}
         {r.track === "OPEN" && (
           <span className={`${CHIP} border-border text-muted-foreground`} title="Not ruled out yet: more bets can still show this bot works.">
             unproven

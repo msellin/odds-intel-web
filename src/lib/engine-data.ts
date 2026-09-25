@@ -183,15 +183,13 @@ export function execOdds(
 /**
  * @deprecated [[#159]] (2026-09-25) — NOT a basis for any shown ROI. Per-bot and headline figures
  * come from the engine view `bot_performance` / `bot_ledger.pnl_unit_public` (lib/bot-performance):
- * FLAT stake at the best price available at pick time on all books. This helper is stake-weighted
- * at our-books price; kept only for the legacy LiveBet shape. Smoke LEGACY-CLV-PNL-NO-NEW-READERS.
+ * FLAT stake at the best price available at pick time on all books. Kept only for the legacy LiveBet
+ * shape (callers: toBet via getAllBets, and getPlaceableBets — neither is rendered today).
+ * Smoke LEGACY-CLV-PNL-NO-NEW-READERS.
  *
- * Settled P&L priced at the executable odds.
- *
- * Only recomputed for SINGLES. Combos settle across several legs and
- * `odds_at_pick_live` describes one selection, so a combo keeps its stored
- * `pnl` — silently repricing a combo off a single leg's price would be worse
- * than the bug this fixes. Void and pending rows keep stored `pnl` too.
+ * #162 (2026-09-25): returns the STORED pnl — since engine migration 441 (#155) that IS the public
+ * figure (flat EUR 10 at the published price, = bot_ledger.pnl_unit_public). It used to re-price at our
+ * books (odds_at_pick_live), which disagreed with /performance. Same rule as settlement._EXEC_PNL.
  */
 export function execPnl(row: {
   result?: string | null;
@@ -201,16 +199,11 @@ export function execPnl(row: {
   odds_at_pick_live?: number | string | null;
   combo_legs?: unknown;
 }): number {
-  const stored = Number(row.pnl || 0);
-  if (row.combo_legs != null) return stored;
-  const stake = Number(row.stake || 0);
-  if (stake <= 0) return stored;
-  if (row.result === "won") {
-    const o = execOdds(row.odds_at_pick ?? null, row.odds_at_pick_live ?? null);
-    return o > 1 ? (o - 1) * stake : stored;
-  }
-  if (row.result === "lost") return -stake;
-  return stored;
+  // #162 (2026-09-25): since #155's flat restatement (engine migration 441) the STORED pnl is the public
+  // figure — flat EUR 10 at the PUBLISHED price (pnl_price_basis), equal to bot_ledger.pnl_unit_public.
+  // Re-pricing at our books here (odds_at_pick_live) disagreed with /performance and bot_performance.
+  // Same change as the engine's settlement._EXEC_PNL, so the two cannot drift.
+  return Number(row.pnl || 0);
 }
 
 export interface LiveBet {

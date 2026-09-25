@@ -11,6 +11,8 @@ import {
   quoteFreshness,
   shownEdge,
   PICK_VERDICT_RANK,
+  UNJUDGEABLE_BOTS,
+  UNJUDGEABLE_FAMILIES,
 } from "@/lib/shadow-bots/verdict";
 import { prettyDisplayName } from "@/app/(app)/admin/bots/bot-board-format";
 import type { PickRowData } from "@/components/shadow-bots/picks-row";
@@ -37,15 +39,24 @@ export function buildPickRows(
   // price test and says nothing about whether the bot behind it works — on
   // 2026-09-16 three of five PLACE rows belonged to the most conclusively
   // negative bot on the board. This is what tells them apart.
+  // #162 W6.1: the same sharp-anchor CLV as /performance (bot_performance); Pinnacle-anchored families wait
+  // for #150's grader and never become the lead.
+  const waiting = new Set(
+    data.scoreboard
+      .filter((r) => UNJUDGEABLE_BOTS.has(r.bot_name) || (r.family != null && UNJUDGEABLE_FAMILIES.has(r.family)))
+      .map((r) => r.bot_name),
+  );
   const statsByName = new Map(
-    data.scoreboard.map((r) => [
-      r.bot_name,
-      {
-        n: Number(r.clv_n ?? 0),
-        mean: r.clv_mc_mean == null ? null : Number(r.clv_mc_mean),
-        sd: r.clv_mc_sd == null ? null : Number(r.clv_mc_sd),
-      },
-    ]),
+    data.scoreboard
+      .filter((r) => !waiting.has(r.bot_name))
+      .map((r) => [
+        r.bot_name,
+        {
+          n: Number(r.clv_n ?? 0),
+          mean: r.clv_mean == null ? null : Number(r.clv_mean),
+          sd: r.clv_sd == null ? null : Number(r.clv_sd),
+        },
+      ]),
   );
   const noStats = { n: 0, mean: null, sd: null };
   // Built HERE, not in the query layer: `loggedPickIds` crosses `unstable_cache`
@@ -117,7 +128,7 @@ export function buildPickRows(
       minutesToKo,
       inplay,
       isControlArm: isInplayControlBot(pick.bot_name),
-      track: botTrack(statsByName.get(pick.bot_name) ?? noStats, pick.bot_name === lead),
+      track: waiting.has(pick.bot_name) ? "WAITING" : botTrack(statsByName.get(pick.bot_name) ?? noStats, pick.bot_name === lead),
       alreadyLogged: loggedIds.has(pick.id),
       markState: markStates[pick.id] ?? 0,
       stake: FLAT_STAKE_EUR,
