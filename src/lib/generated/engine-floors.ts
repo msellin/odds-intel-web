@@ -91,6 +91,14 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "anchor": "consensus",
     "market": "1x2 + O/U 2.5"
   },
+  "bot_consensus_pinconf_v1": {
+    "edgeFloor": 0.03,
+    "oddsFloor": null,
+    "oddsCap": null,
+    "realMoney": false,
+    "anchor": "consensus",
+    "market": "1x2 + O/U 2.5 (twin)"
+  },
   "bot_coolbet_1x2_model_v1": {
     "edgeFloor": 0.1,
     "oddsFloor": 2.8,
@@ -186,6 +194,14 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "realMoney": false,
     "anchor": "sharp",
     "market": "1x2 (forward test)"
+  },
+  "bot_sharp_aligned_v1": {
+    "edgeFloor": 0.03,
+    "oddsFloor": null,
+    "oddsCap": null,
+    "realMoney": false,
+    "anchor": "sharp",
+    "market": "1x2 + O/U 2.5 (twin)"
   },
   "bot_sharp_ou_v1": {
     "edgeFloor": 0.03,
