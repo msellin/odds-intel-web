@@ -51,14 +51,6 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "anchor": "model",
     "market": "1x2"
   },
-  "bot_combined_1x2_ev8_v1": {
-    "edgeFloor": null,
-    "oddsFloor": null,
-    "oddsCap": null,
-    "realMoney": false,
-    "anchor": "model",
-    "market": "1x2"
-  },
   "bot_combined_1x2_v1": {
     "edgeFloor": null,
     "oddsFloor": null,
@@ -154,14 +146,6 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "realMoney": false,
     "anchor": "none",
     "market": "in-play O/U 2.5 + 1x2"
-  },
-  "bot_ou35_model_v1": {
-    "edgeFloor": 0.08,
-    "oddsFloor": 1.8,
-    "oddsCap": null,
-    "realMoney": false,
-    "anchor": "model",
-    "market": "O/U 3.5"
   },
   "bot_ou_sharp_2anchor_v1": {
     "edgeFloor": null,
@@ -274,6 +258,14 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "realMoney": false,
     "anchor": "model",
     "market": "1x2"
+  },
+  "bot_v10_ou_comb_v1": {
+    "edgeFloor": null,
+    "oddsFloor": null,
+    "oddsCap": null,
+    "realMoney": false,
+    "anchor": "model",
+    "market": "ou"
   }
 };
 
