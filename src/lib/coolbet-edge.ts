@@ -1,6 +1,6 @@
 /**
  * Pure, client-safe per-market edge thresholds. Lives in its own file so
- * client components (e.g. `place-bet-table.tsx`) can import `autoMinEdgeFor`
+ * client components (e.g. `picks-table.tsx` → `botEdgeThreshold`) can import it
  * without dragging `engine-data.ts` — and via it `supabase-server.ts` +
  * `next/headers` — into the client bundle. Next 16 / Turbopack rejects that
  * import graph at build time.
@@ -10,12 +10,8 @@
  * picked these floors. `null` means retired — never auto-place this market.
  */
 
-/** Legacy single-floor threshold (kept for any external callers). New code
- * should call `autoMinEdgeFor(market)` so each market gets its own floor. */
-export const COOLBET_AUTO_MIN_EDGE = 0.05;
-
-/** Legacy live-edge floor — see autoMinEdgeFor() for the per-market version. */
-export const COOLBET_AUTO_MIN_REMAINING_EDGE = 0.03;
+// #162 W4.6 (2026-09-25): the legacy single-floor COOLBET_AUTO_MIN_EDGE /
+// COOLBET_AUTO_MIN_REMAINING_EDGE were deleted with their only reader (getPlaceableBets).
 
 export const COOLBET_AUTO_MIN_EDGE_BY_MARKET: Record<string, number | null> = {
   // PER-MARKET-EDGE-MIRROR-FIX-2026-09-10: 0.13 (reverting an erroneous 0.10).

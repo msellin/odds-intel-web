@@ -519,60 +519,17 @@ async function handleCallbackQuery(
     return;
   }
 
-  if (!data.startsWith("place:")) {
-    await answerCallbackQuery(cqId, "Unknown action");
+  // MANUAL-PLACE "Record at Coolbet" (place:<id>) — RETIRED 2026-09-25 (#162 W4.6). It
+  // queued manual_placement_queue for a VPS drain into the engine's API placer; the drain,
+  // the placer and the button that sent this callback were deleted together (the queue had
+  // never held a row). A tap on an old message now gets an explicit answer instead of
+  // queueing a row nothing would ever read.
+  if (data.startsWith("place:")) {
+    await answerCallbackQuery(cqId, "Retired — place from /admin/shadow-bots", true);
     return;
   }
 
-  const simulatedBetId = data.slice("place:".length).trim();
-  if (!UUID_RE.test(simulatedBetId)) {
-    await answerCallbackQuery(cqId, "❌ Invalid bet id", true);
-    return;
-  }
-
-  // Short-circuit: already in real_bets → ack without queueing
-  const { data: existing } = await admin
-    .from("real_bets")
-    .select("id")
-    .eq("simulated_bet_id", simulatedBetId)
-    .limit(1)
-    .maybeSingle();
-
-  if (existing) {
-    await answerCallbackQuery(cqId, "✓ Already recorded", false);
-    return;
-  }
-
-  // Dedup: don't queue twice if a previous tap is still pending/processing
-  const { data: inflight } = await admin
-    .from("manual_placement_queue")
-    .select("id, status")
-    .eq("simulated_bet_id", simulatedBetId)
-    .in("status", ["pending", "processing"])
-    .limit(1)
-    .maybeSingle();
-
-  if (inflight) {
-    await answerCallbackQuery(cqId, "⏳ Already queued, working on it…");
-    return;
-  }
-
-  const { error: insertErr } = await admin
-    .from("manual_placement_queue")
-    .insert({
-      simulated_bet_id: simulatedBetId,
-      requested_by_chat_id: fromId,
-      telegram_chat_id: chatId ?? null,
-      telegram_message_id: messageId ?? null,
-    });
-
-  if (insertErr) {
-    console.error("manual_placement_queue insert failed", insertErr);
-    await answerCallbackQuery(cqId, "❌ Queue insert failed — check logs", true);
-    return;
-  }
-
-  await answerCallbackQuery(cqId, "📝 Queued — recording at Coolbet…");
+  await answerCallbackQuery(cqId, "Unknown action");
 }
 
 export async function POST(req: NextRequest) {
