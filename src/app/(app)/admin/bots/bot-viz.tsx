@@ -56,7 +56,7 @@ export function ForestBar({
   const cy = height / 2;
   const faded = verdict === "early";
   const tone = VERDICT_STROKE[verdict];
-  const showControl = metric === "clv_mc" && control != null;
+  const showControl = metric === "clv_anchor" && control != null;
   const cLo = showControl && control.se != null ? control.mean - 1.96 * control.se : null;
   const cHi = showControl && control.se != null ? control.mean + 1.96 * control.se : null;
   const clampLo = lo != null && lo < -DOMAIN;

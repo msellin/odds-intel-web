@@ -180,6 +180,11 @@ export function execOdds(
 }
 
 /**
+ * @deprecated [[#159]] (2026-09-25) — NOT a basis for any shown ROI. Per-bot and headline figures
+ * come from the engine view `bot_performance` / `bot_ledger.pnl_unit_public` (lib/bot-performance):
+ * FLAT stake at the best price available at pick time on all books. This helper is stake-weighted
+ * at our-books price; kept only for the legacy LiveBet shape. Smoke LEGACY-CLV-PNL-NO-NEW-READERS.
+ *
  * Settled P&L priced at the executable odds.
  *
  * Only recomputed for SINGLES. Combos settle across several legs and
@@ -426,6 +431,9 @@ export const getAllBotsFromDB = unstable_cache(
   { revalidate: 1800 }
 );
 
+/** @deprecated [[#159]] — /performance no longer reads raw bets (rows: bot_performance; detail
+ *  view: /api/performance/bot-legs; history: getCohortLegs). Its `pnl` is stake-weighted and its
+ *  `clv` is the legacy column. Do not add readers. */
 export async function getAllBets(): Promise<LiveBet[]> {
   const supabase = createSupabasePublic();
 
@@ -1554,191 +1562,57 @@ export async function getPublicCohortBotNames(): Promise<Set<string>> {
 // another country, where Unibet prices differ. This is a 👥 PICKS figure: a book's
 // Estonian availability is not a reader's constraint (see the note above and
 // project_own_vs_picks_book_constraint).
-const UNOBTAINABLE_BOOKMAKERS = ["Unibet-Kambi"] as const;
+// [[#159]] UNOBTAINABLE_BOOKMAKERS (["Unibet-Kambi"]) retired: the public price basis is now
+// computed in the engine over is_publishable_book, which already treats Unibet-Kambi as a
+// non-offer — the exclusion happens in ONE place, before any number reaches this file.
 
+// [[#159]] ONE BASIS (2026-09-25, owner-approved). The hero is now summed from the SAME per-leg
+// figure the leaderboard rows and dashboard_cache read — bot_ledger.pnl_unit_public (engine
+// view, migration 433): FLAT EUR 10 at the best price AVAILABLE when the pick was made on ALL
+// publishable books. It used to price here at odds_at_pick_live (our 4 Estonian books) and
+// DROP the legs without one, while the rows priced at a different basis — so the hero and the
+// table beside it were two definitions. A leg with no quote at pick time is priced at the
+// recorded odds and COUNTED (nRecordedPrice → unpriceableExcluded / roiCoveragePct keep their
+// meaning as "legs not on a pick-time price"), never silently dropped or silently included.
+// The legacy any-book / Pinnacle CLV medians are gone: both read simulated_bets.clv /
+// clv_pinnacle (withdrawn, CLV-PUBLIC-WITHDRAWN; deprecated by #159).
 const _getCalibratedHeadlineStatsUncached =
   async (): Promise<CalibratedHeadlineStats> => {
-    const admin = createSupabaseAdmin();
-    const cutoff30 = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
-
-    // Pull all production pre-match settled bets since launch in one shot.
-    // PERF-COHORT-PREMATCH-ONLY (2026-08-21): exclude inplay bots so this
-    // cohort matches the leaderboard's PERFORMANCE-PUBLIC-PREMATCH-ONLY
-    // rule + the /performance ledger's getPublicCohortBotNames filter.
-    // Prevents the "hero says 1025 / leaderboard says 8 proven / ledger
-    // dropdown shows 16 bots" three-way inconsistency.
-    // FLAT-ROI-EVERYWHERE (2026-08-21): fetch odds_at_pick + result so the
-    // ROI numerator can be computed as €10-flat-stake PnL. Internal bot
-    // stakes (r.stake) stay Kelly-weighted; we ignore them for the public
-    // headline and use flat instead so this reconciles with WinnerOdds,
-    // Tipstrr, SignalOdds, Forebet — all of which publish flat-stake ROI.
-    type HeadlineRow = {
-      created_at: string;
-      odds_at_pick: number | string | null;
-      odds_at_pick_live: number | string | null;
-      result: string | null;
-      clv: number | string | null;
-      clv_pinnacle: number | string | null;
-      recommended_bookmaker: string | null;
-    };
-    // ALL-BETS-CEILING-DEAD-2026-09-21. This is the PUBLIC headline ROI
-    // cohort. It used .range(0, 19999) against a server capped at 10,000, so
-    // the moment the cohort passed 10k this page would have published a figure
-    // computed on a subset — no error, no visible difference, and the number
-    // would simply have stopped moving.
-    const { rows: data } = await fetchAllPaged<HeadlineRow>(
-      "calibratedPublicHeadline", PAGED_ROW_CEILING,
-      (from, to) => admin
-        .from("simulated_bets")
-        .select(
-          "created_at, odds_at_pick, odds_at_pick_live, result, clv, clv_pinnacle, recommended_bookmaker, bots!inner(name, maturity_label)",
-        )
-        .in("bots.maturity_label", HEADLINE_MATURITY_LABELS as unknown as string[])
-        .not("bots.name", "like", "inplay_%")
-        .in("market", CALIBRATED_PUBLIC_MARKETS as unknown as string[])
-        .in("result", ["won", "lost"])
-        .gte("created_at", `${CALIBRATED_SINCE}T00:00:00Z`)
-        .order("created_at", { ascending: true })
-        .order("id", { ascending: true })
-        .range(from, to) as unknown as PromiseLike<{ data: HeadlineRow[] | null; error: unknown }>,
-    );
-
-    if (data.length === 0) {
-      return {
-        allTime: {
-          n: 0, stakeEur: 0, pnlEur: 0, roiPct: null,
-          medianClvPct: null, meanClvPct: null, medianClvPinPct: null,
-          obtainableN: 0, obtainableRoiPct: null,
-          unpriceableExcluded: 0, roiCoveragePct: 100,
-          clvN: 0, clvBeatPct: null, sinceDate: CALIBRATED_SINCE,
-        },
-        last30d: { n: 0, roiPct: null },
-      };
-    }
-
-    let n = 0, pnlFlat = 0;
-    let nObtainable = 0, pnlFlatObtainable = 0;
-    // Settled rows excluded from ROI because no accessible book quoted them
-    // at pick time — see LANDING-PERF-UNPLACEABLE-FALLBACK below.
-    let unpriceable = 0;
-    let n30 = 0, pnlFlat30 = 0;
-    let clvBeats = 0;
-    let clvSum = 0;
-    const clvVals: number[] = [];
-    const clvPinVals: number[] = [];
-    for (const r of data as Array<{
-      created_at: string;
-      odds_at_pick: number | string | null;
-      odds_at_pick_live: number | string | null;
-      result: string | null;
-      clv: number | string | null;
-      clv_pinnacle: number | string | null;
-    }>) {
-      // LANDING-PERF-ROI-BASIS-2026-09-05: /performance's headline shares the
-      // track-record API's cohort exactly, so it must share its price basis too
-      // or the two public pages report different ROI for identical bets.
-      //
-      // LANDING-PERF-UNPLACEABLE-FALLBACK-2026-09-06: and that is exactly what
-      // happened. The track-record API started excluding settled rows with no
-      // `odds_at_pick_live` — bets no accessible book quoted at pick time, i.e.
-      // NOT PLACEABLE — because `execOdds` falls back to `odds_at_pick`, the
-      // stale high-water mark, and pricing 65 unplaceable bets that way lifted
-      // the public headline by +1.92pp (+10.70% -> +12.62%; those 65 alone
-      // return +33.09%). This function was not updated in the same change, so
-      // for a few hours the landing hero and /performance published different
-      // ROI for identical bets — the precise failure the comment above warns
-      // about, re-created by the fix for it.
-      //
-      // Same rule here now. `n` counts only priced rows, so ROI and its stake
-      // stay consistent; the excluded count is returned as coverage rather than
-      // hidden (ANALYSIS_GOTCHAS #29 — a restated figure without its coverage
-      // invites the "your data is thin" dismissal).
-      if (r.odds_at_pick_live == null || Number(r.odds_at_pick_live) <= 1) {
-        unpriceable += 1;
-        continue;
-      }
-      const odds = execOdds(r.odds_at_pick, r.odds_at_pick_live);
-      // Flat €10 stake — win = 10*(odds - 1), loss = -10.
-      const pFlat = r.result === "won"
-        ? FLAT_STAKE_EUR * (odds - 1)
-        : -FLAT_STAKE_EUR;
-      n += 1;
-      pnlFlat += pFlat;
-      // Exclude only prices NO reader could have taken — see
-      // UNOBTAINABLE_BOOKMAKERS. Computed live rather than hardcoded, because
-      // this is the page whose pitch is auditability and a stale caveat is the
-      // same defect one level down.
-      if (!(UNOBTAINABLE_BOOKMAKERS as readonly string[]).includes(
-        String((r as { recommended_bookmaker?: string | null }).recommended_bookmaker ?? ""),
-      )) {
-        nObtainable += 1;
-        pnlFlatObtainable += pFlat;
-      }
-      if (r.clv != null) {
-        const c = Number(r.clv) * 100;
-        clvVals.push(c);
-        clvSum += c;
-        if (c > 0) clvBeats += 1;
-      }
-      if (r.clv_pinnacle != null) {
-        clvPinVals.push(Number(r.clv_pinnacle) * 100);
-      }
-      if (r.created_at >= cutoff30) {
-        n30 += 1;
-        pnlFlat30 += pFlat;
-      }
-    }
-    const stakeFlat = n * FLAT_STAKE_EUR;
-    const stakeFlatObtainable = nObtainable * FLAT_STAKE_EUR;
-    const stakeFlat30 = n30 * FLAT_STAKE_EUR;
-
-    function median(xs: number[]): number | null {
-      if (xs.length === 0) return null;
-      const s = [...xs].sort((a, b) => a - b);
-      const m = Math.floor(s.length / 2);
-      return Number(
-        (s.length % 2 === 0 ? (s[m - 1] + s[m]) / 2 : s[m]).toFixed(2),
-      );
-    }
-
+    const { getHeadlineFlat, PERF_FLAT_STAKE_EUR } = await import("./bot-performance");
+    const cohort = await getPublicCohortBotNames();
+    const h = await getHeadlineFlat({
+      bots: [...cohort],
+      markets: CALIBRATED_PUBLIC_MARKETS,
+      since: `${CALIBRATED_SINCE}T00:00:00Z`,
+    });
+    const pct = (v: number | null) => (v == null ? null : Number((100 * v).toFixed(2)));
     return {
       allTime: {
-        n,
-        stakeEur: Number(stakeFlat.toFixed(2)),
-        pnlEur: Number(pnlFlat.toFixed(2)),
-        roiPct: stakeFlat > 0 ? Number(((100 * pnlFlat) / stakeFlat).toFixed(2)) : null,
-        medianClvPct: median(clvVals),
-        meanClvPct: clvVals.length
-          ? Number((clvSum / clvVals.length).toFixed(2))
-          : null,
-        medianClvPinPct: median(clvPinVals),
-        // Coverage for the exclusion above, so the restated figure travels with
-        // the number of bets it is computed over.
-        unpriceableExcluded: unpriceable,
-        roiCoveragePct: n + unpriceable > 0
-          ? Number(((100 * n) / (n + unpriceable)).toFixed(1))
-          : 100,
-        // The same cohort with unobtainable-price rows removed.
-        obtainableN: nObtainable,
-        obtainableRoiPct: stakeFlatObtainable > 0
-          ? Number(((100 * pnlFlatObtainable) / stakeFlatObtainable).toFixed(2))
-          : null,
-        clvN: clvVals.length,
-        clvBeatPct: clvVals.length
-          ? Number(((100 * clvBeats) / clvVals.length).toFixed(1))
-          : null,
+        n: h.n,
+        stakeEur: h.n * PERF_FLAT_STAKE_EUR,
+        pnlEur: Number((h.pnlUnits * PERF_FLAT_STAKE_EUR).toFixed(2)),
+        roiPct: pct(h.roi),
+        medianClvPct: null,
+        meanClvPct: null,
+        medianClvPinPct: null,
+        // The public basis already excludes books no reader can take (Unibet-Kambi is a
+        // non-offer in is_publishable_book), so "obtainable" IS the headline now.
+        obtainableN: h.n,
+        obtainableRoiPct: pct(h.roi),
+        unpriceableExcluded: h.nRecordedPrice,
+        roiCoveragePct: h.n > 0 ? Number(((100 * (h.n - h.nRecordedPrice)) / h.n).toFixed(1)) : 100,
+        clvN: 0,
+        clvBeatPct: null,
         sinceDate: CALIBRATED_SINCE,
       },
-      last30d: {
-        n: n30,
-        roiPct: stakeFlat30 > 0 ? Number(((100 * pnlFlat30) / stakeFlat30).toFixed(2)) : null,
-      },
+      last30d: { n: h.n30, roiPct: pct(h.roi30) },
     };
   };
 
 export const getCalibratedHeadlineStats = unstable_cache(
   _getCalibratedHeadlineStatsUncached,
-  ["getCalibratedHeadlineStats_v1"],
+  // v2 [[#159]]: one public basis (bot_ledger.pnl_unit_public).
+  ["getCalibratedHeadlineStats_v2"],
   { revalidate: 600 },
 );
 
@@ -2634,67 +2508,9 @@ export async function getForwardTestBotRecord(
 export const PICKS_FORWARD_TEST_STAKE_EUR = 10;
 export const PICKS_FORWARD_TEST_START_BANKROLL = 1000;
 
-// ARM-SCOPED (2026-09-22, [[#068]]) — see getPicksForwardTestSummary. The
-// running bankroll below is cumulative, so mixing arms here would draw one
-// equity curve out of two different rules' picks.
-export async function getPicksForwardTestBets(
-  arm: string = "live",
-  // [[#095]] the consensus arm is TWO bots, one per grade — pass the grade to
-  // get one bot's record. Omitted = the whole arm (the live arm has no grade).
-  grade?: "B" | "C" | "D",
-  // [[#122]] one market's picks — the sharp arm's two halves are separate bots.
-  market?: "1x2" | "over_under_25",
-  // [[#156]] the row's CURRENT rule_version only, so the list and chart reconcile with
-  // the row's figures (which are scored on the current rule, as bot_scoreboard does).
-  // Omitted = every version.
-  ruleVersion?: string,
-): Promise<Array<{
-  id: string; match: string; league: string; placedAt: string; market: string;
-  selection: string; odds: number; stake: number | null; result: string;
-  pnl: number; bankrollAfter: number | null; modelProb: number;
-  clv: number | null; closingOdds: number | null;
-}>> {
-  const supabase = createSupabasePublic();
-  const { data, error } = await supabase
-    .from("picks_forward_test_public")
-    .select("*")
-    .eq("arm", arm)
-    .match({
-      ...(grade ? { grade } : {}),
-      ...(market ? { market } : {}),
-      // [[#158]] the rule the pick COUNTS under (re-checked earlier picks included).
-      ...(ruleVersion ? { record_rule_version: ruleVersion } : {}),
-    })
-    .order("published_at", { ascending: true });
-  if (error || !data) return [];
-
-  const S = PICKS_FORWARD_TEST_STAKE_EUR;
-  let running = PICKS_FORWARD_TEST_START_BANKROLL;
-  return (data as Array<Record<string, unknown>>).map((r) => {
-    const pnlUnits = r.pnl == null ? 0 : Number(r.pnl);
-    const settled = r.outcome != null;
-    if (settled) running += pnlUnits * S;
-    return {
-      id: String(r.id),
-      match: `${r.home_team ?? "?"} v ${r.away_team ?? "?"}`,
-      league: String(r.league ?? ""),
-      placedAt: String(r.published_at ?? ""),
-      market: String(r.market ?? ""),
-      selection: String(r.selection ?? ""),
-      odds: Number(r.odds ?? 0),
-      stake: S,
-      result: String(r.outcome ?? "pending"),
-      pnl: pnlUnits * S,
-      bankrollAfter: settled ? running : null,
-      // p_sharp is the de-vigged Pinnacle probability this rule bets against —
-      // the same slot the other bots fill with a MODEL probability. Different
-      // provenance, same meaning to a reader: "what we think the chance is".
-      modelProb: r.p_sharp == null ? 0 : Number(r.p_sharp),
-      clv: r.clv == null ? null : Number(r.clv),
-      closingOdds: r.closing_odds == null ? null : Number(r.closing_odds),
-    };
-  });
-}
+// [[#159]] getPicksForwardTestBets (the forward-test rows' bet list from picks_forward_test_public)
+// is gone: every /performance detail view reads the SAME record legs its row is computed from —
+// bot_ledger_display (in_record = the #158 record) via /api/performance/bot-legs.
 
 // ── FEEDS-DASHBOARD (#107, 2026-09-23) ─────────────────────────────────────────
 // feed_status / feed_book_stats are written every 5 min by the engine's

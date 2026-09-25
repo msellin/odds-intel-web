@@ -66,15 +66,30 @@ export interface BotScoreboardRow {
   won: number | null;
   lost: number | null;
   void: number | null;
+  /** [[#159]] FLAT 1-unit ROI at OUR books (odds_at_pick_live) — from bot_performance. */
   roi_unit: number | null;
+  /** [[#159]] The same at the best price available on ALL books — the /performance figure. */
+  roi_public?: number | null;
+  /** [[#159]] Sharp-anchor CLV at the public price — the /performance figure. */
+  clv_public?: number | null;
+  clv_public_n?: number | null;
+  roi_staked?: number | null;
+  n_own_recorded?: number | null;
+  n_public_recorded?: number | null;
+  /** Own-book margin-corrected CLV — the labelled SECONDARY. */
   clv_mc_n: number | null;
   clv_mc_mean: number | null;
   clv_mc_se: number | null;
   clv_mc_t: number | null;
-  clv_pin_n: number | null;
-  clv_pin_mean: number | null;
-  clv_pin_se: number | null;
-  clv_pin_t: number | null;
+  /** [[#159]] THE CLV: sharp-anchor close (fresh de-vigged Pinnacle, else a 5+-book consensus)
+   *  at our books' price. Replaced the legacy clv_pin_* (clv_pinnacle_devig: no close-age
+   *  limit, recorded price) — migration 433. */
+  clv_anchor_n: number | null;
+  clv_anchor_n_pinnacle?: number | null;
+  clv_anchor_n_consensus?: number | null;
+  clv_anchor_mean: number | null;
+  clv_anchor_se: number | null;
+  clv_anchor_t: number | null;
   /** Forward-test / control bots: the rule_version being scored (pre-registration — never pooled across versions). */
   scored_rule_version: string | null;
   /** Picks under earlier rule_versions of this bot, kept in bot_ledger but not scored here. */
@@ -146,7 +161,12 @@ export interface BotLedgerRow {
   pnl_unit: number | null;
   clv_raw: number | null;
   clv_mc: number | null;
+  /** LEGACY (clv_pinnacle_devig / shadow clv_pinnacle) — never shown; use clv_anchor_own. */
   clv_pinnacle: number | null;
+  /** [[#159]] per-leg sharp-anchor CLV at our books' price (bot_ledger, migration 433). */
+  clv_anchor_own?: number | null;
+  clv_anchor_source?: string | null;
+  odds_own?: number | null;
   is_inplay: boolean | null;
   model_version?: string | null;
   rule_version?: string | null;
@@ -163,8 +183,8 @@ export interface BotWeeklyRow {
   settled: number | null;
   clv_mc_n: number | null;
   clv_mc_mean: number | null;
-  clv_pin_n: number | null;
-  clv_pin_mean: number | null;
+  clv_anchor_n: number | null;
+  clv_anchor_mean: number | null;
   pnl_unit: number | null;
 }
 
@@ -180,6 +200,10 @@ export interface BotMarketStatsRow {
   clv_mc_n: number | null;
   clv_mc_mean: number | null;
   clv_mc_sd: number | null;
+  /** [[#159]] sharp-anchor CLV per market (migration 433) — the junk-control comparison. */
+  clv_anchor_n: number | null;
+  clv_anchor_mean: number | null;
+  clv_anchor_sd: number | null;
 }
 
 export interface RetiredInfo {
@@ -294,14 +318,15 @@ function redactInplay(d: BotBoardData): BotBoardData {
     rows: d.scoreboard.rows.map((r) =>
       inplay.has(r.bot_name)
         ? { ...r, clv_mc_n: null, clv_mc_mean: null, clv_mc_se: null, clv_mc_t: null,
-            clv_pin_n: null, clv_pin_mean: null, clv_pin_se: null, clv_pin_t: null, clv_outlier_n: null }
+            clv_anchor_n: null, clv_anchor_mean: null, clv_anchor_se: null, clv_anchor_t: null,
+            clv_public: null, clv_public_n: null, clv_outlier_n: null }
         : r,
     ),
   };
   const weekly = {
     ...d.weekly,
     rows: d.weekly.rows.map((r) =>
-      inplay.has(r.bot_name) ? { ...r, clv_mc_n: null, clv_mc_mean: null, clv_pin_n: null, clv_pin_mean: null } : r,
+      inplay.has(r.bot_name) ? { ...r, clv_mc_n: null, clv_mc_mean: null, clv_anchor_n: null, clv_anchor_mean: null } : r,
     ),
   };
   const marketStats = {
@@ -314,7 +339,7 @@ function redactInplay(d: BotBoardData): BotBoardData {
 }
 
 const redactLedgerRow = (r: BotLedgerRow): BotLedgerRow =>
-  r.is_inplay || r.bot_name.startsWith("bot_inplay_") ? { ...r, clv_raw: null, clv_mc: null, clv_pinnacle: null } : r;
+  r.is_inplay || r.bot_name.startsWith("bot_inplay_") ? { ...r, clv_raw: null, clv_mc: null, clv_pinnacle: null, clv_anchor_own: null } : r;
 
 async function readRetired(): Promise<Read<RetiredInfo>> {
   try {

@@ -80,7 +80,9 @@ export function PicksTable({
   const scored = v.sb?.scored_rule_version ?? null;
   const loaded = ledger && !ledger.loading ? ledger : null;
   const rows = useMemo(() => loaded?.rows ?? [], [loaded]);
-  const clvOf = (r: BotPickRow) => (metric === "clv_pinnacle" ? r.clv_pinnacle : metric === "clv_mc" ? r.clv_mc : null);
+  // [[#159]] per-leg sharp-anchor CLV at our books' price (bot_ledger.clv_anchor_own); the legacy
+  // clv_pinnacle column is never shown.
+  const clvOf = (r: BotPickRow) => (metric === "clv_anchor" ? r.clv_anchor_own ?? null : metric === "clv_mc" ? r.clv_mc : null);
   // A column of dashes says nothing — hide it and say why (e.g. bot_v10_1x2: the sim ledger has
   // had no clv_pinnacle_devig since 5 Sep, while its scoreboard n=330 is older).
   const anyClv = !inplay && rows.some((r) => clvOf(r) != null);

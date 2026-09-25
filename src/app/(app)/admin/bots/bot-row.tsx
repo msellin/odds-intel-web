@@ -35,6 +35,7 @@ import {
   FAMILY_INFO,
   METRIC_LABEL,
   METRIC_PILL,
+  METRIC_SHORT,
   MIN_N,
   type Accent,
   type BotView,
@@ -228,7 +229,7 @@ function StripCell({ v }: { v: BotView }) {
   );
 }
 
-const ROI_TITLE = `Settled picks · ROI on a flat 1-unit stake per pick — comparable across bots, not their real staking. Coloured only from ${ROI_COLOUR_MIN} settled picks; below that it is noise.`;
+const ROI_TITLE = `Settled picks · ROI on a flat 1-unit stake per pick AT OUR BOOKS (best of Coolbet / Epicbet / Tonybet / Unibet-Site at pick time) — comparable across bots, not their real staking. Second line: the same at the best price available on ALL books, the figure /performance shows (one definition, view bot_performance — #159). Coloured only from ${ROI_COLOUR_MIN} settled picks; below that it is noise.`;
 
 export function NRoiCell({ v }: { v: BotView }) {
   const settled = v.sb?.settled ?? 0;
@@ -241,6 +242,11 @@ export function NRoiCell({ v }: { v: BotView }) {
         <span className="text-muted-foreground"> · </span>
         <span className={tone}>{settled > 0 ? pct(roi) : "—"}</span>
       </div>
+      {settled > 0 && v.sb?.roi_public != null && (
+        <div className="text-xs tabular-nums text-muted-foreground" title="Best price available on all books at pick time — the /performance figure">
+          all books {pct(v.sb.roi_public)}
+        </div>
+      )}
       {(v.sb?.pending ?? 0) > 0 && <div className="text-xs tabular-nums text-muted-foreground">+{count(v.sb?.pending)} pending</div>}
     </div>
   );
@@ -483,14 +489,14 @@ function ColumnHeader({ metric, hasControl, sort }: { metric: Metric; hasControl
           {metric === "lift" ? (
             <span className={HEAD}>Record</span>
           ) : (
-            <SortHead k="clv" sort={sort} className="justify-end">{metric === "clv_pinnacle" ? "Pin-CLV" : "mc-CLV"}</SortHead>
+            <SortHead k="clv" sort={sort} className="justify-end">{METRIC_SHORT[metric]}</SortHead>
           )}
         </div>
         <div className="min-w-0 flex-1">
           {metric !== "lift" && (
             <>
               <ForestAxis />
-              {metric === "clv_mc" && hasControl && (
+              {metric === "clv_anchor" && hasControl && (
                 <div className="mt-0.5 text-xs text-warning/90" title="Each row's dashed line is the junk control on that bot's own market mix.">
                   <span className="font-mono">┊</span> junk control, same markets
                 </div>

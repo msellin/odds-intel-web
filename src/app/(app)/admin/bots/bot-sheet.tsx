@@ -311,8 +311,8 @@ function PerformanceTab({ v, markets, weekly }: { v: BotView; markets: BotMarket
                 <th className="py-1 pr-2 font-normal">Market</th>
                 <th className="py-1 pr-2 text-right font-normal">Settled</th>
                 <th className="py-1 pr-2 text-right font-normal">Hit</th>
-                {/* bot_market_stats carries mc-CLV only: shown for mc-CLV families, never as a second metric */}
-                {v.metric.metric === "clv_mc" && <th className="py-1 text-right font-normal">mc-CLV</th>}
+                {/* bot_market_stats: sharp CLV per market (migration 433) — the family's one metric */}
+                {v.metric.metric === "clv_anchor" && <th className="py-1 text-right font-normal">sharp CLV</th>}
               </tr>
             </thead>
             <tbody>
@@ -321,7 +321,7 @@ function PerformanceTab({ v, markets, weekly }: { v: BotView; markets: BotMarket
                   <td className="py-1 pr-2">{m.market ?? "—"}</td>
                   <td className="py-1 pr-2 text-right">{count(m.settled)}</td>
                   <td className="py-1 pr-2 text-right">{m.settled ? `${Math.round(((m.won ?? 0) / m.settled) * 100)}%` : "—"}</td>
-                  {v.metric.metric === "clv_mc" && <td className="py-1 text-right">{m.clv_mc_n ? pct(m.clv_mc_mean) : "—"}</td>}
+                  {v.metric.metric === "clv_anchor" && <td className="py-1 text-right">{m.clv_anchor_n ? pct(m.clv_anchor_mean) : "—"}</td>}
                 </tr>
               ))}
             </tbody>

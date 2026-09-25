@@ -1,17 +1,17 @@
 "use client";
 
-// "How to read this" panel for /admin/bots — plain-language definitions first (CLV, MC-CLV,
-// PIN-CLV, t), then the icon legend. Split out of bots-board.tsx.
+// "How to read this" panel for /admin/bots — plain-language definitions first (CLV, sharp CLV,
+// MC-CLV, t), then the icon legend. Split out of bots-board.tsx.
 
 import { Banknote, Globe, Send, Wallet } from "lucide-react";
 
 const HOW_TO_READ = [
   "CLV (closing-line value) = how much better our price was than the price just before kick-off. Positive means we bet at a better price than the market finally settled on — the best early sign of real skill.",
-  "MC-CLV compares against the average closing price across bookmakers; PIN-CLV compares against Pinnacle's closing price with its margin removed (the sharpest reference). Each family of bots is judged on one of the two.",
+  "Sharp CLV (every bot, since #159) = our price at our books against the fresh closing line of Pinnacle with its margin removed, or a 5+ bookmaker consensus where Pinnacle has none. The same definition /performance uses. MC-CLV (against the bet book's own close, margin-corrected) is shown only as a secondary — it cannot judge a rule that bets a soft book's mispriced line.",
   "t = how sure we are the average is not just luck: |t| ≥ 2 is roughly 95% sure; below that the bot is 'inconclusive'. In-play bots have no closing price, so no CLV yet.",
   "The bar is the 95% range on a shared −8% … +8% scale (arrowheads = runs past it). Left of zero = we priced worse than the close.",
   "Dashed amber line = a deliberately junk-anchored bot on the same markets. A bot that cannot be told apart from it is not showing skill.",
-  "No verdict below 30 measured picks. ROI is a flat 1-unit stake, for comparison only — uncoloured below 300 settled.",
+  "No verdict below 30 measured picks. ROI is a flat 1-unit stake at our books' price, for comparison only — uncoloured below 300 settled. The 'all books' ROI under it is the /performance figure (best price available at pick time on every book).",
   "Pre-registered bots are scored on their current rule version only.",
   "Switches: /picks = shown to customers on /picks (not Telegram, not /performance). € = selected to bet real money — one of six gates; it stakes nothing alone.",
 ];

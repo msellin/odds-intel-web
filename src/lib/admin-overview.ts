@@ -332,9 +332,10 @@ export async function loadOverview(viewerId: string | null): Promise<OverviewDat
     const fam = famOf.get(r.bot_name) ?? RETIRED_SERIES;
     picksWeek[i][fam] += r.picks ?? 0;
     pnlWeek[i][fam] += r.pnl_unit ?? 0;
-    if (MC_FAMILIES.includes(fam) && r.clv_mc_n && r.clv_mc_mean != null) {
-      clvAgg[i][fam].n += r.clv_mc_n;
-      clvAgg[i][fam].s += r.clv_mc_mean * r.clv_mc_n;
+    // [[#159]] one CLV for every bot: the sharp-anchor close (bot_weekly.clv_anchor_*).
+    if (MC_FAMILIES.includes(fam) && r.clv_anchor_n && r.clv_anchor_mean != null) {
+      clvAgg[i][fam].n += r.clv_anchor_n;
+      clvAgg[i][fam].s += r.clv_anchor_mean * r.clv_anchor_n;
     }
   }
   const picksByFamily = weeks.map((week, i) => ({ week, ...picksWeek[i] }));

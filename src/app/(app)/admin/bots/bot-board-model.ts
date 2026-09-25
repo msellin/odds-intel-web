@@ -18,7 +18,11 @@ import type {
 import { fmtRuleVersion, identityLine, prettyDisplayName } from "./bot-board-format";
 import { timeAgo } from "@/lib/rel-time";
 
-export type Metric = "clv_mc" | "clv_pinnacle" | "lift";
+// [[#159]] (2026-09-25): ONE CLV for every non-in-play bot — clv_anchor, the sharp-anchor close
+// (fresh de-vigged Pinnacle, else a 5+-book consensus). "clv_pinnacle" (the legacy
+// clv_pinnacle_devig: no close-age limit, recorded price) is gone; clv_mc (the bet book's OWN
+// close) stays only as the "other metric".
+export type Metric = "clv_anchor" | "clv_mc" | "lift";
 
 export const MIN_N = 30;
 export const CONTROL_BOT = "control_junk_anchor";
@@ -45,23 +49,23 @@ export interface FamilyInfo {
 }
 
 export const FAMILY_INFO: Record<string, FamilyInfo> = {
-  forward_test: { title: "Forward test", subtitle: "Pre-registered, public on /picks. Never re-scored.", metric: "clv_mc", accent: "teal", icon: "flask" },
-  sharp_trigger: { title: "Sharp triggers", subtitle: "One per book — fire when the book beats Pinnacle.", metric: "clv_mc", accent: "violet", icon: "crosshair" },
-  sharp_generator: { title: "Sharp generators", subtitle: "Any placeable book above the de-vigged Pinnacle line.", metric: "clv_mc", accent: "violet", icon: "radar" },
-  model_shadow: { title: "Model · paper", subtitle: "Our model, priced at books we can bet.", metric: "clv_mc", accent: "sky", icon: "brain" },
-  model_sim: { title: "Model · simulated", subtitle: "Our model, best accessible price (behind /performance).", metric: "clv_pinnacle", accent: "sky", icon: "brain" },
+  forward_test: { title: "Forward test", subtitle: "Pre-registered, public on /picks. Never re-scored.", metric: "clv_anchor", accent: "teal", icon: "flask" },
+  sharp_trigger: { title: "Sharp triggers", subtitle: "One per book — fire when the book beats Pinnacle.", metric: "clv_anchor", accent: "violet", icon: "crosshair" },
+  sharp_generator: { title: "Sharp generators", subtitle: "Any placeable book above the de-vigged Pinnacle line.", metric: "clv_anchor", accent: "violet", icon: "radar" },
+  model_shadow: { title: "Model · paper", subtitle: "Our model, priced at books we can bet.", metric: "clv_anchor", accent: "sky", icon: "brain" },
+  model_sim: { title: "Model · simulated", subtitle: "Our model, best accessible price (behind /performance).", metric: "clv_anchor", accent: "sky", icon: "brain" },
   inplay: { title: "In-play", subtitle: "Picks during the match. No closing line → no CLV.", metric: "lift", accent: "amber", icon: "timer" },
-  control: { title: "Junk control", subtitle: "A deliberately junk-anchored arm — the forward test's noise floor.", metric: "clv_mc", accent: "amber", icon: "control" },
-  unknown: { title: "Settings unknown", subtitle: "The nightly settings list could not describe these (scripts/export_bot_config.py).", metric: "clv_mc", accent: "amberStrong", icon: "alert" },
+  control: { title: "Junk control", subtitle: "A deliberately junk-anchored arm — the forward test's noise floor.", metric: "clv_anchor", accent: "amber", icon: "control" },
+  unknown: { title: "Settings unknown", subtitle: "The nightly settings list could not describe these (scripts/export_bot_config.py).", metric: "clv_anchor", accent: "amberStrong", icon: "alert" },
 };
 
 export const METRIC_LABEL: Record<Metric, string> = {
   clv_mc: "mc-CLV — margin-corrected CLV against the bet book's own close",
-  clv_pinnacle: "Pinnacle CLV — against the de-vigged Pinnacle close",
+  clv_anchor: "CLV — against the sharp close (fresh de-vigged Pinnacle, else a 5+-book consensus), at our books' price",
   lift: "lift — hit rate minus de-vigged implied probability (not computed yet)",
 };
-export const METRIC_PILL: Record<Metric, string> = { clv_mc: "MC-CLV", clv_pinnacle: "PIN-CLV", lift: "NO CLV" };
-export const METRIC_SHORT: Record<Metric, string> = { clv_mc: "mc-CLV", clv_pinnacle: "Pin-CLV", lift: "lift" };
+export const METRIC_PILL: Record<Metric, string> = { clv_anchor: "SHARP CLV", clv_mc: "MC-CLV", lift: "NO CLV" };
+export const METRIC_SHORT: Record<Metric, string> = { clv_anchor: "sharp CLV", clv_mc: "mc-CLV", lift: "lift" };
 
 export function familyOf(sb: BotScoreboardRow | undefined, cfg: BotConfigRow | undefined): string {
   const f = sb?.family && sb.family !== "unknown" ? sb.family : cfg?.family ?? sb?.family ?? "unknown";
@@ -71,8 +75,8 @@ export function familyOf(sb: BotScoreboardRow | undefined, cfg: BotConfigRow | u
 export function metricOf(family: string, cfg: BotConfigRow | undefined): Metric {
   if (family === "inplay") return "lift";
   const m = cfg?.admissible_metric;
-  if (m === "clv_mc" || m === "clv_pinnacle" || m === "lift") return m;
-  return FAMILY_INFO[family]?.metric ?? "clv_mc";
+  if (m === "clv_anchor" || m === "clv_mc" || m === "lift") return m;
+  return FAMILY_INFO[family]?.metric ?? "clv_anchor";
 }
 
 export interface MetricValue {
@@ -85,14 +89,14 @@ export interface MetricValue {
 
 export function metricValue(sb: BotScoreboardRow | undefined, metric: Metric): MetricValue {
   if (!sb || metric === "lift") return { metric, n: null, mean: null, se: null, t: null };
-  if (metric === "clv_pinnacle") return { metric, n: sb.clv_pin_n, mean: sb.clv_pin_mean, se: sb.clv_pin_se, t: sb.clv_pin_t };
+  if (metric === "clv_anchor") return { metric, n: sb.clv_anchor_n, mean: sb.clv_anchor_mean, se: sb.clv_anchor_se, t: sb.clv_anchor_t };
   return { metric, n: sb.clv_mc_n, mean: sb.clv_mc_mean, se: sb.clv_mc_se, t: sb.clv_mc_t };
 }
 
 /** The non-admissible CLV, for the drawer's collapsed "Other metrics" block only. */
 export function otherMetric(sb: BotScoreboardRow | undefined, metric: Metric): MetricValue | null {
   if (!sb || metric === "lift") return null;
-  return metricValue(sb, metric === "clv_mc" ? "clv_pinnacle" : "clv_mc");
+  return metricValue(sb, metric === "clv_mc" ? "clv_anchor" : "clv_mc");
 }
 
 export type Verdict = "beats" | "loses" | "inconclusive" | "early" | "noclv";
@@ -147,15 +151,15 @@ type MarketRows = BotMarketStatsRow[] | undefined;
 export function controlLineFor(botMarkets: MarketRows, c: ControlRef | null): ControlLineRef | null {
   if (!c) return null;
   const pooled: ControlLineRef = { mean: c.mean, se: c.se, sameMarket: false };
-  const rows = (botMarkets ?? []).filter((r) => r.market && (r.clv_mc_n ?? 0) > 0);
-  const total = rows.reduce((s, r) => s + Number(r.clv_mc_n), 0);
+  const rows = (botMarkets ?? []).filter((r) => r.market && (r.clv_anchor_n ?? 0) > 0);
+  const total = rows.reduce((s, r) => s + Number(r.clv_anchor_n), 0);
   if (!c.byMarket || total === 0) return pooled;
   let mean = 0;
   let var_ = 0;
   for (const r of rows) {
     const cm = c.byMarket.get(r.market as string);
     if (!cm || cm.n < MIN_N || cm.se == null) return pooled;
-    const w = Number(r.clv_mc_n) / total;
+    const w = Number(r.clv_anchor_n) / total;
     mean += w * cm.mean;
     var_ += w * w * cm.se * cm.se;
   }
@@ -172,7 +176,7 @@ export function controlCompare(
   // No comparison against a control that is itself too thin to read.
   if (c.se == null || line.se == null || (c.n ?? 0) < MIN_N) return null;
   const m = v.metric;
-  if (m.metric !== "clv_mc" || m.mean == null || m.se == null || m.n == null || m.n < MIN_N) return null;
+  if (m.metric !== "clv_anchor" || m.mean == null || m.se == null || m.n == null || m.n < MIN_N) return null;
   const se = Math.sqrt(m.se * m.se + line.se * line.se);
   if (!(se > 0)) return null;
   const t = (m.mean - line.mean) / se;
@@ -210,12 +214,12 @@ export function weekBuckets(rows: BotWeeklyRow[] | undefined, metric: Metric, no
   for (let i = 11; i >= 0; i--) {
     const start = cur - i * 7 * 86400000;
     const r = byWeek.get(start);
-    const pin = metric === "clv_pinnacle";
+    const anchor = metric === "clv_anchor";
     out.push({
       start,
       picks: Number(r?.picks ?? 0),
-      clvN: metric === "lift" ? 0 : Number((pin ? r?.clv_pin_n : r?.clv_mc_n) ?? 0),
-      clvMean: metric === "lift" ? null : (pin ? r?.clv_pin_mean : r?.clv_mc_mean) ?? null,
+      clvN: metric === "lift" ? 0 : Number((anchor ? r?.clv_anchor_n : r?.clv_mc_n) ?? 0),
+      clvMean: metric === "lift" ? null : (anchor ? r?.clv_anchor_mean : r?.clv_mc_mean) ?? null,
     });
   }
   return out;
@@ -284,7 +288,7 @@ export function buildView(
     weeks: opts.weekly ? weekBuckets(opts.weekly.get(name), metric.metric, opts.now) : null,
   };
   const botMarkets = opts.markets?.get(name);
-  const controlLine = metric.metric === "clv_mc" && name !== CONTROL_BOT ? controlLineFor(botMarkets, opts.control) : null;
+  const controlLine = metric.metric === "clv_anchor" && name !== CONTROL_BOT ? controlLineFor(botMarkets, opts.control) : null;
   const gateRv = (cfg?.gates ?? []).find((g) => g.name === "rule_version")?.value;
   const configRuleVersion =
     typeof gateRv === "string" && sb?.scored_rule_version && gateRv !== sb.scored_rule_version ? gateRv : null;
@@ -308,17 +312,19 @@ function breakEvenOf(rows: MarketRows): number | null {
 }
 
 export function controlRef(sb: BotScoreboardRow | undefined, markets: BotMarketStatsRow[] | undefined | null): ControlRef | null {
-  if (!sb || sb.clv_mc_mean == null) return null;
+  // [[#159]] / [[#156]]: the forward test is read against the junk control on the SHARP-ANCHOR
+  // close (the amended stopping rule), not the own-book mc-CLV.
+  if (!sb || sb.clv_anchor_mean == null) return null;
   let byMarket: ControlRef["byMarket"] = null;
   if (markets) {
     byMarket = new Map();
     for (const r of markets) {
-      if (!r.market || r.clv_mc_mean == null || !r.clv_mc_n) continue;
-      const se = r.clv_mc_sd != null && r.clv_mc_n >= 2 ? r.clv_mc_sd / Math.sqrt(r.clv_mc_n) : null;
-      byMarket.set(r.market, { n: r.clv_mc_n, mean: r.clv_mc_mean, se });
+      if (!r.market || r.clv_anchor_mean == null || !r.clv_anchor_n) continue;
+      const se = r.clv_anchor_sd != null && r.clv_anchor_n >= 2 ? r.clv_anchor_sd / Math.sqrt(r.clv_anchor_n) : null;
+      byMarket.set(r.market, { n: r.clv_anchor_n, mean: r.clv_anchor_mean, se });
     }
   }
-  return { mean: sb.clv_mc_mean, se: sb.clv_mc_se, n: sb.clv_mc_n, ruleVersion: sb.scored_rule_version, byMarket };
+  return { mean: sb.clv_anchor_mean, se: sb.clv_anchor_se, n: sb.clv_anchor_n, ruleVersion: sb.scored_rule_version, byMarket };
 }
 
 /** Within a family: Beats → Loses → Inconclusive → Too early → No CLV, silent last; |t| desc. */
@@ -458,7 +464,7 @@ export function withUnpickedBots(
       maturity_label: b.maturity_label, family: cfgBy.get(b.name)?.family ?? null,
       picks_total: 0, pending: 0, settled: 0, won: 0, lost: 0, void: 0, roi_unit: null,
       clv_mc_n: 0, clv_mc_mean: null, clv_mc_se: null, clv_mc_t: null,
-      clv_pin_n: 0, clv_pin_mean: null, clv_pin_se: null, clv_pin_t: null,
+      clv_anchor_n: 0, clv_anchor_mean: null, clv_anchor_se: null, clv_anchor_t: null,
       scored_rule_version: null, earlier_version_picks: 0, clv_outlier_n: 0,
       first_pick_at: null, last_pick_at: null, picks_7d: 0, settled_7d: 0,
     });

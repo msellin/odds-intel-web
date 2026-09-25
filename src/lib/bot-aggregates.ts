@@ -281,33 +281,14 @@ export function buildPerformanceStats(bets: LiveBet[]): PerformanceStats {
 
 export const isLiveBot = (botName: string): boolean => botName.startsWith("inplay_");
 
-// ── Public leaderboard aggregator ─────────────────────────────────────────────
+// ── Public leaderboard aggregator — REMOVED [[#159]] (2026-09-25) ────────────────
+// `buildPublicBotStats` recomputed the /performance leaderboard in the browser from raw bets:
+// stake-weighted P&L at our-books price and the legacy `simulated_bets.clv`. That was a second
+// definition of per-bot ROI and CLV — a Pro reader and a Free reader saw different numbers for
+// the same bot. Every row now comes from the engine view `bot_performance`
+// (lib/bot-performance.ts). Do not reintroduce a client-side per-bot aggregate
+// (smoke ONE-ROI-CLV-PARITY).
 
-export interface PublicBotStatShape {
-  /** Identity / join key. Kept because the modal, the bet filter and every
-   *  ENGINE_BOT_FLOORS lookup key on it. */
-  name: string;
-  /** What the reader sees. Null on bots created before migration 375. */
-  displayName: string | null;
-  settled: number;
-  won: number;
-  lost: number;
-  pnl: number | null;
-  roi: number | null;
-  clvDirection: "positive" | "negative" | "neutral" | null;
-  avgClv: number | null;
-  currentBankroll: number | null;
-  startingBankroll: number | null;
-  hasEnoughData: boolean;
-  maturityLabel: string;
-  isVip?: boolean;
-}
-
-/**
- * Build the leaderboard row set shown on /performance. Mirrors
- * `buildBotStats` but emits `clvDirection` + tier-conditional fields the
- * way the cache version did. Used for the toggle's quality-only path.
- */
 /**
  * Maturity labels a bot must carry to appear on the PUBLIC /performance page.
  *
@@ -425,71 +406,4 @@ export function dropVipUnsettled<T extends { bot: string; result: string }>(
   return bets.filter(
     (b) => !vipBotNames.has(b.bot) || b.result === "won" || b.result === "lost" || b.result === "void",
   );
-}
-
-export function buildPublicBotStats(
-  bets: LiveBet[],
-  botsDB: BotDbRow[],
-  opts: { isPro: boolean; isElite: boolean },
-): PublicBotStatShape[] {
-  const betsByBot: Record<string, LiveBet[]> = {};
-  for (const bet of bets) {
-    if (!betsByBot[bet.bot]) betsByBot[bet.bot] = [];
-    betsByBot[bet.bot].push(bet);
-  }
-
-  const bankrollMap = new Map<string, number>();
-  for (const b of botsDB) bankrollMap.set(b.name, b.currentBankroll);
-
-  // BOTS-RETIRE-1X2 (2026-05-17): public leaderboard must not surface retired bots.
-  // Cache path already filters via dashboard_cache.bot_breakdown (settlement.py
-  // joins `WHERE is_active AND retired_at IS NULL`), but the client-side
-  // aggregateBets toggle would otherwise resurrect them from raw bets data.
-  // PERF-PUBLIC-IS-CALIBRATED-OR-BETA: and the shadow fleet never appears here
-  // at all — see PUBLIC_MATURITY_LABELS above for why.
-  // VIP-PERFORMANCE-SETTLED-ONLY (#148): plus the VIP bot, whose bets arrive
-  // here already stripped of unsettled rows (dropVipUnsettled in page.tsx).
-  const activeBots = botsDB.filter((b) =>
-    !b.retiredAt && (isPublicBot(b.maturityLabel) || isVipBot(b) || b.showOnPerformance === true)
-    && !LEDGER_BACKED_BOTS.has(b.name));
-  const rows: PublicBotStatShape[] = activeBots.map((dbBot): PublicBotStatShape => {
-    const botBets = betsByBot[dbBot.name] || [];
-    const settled = botBets.filter((b) => b.result !== "pending" && b.result !== "void");
-    const won = settled.filter((b) => b.result === "won").length;
-    const lost = settled.length - won;
-    const totalPnl = settled.reduce((s, b) => s + b.pnl, 0);
-    const totalStaked = settled.reduce((s, b) => s + b.stake, 0);
-    const clvValues = settled
-      .map((b) => b.clv)
-      .filter((c): c is number => c !== null && Number.isFinite(c));
-    const avgClv = clvValues.length > 0
-      ? clvValues.reduce((s, c) => s + c, 0) / clvValues.length
-      : null;
-    const clvDirection: PublicBotStatShape["clvDirection"] = avgClv == null
-      ? "neutral"
-      : avgClv > 0 ? "positive" : "negative";
-    return {
-      name: dbBot.name,
-      displayName: dbBot.displayName ?? null,
-      settled: settled.length,
-      won: opts.isPro ? won : 0,
-      lost: opts.isPro ? lost : 0,
-      pnl: opts.isPro ? totalPnl : null,
-      roi: totalStaked > 0 ? (totalPnl / totalStaked) * 100 : null,
-      clvDirection,
-      avgClv: opts.isElite ? avgClv : null,
-      currentBankroll: opts.isElite ? (bankrollMap.get(dbBot.name) ?? null) : null,
-      startingBankroll: dbBot.startingBankroll,
-      hasEnoughData: settled.length >= 5,
-      maturityLabel: dbBot.maturityLabel ?? 'active',
-      isVip: isVipBot(dbBot),
-    };
-  });
-
-  return rows.sort((a, b) => {
-    if (a.hasEnoughData !== b.hasEnoughData) return a.hasEnoughData ? -1 : 1;
-    if (a.hasEnoughData) return (b.roi ?? -999) - (a.roi ?? -999);
-    if (a.settled !== b.settled) return b.settled - a.settled;
-    return a.name.localeCompare(b.name);
-  });
 }

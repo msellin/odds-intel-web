@@ -120,7 +120,7 @@ export function OverviewCharts({ d }: { d: OverviewData }) {
             fmt={pct}
             zeroLine
             height={260}
-            footer="Margin-corrected CLV, weighted by picks within a family (high-volume bots weigh more). Model · simulated bots are judged on Pinnacle's price instead and in-play bots have no closing price, so neither is drawn. This week is still running."
+            footer="Sharp CLV — our price at our books against the fresh de-vigged Pinnacle close (else a 5+-book consensus), the one CLV every bot is judged on (#159). Weighted by picks within a family (high-volume bots weigh more). In-play bots have no closing price, so they are not drawn. This week is still running."
           />
         </div>
         <DonutCard title="Feeds right now" description="Every odds collector and data feed, checked every 5 minutes." slices={feedSlices} center={d.feedsStale ? "?" : `${feedCount("ok")}/${d.feeds.rows.length}`} centerLabel={d.feedsStale ? "status check stale" : "fresh"} />

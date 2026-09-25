@@ -37,7 +37,7 @@ export function ControlStrip({ v, ctx }: { v: BotView; ctx: RowCtx }) {
         ))}
         <RulePill v={v} />
         <span className="basis-full text-xs text-muted-foreground">
-          A deliberately junk-anchored arm. Each mc-CLV bar draws it as a dashed line on that bot&apos;s own market mix — a bot that cannot be told apart from it is not showing skill.
+          A deliberately junk-anchored arm. Each sharp-CLV bar draws it as a dashed line on that bot&apos;s own market mix — a bot that cannot be told apart from it is not showing skill.
         </span>
       </div>
     </div>

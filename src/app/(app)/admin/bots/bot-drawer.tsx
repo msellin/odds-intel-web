@@ -272,9 +272,16 @@ export function Evidence({ v, now, withOther = true }: { v: BotView; now: number
             <span className="text-sm font-normal text-muted-foreground">{ciHalf(m.se)}</span>
           </MiniTile>
         )}
-        <MiniTile label="ROI · flat" sub={`${count(settled)} settled${settled < ROI_COLOUR_MIN ? ` · uncoloured below ${ROI_COLOUR_MIN}` : ""}`}>
+        <MiniTile label="ROI · flat · at our books" sub={`${count(settled)} settled${settled < ROI_COLOUR_MIN ? ` · uncoloured below ${ROI_COLOUR_MIN}` : ""}`}>
           <span className={roiTone(settled, sb?.roi_unit)}>
             {settled > 0 ? pct(sb?.roi_unit) : "—"}
+          </span>
+        </MiniTile>
+        {/* [[#159]] the PUBLIC basis beside it — the exact figure /performance shows for this bot
+            (both from the view bot_performance). */}
+        <MiniTile label="ROI · flat · all books" sub="best price available at pick time — as /performance">
+          <span className={roiTone(settled, sb?.roi_public)}>
+            {settled > 0 && sb?.roi_public != null ? pct(sb.roi_public) : "—"}
           </span>
         </MiniTile>
       </div>

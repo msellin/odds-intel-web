@@ -1,7 +1,7 @@
 "use client";
 
 import { CALIBRATED_SINCE } from "@/lib/engine-data";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { TrendingUp, TrendingDown, Minus, ChevronRight } from "lucide-react";
 import { isLiveBot, vipEvLabel, VIP_LIVE_SINCE } from "@/lib/bot-aggregates";
 import {
@@ -72,6 +72,23 @@ export interface PublicBotStat {
   /** [[#156]] Forward-test (picks_forward_test) bots only: the row is scored on its
    *  CURRENT rule version, and its CLV is the SHARP-ANCHOR close, not the book's own. */
   forwardTest?: ForwardTestRecord;
+  /** [[#159]] Every row: the figures behind it, from the engine view bot_performance. */
+  record?: BotRecordDetail;
+}
+
+/** [[#159]] What the detail view states about a row's numbers — the same for every bot.
+ *  CLV = the pick's price against the sharp-anchor close (fresh de-vigged Pinnacle, else a 5+
+ *  bookmaker consensus); a raw fraction. roiStaked = the bot's own stakes (percent), the
+ *  labelled secondary to the flat ROI. */
+export interface BotRecordDetail {
+  clv: number | null;
+  clvN: number;
+  clvNPinnacle: number;
+  clvNConsensus: number;
+  roiStaked: number | null;
+  /** Settled picks priced at the recorded odds — no quote at pick time. */
+  nRecordedPrice: number;
+  pending: number;
 }
 
 /** [[#156]] (2026-09-25). A forward-test bot's CLV, shown to every reader.
@@ -145,31 +162,31 @@ function ForwardTestClvLine({ ft }: { ft: ForwardTestRecord }) {
   );
 }
 
-export interface SanitizedBotBet {
+/** One pick in the detail view — `BotLeg` from lib/bot-performance (via /api/performance/bot-legs).
+ *  odds = the best price available at pick time (all books); pnl = EUR at the flat stake;
+ *  clv = sharp-anchor CLV of this pick (fraction). stake / edge are Elite-only (null otherwise). */
+export interface BotLegView {
   id: string;
+  bot: string;
   match: string;
   league: string;
   placedAt: string;
   market: string;
   selection: string;
   odds: number;
-  stake: number | null;
   result: string;
   pnl: number;
-  bankrollAfter: number | null;
-  modelProb: number;
   clv: number | null;
-  closingOdds: number | null;
-  edge: number | null;  // model edge % at pick time (Elite-only)
-  bot: string;
+  clvSource: "pinnacle" | "consensus" | null;
+  modelProb: number | null;
+  stake: number | null;
+  edge: number | null;
   strategyProfile: string | null;
 }
 
 interface Props {
   bots: PublicBotStat[];
-  isPro: boolean;
   isElite: boolean;
-  allBets: SanitizedBotBet[] | null;
   retiredBotCount?: number;
 }
 
@@ -294,7 +311,7 @@ function resultBadge(r: string) {
 
 // ── Bankroll chart ────────────────────────────────────────────────────────────
 
-function buildChartData(bets: SanitizedBotBet[], startingBankroll: number | null) {
+function buildChartData(bets: BotLegView[], startingBankroll: number | null) {
   const settled = [...bets]
     .filter((b) => b.result === "won" || b.result === "lost")
     .sort((a, b) => new Date(a.placedAt).getTime() - new Date(b.placedAt).getTime());
@@ -334,27 +351,55 @@ function buildChartData(bets: SanitizedBotBet[], startingBankroll: number | null
   ];
 }
 
-// ── Bot detail modal (Pro+) ───────────────────────────────────────────────────
+// ── Bot detail view — open to EVERY reader ([[#159]]) ──────────────────────────
+//
+// Until 2026-09-25 this opened for Pro only (`clickable = isPro && !!allBets`), and the ledger
+// it drew came from a client-side bet array the page shipped to Pro browsers. Owner: the
+// detail view opens for everyone, the same view. It now fetches its own legs from
+// /api/performance/bot-legs — the SAME record legs (bot_ledger_display, in_record) the row is
+// computed from, so the list a reader counts reconciles with the row. VIP / hide_pending bots:
+// the route returns settled legs only (their pending picks are the paid product).
+
+function ClvLine({ bot }: { bot: PublicBotStat }) {
+  if (bot.forwardTest) return <ForwardTestClvLine ft={bot.forwardTest} />;
+  const r = bot.record;
+  if (!r) return null;
+  const tone = r.clv == null ? "" : r.clv > 0 ? "text-emerald-400" : "text-red-400";
+  return (
+    <p className="text-[10px] tabular-nums text-muted-foreground">
+      <span className={tone}>vs sharp close {clvPct(r.clv)}</span>
+      {r.clvN > 0
+        ? ` · ${r.clvN} picks · ${r.clvNPinnacle} Pinnacle / ${r.clvNConsensus} consensus`
+        : " · no settled pick with a fresh closing line yet"}
+    </p>
+  );
+}
 
 function BotModal({
   bot,
-  bets,
   isElite,
   onClose,
 }: {
   bot: PublicBotStat;
-  bets: SanitizedBotBet[];
   isElite: boolean;
   onClose: () => void;
 }) {
-  // MATCH-DUPES-CLEANUP: hide voided bets from the per-bot history. They fire when the
-  // OU/odds-quality cleanup (or future audits) retroactively invalidates a settled bet —
-  // pnl=0 by definition, but the row at original odds_at_pick was misleading users into
-  // thinking the bot had taken e.g. Over 1.5 at 3.42 (it did, but the price was garbage).
-  // VIP-PERFORMANCE-SETTLED-ONLY (#148): a VIP bot's modal lists settled picks
-  // only. The server already drops its unsettled rows; this is the last guard.
-  const botBets = bets
-    .filter((b) => b.bot === bot.name && b.result !== "void")
+  const [legs, setLegs] = useState<BotLegView[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    fetch(`/api/performance/bot-legs?bot=${encodeURIComponent(bot.name)}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((j: { legs: BotLegView[] }) => { if (alive) setLegs(j.legs ?? []); })
+      .catch(() => { if (alive) setFailed(true); });
+    return () => { alive = false; };
+  }, [bot.name]);
+
+  // MATCH-DUPES-CLEANUP: voided picks are not history (pnl 0 by definition, price often garbage).
+  // VIP-PERFORMANCE-SETTLED-ONLY (#148): the route already drops a VIP bot's unsettled rows;
+  // this is the last guard.
+  const botBets = (legs ?? [])
+    .filter((b) => b.bot === bot.name && b.result !== "void" && b.result !== "push")
     .filter((b) => !bot.isVip || b.result === "won" || b.result === "lost")
     .sort((a, b) => new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime());
 
@@ -363,8 +408,6 @@ function BotModal({
   const bankrollValues = chartData.map((d) => d.bankroll);
   const minB = Math.min(...bankrollValues, origin);
   const maxB = Math.max(...bankrollValues, origin);
-  // Bucket size scales with origin — €50 buckets feel right at €1000 starts
-  // but tiny at €10k. Use 5% of origin, min 50.
   const bucket = Math.max(50, Math.round((origin * 0.05) / 50) * 50);
   const yDomain = [Math.floor((minB - bucket * 0.6) / bucket) * bucket, Math.ceil((maxB + bucket * 0.6) / bucket) * bucket];
 
@@ -384,7 +427,7 @@ function BotModal({
             )}
             <span className="text-sm text-muted-foreground font-normal">
               {bot.settled > 0
-                ? `${bot.settled} settled · ROI ${fmtPct(bot.roi)}`
+                ? `${bot.settled} settled · ${bot.won} W / ${bot.lost} L · ROI ${fmtPct(bot.roi)}`
                 : "Accumulating data…"}
             </span>
             {bot.isVip && (
@@ -394,17 +437,30 @@ function BotModal({
             )}
           </DialogTitle>
         </DialogHeader>
-        {bot.forwardTest && (
-          <div className="rounded-lg border border-border/40 px-4 py-3 text-xs">
-            <ForwardTestClvLine ft={bot.forwardTest} />
-          </div>
-        )}
+        <div className="rounded-lg border border-border/40 px-4 py-3 text-xs space-y-0.5">
+          <p className="text-[10px] text-muted-foreground">
+            ROI at the best price available when each pick was made (all books) · flat €10 per pick
+            {bot.record?.roiStaked != null && bot.settled > 0 && (
+              <span className="text-muted-foreground/60"> · at the bot&apos;s own stakes {fmtPct(bot.record.roiStaked)}</span>
+            )}
+            {(bot.record?.nRecordedPrice ?? 0) > 0 && (
+              <span className="text-muted-foreground/60">
+                {" "}· {bot.record?.nRecordedPrice} pick{bot.record?.nRecordedPrice === 1 ? "" : "s"} priced at the recorded odds (no quote stored at pick time)
+              </span>
+            )}
+          </p>
+          <ClvLine bot={bot} />
+        </div>
 
         {/* Chart */}
-        {chartData.length > 1 ? (
+        {legs == null && !failed ? (
+          <div className="mt-4 px-4 py-6 text-center text-sm text-muted-foreground">Loading picks…</div>
+        ) : failed ? (
+          <div className="mt-4 px-4 py-6 text-center text-sm text-muted-foreground">Could not load this bot&apos;s picks — try again.</div>
+        ) : chartData.length > 1 ? (
           <div className="mt-2">
             <p className="text-xs text-muted-foreground mb-2">
-              Bankroll progression · {chartData.length} settled bets
+              Bankroll progression · flat €10 · {chartData.length - 1} settled bets
             </p>
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
@@ -428,7 +484,7 @@ function BotModal({
                     return `Bet #${idx} · ${d.date}`;
                   }}
                 />
-                <ReferenceLine y={1000} stroke="#555" strokeDasharray="4 4" />
+                <ReferenceLine y={origin} stroke="#555" strokeDasharray="4 4" />
                 <Line
                   type="monotone"
                   dataKey="bankroll"
@@ -476,12 +532,12 @@ function BotModal({
                     <th className="py-2 pl-3 pr-2">Date</th>
                     <th className="py-2 px-2">Match</th>
                     <th className="py-2 px-2">Market</th>
-                    <th className="py-2 px-2 text-right">Odds</th>
+                    <th className="py-2 px-2 text-right" title="Best price available when the pick was made (all books)">Odds</th>
                     {isElite && <th className="py-2 px-2 text-right">Stake</th>}
                     <th className="py-2 px-2 text-center">Result</th>
-                    <th className="py-2 px-2 text-right">P&L</th>
+                    <th className="py-2 px-2 text-right" title="Flat €10 per pick">P&L</th>
                     {isElite && <th className="py-2 px-2 text-right">Edge</th>}
-                    <th className="py-2 pr-3 text-right">CLV</th>
+                    <th className="py-2 pr-3 text-right" title="Against the sharp closing line">CLV</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/[0.04]">
@@ -521,13 +577,15 @@ function BotModal({
                           )}
                         </td>
                       )}
-                      <td className="py-2 pr-3 text-right tabular-nums">
+                      <td className="py-2 pr-3 text-right tabular-nums" title={b.clvSource ? `vs ${b.clvSource} close` : undefined}>
+                        {/* Per-pick CLV NUMBER stays Elite-only (CLV-PUBLIC-WITHDRAWN); everyone sees its
+                            direction. The row's aggregate sharp CLV above is public (#156 / #159). */}
                         {isElite && b.clv != null ? (
                           <span className={b.clv > 0 ? "text-emerald-400" : b.clv < 0 ? "text-red-400" : "text-muted-foreground"}>
                             {b.clv >= 0 ? "+" : ""}{(b.clv * 100).toFixed(1)}%
                           </span>
                         ) : b.clv != null ? (
-                          <ClvIcon dir={b.clv > 0 ? "positive" : b.clv < 0 ? "negative" : "neutral"} />
+                          <span className="inline-flex justify-end"><ClvIcon dir={b.clv > 0 ? "positive" : b.clv < 0 ? "negative" : "neutral"} /></span>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
@@ -546,55 +604,45 @@ function BotModal({
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredBotCount = 0 }: Props) {
-  const [selected, setSelected] = useState<PublicBotStat | null>(null);
-  // SHOW-THE-LOSERS-BY-DEFAULT (2026-09-22, owner: "add the fix not to hide
-  // negative ones, be default show all").
-  //
-  // This defaulted to FALSE, so a reader's first view of /performance was the
-  // WINNERS ONLY and they had to click "N underperforming (negative ROI)" to see
-  // the rest. The count was honest and the collapse was one click — but the
-  // default is what most readers ever see, and a track record whose default view
-  // excludes the losing strategies is not a track record.
-  //
-  // It also cut directly against the point of V10-SPLIT-BY-MARKET ([[#040]]) two
-  // hours earlier: the whole reason for splitting `bot_v10_all` was to stop one
-  // market's +12.8% hiding another's -0.5%, and this toggle then hid the -0.5%
-  // half behind a chevron anyway.
-  //
-  // 👥 PICKS judges work on "whether the number survives scrutiny". A default
-  // that hides the unflattering rows fails that on its own terms.
-  //
-  // The toggle is KEPT (now a collapse, not a reveal) because the grouping is
-  // still useful — losers sort below winners and a reader can fold them away.
-  const [showUnderperforming, setShowUnderperforming] = useState(true);
-  // Same reasoning as above — "show all" includes the ones still accumulating.
-  const [showDeveloping, setShowDeveloping] = useState(true);
+/** [[#159]] (f) rows are grouped by STATUS — how much evidence backs them — never by ROI. */
+type GroupKey = "live" | "testing" | "vip" | "developing";
+const GROUP_TITLE: Record<GroupKey, string> = {
+  live: "Calibrated & beta — live results",
+  testing: "Testing — still collecting",
+  vip: "VIP — paid tier, shown once settled",
+  developing: "In development — fewer than 5 settled",
+};
+const GROUP_ORDER: GroupKey[] = ["live", "testing", "vip", "developing"];
 
-  // PERFORMANCE-PUBLIC-PREMATCH-ONLY (2026-06-24): the public leaderboard
-  // hides in-play bots entirely — they have higher variance + the InplayBot
-  // UUID-bug history, and the public "production strategies" cohort the
-  // landing claims is pre-match only. In-play data stays in /admin where
-  // the operator can audit it.
-  //
-  // PERF-BOT-COUNT-RECONCILE-ADMIN (closed 2026-09-06): the "Tested to date:
-  // N strategies" counts below are therefore INTENTIONALLY LOWER than
-  // /admin/bots, which shows every bot including in-play ones. That is not a
-  // bug and should not be "fixed" to match — the public cohort is pre-match
-  // only by design, because that is what the landing page claims. Any future
-  // audit comparing the two numbers should expect the delta to equal the
-  // in-play bot count exactly.
+function groupOf(b: PublicBotStat): GroupKey {
+  // (e) ONE row rule: < 5 settled is "in development" whatever the bot — forward-test rows included.
+  if (!b.hasEnoughData) return "developing";
+  if (b.isVip) return "vip";
+  if (b.maturityLabel === "calibrated" || b.maturityLabel === "beta") return "live";
+  return "testing";
+}
+
+export function PerformanceLeaderboard({ bots, isElite, retiredBotCount = 0 }: Props) {
+  const [selected, setSelected] = useState<PublicBotStat | null>(null);
+
+  // PERFORMANCE-PUBLIC-PREMATCH-ONLY (2026-06-24): the public leaderboard hides in-play bots
+  // entirely; their audit data lives in /admin. So the "strategies tested" count below is
+  // INTENTIONALLY lower than /admin/bots by exactly the in-play bot count
+  // (PERF-BOT-COUNT-RECONCILE-ADMIN, closed 2026-09-06).
   const tabFilteredBots = bots.filter((b) => !isLiveBot(b.name));
 
-  const activeBots = tabFilteredBots.filter((b) => b.hasEnoughData && (b.roi == null || b.roi >= 0));
-  const underperformingBots = tabFilteredBots.filter((b) => b.hasEnoughData && b.roi != null && b.roi < 0);
-  const developingBots = tabFilteredBots.filter((b) => !b.hasEnoughData);
-
-  const visibleBots = [
-    ...activeBots,
-    ...(showUnderperforming ? underperformingBots : []),
-    ...(showDeveloping ? developingBots : []),
-  ];
+  // [[#159]] (f) The ROI-based "N underperforming" group/toggle is GONE (owner, 2026-09-25) —
+  // the same second, ROI-based judgement the header counts were removed for. Every row is
+  // shown (SHOW-THE-LOSERS-BY-DEFAULT, 2026-09-22), grouped by status, and within a group the
+  // most-evidenced first (settled desc) — not the luckiest.
+  const groups = GROUP_ORDER.map((key) => ({
+    key,
+    title: GROUP_TITLE[key],
+    bots: tabFilteredBots
+      .filter((b) => groupOf(b) === key)
+      .sort((a, b) => b.settled - a.settled || a.name.localeCompare(b.name)),
+  })).filter((g) => g.bots.length > 0);
+  const visibleBots = groups.flatMap((g) => g.bots);
 
   return (
     <div className="rounded-xl border border-border/50 bg-card/60 overflow-hidden">
@@ -604,9 +652,9 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
             <h2 className="text-sm font-semibold">Bot Leaderboard</h2>
             <p className="text-[11px] text-muted-foreground mt-0.5">
               {/* 2026-09-25 (owner): no separate "N proven" count — the status labels and their legend
-                  below say how much evidence each bot has; a second, ROI-based judgement contradicted them
-                  (4 picks at +29% read as "proven"). */}
-              {isPro ? "Click any row for its bankroll chart" : "Pro unlocks W/L, P&L, charts"}
+                  below say how much evidence each bot has. [[#159]]: the detail view opens for every
+                  reader (the "Pro unlocks W/L, P&L, charts" split ended). */}
+              Click any row for its chart and every pick
             </p>
             {/* PERF-STATE-THE-PERIOD (2026-09-17). Every ROI on this table is
                 cumulative since CALIBRATED_SINCE, and until now the page never
@@ -629,10 +677,12 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
                   day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
                 })}
               </span>{" "}
-              · flat stakes · logged before kickoff
+              {/* [[#159]] now TRUE: every figure is flat €10 at the best price available when the
+                  pick was made (all books) — one definition, engine view bot_performance. */}
+              · flat €10 stakes · ROI at the best price available when each pick was made (all books) · logged before kickoff
               {retiredBotCount > 0 && (
                 <>
-                  {" "}· <span className="text-foreground">{activeBots.length + underperformingBots.length + developingBots.length + retiredBotCount}</span>{" "}
+                  {" "}· <span className="text-foreground">{tabFilteredBots.length + retiredBotCount}</span>{" "}
                   strategies tested, {retiredBotCount} retired
                 </>
               )}
@@ -702,10 +752,14 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
               see 2 columns. Cards let each strategy stand on its own
               at 375px without cropping. */}
           <ul className="divide-y divide-border/10 sm:hidden">
-            {visibleBots.map((bot) => {
+            {groups.map((g) => [
+              <li key={`g-${g.key}`} className="bg-muted/20 px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                {g.title}
+              </li>,
+              ...g.bots.map((bot) => {
               const isMaturing = !bot.hasEnoughData;
               const isLive = isLiveBot(bot.name);
-              const clickable = isPro && !!allBets;
+              const clickable = true;
               return (
                 <li
                   key={bot.name}
@@ -759,7 +813,7 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
                         </span>
                         {!isMaturing && <ClvIcon dir={bot.clvDirection} />}
                       </div>
-                      {isPro && bot.pnl != null && !isMaturing && (
+                      {bot.pnl != null && !isMaturing && (
                         <p className={`mt-0.5 font-mono text-[11px] tabular-nums ${pnlColor(bot.pnl)}`}>
                           {bot.pnl >= 0 ? "+" : ""}€{bot.pnl.toFixed(0)}
                         </p>
@@ -768,7 +822,7 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
                   </div>
                 </li>
               );
-            })}
+            })])}
           </ul>
 
           {/* Desktop table — hidden on mobile since the sm:hidden card
@@ -780,9 +834,9 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
               <tr className="border-b border-border/20 text-left text-[10px] uppercase tracking-wider text-muted-foreground">
                 <th scope="col" className="sticky left-0 z-10 bg-background py-2.5 pl-5 pr-2">Bot</th>
                 <th scope="col" className="py-2.5 px-2 text-right">Settled</th>
-                {isPro && <th scope="col" className="py-2.5 px-2 text-right">W / L</th>}
+                <th scope="col" className="py-2.5 px-2 text-right">W / L</th>
                 <th scope="col" className="py-2.5 px-2 text-right">ROI</th>
-                {isPro && <th scope="col" className="py-2.5 px-2 text-right">P&L (€)</th>}
+                <th scope="col" className="py-2.5 px-2 text-right" title="Flat €10 per pick">P&L (€)</th>
                 {isElite && <th scope="col" className="py-2.5 px-2 text-right">Avg CLV</th>}
                 {/* [[#074]] 2026-09-23: no Bankroll column. bots.current_bankroll is on the
                     stored-pnl (high-water odds) basis while P&L / ROI beside it are on the
@@ -790,19 +844,25 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
                     +€206). It is a live staking input, so its basis is not changed here —
                     the operator sees it on /admin/bots; readers get the honest columns. */}
                 <th scope="col" className="py-2.5 px-2 text-center">CLV</th>
-                {isPro && <th scope="col" className="py-2.5 pr-4 w-6" />}
+                <th scope="col" className="py-2.5 pr-4 w-6" />
               </tr>
             </thead>
             <tbody className="divide-y divide-border/10">
-              {visibleBots.map((bot) => {
+              {groups.map((g) => [
+                <tr key={`g-${g.key}`} className="bg-muted/20">
+                  <td colSpan={isElite ? 8 : 7} className="sticky left-0 py-1.5 pl-5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    {g.title}
+                  </td>
+                </tr>,
+                ...g.bots.map((bot) => {
                 const isMaturing = !bot.hasEnoughData;
                 const isLive = isLiveBot(bot.name);
 
                 return (
                   <tr
                     key={bot.name}
-                    className={`group transition-colors ${isPro ? "cursor-pointer hover:bg-muted/40" : ""} ${isMaturing ? "opacity-50" : ""}`}
-                    onClick={() => isPro && allBets && setSelected(bot)}
+                    className={`group cursor-pointer transition-colors hover:bg-muted/40 ${isMaturing ? "opacity-50" : ""}`}
+                    onClick={() => setSelected(bot)}
                   >
                     <td className="sticky left-0 z-10 bg-background py-3 pl-5 pr-2">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -823,7 +883,6 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
                         ? <span className={isMaturing ? "text-muted-foreground text-xs" : ""}>{bot.settled}</span>
                         : <span className="text-muted-foreground text-xs">—</span>}
                     </td>
-                    {isPro && (
                       <td className="py-3 px-2 text-right text-sm whitespace-nowrap">
                         {isMaturing ? (
                           <span className="text-muted-foreground text-xs">—</span>
@@ -835,7 +894,6 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
                           </>
                         )}
                       </td>
-                    )}
                     <td className={`py-3 px-2 text-right text-sm tabular-nums font-medium ${
                       isMaturing ? "text-muted-foreground" :
                       bot.roi == null ? "text-muted-foreground" :
@@ -843,13 +901,11 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
                     }`}>
                       {isMaturing ? "—" : fmtPct(bot.roi)}
                     </td>
-                    {isPro && (
                       <td className={`py-3 px-2 text-right text-sm tabular-nums ${
                         isMaturing || bot.pnl == null ? "text-muted-foreground" : pnlColor(bot.pnl)
                       }`}>
                         {isMaturing || bot.pnl == null ? "—" : fmt(bot.pnl)}
                       </td>
-                    )}
                     {isElite && (
                       <td className={`py-3 px-2 text-right text-sm tabular-nums ${
                         isMaturing || bot.avgClv == null ? "text-muted-foreground" :
@@ -867,55 +923,24 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
                         )}
                       </div>
                     </td>
-                    {isPro && (
                       <td className="py-3 pr-4">
                         <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors" />
                       </td>
-                    )}
                   </tr>
                 );
-              })}
+              })])}
             </tbody>
           </table>
           </div>
         </>
       )}
 
-      {/* Underperforming + developing collapse toggles */}
-      {(underperformingBots.length > 0 || developingBots.length > 0) && (
-        <div className="border-t border-border/20 px-5 py-2.5 flex flex-wrap gap-x-5 gap-y-1.5">
-          {underperformingBots.length > 0 && (
-            <button
-              onClick={() => setShowUnderperforming((v) => !v)}
-              className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <ChevronRight className={`h-3 w-3 transition-transform ${showUnderperforming ? "rotate-90" : ""}`} />
-              {showUnderperforming
-                ? `Hide ${underperformingBots.length} underperforming`
-                : `${underperformingBots.length} underperforming (negative ROI)`}
-            </button>
-          )}
-          {developingBots.length > 0 && (
-            <button
-              onClick={() => setShowDeveloping((v) => !v)}
-              className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <ChevronRight className={`h-3 w-3 transition-transform ${showDeveloping ? "rotate-90" : ""}`} />
-              {showDeveloping
-                ? `Hide ${developingBots.length} in development`
-                : `${developingBots.length} in development (< 5 bets)`}
-            </button>
-          )}
-        </div>
-      )}
-
       {/* #055 follow-up (2026-09-24): the Pro/Elite upsells were removed — there is no paid
           tier to buy (no checkout), and both links pointed back at /performance itself. */}
 
-      {selected && allBets && (
+      {selected && (
         <BotModal
           bot={selected}
-          bets={allBets}
           isElite={isElite}
           onClose={() => setSelected(null)}
         />

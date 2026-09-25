@@ -1,45 +1,35 @@
 "use client";
 
 /**
- * UI-METRIC-SOT — /performance client wrapper. Renders hero from cache (the
- * single source of truth for headline metrics) and the per-bot leaderboard
- * from a client-side recompute over raw bets so retirements and new picks
- * appear immediately without waiting on the 30-minute dashboard_cache refresh.
+ * /performance client wrapper — the hero and the per-bot leaderboard.
+ *
+ * [[#159]] (2026-09-25): both render SERVER-computed figures only. The leaderboard rows come
+ * from the engine view `bot_performance` (see /performance/page.tsx and lib/bot-performance.ts);
+ * the hero from getCalibratedHeadlineStats, which sums the same per-leg public figure. The
+ * client-side recompute from raw bets that used to run here for Pro readers
+ * (buildPublicBotStats — stake-weighted, our-books price, the legacy `clv` column) is GONE:
+ * it was a second definition of ROI and CLV, and the reason the same bot read differently to a
+ * Pro and a Free reader. Freshness no longer needs it — the view is read live (2-min cache).
  */
 
-import { useMemo } from "react";
 import { PerformanceHero } from "./performance-hero";
 import { PerformanceLeaderboard } from "./performance-leaderboard";
-import type { PublicBotStat, SanitizedBotBet } from "./performance-leaderboard";
-import type { TrackRecordStats, DashboardCache, LiveBet, ModelV2Stats, CalibratedHeadlineStats } from "@/lib/engine-data";
-import {
-  filterExperimental,
-  buildPublicBotStats,
-  isLiveBot,
-  isPublicBot,
-} from "@/lib/bot-aggregates";
+import type { PublicBotStat } from "./performance-leaderboard";
+import type { TrackRecordStats, DashboardCache, ModelV2Stats, CalibratedHeadlineStats } from "@/lib/engine-data";
+import { isLiveBot, isPublicBot } from "@/lib/bot-aggregates";
 
 interface BotDbRow {
   name: string;
-  strategy?: string | null;
-  currentBankroll: number;
-  startingBankroll: number;
   retiredAt?: string | null;
   maturityLabel?: string;
-  isVip?: boolean;
 }
 
 interface Props {
   trackStats: TrackRecordStats;
   cache: DashboardCache | null;
-  cachedBots: PublicBotStat[];
+  bots: PublicBotStat[];
   isPro: boolean;
   isElite: boolean;
-  // For Pro+ users we ship raw bets so the toggle can recompute everything.
-  // `allBets` is sanitized for display (used by the modal); `aggregateBets`
-  // is the unsanitized superset used for math.
-  allBets: SanitizedBotBet[] | null;
-  aggregateBets: LiveBet[] | null;
   botsDB: BotDbRow[] | null;
   modelV2Stats: ModelV2Stats | null;
   calibrated: CalibratedHeadlineStats | null;
@@ -48,73 +38,18 @@ interface Props {
 export function PerformanceClient({
   trackStats,
   cache,
-  cachedBots,
-  isPro,
+  bots,
   isElite,
-  allBets,
-  aggregateBets,
   botsDB,
   modelV2Stats,
   calibrated,
 }: Props) {
-  // UI-METRIC-SOT (2026-06-06): dashboard_cache is the single source of truth
-  // for hero metrics. Settlement.py writes active_avg_clv / active_roi_pct /
-  // active_settled_bets over the SAME cohort the client used to recompute
-  // (active + non-experimental + non-retired, settled = won/lost), so the
-  // previous client-side overrides were identity ops on a good day and a
-  // flicker on a stale-cache day. They are gone.
-  //
-  // The leaderboard is still recomputed from raw bets for Pro+ so retirements
-  // / new bot rows reflect immediately rather than waiting up to 30min for
-  // the next dashboard_cache rebuild.
-  const nonExperimentalBets = useMemo(() => {
-    if (!aggregateBets) return null;
-    return filterExperimental(aggregateBets);
-  }, [aggregateBets]);
+  // VIP-PERFORMANCE-SETTLED-ONLY (#148): the VIP bot is listed in the table but never counted
+  // in the hero numbers.
+  const botsTracked = bots.filter((b) => b.hasEnoughData && !b.isVip).length || null;
 
-  const computedBots = useMemo<PublicBotStat[] | null>(() => {
-    if (!nonExperimentalBets || !botsDB) return null;
-    return buildPublicBotStats(nonExperimentalBets, botsDB, { isPro, isElite });
-  }, [nonExperimentalBets, botsDB, isPro, isElite]);
-
-  // Leaderboard rows: computed for Pro+ when toggle data is available, else cache.
-  //
-  // LEADERBOARD-ROW-FLASH-2026-09-14: this used to be a bare
-  // `computedBots ?? cachedBots`, which made bot_sharp_forward_test_v1 appear on
-  // load and then vanish. The Suspense FALLBACK renders `cachedBots` (where the
-  // published-picks row is injected server-side), then the resolved section
-  // swaps in `computedBots` — rebuilt from `aggregateBets`, i.e. from
-  // simulated_bets, a table that bot deliberately does not write to. So the
-  // recompute silently dropped it, and the row flickered out.
-  //
-  // Merge instead of replace: keep every computed row (that is the point of the
-  // live recompute — fresh retirements and new bots without waiting for the
-  // 30-min cache rebuild), and carry over any cache-only row it has no opinion
-  // about. Written generally rather than name-matching the one bot, because any
-  // future read-through strategy hits exactly this.
-  const leaderboardBots: PublicBotStat[] = useMemo(() => {
-    if (!computedBots) return cachedBots;
-    const seen = new Set(computedBots.map((b) => b.name));
-    return [...computedBots, ...cachedBots.filter((b) => !seen.has(b.name))];
-  }, [computedBots, cachedBots]);
-
-  // Count non-experimental active bots with enough data for the scale row
-  // VIP-PERFORMANCE-SETTLED-ONLY (#148): the VIP bot is listed in the table but
-  // never counted in the hero numbers (neither here nor in activeBotCount, which
-  // gates on isPublicBot alone).
-  const botsTracked = leaderboardBots.filter(b => b.hasEnoughData && !b.isVip).length || null;
-
-  // PERF-COHORT-RECONCILE (2026-08-21): "strategies live" in the hero must
-  // match the leaderboard funnel line ("Tested to date: N · X proven · ...").
-  // The leaderboard funnel counts non-in-play, non-experimental, non-retired
-  // strategies (5 proven + 5 underperforming + 15 maturing = 25 typical);
-  // the previous `!retiredAt` count was 43 because it also included in-play
-  // + experimental bots, which produced a confusing 43 vs 25 mismatch on the
-  // same page.
-  // PERF-PUBLIC-IS-CALIBRATED-OR-BETA (2026-09-16): the count must match the
-  // table, and the table now lists only bots with live results behind them. The
-  // invariant is the point — a hero reading "15 strategies live" above a table
-  // of 2 rows is the mismatch this comment has been rewritten twice to prevent.
+  // PERF-COHORT-RECONCILE (2026-08-21) / PERF-PUBLIC-IS-CALIBRATED-OR-BETA (2026-09-16): the
+  // "strategies live" count must match the table's public cohort.
   const activeBotCount = botsDB
     ? botsDB.filter(
         (b) => !b.retiredAt && !isLiveBot(b.name) && isPublicBot(b.maturityLabel),
@@ -134,12 +69,9 @@ export function PerformanceClient({
         calibrated={calibrated}
       />
 
-
       <PerformanceLeaderboard
-        bots={leaderboardBots}
-        isPro={isPro}
+        bots={bots}
         isElite={isElite}
-        allBets={allBets}
         retiredBotCount={retiredBotCount ?? 0}
       />
     </div>
