@@ -98,19 +98,20 @@ function MethodBadge({ p }: { p: { edge_kind: "sharp" | "model"; arm: string | n
 }
 
 /** [[#095]] — the consensus grade, shown ON the pick. Each grade is its own
- *  tracked bot on /performance: B is `beta` (not yet proven), C is `testing`
- *  (weaker picks, published and scored in the open so they can be retired on
- *  their own record). Same words as the Telegram post. */
-function GradeBadge({ grade }: { grade: "B" | "C" | "D" | null }) {
+ *  tracked bot on /performance, scored in the open so it can be retired on its
+ *  own record. #162 W5.6: the status word ("testing", "beta") is the bot's
+ *  CURRENT status (bot_status, read from bots), not typed here — same words as
+ *  the Telegram post, which reads the same field. */
+function GradeBadge({ grade, status }: { grade: "B" | "C" | "D" | null; status?: string | null }) {
   // Re-tiered 2026-09-23 ([[#098]]): B strongest, C standard, D weak (no longer
   // published — only shown for picks sent before the change). Grade A is kept
   // for model picks.
   if (!grade) return null;
   const spec = {
     B: { label: "Grade B · strongest", style: "border-emerald-500/25 bg-emerald-500/10 text-emerald-300",
-         title: "Grade B — our strongest consensus picks: every check passes and the odds are 1.20–1.60. Tracked as its own bot (beta): not yet proven live." },
+         title: `Grade B — our strongest consensus picks: every check passes and the odds are 1.20–1.60. Tracked as its own bot${status ? ` (${status})` : ""}: not yet proven live.` },
     C: { label: "Grade C · standard", style: "border-sky-500/25 bg-sky-500/10 text-sky-300",
-         title: "Grade C — standard consensus pick: every check passes, other odds. Tracked as its own bot (testing): not yet proven." },
+         title: `Grade C — standard consensus pick: every check passes, other odds. Tracked as its own bot${status ? ` (${status})` : ""}: not yet proven.` },
     D: { label: "weak · no longer published", style: "border-neutral-500/25 bg-neutral-500/10 text-neutral-400",
          title: "A weak pick type (lower-profile league, a second sharp book disagrees, or an edge that looks too big to be real). We stopped publishing these on 23 Sep; earlier ones stay visible with their results." },
   }[grade];
@@ -280,7 +281,7 @@ function PickRow({ p }: { p: PublicPick }) {
           <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-emerald-300">
             <span>Pick: {formatMarket(p.market, p.selection)}</span>
             <MethodBadge p={p} />
-            <GradeBadge grade={p.grade} />
+            <GradeBadge grade={p.grade} status={p.bot_status} />
             <OutcomeBadge outcome={p.outcome} kickoff={p.kickoff_utc} />
             {p.clv != null && (
               <span

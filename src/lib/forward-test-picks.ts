@@ -44,6 +44,7 @@
  * ledger to be the same set. There is therefore nothing to gate server-side.
  */
 import { createSupabasePublic } from "./supabase-public";
+import { botStatus, type BotStatus } from "./bot-status";
 
 export interface ForwardTestPick {
   id: string;
@@ -209,6 +210,8 @@ export interface PublicPick {
    * before the re-tier. Grade A is reserved for model picks. NULL elsewhere.
    */
   grade: "B" | "C" | "D" | null;
+  /** #162 W5.6: the bot's current status (bots.maturity_label via lib/bot-status), null = unread. */
+  bot_status?: BotStatus | null;
   match_id: string;
   market: string;
   selection: string;
@@ -272,7 +275,17 @@ export async function fetchPublicPicks(
     .limit(200);
 
   if (error) throw new Error(`public picks: ${error.message}`);
-  return (data ?? []) as unknown as PublicPick[];
+  const picks = (data ?? []) as unknown as PublicPick[];
+  // #162 W5.6: the status word a pick shows (e.g. the consensus grade's "testing") is READ from the
+  // bot's one status field (#155), never typed into the page — it was hard-coded "B = beta" and went
+  // false when bot_consensus_b_v1 moved to TESTING. Unreadable = no word, never a guessed one.
+  const names = [...new Set(picks.map((p) => p.bot).filter((n): n is string => !!n))];
+  if (names.length) {
+    const { data: bots } = await sb.from("bots").select("name, maturity_label, retired_at").in("name", names);
+    const byName = new Map((bots ?? []).map((r) => [r.name as string, botStatus({ maturityLabel: r.maturity_label, retiredAt: r.retired_at })]));
+    for (const p of picks) p.bot_status = (p.bot && byName.get(p.bot)) || null;
+  }
+  return picks;
 }
 
 export interface BoardLeg {
