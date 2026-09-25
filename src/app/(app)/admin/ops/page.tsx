@@ -278,7 +278,7 @@ export default async function OpsDashboardPage() {
                   <span className="text-warning">Can&apos;t tell whether bets on them were voided (bets unreadable)</span>
                 ) : postponedN ? (
                   <span className="text-warning">
-                    {postponedN} paper pick{postponedN === 1 ? "" : "s"} on postponed matches never closed — settlement doesn&apos;t void these yet
+                    {postponedN} paper pick{postponedN === 1 ? "" : "s"} on postponed matches never closed — settlement should void these every 15 min
                   </span>
                 ) : (
                   "None left open"

@@ -217,9 +217,9 @@ function jobItems(i: AttentionInputs): AttentionItem[] {
   }
   if (i.postponedError) out.push(unreadable("postponed-unreadable", "jobs", "Postponed-match check", i.postponedError, "/admin/ops#settlement"));
   else if (i.postponedOpen) {
-    // honest wording (review 2026-09-25): settlement voids postponed REAL bets and forward-test picks, but
-    // not paper/shadow picks — so these stay open until the engine fix (#162), not "normally by itself"
-    out.push({ id: "postponed-open", severity: "warn", area: "jobs", title: `${i.postponedOpen} pick${i.postponedOpen === 1 ? "" : "s"} on postponed matches never closed`, detail: "Paper picks — no money. Settlement doesn't void these yet (engine fix queued)", href: "/admin/ops#settlement" });
+    // since engine #165 (2026-09-25) settlement voids postponed picks in EVERY bet table every 15 min
+    // (settlement.void_bets_on_dead_matches), so anything counted here means that sweep stopped running
+    out.push({ id: "postponed-open", severity: "warn", area: "jobs", title: `${i.postponedOpen} pick${i.postponedOpen === 1 ? "" : "s"} on postponed matches never closed`, detail: "Settlement should void these every 15 min — check the settle-ready job", href: "/admin/ops#settlement" });
   }
   if (i.staleError) out.push(unreadable("stale-unreadable", "jobs", "Pending-bet check", i.staleError, "/admin/ops"));
   else if (i.stalePending > 0) {

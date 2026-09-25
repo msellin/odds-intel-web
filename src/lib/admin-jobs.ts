@@ -42,9 +42,9 @@ export interface StaleBet {
 }
 
 /**
- * Pending picks on a postponed or cancelled match. Settlement voids postponed REAL bets and forward-test
- * picks, but NOT paper/shadow picks (found 2026-09-25: 219 shadow picks pending since 23 Aug → #162),
- * so any still pending did not get voided.
+ * Pending picks on a postponed or cancelled match. Since engine #165 (2026-09-25) settlement voids these in
+ * every bet table every 15 min (settlement.void_bets_on_dead_matches; 219 shadow picks pending since 23 Aug
+ * were voided that day), so any still pending past the grace means the sweep did not run.
  */
 export function postponedNeedingVoid(pending: Pick<StaleBet, "match_status">[]): number {
   return pending.filter((b) => b.match_status === "postponed" || b.match_status === "cancelled").length;
