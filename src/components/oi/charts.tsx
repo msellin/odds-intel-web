@@ -153,6 +153,26 @@ function useHidden(initial: string[] = []) {
   return { hidden, toggle };
 }
 
+/**
+ * Round axis ticks that always include 0 (UX re-test 2026-09-25: the CLV axis read +4.7%, +2.7%,
+ * −0.3%, −3.3% with no 0). Picks a step from 1/2/2.5/5 × 10^k so there are ~4–6 ticks.
+ */
+export function niceTicks(values: (number | null | undefined)[]): number[] | undefined {
+  const v = values.filter((x): x is number => typeof x === "number" && Number.isFinite(x));
+  if (v.length === 0) return undefined;
+  const lo = Math.min(0, ...v);
+  const hi = Math.max(0, ...v);
+  const span = hi - lo || Math.abs(hi) || 1;
+  const raw = span / 5;
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw) ?? 10 * mag;
+  const out: number[] = [];
+  for (let t = Math.floor(lo / step) * step; t <= Math.ceil(hi / step) * step + step / 1e6; t += step) {
+    out.push(Math.round(t / step) * step);
+  }
+  return out;
+}
+
 export interface RangeOption {
   value: string;
   label: string;
@@ -179,6 +199,7 @@ export function ChartCard({
   yFmt,
   zeroLine = false,
   yDomain,
+  yTicks,
   defaultHidden,
   empty,
   footer,
@@ -200,6 +221,8 @@ export function ChartCard({
   zeroLine?: boolean;
   /** Passed to the Y axis, e.g. [(m) => Math.min(0, m), (M) => Math.max(0, M)] to keep 0 in view. */
   yDomain?: [number | string | ((v: number) => number), number | string | ((v: number) => number)];
+  /** Explicit round ticks (see niceTicks); the axis domain follows them. */
+  yTicks?: number[];
   /** Series keys hidden until the viewer turns them on in the legend (opt-in series). */
   defaultHidden?: string[];
   empty?: ReactNode;
@@ -219,7 +242,7 @@ export function ChartCard({
     <>
       <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 3" />
       <XAxis dataKey={xKey} {...AXIS} tickFormatter={xFmt} minTickGap={12} />
-      <YAxis {...AXIS} width={48} tickFormatter={yFmt} domain={yDomain} allowDecimals />
+      <YAxis {...AXIS} width={48} tickFormatter={yFmt} ticks={yTicks} domain={yTicks ? [yTicks[0], yTicks[yTicks.length - 1]] : yDomain} allowDecimals interval={0} />
       {zeroLine && <ReferenceLine y={0} stroke="var(--muted-foreground)" strokeOpacity={0.4} />}
       <Tooltip
         cursor={kind === "bar" ? { fill: "var(--accent)", opacity: 0.4 } : { stroke: "var(--border)" }}

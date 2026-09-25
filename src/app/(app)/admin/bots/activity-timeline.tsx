@@ -13,9 +13,14 @@ import { timeAgo, utcStamp } from "./bot-board-format";
 import { useControls } from "./controls-context";
 
 /** Who made a change, in words (the raw actor stays in the title). */
+/** A change written by a migration is the change log's starting state, not a person's action. */
+export function isSetupActor(actor: string): boolean {
+  return /^migration:\d+$/.test(actor);
+}
+
 export function actorWord(actor: string): string {
-  const m = /^migration:(\d+)$/.exec(actor);
-  if (m) return `database change ${m[1]}`;
+  // "database change 413" meant nothing to the owner (UX re-test 2026-09-25)
+  if (isSetupActor(actor)) return "the initial setup when the change log started";
   if (actor.startsWith("telegram:")) return "Telegram";
   if (actor.startsWith("engine:")) return `the engine (${actor.slice(7).split(".").pop()})`;
   return actor;

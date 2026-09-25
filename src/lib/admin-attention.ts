@@ -20,7 +20,7 @@
  */
 import type { ControlState } from "./bot-controls/types";
 import { HEARTBEAT_STALE_MIN } from "./bot-controls/types";
-import { dqGroupLabel } from "./admin-feeds-model";
+import { dqGroupLabel, feedHealth } from "./admin-feeds-model";
 
 export type Severity = "danger" | "warn" | "info";
 
@@ -48,6 +48,7 @@ export interface AttentionInputs {
     status_reason: string | null;
     last_data_at: string | null;
     paused?: boolean;
+    paused_by?: string | null;
     paused_at?: string | null;
     updated_at?: string | null;
   }[];
@@ -143,14 +144,16 @@ function feedItems(i: AttentionInputs): AttentionItem[] {
     out.push({ id: "feed-status-stale", severity: "danger", area: "feeds", title: "The feed status check itself has stopped — feed colours are out of date", since: updated, href: "/admin/feeds" });
   }
   for (const fd of i.feeds) {
-    if (fd.status !== "fail" && fd.status !== "warn") continue;
+    const h = feedHealth(fd);
+    if (h !== "fail" && h !== "warn") continue;
+    const auto = fd.status === "paused" && fd.paused_by === "auto";
     out.push({
       id: `feed-${fd.feed_id}`,
-      severity: fd.status === "fail" ? "danger" : "warn",
+      severity: h === "fail" ? "danger" : "warn",
       area: "feeds",
-      title: `${fd.label}: ${fd.status === "fail" ? "stopped" : "needs a look"}`,
+      title: `${fd.label}: ${auto ? "stopped — the engine paused it after repeated failures" : h === "fail" ? "stopped" : "needs a look"}`,
       detail: fd.status_reason ?? undefined,
-      since: fd.status === "fail" ? fd.last_data_at : undefined,
+      since: h === "fail" ? fd.last_data_at : undefined,
       href: feedAnchor(fd.feed_id),
     });
   }
@@ -158,7 +161,7 @@ function feedItems(i: AttentionInputs): AttentionItem[] {
     out.push({ id: "footprint-long", severity: "warn", area: "feeds", title: "Coolbet sweeping paused for over a day", detail: f.daemons_paused_reason ?? "no reason given", since: f.daemons_paused_at, href: "/admin/feeds#coolbet-footprint" });
   }
   for (const fd of i.feeds) {
-    if (fd.paused && fd.paused_at && i.now - new Date(fd.paused_at).getTime() > H24) {
+    if (fd.paused && fd.paused_by !== "auto" && fd.paused_at && i.now - new Date(fd.paused_at).getTime() > H24) {
       out.push({ id: `feed-paused-${fd.feed_id}`, severity: "warn", area: "feeds", title: `${fd.label} paused for over a day`, since: fd.paused_at, href: feedAnchor(fd.feed_id) });
     }
   }

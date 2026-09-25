@@ -19,7 +19,7 @@ import { ControlsProvider, useControls } from "../bots/controls-context";
 import { ControlSwitch } from "../bots/control-switch";
 import { ToastProvider } from "../bots/toast";
 import { relTime } from "../bots/bot-board-format";
-import { actorWord } from "../bots/activity-timeline";
+import { actorWord, isSetupActor } from "../bots/activity-timeline";
 
 export function FootprintControl({ state, now, children }: { state: ControlState; now: number; children?: ReactNode }) {
   return (
@@ -58,7 +58,9 @@ function FootprintRow({ children }: { children?: ReactNode }) {
             {state.fleet.error && <span className="text-warning">State unreadable ({state.fleet.error}) · </span>}
             {f?.daemons_paused && <span className="text-info">Paused{f.daemons_paused_reason ? `: “${f.daemons_paused_reason}”` : ""} · </span>}
             {TAKES_EFFECT.daemons_paused}
-            {last && <> · last change {relTime(last.created_at, now)} ago by {actorWord(last.actor)}</>}
+            {last && (isSetupActor(last.actor)
+              ? <> · no one has changed it since the change log started</>
+              : <> · last change {relTime(last.created_at, now)} ago by {actorWord(last.actor)}</>)}
           </p>
         </div>
         <div className="shrink-0">

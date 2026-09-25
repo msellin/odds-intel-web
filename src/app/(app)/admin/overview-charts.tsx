@@ -3,10 +3,11 @@
 // The Overview's interactive charts (#139, owner 2026-09-24: "graphs, bars, columns"). Client-side
 // because recharts and the formatters (functions) cannot cross the server/client boundary.
 
-import { ChartCard, DonutCard, type Series, type Slice } from "@/components/oi/charts";
+import { ChartCard, DonutCard, niceTicks, type Series, type Slice } from "@/components/oi/charts";
 import { FAMILY_INFO, type Verdict } from "./bots/bot-board-model";
 import type { OverviewData } from "@/lib/admin-overview";
 import { RETIRED_SERIES } from "@/lib/admin-overview-shared";
+import { feedHealth } from "@/lib/admin-feeds-model";
 import { fmtEur, fmtInt, fmtPct } from "@/components/oi/format";
 
 // Family colours: the /picks method hue per method (sharp = violet, consensus = teal, model = sky);
@@ -57,7 +58,8 @@ const VERDICT_SLICES: { key: Verdict; label: string; color: string }[] = [
 export function OverviewCharts({ d }: { d: OverviewData }) {
   const famSeries: Series[] = d.families.map((f) => ({ key: f, label: familyLabel(f), color: FAMILY_COLOR[f] ?? "var(--chart-5)" }));
   const clvSeries: Series[] = d.clvFamilies.map((f) => ({ key: f, label: familyLabel(f), color: FAMILY_COLOR[f] ?? "var(--chart-5)" }));
-  const feedCount = (s: string) => d.feeds.rows.filter((f) => f.status === s).length;
+  // an engine auto-pause counts as Stopped, not Paused (feedHealth)
+  const feedCount = (s: string) => d.feeds.rows.filter((f) => feedHealth(f) === s).length;
   // stale status check: show every feed as Unknown, never a green "fresh" (same rule as /admin/feeds)
   const feedCountRaw = feedCount;
   const staleCount = (s: string) => (s === "unknown" ? d.feeds.rows.length : 0);
@@ -113,8 +115,8 @@ export function OverviewCharts({ d }: { d: OverviewData }) {
             ranges={RANGES}
             defaultRange={fitRange(d.clvByFamily, d.clvFamilies)}
             xFmt={wk}
-            yFmt={(v) => fmtPct(v, 1)}
-            yDomain={ZERO_IN_VIEW}
+            yFmt={(v) => fmtPct(v, 1).replace(/\.0%$/, "%")}
+            yTicks={niceTicks(d.clvByFamily.flatMap((r) => d.clvFamilies.map((f) => r[f] as number | null)))}
             fmt={pct}
             zeroLine
             height={260}

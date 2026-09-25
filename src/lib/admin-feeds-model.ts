@@ -10,6 +10,17 @@
  */
 export const STATUS_STALE_MIN = 15;
 
+/**
+ * A feed's health as the operator should read it. A feed PAUSED BY THE ENGINE (paused_by = 'auto',
+ * the circuit breaker after repeated failures) is an outage, not a pause: it reads "fail" on every
+ * surface. 2026-09-25: Unibet-Site was dark 8 h and the Overview showed a calm blue "Paused 1"
+ * beside "22/23 fresh". Only an operator's deliberate pause reads "paused".
+ */
+export function feedHealth(f: { status: string; paused_by?: string | null }): "ok" | "warn" | "fail" | "paused" | "unknown" {
+  if (f.status === "paused" && f.paused_by === "auto") return "fail";
+  return (["ok", "warn", "fail", "paused", "unknown"].includes(f.status) ? f.status : "unknown") as "ok" | "warn" | "fail" | "paused" | "unknown";
+}
+
 /** One row of book_footprint: requests we sent one book in one clock hour, and how many we refused. */
 export interface FootprintHour {
   book: string;

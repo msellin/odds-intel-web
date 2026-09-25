@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 
+import { feedHealth } from "@/lib/admin-feeds-model";
 import type { Metadata } from "next";
 import { AlertTriangle, CheckCircle2, CirclePause, CircleStop, Gauge, Server } from "lucide-react";
 import { AutoRefreshBadge } from "../ops/auto-refresh";
@@ -50,7 +51,8 @@ export default async function FeedsPage() {
   const feeds = d.feeds.v;
   const updated = feeds.reduce<string | null>((a, f) => (!a || f.updated_at > a ? f.updated_at : a), null);
   const statusAgeMin = updated ? Math.round((now - new Date(updated).getTime()) / 60000) : null;
-  const count = (s: string) => feeds.filter((f) => f.status === s).length;
+  // an engine auto-pause (repeated failures) counts as Stopped, not Paused
+  const count = (s: string) => feeds.filter((f) => feedHealth(f) === s).length;
   const fresh = count("ok");
   const warn = count("warn");
   const fail = count("fail");

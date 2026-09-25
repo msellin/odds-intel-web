@@ -30,7 +30,7 @@ import { StatusBadge, TONE_DOT, TONE_TEXT } from "@/components/oi/status-badge";
 import { FeedControls } from "./feed-controls";
 import { ToastProvider } from "../bots/toast";
 import { relSpan, timeAgo } from "@/lib/rel-time";
-import { BUDGET_REASON_RE, budgetSentence, budgetView, STATUS_STALE_MIN, type BudgetView, type FootprintHour } from "@/lib/admin-feeds-model";
+import { feedHealth, BUDGET_REASON_RE, budgetSentence, budgetView, STATUS_STALE_MIN, type BudgetView, type FootprintHour } from "@/lib/admin-feeds-model";
 
 // #139 admin redesign (2026-09-24): colours are the admin status tokens (success / warning /
 // danger / info / neutral) instead of hard-coded emerald / amber / red / sky; logic unchanged.
@@ -102,7 +102,7 @@ export function okWord(f: FeedStatus, now: number): string {
 
 function statusTone(f: FeedStatus | undefined, stale = false): Tone {
   if (!f || stale) return "neutral";
-  return ({ ok: "success", warn: "warning", fail: "danger", paused: "info", unknown: "neutral" } as const)[f.status];
+  return ({ ok: "success", warn: "warning", fail: "danger", paused: "info", unknown: "neutral" } as const)[feedHealth(f)];
 }
 
 /** The headline colour: age of the last data row against this feed's own schedule. */
@@ -200,7 +200,7 @@ export function FeedsBoard({
   const card = (b: BlockDef, big: boolean) => {
     const { main, extras, headTone, tone, st, budget } = view(b);
     const isSel = selected === b.key;
-    const raw = main && main.status !== "ok" && main.status !== "paused"
+    const raw = main && feedHealth(main) !== "ok" && feedHealth(main) !== "paused"
       ? main.status_reason
       : extras.find((e) => e.status === "fail" || e.status === "warn")?.status_reason;
     // The engine's "request budget spent — N refused this hour" is replaced by which hour actually ran out.
@@ -217,7 +217,7 @@ export function FeedsBoard({
         </div>
         {b.main ? (
           <div className={`mt-1 ${big ? "text-2xl" : "text-lg"} font-semibold tabular-nums ${TONE_TEXT[headTone]}`}>
-            {main?.paused ? "paused" : ago(main?.last_data_at ?? null, now)}
+            {main?.paused ? (main.paused_by === "auto" ? "stopped" : "paused") : ago(main?.last_data_at ?? null, now)}
           </div>
         ) : (
           <div className={`mt-1 text-lg font-semibold ${TONE_TEXT[headTone]}`}>

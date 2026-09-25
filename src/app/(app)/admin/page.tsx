@@ -13,6 +13,7 @@ import { StatusBadge, TrendPill, type Tone } from "@/components/oi/status-badge"
 import { OverviewCharts } from "./overview-charts";
 import { fmtEur, fmtInt } from "@/components/oi/format";
 import { RETIRED_SERIES } from "@/lib/admin-overview-shared";
+import { feedHealth } from "@/lib/admin-feeds-model";
 import { AutoRefresh } from "./ops/auto-refresh";
 
 // /admin Overview (#139, 2026-09-24). Was a link index with one feed widget (ADMIN-REDO #107).
@@ -64,8 +65,8 @@ export default async function AdminIndexPage() {
   // a pace from the first hours of a week is noise — no trend until a day of it has passed
   const paceChange = lastWeek > 0 && weekShare >= 1 / 7 ? Math.round(((pace - lastWeek) / lastWeek) * 100) : null;
   const feedsStale = d.feedsStale; // same rule as /admin/feeds (status check > 15 min old)
-  const feedsOk = d.feeds.rows.filter((x) => x.status === "ok").length;
-  const feedsBad = d.feeds.rows.filter((x) => x.status === "fail" || x.status === "warn").length;
+  const feedsOk = d.feeds.rows.filter((x) => feedHealth(x) === "ok").length;
+  const feedsBad = d.feeds.rows.filter((x) => feedHealth(x) === "fail" || feedHealth(x) === "warn").length;
   // same window + rules as the Real bets page ("last 30 days"), so both pages show one number
   const rb = d.realBets.last30;
   const rbPnl = rb?.pnl ?? 0;

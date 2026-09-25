@@ -12,7 +12,7 @@ import { TAKES_EFFECT } from "@/lib/bot-controls/types";
 import { ControlSwitch } from "./control-switch";
 import { useControls } from "./controls-context";
 import { timeAgo } from "./bot-board-format";
-import { actorWord } from "./activity-timeline";
+import { actorWord, isSetupActor } from "./activity-timeline";
 
 function Row({ title, desc, meta, control }: { title: string; desc: string; meta: React.ReactNode; control: React.ReactNode }) {
   return (
@@ -46,7 +46,9 @@ export function FleetControlsCard() {
               <>
                 {f?.publishing_paused && <>Paused{f.publishing_paused_reason ? `: “${f.publishing_paused_reason}”` : ""} · </>}
                 {TAKES_EFFECT.publishing_paused}
-                {lastPub && <> · last change {timeAgo(lastPub.created_at, now)} by {actorWord(lastPub.actor)}</>}
+                {lastPub && (isSetupActor(lastPub.actor)
+                  ? <> · no one has changed it since the change log started ({new Date(lastPub.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })})</>
+                  : <> · last change {timeAgo(lastPub.created_at, now)} by {actorWord(lastPub.actor)}</>)}
               </>
             }
             control={<ControlSwitch control="publishing_paused" invert label="Picks channel" onWord="Sending" offWord="Paused" />}
