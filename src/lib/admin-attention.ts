@@ -176,11 +176,17 @@ function jobItems(i: AttentionInputs): AttentionItem[] {
       // the raw error usually repeats the job name ("line_velocity failed: exit 1") — keep the useful tail
       const err = j.error_message?.replace(new RegExp(`^${j.job_name}\\s*failed:?\\s*`, "i"), "").slice(0, 160);
       const streak = j.fail_streak ?? 1;
+      // A failure whose LAST run is over a week old belongs to a job that runs rarely (weekly /
+      // monthly) or was fixed since without a rerun — "To check", not "Urgent" (2026-09-25:
+      // aln_auto_tune read urgent for 24 days after its fix, until its monthly run).
+      const old = i.now - new Date(j.started_at).getTime() > 7 * H24;
       out.push({
         id: `job-${j.job_name}`,
-        severity: "danger",
+        severity: old ? "warn" : "danger",
         area: "jobs",
-        title: streak > 1 ? `${humanJob(j.job_name)} job has failed ${streak} runs in a row` : `${humanJob(j.job_name)} job failed on its last run`,
+        title: old
+          ? `${humanJob(j.job_name)} job failed on its last run, ${Math.round((i.now - new Date(j.started_at).getTime()) / H24)} days ago — it runs rarely; the next run shows whether it is fixed`
+          : streak > 1 ? `${humanJob(j.job_name)} job has failed ${streak} runs in a row` : `${humanJob(j.job_name)} job failed on its last run`,
         detail: `${err ? `Error: ${err} · ` : ""}${j.job_name}`,
         since: j.failing_since ?? j.started_at,
         sinceFloor: j.last_ok_at == null,
