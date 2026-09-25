@@ -74,7 +74,8 @@ export default async function PickQueuePage() {
   const c = queueCounts(rows);
   const t = data.todayRealBets;
   const placedToday = t.confirmedCount + t.unconfirmedCount;
-  const overCap = t.confirmedCount >= DAILY_MAX_BETS || t.confirmedStake >= DAILY_MAX_STAKE_EUR;
+  // #162 W4.2: the engine's daily cap counts confirmed AND unconfirmed (hand-logged) bets at every book
+  const overCap = placedToday >= DAILY_MAX_BETS || t.confirmedStake + t.unconfirmedStake >= DAILY_MAX_STAKE_EUR;
   const loaded = new Date(data.loadedAt).toISOString().slice(11, 16);
   // The fleet's automatic-placing state, stated ONCE here (UX fix round, 2026-09-24) — it used to
   // be an "auto off" chip on every row. Off is neutral, not red and not green: money being off is

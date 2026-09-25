@@ -215,7 +215,9 @@ export default async function RealBetsPage() {
   const todayHand = todayBets.filter((b) => b.placedReal == null);
   const autoStake = todayAuto.reduce((a, b) => a + b.stake, 0);
   const handStake = todayHand.reduce((a, b) => a + b.stake, 0);
-  const overCap = todayAuto.length >= DAILY_MAX_BETS || autoStake >= DAILY_MAX_STAKE_EUR;
+  // #162 W4.2 (engine spent_today, 2026-09-25): the daily limit counts EVERY real or unverified bet at
+  // every book — hand-logged ones included — so this reads the same as the engine that refuses.
+  const overCap = todayAuto.length + todayHand.length >= DAILY_MAX_BETS || autoStake + handStake >= DAILY_MAX_STAKE_EUR;
 
   const overall = aggregate(bets);
   // The SAME window definition as the Overview's real-money card (realMoneyWindow in admin-money.ts):
@@ -257,7 +259,8 @@ export default async function RealBetsPage() {
   const todoBooks = [...new Set(todo.map((b) => b.bookmaker))];
   const todoAccount = todoBooks.length === 1 ? `your ${todoBooks[0]} account` : "your bookmaker accounts";
   const todoText = `${todo.length} hand-placed ${todo.length === 1 ? "bet" : "bets"} not matched to ${todoAccount}`;
-  const autoUsed = todayAuto.length > 0 ? `${todayAuto.length} bets / ${fmtEur(autoStake)} used today` : "none used today";
+  const usedN = todayAuto.length + todayHand.length;
+  const autoUsed = usedN > 0 ? `${usedN} bets / ${fmtEur(autoStake + handStake)} used today` : "none used today";
 
   const answers: Answer[] = unreadable
     ? [{ label: "Real bets", text: "Can't tell — the real-bet ledger could not be read", tone: "warning", icon: AlertTriangle }]
@@ -338,15 +341,15 @@ export default async function RealBetsPage() {
           value={`${todayAuto.length + todayHand.length} bets`}
           foot={
             // LOGGED-PICKS-INVISIBLE (2026-09-15): a hand-logged bet is real exposure, so it is in the visible
-            // number — but kept apart from the automatic placer's caps, which only count confirmed placements.
+            // number — and since #162 W4.2 (2026-09-25) it counts against the daily caps too, as in the engine.
             <span className="inline-flex items-center gap-1">
               <span>
                 Daily limit: {DAILY_MAX_BETS} bets / {fmtEur(DAILY_MAX_STAKE_EUR)} ({autoUsed})
-                {todayHand.length > 0 ? ` · +${todayHand.length} by hand ${fmtEur(handStake)}` : ""}
+                {todayHand.length > 0 ? ` · ${todayHand.length} of them by hand` : ""}
               </span>
               <InfoTip>
                 The automatic placer&apos;s daily limits (defaults — the engine reads COOLBET_MAX_BETS_PER_DAY / COOLBET_MAX_STAKE_PER_DAY, so the live limit may differ).
-                Bets logged by hand are counted in today&apos;s total but not against these limits.
+                Every real or unverified bet today counts against these limits — at every bookmaker, bets logged by hand included.
               </InfoTip>
             </span>
           }
