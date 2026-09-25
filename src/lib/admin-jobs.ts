@@ -6,7 +6,12 @@
  *   - view pipeline_job_latest (engine migration 417) — latest run per job over 35 days with its
  *     failure streak. Replaces the old engine-data latest-status helper, which saw only the newest 300 runs (~2 h) and
  *     so never showed a nightly job failing (IA §1.6);
- *   - failed pipeline_runs of the last 14 days → the failures-per-day chart (pipeline_runs keeps ~14 d);
+ *   - failed pipeline_runs of the last 14 days → the failures-per-day chart (pipeline_runs keeps ~14 d),
+ *     each split into "fixed since" (the job succeeded later) vs "still failing" (part of the job's
+ *     current failure run, per pipeline_job_latest.failing_since) — answer-first fix round 2026-09-25:
+ *     red bars every day beside "1 job failing" read as fourteen days of outage;
+ *   - retired_jobs (migration 426) → unregistered jobs are left out of the chart too (the view
+ *     already drops them from the job list);
  *   - pending simulated_bets with their kickoff → stale pending bets (settlement stuck);
  *   - today's ops_snapshots row → settlement + enrichment coverage;
  *   - profiles.created_at → signups in 7 days (the one user number kept, IA §2.3).
@@ -31,7 +36,12 @@ export interface StaleBet {
 
 export interface FailDay {
   day: string;
+  /** all failed runs that day */
   failed: number;
+  /** of which the job succeeded on a later run */
+  fixed: number;
+  /** of which still part of the job's current failure run */
+  still: number;
   jobs: number;
 }
 
@@ -71,6 +81,7 @@ interface JobsFixture {
   snapshot?: OpsSnapshot | null;
   signups_7d?: number;
   feeds?: JobFeed[];
+  retired?: string[];
 }
 
 async function read<T>(label: string, q: () => PromiseLike<{ data: unknown; error: { message: string } | null }>, fallback: T): Promise<R<T>> {
@@ -83,15 +94,24 @@ async function read<T>(label: string, q: () => PromiseLike<{ data: unknown; erro
   }
 }
 
-function perDay(rows: { job_name: string; started_at: string }[], now: number): FailDay[] {
+function perDay(rows: { job_name: string; started_at: string }[], now: number, latest: JobLatestRow[], retired: Set<string>): FailDay[] {
   const days: FailDay[] = [];
-  for (let i = FAIL_DAYS - 1; i >= 0; i--) days.push({ day: new Date(now - i * 86_400_000).toISOString().slice(0, 10), failed: 0, jobs: 0 });
+  for (let i = FAIL_DAYS - 1; i >= 0; i--) days.push({ day: new Date(now - i * 86_400_000).toISOString().slice(0, 10), failed: 0, fixed: 0, still: 0, jobs: 0 });
   const idx = new Map(days.map((d, i) => [d.day, i]));
   const jobsPer = days.map(() => new Set<string>());
+  // A failed run is "still failing" when its job's latest run failed and it is inside that job's current
+  // failure run (at or after failing_since). Everything else was followed by a success.
+  const openSince = new Map(
+    latest.filter((j) => (j.status === "failed" || j.status === "error") && j.failing_since).map((j) => [j.job_name, j.failing_since as string]),
+  );
   for (const r of rows) {
+    if (retired.has(r.job_name)) continue;
     const i = idx.get(r.started_at.slice(0, 10));
     if (i == null) continue;
     days[i].failed += 1;
+    const since = openSince.get(r.job_name);
+    if (since && new Date(r.started_at).getTime() >= new Date(since).getTime()) days[i].still += 1;
+    else days[i].fixed += 1;
     jobsPer[i].add(/^shadow_\d{4}$/.test(r.job_name) ? "shadow" : r.job_name);
   }
   days.forEach((d, i) => (d.jobs = jobsPer[i].size));
@@ -112,7 +132,7 @@ export async function loadJobsPage(): Promise<JobsPageData> {
     return {
       now,
       jobs: fx.jobs ? { v: fx.jobs, error: null } : { v: [], error: "pipeline_job_latest: not in fixture" },
-      failDays: fx.failed_runs ? { v: perDay(failed, now), error: null } : { v: [], error: "pipeline_runs: not in fixture" },
+      failDays: fx.failed_runs ? { v: perDay(failed, now, fx.jobs ?? [], new Set(fx.retired ?? [])), error: null } : { v: [], error: "pipeline_runs: not in fixture" },
       failTruncated: failed.length >= FAILED_LIMIT,
       stale: fx.pending ? { v: staleOf(pending, now), error: null } : { v: [], error: "simulated_bets: not in fixture" },
       pendingTotal: pending.length,
@@ -126,7 +146,7 @@ export async function loadJobsPage(): Promise<JobsPageData> {
   const today = new Date(now).toISOString().slice(0, 10);
   const since14 = new Date(now - FAIL_DAYS * 86_400_000).toISOString();
   const since7 = new Date(now - 7 * 86_400_000).toISOString();
-  const [jobs, failed, pending, snap, signups, feeds] = await Promise.all([
+  const [jobs, failed, pending, snap, signups, feeds, retired] = await Promise.all([
     read<JobLatestRow[]>("pipeline_job_latest", () => db.from("pipeline_job_latest").select("*"), []),
     read<{ job_name: string; started_at: string }[]>(
       "pipeline_runs",
@@ -160,12 +180,14 @@ export async function loadJobsPage(): Promise<JobsPageData> {
       }
     })(),
     read<JobFeed[]>("feed_status", () => db.from("feed_status").select("feed_id, label, book, schedule, controls, paused, run_now_pending"), []),
+    // unreadable → treat as none retired (the job list itself already excludes them via the view)
+    read<{ job_name: string }[]>("retired_jobs", () => db.from("retired_jobs").select("job_name"), []),
   ]);
   const pend: StaleBet[] = pending.v.map((b) => ({ id: b.id, market: b.market, pick_time: b.pick_time, bot_id: b.bot_id, match_kickoff: b.match?.date ?? null }));
   return {
     now,
     jobs,
-    failDays: { v: failed.error ? [] : perDay(failed.v, now), error: failed.error },
+    failDays: { v: failed.error ? [] : perDay(failed.v, now, jobs.v, new Set(retired.v.map((r) => r.job_name))), error: failed.error },
     failTruncated: failed.v.length >= FAILED_LIMIT,
     stale: { v: staleOf(pend, now), error: pending.error },
     pendingTotal: pend.length,

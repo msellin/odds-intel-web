@@ -1,19 +1,18 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
+import { jobAnchor } from "@/lib/admin-jobs-model";
 import type { Metadata } from "next";
-import { AlertTriangle, ArrowRight, Bot, CheckCircle2, Euro, Rss, ShieldAlert, Sparkles } from "lucide-react";
+import { Euro, AlertTriangle, ArrowRight, Bot, CheckCircle2, Rss, ShieldAlert } from "lucide-react";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
 import { isBotBoardDevPreview } from "@/lib/bot-board";
 import { loadOverview } from "@/lib/admin-overview";
 import type { AttentionItem } from "@/lib/admin-attention";
 import { PageHeader, Panel, PanelHeader } from "@/components/oi/panel";
-import { Sparkline, StatCard } from "@/components/oi/stat-card";
-import { StatusBadge, TrendPill, type Tone } from "@/components/oi/status-badge";
+import { StatusBadge, type Tone } from "@/components/oi/status-badge";
 import { OverviewCharts } from "./overview-charts";
+import { AnswerStrip, type Answer } from "@/components/oi/answer-strip";
 import { fmtEur, fmtInt } from "@/components/oi/format";
-import { RETIRED_SERIES } from "@/lib/admin-overview-shared";
-import { feedHealth } from "@/lib/admin-feeds-model";
 import { AutoRefresh } from "./ops/auto-refresh";
 
 // /admin Overview (#139, 2026-09-24). Was a link index with one feed widget (ADMIN-REDO #107).
@@ -54,105 +53,66 @@ export default async function AdminIndexPage() {
   const d = await loadOverview(viewerId);
   const f = d.control.fleet.row;
   const danger = d.attention.filter((a) => a.severity === "danger").length;
-  // Active bots only: last week's total includes bots retired since, which would read as a drop.
-  const picksPerWeek = d.picksByFamily.map((r) => d.families.filter((k) => k !== RETIRED_SERIES).reduce((a, k) => a + Number(r[k] ?? 0), 0));
-  const thisWeek = picksPerWeek[picksPerWeek.length - 1] ?? 0;
-  const lastWeek = picksPerWeek[picksPerWeek.length - 2] ?? 0;
-  // The current week is still running: compare its PACE (picks so far ÷ share of the week gone)
-  // with last full week, never the raw part-week — that would read as a collapse every Monday.
-  const weekShare = Math.min(1, Math.max(1 / 168, (d.now - new Date(`${d.weeks[d.weeks.length - 1]}T00:00:00Z`).getTime()) / (7 * 86_400_000)));
-  const pace = Math.round(thisWeek / weekShare);
-  // a pace from the first hours of a week is noise — no trend until a day of it has passed
-  const paceChange = lastWeek > 0 && weekShare >= 1 / 7 ? Math.round(((pace - lastWeek) / lastWeek) * 100) : null;
-  const feedsStale = d.feedsStale; // same rule as /admin/feeds (status check > 15 min old)
-  const feedsOk = d.feeds.rows.filter((x) => feedHealth(x) === "ok").length;
-  const feedsBad = d.feeds.rows.filter((x) => feedHealth(x) === "fail" || feedHealth(x) === "warn").length;
   // same window + rules as the Real bets page ("last 30 days"), so both pages show one number
   const rb = d.realBets.last30;
   const rbPnl = rb?.pnl ?? 0;
   const rbBets = rb?.bets ?? 0;
-  const rbStaked = rb?.staked ?? 0;
   const hhmm = new Date(d.now).toISOString().slice(11, 16);
 
-  return (
-    <div className="space-y-4 lg:space-y-6">
-      <AutoRefresh intervalMs={120_000} />
-      <PageHeader eyebrow="Admin" title="Overview" meta={`Checked ${hhmm} UTC · refreshes every 2 min`} />
+  // feeds: the Feeds page's own answer (feedsAnswer over its blocks, incl. feeds gone quiet, via feedHealth)
 
-      {/* ── KPI strip ── */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-6">
-        <StatCard
-          label="Needs attention"
-          icon={danger ? AlertTriangle : CheckCircle2}
-          tone={danger ? "danger" : d.attention.length ? "warning" : "success"}
-          value={d.attention.length}
-          foot={d.attention.length === 0 ? "All clear" : `${danger} urgent · ${d.attention.length - danger} to check`}
-          href="#attention"
-          hrefLabel="See list"
-        />
-        <StatCard
-          label="Real money"
-          icon={ShieldAlert}
-          tone={f?.real_money_armed ? "danger" : "neutral"}
-          unknown={!f}
-          danger={!!f?.real_money_armed}
-          value={f?.real_money_armed ? "ARMED" : "Off"}
-          foot={
-            d.canStake === "yes"
-              ? `CAN STAKE — ${d.bots.switchedOn ?? "?"} bot${d.bots.switchedOn === 1 ? "" : "s"} switched on`
-              : d.canStake === "unknown"
-                ? "Some switches unreadable — can't tell if money can move"
-                : `Can't stake — blocked by: ${d.moneyBlockers.join(", ")}`
-          }
-          href="/admin/bots#real-money"
-        />
-        <StatCard
-          label="Active bots"
-          icon={Bot}
-          tone="info"
-          unknown={!!d.bots.error}
-          value={d.bots.active}
-          trend={<StatusBadge tone={d.bots.verdicts.beats > 0 ? "success" : "warning"} dot={false} title="Bots that get better prices than the closing price">{d.bots.verdicts.beats} beat</StatusBadge>}
-          foot={`${d.bots.published} on /picks · ${d.bots.telegram} on Telegram`}
-          href="/admin/bots"
-        />
-        <StatCard
-          label="Picks · this week"
-          icon={Sparkles}
-          tone="model"
-          value={fmtInt(thisWeek)}
-          trend={
-            paceChange != null ? (
-              <TrendPill good={null} up={paceChange === 0 ? null : paceChange > 0} value={`${paceChange > 0 ? "+" : paceChange < 0 ? "\u2212" : ""}${Math.abs(paceChange)}%`} title="This week's pace against last full week (bots active today only)" />
-            ) : undefined
-          }
-          spark={<Sparkline values={picksPerWeek} tone="model" kind="bars" />}
-          foot={`Mon–now, active bots · on pace for ${fmtInt(pace)} · last week ${fmtInt(lastWeek)}`}
-          href="/admin/bots"
-        />
-        <StatCard
-          label="Feeds fresh"
-          icon={Rss}
-          tone={feedsBad ? "warning" : "success"}
-          unknown={!!d.feeds.error || feedsStale}
-          value={`${feedsOk}/${d.feeds.rows.length}`}
-          foot={feedsStale ? "the status check itself is stale — colours can't be trusted" : feedsBad ? `${feedsBad} need a look` : "all sweeping on time"}
-          href="/admin/feeds"
-        />
-        <StatCard
-          label="Real bets · 30 days"
-          icon={Euro}
-          tone={rbPnl >= 0 ? "success" : "danger"}
-          unknown={!!d.realBets.error || !rb}
-          value={fmtEur(rbPnl, { signed: true })}
-          spark={<Sparkline values={d.realBets.rows.map((r) => r.pnl)} kind="bars" signed />}
-          foot={rb ? `${fmtInt(rbBets)} bets · ${fmtEur(rbStaked)} staked` : "couldn't load the real-bet ledger"}
-          href="/admin/real-bets"
-        />
+  const answers: Answer[] = [
+    f?.real_money_armed && d.canStake !== "no"
+      ? { label: "Real money", text: d.canStake === "yes" ? "ARMED — real bets can be placed now" : "ARMED — some switches unreadable", tone: "danger", icon: ShieldAlert, href: "/admin/bots#real-money" }
+      : !f
+        ? // review 2026-09-25: an unreadable fleet row must never read "Off" — the ladder says "no" when no bot is on
+          { label: "Real money", text: "Can't tell if real money is armed", sub: d.canStake === "no" ? "no bot can bet right now" : undefined, tone: "warning", icon: ShieldAlert, href: "/admin/bots#real-money" }
+        : d.canStake === "unknown"
+        ? { label: "Real money", text: "Can't tell — some switches unreadable", tone: "warning", icon: ShieldAlert, href: "/admin/bots#real-money" }
+        : { label: "Real money", text: f?.real_money_armed ? "Armed, but nothing can bet right now" : "Off — nothing can bet automatically", sub: d.moneyBlockers.length ? `blocked by: ${d.moneyBlockers.join(", ")}` : undefined, tone: f?.real_money_armed ? "danger" : "neutral", icon: ShieldAlert, href: "/admin/bots#real-money" },
+    // same window + rules as the Real bets page ("last 30 days")
+    rb
+      ? { label: "Real bets · 30 days", text: `${fmtEur(rbPnl, { signed: true })} on ${fmtInt(rbBets)} bets`, tone: rbPnl > 0 ? "success" : rbPnl < 0 ? "danger" : "neutral", alarm: false, icon: Euro, href: "/admin/real-bets" }
+      : { label: "Real bets · 30 days", text: "couldn't load the real-bet ledger", tone: "warning", icon: Euro, href: "/admin/real-bets" },
+    d.coolbetRisk.level === "high"
+      ? { label: "Odds feeds", text: "Coolbet block risk: high", sub: d.coolbetRisk.sub, tone: "danger", icon: Rss, href: "/admin/feeds#coolbet-footprint" }
+      : d.feedsAnswer.tone !== "success"
+        ? { label: "Odds feeds", text: d.feedsAnswer.text, sub: d.feedsAnswer.sub, tone: d.feedsAnswer.tone, icon: Rss, href: d.feedsAnswer.href }
+        : d.coolbetRisk.level !== "low"
+          ? { label: "Odds feeds", text: d.coolbetRisk.level === "unknown" ? "Coolbet block risk: can't tell" : "Coolbet block risk: medium", sub: d.coolbetRisk.sub, tone: "warning", icon: Rss, href: "/admin/feeds#coolbet-footprint" }
+          : { label: "Odds feeds", text: "All running", sub: d.feedsAnswer.sub, tone: "success", icon: Rss, href: "/admin/feeds" },
+    // the Jobs page's own answer (jobsAnswer), so "1 job failing" reads the same on both pages
+    !d.jobsAnswer
+      ? { label: "Scheduled jobs", text: "Can't tell — job history unreadable", tone: "warning", icon: AlertTriangle, href: "/admin/ops" }
+      : {
+          label: "Scheduled jobs",
+          text: d.jobsAnswer.text,
+          sub: d.jobsAnswer.sub,
+          tone: d.jobsAnswer.tone,
+          icon: d.jobsAnswer.tone === "success" ? CheckCircle2 : AlertTriangle,
+          href: d.jobsAnswer.failing[0] ? `/admin/ops#${jobAnchor(d.jobsAnswer.failing[0].job)}` : "/admin/ops",
+        },
+    d.bots.verdicts.beats > 0
+      ? { label: "Bots", text: `${d.bots.verdicts.beats} of ${d.bots.active} beat the closing price`, tone: "success", icon: Bot, href: "/admin/bots" }
+      : { label: "Bots", text: `None proven yet — 0 of ${d.bots.active} beat the closing price`, tone: "neutral", icon: Bot, href: "/admin/bots" },
+  ];
+
+  return (
+    <div className="flex flex-col gap-4 lg:gap-6">
+      <AutoRefresh intervalMs={120_000} />
+      <div className="order-first">
+      <PageHeader eyebrow="Admin" title="Overview" meta={`Checked ${hhmm} UTC · refreshes every 2 min`} />
+      </div>
+
+      {/* ── The answers first (owner, 2026-09-25: "so this is the clean and intuitive dashboard?"
+             — the six KPI cards read like a report; each question now gets one plain sentence) ── */}
+      {/* on a phone the to-do list comes first — five full-width answers pushed it off the screen */}
+      <div className="order-2 sm:order-none">
+        <AnswerStrip answers={answers} />
       </div>
 
       {/* ── Attention inbox ── */}
-      <Panel id="attention">
+      <Panel id="attention" className="order-1 sm:order-none">
         <PanelHeader
           title="Needs attention"
           description="Only things that need an action. Each one links to where it is fixed."
@@ -204,7 +164,10 @@ export default async function AdminIndexPage() {
         )}
       </Panel>
 
-      <OverviewCharts d={d} />
+      {/* charts default to order 0 and would jump above the answers on a phone */}
+      <div className="order-3 flex flex-col gap-4 sm:order-none lg:gap-6">
+        <OverviewCharts d={d} />
+      </div>
     </div>
   );
 }

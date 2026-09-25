@@ -2510,6 +2510,73 @@ export async function getPicksForwardTestSummary(
   return { current: rows[0], closed: rows.slice(1), pooled };
 }
 
+// ─── SHARP-ANCHOR CLV for the forward-test bots ([[#156]], 2026-09-25) ──────────
+// The forward-test rows used to show `clv_margin_corrected` — the pick's odds against
+// the SAME soft book's own close. These rules pick a leg BECAUSE that book misprices
+// it, and a mispriced line that is never corrected closes where it opened, so that
+// figure sits near minus the book's margin BY CONSTRUCTION: it could not tell the
+// live arm from the random junk-anchor control (−0.4pp [−1.9, +1.2]) while the
+// sharp-anchor close separated them by +4.6pp (1X2) / +3.7pp (O/U). The stopping
+// rule was amended the same day (engine: dev/active/picks-forward-test-preregistration.md).
+//
+// Sharp-anchor CLV = `clv_sharp` (fresh Shin-de-vigged Pinnacle close) where present,
+// else `clv_cons` (>=5-book consensus close); thin 3–4-book consensus is excluded.
+// `leg_clv_sharp` is PRIVATE (anon least-privilege, migration 404), so this reads the
+// aggregate view `picks_forward_test_anchor_clv` (migration 430, service_role only)
+// server-side. No anon grant exists or is needed.
+export type ForwardTestAnchorClv = {
+  ruleVersion: string;
+  settled: number;
+  nAnchor: number;
+  nPinnacle: number;
+  nConsensus: number;
+  clvAnchor: number | null;
+  nClvMc: number;
+  clvMarginCorrected: number | null;
+};
+
+/** Per rule_version, markets combined (n-weighted). Null when the view is unreachable. */
+export async function getForwardTestAnchorClv(
+  arm: string,
+  grade?: "B" | "C" | "D",
+  market?: "1x2" | "over_under_25",
+): Promise<Map<string, ForwardTestAnchorClv> | null> {
+  const db = createSupabaseAdmin();
+  const { data, error } = await db
+    .from("picks_forward_test_anchor_clv")
+    .select("*")
+    .eq("arm", arm)
+    .match({ ...(grade ? { grade } : {}), ...(market ? { market } : {}) });
+  if (error || !data) return null;
+  const out = new Map<string, ForwardTestAnchorClv>();
+  const sums = new Map<string, { a: number; mc: number }>();
+  for (const r of data as Record<string, unknown>[]) {
+    const rv = String(r.rule_version ?? "");
+    const cur = out.get(rv) ?? {
+      ruleVersion: rv, settled: 0, nAnchor: 0, nPinnacle: 0, nConsensus: 0,
+      clvAnchor: null, nClvMc: 0, clvMarginCorrected: null,
+    };
+    const s = sums.get(rv) ?? { a: 0, mc: 0 };
+    const nA = Number(r.n_anchor ?? 0);
+    const nM = Number(r.n_clv_mc ?? 0);
+    cur.settled += Number(r.settled ?? 0);
+    cur.nAnchor += nA;
+    cur.nPinnacle += Number(r.n_pinnacle ?? 0);
+    cur.nConsensus += Number(r.n_consensus ?? 0);
+    cur.nClvMc += nM;
+    if (r.clv_anchor != null) s.a += Number(r.clv_anchor) * nA;
+    if (r.clv_margin_corrected != null) s.mc += Number(r.clv_margin_corrected) * nM;
+    out.set(rv, cur);
+    sums.set(rv, s);
+  }
+  for (const [rv, c] of out) {
+    const s = sums.get(rv)!;
+    c.clvAnchor = c.nAnchor > 0 ? s.a / c.nAnchor : null;
+    c.clvMarginCorrected = c.nClvMc > 0 ? s.mc / c.nClvMc : null;
+  }
+  return out;
+}
+
 // PICKS-BOT-ACTS-LIKE-THE-OTHERS-2026-09-14. The leaderboard row for
 // bot_sharp_forward_test_v1 needs the same things every other row has: a
 // bankroll chart and an expandable bet list. Both are driven by the shared
@@ -2537,6 +2604,10 @@ export async function getPicksForwardTestBets(
   grade?: "B" | "C" | "D",
   // [[#122]] one market's picks — the sharp arm's two halves are separate bots.
   market?: "1x2" | "over_under_25",
+  // [[#156]] the row's CURRENT rule_version only, so the list and chart reconcile with
+  // the row's figures (which are scored on the current rule, as bot_scoreboard does).
+  // Omitted = every version.
+  ruleVersion?: string,
 ): Promise<Array<{
   id: string; match: string; league: string; placedAt: string; market: string;
   selection: string; odds: number; stake: number | null; result: string;
@@ -2548,7 +2619,11 @@ export async function getPicksForwardTestBets(
     .from("picks_forward_test_public")
     .select("*")
     .eq("arm", arm)
-    .match({ ...(grade ? { grade } : {}), ...(market ? { market } : {}) })
+    .match({
+      ...(grade ? { grade } : {}),
+      ...(market ? { market } : {}),
+      ...(ruleVersion ? { rule_version: ruleVersion } : {}),
+    })
     .order("published_at", { ascending: true });
   if (error || !data) return [];
 

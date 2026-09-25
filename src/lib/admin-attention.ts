@@ -18,6 +18,7 @@
  *
  * Pure and client-safe: the loader (admin-overview.ts) does the reads, this only decides.
  */
+import { humanJob, jobAnchor } from "./admin-jobs-model";
 import type { ControlState } from "./bot-controls/types";
 import { HEARTBEAT_STALE_MIN } from "./bot-controls/types";
 import { dqGroupLabel, feedHealth } from "./admin-feeds-model";
@@ -61,6 +62,8 @@ export interface AttentionInputs {
   dqError: string | null;
   /** Manual real bets with placed_real NULL, placed since MANUAL_RECONCILE_SINCE, older than 24 h. */
   unconfirmedManual: number;
+  /** placed_at of the oldest of them (ISO) — the owner needs to know WHICH bets, not "over a day". */
+  unconfirmedOldest?: string | null;
   unconfirmedError: string | null;
   bots: { bot: string; text: string; severity: "warn" | "danger" }[];
 }
@@ -74,15 +77,12 @@ const AREA_ORDER: Record<AttentionItem["area"], number> = { money: 0, picks: 1, 
 const FEED_STATUS_STALE_MIN = 15;
 /** A job still 'running' after this long has almost certainly died without recording it. */
 const JOB_STUCK_H = 3;
+/** Distinct data-quality problems in 24 h before the inbox asks for a look (they are set aside automatically). */
+const DQ_ATTENTION_MIN = 10;
 /** First day every NULL placed_real row means "unconfirmed manual", not "legacy" (see header). */
 export const MANUAL_RECONCILE_SINCE = "2026-09-10";
 
 /** "league_draw_rate" → "League draw rate". */
-function humanJob(name: string): string {
-  const s = name.replace(/^job_/, "").replace(/_/g, " ").trim();
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
 // Data-quality groups: the SAME plain labels as the /admin/feeds summary (admin-feeds-model.ts).
 function dqSummary(rows: { check_name: string; n: number }[]): string {
   const g = new Map<string, number>();
@@ -185,15 +185,16 @@ function jobItems(i: AttentionInputs): AttentionItem[] {
         severity: old ? "warn" : "danger",
         area: "jobs",
         title: old
-          ? `${humanJob(j.job_name)} job failed on its last run, ${Math.round((i.now - new Date(j.started_at).getTime()) / H24)} days ago — it runs rarely; the next run shows whether it is fixed`
-          : streak > 1 ? `${humanJob(j.job_name)} job has failed ${streak} runs in a row` : `${humanJob(j.job_name)} job failed on its last run`,
-        detail: `${err ? `Error: ${err} · ` : ""}${j.job_name}`,
+          ? `${humanJob(j.job_name)}: failed on its last run, ${Math.round((i.now - new Date(j.started_at).getTime()) / H24)} days ago — it runs rarely; the next run shows whether it is fixed`
+          : streak > 1 ? `${humanJob(j.job_name)}: failed ${streak} runs in a row` : `${humanJob(j.job_name)}: failed on its last run`,
+        // the raw error is technical — the Jobs page shows it behind "technical detail"
+        detail: err ? "See the Jobs page for the technical detail" : undefined,
         since: j.failing_since ?? j.started_at,
         sinceFloor: j.last_ok_at == null,
-        href: `/admin/ops#job-${j.job_name}`,
+        href: `/admin/ops#${jobAnchor(j.job_name)}`,
       });
     } else if (j.status === "running" && i.now - new Date(j.started_at).getTime() > JOB_STUCK_H * 60 * MIN) {
-      out.push({ id: `job-stuck-${j.job_name}`, severity: "warn", area: "jobs", title: `${humanJob(j.job_name)} job has been "running" for over ${JOB_STUCK_H} h — probably died`, detail: j.job_name, since: j.started_at, href: `/admin/ops#job-${j.job_name}` });
+      out.push({ id: `job-stuck-${j.job_name}`, severity: "warn", area: "jobs", title: `${humanJob(j.job_name)}: "running" for over ${JOB_STUCK_H}\u00a0hours — probably died`, since: j.started_at, href: `/admin/ops#${jobAnchor(j.job_name)}` });
     }
   }
   if (i.staleError) out.push(unreadable("stale-unreadable", "jobs", "Pending-bet check", i.staleError, "/admin/ops"));
@@ -211,12 +212,23 @@ export function buildAttention(i: AttentionInputs): AttentionItem[] {
   out.push(...jobItems(i));
   if (i.unconfirmedError) out.push(unreadable("manual-unreadable", "money", "Real-bet ledger", i.unconfirmedError, "/admin/real-bets"));
   else if (i.unconfirmedManual > 0) {
-    out.push({ id: "manual-unconfirmed", severity: "warn", area: "money", title: `${i.unconfirmedManual} manual real bet${i.unconfirmedManual === 1 ? "" : "s"} not confirmed against the bookmaker account for over a day`, detail: "Placed by hand from the pick queue; the account reconciler has not matched them yet", href: "/admin/real-bets" });
+    const from = i.unconfirmedOldest ? new Date(i.unconfirmedOldest).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }) : null;
+    out.push({
+      id: "manual-unconfirmed",
+      severity: "warn",
+      area: "money",
+      title: `${i.unconfirmedManual} real bet${i.unconfirmedManual === 1 ? "" : "s"} placed by hand${from ? ` (from ${from})` : ""} still not matched to your Coolbet account — check ${i.unconfirmedManual === 1 ? "it" : "them"}`,
+      detail: "Logged from the Pick queue; the bookmaker-account check has not found them yet",
+      since: i.unconfirmedOldest,
+      href: "/admin/real-bets",
+    });
   }
   if (i.dqError) out.push(unreadable("dq-unreadable", "data", "Data-quality findings", i.dqError, "/admin/feeds#dq"));
+  // Distinct problems; bad rows are already set aside automatically, so this only asks for a look when
+  // there are many (UX test 2026-09-25: "74 findings" asked nothing of the owner).
   const dq = i.dqLast24h.reduce((a, d) => a + d.n, 0);
-  if (dq > 0) {
-    out.push({ id: "dq", severity: "warn", area: "data", title: `${dq} data-quality finding${dq === 1 ? "" : "s"} in the last 24 h`, detail: dqSummary(i.dqLast24h), href: "/admin/feeds#dq" });
+  if (dq >= DQ_ATTENTION_MIN) {
+    out.push({ id: "dq", severity: "warn", area: "data", title: `${dq} odds problems in the last 24\u00a0hours — set aside automatically, worth a look`, detail: dqSummary(i.dqLast24h), href: "/admin/feeds#dq" });
   }
   return out.sort((a, b) => SEV_ORDER[a.severity] - SEV_ORDER[b.severity] || AREA_ORDER[a.area] - AREA_ORDER[b.area]);
 }

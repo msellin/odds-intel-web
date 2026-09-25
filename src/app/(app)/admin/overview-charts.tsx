@@ -128,7 +128,7 @@ export function OverviewCharts({ d }: { d: OverviewData }) {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <ChartCard
-          title="Flat-stake P/L, cumulative, by family"
+          title="Profit if every pick were 1 unit"
           description="Running total since 12 weeks ago, as if we bet 1 unit on every settled pick of today's active bots. Units, not money. “Retired bots” can be turned on in the legend."
           kind="area"
           data={d.pnlByFamily}

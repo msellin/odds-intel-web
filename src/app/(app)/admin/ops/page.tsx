@@ -9,10 +9,9 @@ import { FailuresChart } from "./jobs-charts";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
 import { isBotBoardDevPreview } from "@/lib/bot-board";
 import { loadJobsPage, STALE_AFTER_MIN } from "@/lib/admin-jobs";
-import { buildJobViews, JOB_GROUPS, longestFailing, mostRepeats, OTHER_GROUP, type JobView } from "@/lib/admin-jobs-model";
-import { dayMonth } from "../bots/bot-board-format";
+import { buildJobViews, isRecentFailure, JOB_GROUPS, jobsAnswer, OTHER_GROUP, STATE_WORDS_HELP, type JobView } from "@/lib/admin-jobs-model";
 import { PageHeader, Panel, PanelHeader } from "@/components/oi/panel";
-import { StatCard } from "@/components/oi/stat-card";
+import { AnswerStrip, type Answer } from "@/components/oi/answer-strip";
 import { StatusBadge } from "@/components/oi/status-badge";
 import { fmtInt } from "@/components/oi/format";
 
@@ -55,35 +54,20 @@ export default async function OpsDashboardPage() {
   const { now } = d;
   const views = buildJobViews(d.jobs.v, now);
   const jobsUnknown = !!d.jobs.error;
-  const failing = views.filter((v) => v.state === "failing");
-  const stuck = views.filter((v) => v.state === "stuck");
-  // #139 UX fix round: "worst" was the most repeat failures, read as "longest failing" — show both, named.
-  const longest = longestFailing(views);
-  const repeats = mostRepeats(views);
-  const sinceText = (v: JobView) =>
-    v.failingSince ? (v.sinceFloor ? `since before ${dayMonth(new Date(v.failingSince))}` : `since ${ago(v.failingSince, now)} ago`) : "";
-  const failFoot = failing.length ? (
-    <>
-      <span className="block">of {views.length} jobs</span>
-      {longest && (
-        <span className="block">
-          longest failing: {longest.label}, {sinceText(longest)}
-        </span>
-      )}
-      {repeats && (
-        <span className="block">
-          most repeat failures: {repeats.label} ({repeats.streak} in a row)
-        </span>
-      )}
-    </>
-  ) : (
-    `all ${views.length} jobs' last runs passed`
-  );
+  // Retired-looking jobs (last run fine, nothing for 8+ days) sit under a collapsed "Old jobs", not in the counts.
+  const current = views.filter((v) => v.state !== "quiet");
+  const old = views.filter((v) => v.state === "quiet");
+  const failing = current.filter((v) => v.state === "failing");
+  const stuck = current.filter((v) => v.state === "stuck");
+  // ONE rule for the headline, the group badges and the list badge (answer-first fix round 2026-09-25):
+  // any failing job makes the answer amber and names it; red when its last run was in the last 7 days.
+  const ja = jobsAnswer(current, now);
+  const failTone = (vs: JobView[]) => (vs.some((v) => isRecentFailure(v, now)) ? "danger" : "warning");
   const settlement = d.jobs.v.find((j) => j.job_name === "settlement");
-  const sweep = d.jobs.v.find((j) => j.job_name === "settle_ready");
   const settleOk = settlement?.last_ok_at ?? null;
-  const settleAgeH = settleOk ? (now - new Date(settleOk).getTime()) / 3600_000 : null;
   const staleN = d.stale.v.length;
+  // settlement runs 21:00 / 23:30 / 01:00 UTC: no success in 30 h means at least one full night missed
+  const settleLate = settleOk != null && now - new Date(settleOk).getTime() > 30 * 3_600_000;
   // Before 22:00 UTC a stale bet is expected (the 21:00 run is the catch-all); after it, it is an alarm.
   const staleAlarm = staleN > 0 && new Date(now).getUTCHours() >= 22;
   const s = d.snapshot.v;
@@ -91,11 +75,43 @@ export default async function OpsDashboardPage() {
   const snapNote = d.snapshot.error
     ? `Unreadable: ${d.snapshot.error}`
     : !s
-      ? "No ops snapshot for today yet — the engine writes one every hour."
-      : `From the ops snapshot written ${snapAge} min ago (hourly).`;
+      ? "No summary for today yet — the engine writes one every hour."
+      : `Figures from ${snapAge} min ago (updated hourly).`;
+
+  const answers: Answer[] = [
+    jobsUnknown
+      ? { label: "Jobs", text: "Can't tell — job history unreadable", tone: "warning", icon: AlertOctagon }
+      : {
+          label: "Jobs",
+          text: ja.text,
+          sub: ja.sub,
+          tone: ja.tone,
+          alarm: ja.tone === "danger",
+          icon: ja.tone === "success" ? CheckCircle2 : AlertOctagon,
+          href: "#runs",
+        },
+    jobsUnknown
+      ? { label: "Stuck", text: "Can't tell — job history unreadable", tone: "warning", icon: Hourglass }
+      : stuck.length
+      ? { label: "Stuck", text: `${stuck.length} still marked running after 3 h`, sub: stuck.map((x) => x.label).join(", "), tone: "warning", icon: Hourglass, href: "#runs" }
+      : { label: "Stuck", text: "Nothing hanging", tone: "success", icon: Hourglass },
+    {
+      label: "Settlement",
+      // review 2026-09-25: an unreadable pending-bet read left staleN at 0 and read "Up to date"; and a
+      // nightly run that stopped succeeding days ago stayed green — both must not look calm.
+      text: jobsUnknown || d.stale.error
+        ? "Can't tell — settlement data unreadable"
+        : !settleOk ? "No successful run found" : settleLate ? `Last full run ${ago(settleOk, now)} ago — overdue` : staleN ? `${staleN} bet${staleN === 1 ? "" : "s"} overdue` : "Up to date",
+      sub: settleOk ? `last full run ${ago(settleOk, now)} ago · ${fmtInt(d.pendingTotal)} bets waiting for results` : undefined,
+      tone: jobsUnknown || d.stale.error ? "warning" : !settleOk ? "warning" : settleLate ? "danger" : staleN === 0 ? "success" : staleAlarm ? "danger" : "warning",
+      icon: Scale,
+      href: "#settlement",
+    },
+    { label: "New signups", text: d.signups7d.error ? "Unknown" : `${fmtInt(d.signups7d.v)} this week`, tone: "info", icon: UserPlus },
+  ];
 
   const byGroup = new Map<string, JobView[]>();
-  for (const v of views) byGroup.set(v.group, [...(byGroup.get(v.group) ?? []), v]);
+  for (const v of current) byGroup.set(v.group, [...(byGroup.get(v.group) ?? []), v]);
   const groups = [...JOB_GROUPS, OTHER_GROUP].filter((g) => byGroup.has(g.label));
 
   return (
@@ -103,61 +119,12 @@ export default async function OpsDashboardPage() {
       <PageHeader
         eyebrow="Data & ops"
         title="Jobs"
-        meta="Are the engine's scheduled jobs, settlement and match-data loading healthy? Job history covers the last 35 days."
-        actions={<AutoRefreshBadge intervalMs={60_000} checkedAt={now} />}
+        meta="Are the engine's scheduled jobs running?"
+        actions={<AutoRefreshBadge intervalMs={60_000} checkedAt={now} dataAt={views.reduce<string | null>((a, v) => (!a || v.lastRun > a ? v.lastRun : a), null)} />}
       />
 
-      {/* ── KPI strip ── */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
-        <StatCard
-          label="Jobs failing now"
-          icon={failing.length ? AlertOctagon : CheckCircle2}
-          tone={failing.length ? "danger" : "success"}
-          unknown={jobsUnknown}
-          value={failing.length}
-          foot={failFoot}
-          href="#runs"
-          hrefLabel="See jobs"
-        />
-        <StatCard
-          label="Stuck"
-          icon={Hourglass}
-          tone={stuck.length ? "warning" : "success"}
-          unknown={jobsUnknown}
-          value={stuck.length}
-          foot={stuck.length ? `"running" for over 3 h: ${stuck.map((x) => x.label).join(", ")}` : "nothing hanging"}
-          href="#runs"
-          hrefLabel="See jobs"
-        />
-        <StatCard
-          label="Stale pending bets"
-          icon={Scale}
-          tone={staleN === 0 ? "success" : staleAlarm ? "danger" : "warning"}
-          unknown={!!d.stale.error}
-          value={staleN}
-          foot={staleN ? `unsettled ${STALE_AFTER_MIN / 60} h+ after kick-off · ${fmtInt(d.pendingTotal)} pending in all` : `${fmtInt(d.pendingTotal)} pending, none overdue`}
-          href="#settlement"
-          hrefLabel="Settlement"
-        />
-        <StatCard
-          label="Last settlement"
-          icon={CheckCircle2}
-          tone={settleAgeH == null ? "warning" : settleAgeH > 30 ? "danger" : "success"}
-          unknown={jobsUnknown || !settleOk}
-          value={`${ago(settleOk, now)} ago`}
-          foot={`main run nightly · 15-min sweep ${sweep ? `${ago(sweep.started_at, now)} ago (${sweep.status})` : "not seen"}`}
-          href="#settlement"
-          hrefLabel="Settlement"
-        />
-        <StatCard
-          label="Signups · 7 days"
-          icon={UserPlus}
-          tone="info"
-          unknown={!!d.signups7d.error}
-          value={fmtInt(d.signups7d.v)}
-          foot="new accounts on the public site"
-        />
-      </div>
+      {/* ── The answers first (answer-first pass 2026-09-25) ── */}
+      <AnswerStrip answers={answers} />
 
       {d.jobs.error && (
         <Panel className="border-warning/40 px-4 py-3">
@@ -171,24 +138,32 @@ export default async function OpsDashboardPage() {
           <FailuresChart days={d.failDays.v} error={d.failDays.error} truncated={d.failTruncated} />
         </div>
         <Panel>
-          <PanelHeader title="What the jobs do" description="Every job belongs to one group. A red count is a group with a job failing now." />
+          <PanelHeader title="Job groups" description="Every job belongs to one group. A group's badge turns red when one of its jobs failed in the last 7 days, amber for an older failure. Open “What the jobs do” for a line on each group." />
           <ul className="mt-2 divide-y divide-border/60 border-t border-border/60">
             {groups.map((g) => {
               const rows = byGroup.get(g.label) ?? [];
-              const bad = rows.filter((r) => r.state === "failing" || r.state === "stuck").length;
+              const bad = rows.filter((r) => r.state === "failing");
+              const hung = rows.filter((r) => r.state === "stuck");
               return (
-                <li key={g.key} className="px-4 py-2.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium">{g.label}</span>
-                    <StatusBadge tone={bad ? "danger" : "success"} dot={false}>
-                      {bad ? `${bad} of ${rows.length} failing` : `${rows.length} OK`}
-                    </StatusBadge>
-                  </div>
-                  <p className="mt-0.5 text-xs text-muted-foreground">{g.what}</p>
+                <li key={g.key} className="flex items-center justify-between gap-2 px-4 py-2">
+                  <span className="text-sm">{g.label}</span>
+                  <StatusBadge tone={bad.length ? failTone(bad) : hung.length ? "warning" : "success"} dot={false}>
+                    {bad.length ? `${bad.length} of ${rows.length} failing` : hung.length ? `${hung.length} stuck` : `${rows.length} OK`}
+                  </StatusBadge>
                 </li>
               );
             })}
           </ul>
+          <details className="group border-t border-border/60 px-4 py-2.5">
+            <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">What the jobs do</summary>
+            <ul className="mt-2 space-y-1.5">
+              {groups.map((g) => (
+                <li key={g.key} className="text-xs text-muted-foreground">
+                  <span className="text-foreground">{g.label}:</span> {g.what}
+                </li>
+              ))}
+            </ul>
+          </details>
         </Panel>
       </div>
 
@@ -196,17 +171,19 @@ export default async function OpsDashboardPage() {
       <Panel id="runs">
         <PanelHeader
           title="Every scheduled job"
-          description="The latest run of each job in the last 35 days, failing first. “Failing since” counts from the first failure after the last success. The 48 half-hourly shadow scans are one row."
+          description={<>The latest run of each job in the last 35 days, failing first. The 48 half-hourly pick scans are one row. {STATE_WORDS_HELP}</>}
           actions={
             jobsUnknown ? (
               <StatusBadge tone="warning">Unreadable</StatusBadge>
             ) : (
-              <StatusBadge tone={failing.length ? "danger" : "success"}>{failing.length ? `${failing.length} failing` : "All passing"}</StatusBadge>
+              <StatusBadge tone={failing.length ? failTone(failing) : stuck.length ? "warning" : "success"}>
+                {failing.length ? `${failing.length} failing` : stuck.length ? `${stuck.length} stuck` : "All OK"}
+              </StatusBadge>
             )
           }
         />
         <div className="p-4 pt-3">
-          <JobsTable rows={views} now={now} feeds={d.feeds.v} preview={isBotBoardDevPreview()} />
+          <JobsTable rows={current} old={old} now={now} feeds={d.feeds.v} preview={isBotBoardDevPreview()} />
         </div>
       </Panel>
 
@@ -228,7 +205,7 @@ export default async function OpsDashboardPage() {
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
               <Meter label="Matches finished today" value={s?.matches_finished_today} note="Marked finished by the live tracker as they end." />
               <Meter label="Model rows built today" value={s?.feature_vectors_today} note="The per-match rows the models learn from, built by settlement." />
-              <Meter label="Team rating (ELO) updates" value={s?.elo_updates_today} note="0 until the nightly run has processed today's games." />
+              <Meter label="Team rating updates" value={s?.elo_updates_today} note="0 until the nightly run has processed today's games" />
               <Meter
                 label="Duplicate bets"
                 value={s?.duplicate_bets}
@@ -267,7 +244,7 @@ export default async function OpsDashboardPage() {
           />
           <div className="grid gap-3 p-4 pt-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
             <Meter label="API-Football prediction" value={s?.matches_with_predictions} total={s?.matches_today} tone={shareTone(s?.matches_with_predictions, s?.matches_today)} note="Their win/draw/loss chances — one model input." />
-            <Meter label="Team ratings (ELO)" value={s?.signals_with_elo} total={s?.matches_today} tone={shareTone(s?.signals_with_elo, s?.matches_today)} />
+            <Meter label="Team ratings" value={s?.signals_with_elo} total={s?.matches_today} tone={shareTone(s?.signals_with_elo, s?.matches_today)} />
             <Meter label="Recent form" value={s?.signals_with_form} total={s?.matches_today} tone={shareTone(s?.signals_with_form, s?.matches_today)} note="Points per game over the last 5." />
             <Meter label="League table" value={s?.signals_with_standings} total={s?.matches_today} tone={shareTone(s?.signals_with_standings, s?.matches_today, 0.4, 0.2)} note="Cups and friendlies have none." />
             <Meter label="Head-to-head history" value={s?.matches_with_h2h} total={s?.matches_today} tone={shareTone(s?.matches_with_h2h, s?.matches_today, 0.5, 0.25)} note="Refreshed weekly; new pairings have none." />

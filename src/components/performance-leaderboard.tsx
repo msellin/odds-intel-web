@@ -69,6 +69,66 @@ export interface PublicBotStat {
   maturityLabel: string;
   /** #148: the paid-tier VIP bot — settled picks only ever reach this page. */
   isVip?: boolean;
+  /** [[#156]] Forward-test (picks_forward_test) bots only: the row is scored on its
+   *  CURRENT rule version, and its CLV is the SHARP-ANCHOR close, not the book's own. */
+  forwardTest?: ForwardTestRecord;
+}
+
+/** [[#156]] (2026-09-25). A forward-test bot's CLV, shown to every reader.
+ *
+ *  MAIN figure = sharp-anchor CLV: the pick's odds against the fresh de-vigged
+ *  Pinnacle close, or a 5+-book consensus close where Pinnacle has none (the source
+ *  mix is printed). SECONDARY = against the betting book's OWN close, margin-
+ *  corrected — the figure the page used to lead with. It is kept because it is the
+ *  originally registered number, but it cannot judge these rules: they pick a leg
+ *  because that book misprices it, and an uncorrected soft line closes where it
+ *  opened, so its own close scores the pick at about minus its margin whatever the
+ *  pick was worth. All fractions are raw (0.024 = +2.4%). */
+export interface ForwardTestRecord {
+  /** Current rule_version (the row's figures and its bet list use only this). */
+  ruleVersion: string;
+  /** Short label, e.g. "v4". */
+  rule: string;
+  sharpClv: number | null;
+  nSharp: number;
+  nPinnacle: number;
+  nConsensus: number;
+  ownClv: number | null;
+  nOwn: number;
+  /** Earlier rule versions — kept visible, never pooled into the row. */
+  earlier: Array<{ rule: string; settled: number; sharpClv: number | null; nSharp: number }>;
+}
+
+function clvPct(v: number | null): string {
+  return v == null ? "—" : `${v >= 0 ? "+" : ""}${(v * 100).toFixed(1)}%`;
+}
+
+function ForwardTestClvLine({ ft }: { ft: ForwardTestRecord }) {
+  const tone = ft.sharpClv == null ? "" : ft.sharpClv > 0 ? "text-emerald-400" : "text-red-400";
+  return (
+    <>
+      <p className="mt-0.5 text-[10px] tabular-nums text-muted-foreground">
+        <span className={tone}>vs sharp close {clvPct(ft.sharpClv)}</span>
+        {ft.nSharp > 0
+          ? ` · ${ft.nSharp} picks · ${ft.nPinnacle} Pinnacle / ${ft.nConsensus} consensus`
+          : " · no settled picks yet"}
+        {ft.nOwn > 0 && (
+          <span className="text-muted-foreground/60">
+            {" "}· vs the book&apos;s own close {clvPct(ft.ownClv)}
+          </span>
+        )}
+      </p>
+      {ft.earlier.length > 0 && (
+        <p className="text-[10px] text-muted-foreground/60">
+          rule {ft.rule} only · earlier{" "}
+          {ft.earlier
+            .map((e) => `${e.rule}: ${e.settled} settled, vs sharp close ${clvPct(e.sharpClv)}`)
+            .join("; ")}{" "}
+          — not counted
+        </p>
+      )}
+    </>
+  );
 }
 
 export interface SanitizedBotBet {
@@ -602,6 +662,16 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
               they are tracked separately because they are different rules, not
               different kinds of thing.
             </p>
+            {/* [[#156]] 2026-09-25 — what CLV means on the SHARP / CONSENSUS rows. */}
+            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+              Closing-line value (CLV) on the sharp and consensus rows is measured{" "}
+              <span className="text-foreground">vs the sharp close</span>: our price against
+              Pinnacle&apos;s final line with the margin removed, or a 5+ bookmaker consensus
+              where Pinnacle has none. Positive means the price beat where the market
+              settled. The figure against the book&apos;s own close is shown beside it, but
+              it cannot judge these picks — they are chosen because that book&apos;s price is
+              off, and a price the book never corrects closes where it opened.
+            </p>
           </div>
           {/* Pre-match / In-play tabs removed — in-play hidden from public,
               audit data lives in /admin. */}
@@ -658,6 +728,7 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
                       {bot.isVip && (
                         <p className="text-[10px] text-yellow-300/80">Live since {VIP_LIVE_SINCE}</p>
                       )}
+                      {bot.forwardTest && <ForwardTestClvLine ft={bot.forwardTest} />}
                       <p className="mt-1 text-[11px] tabular-nums text-muted-foreground">
                         {isMaturing
                           ? bot.settled > 0
@@ -746,6 +817,7 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
                       {bot.isVip && (
                         <p className="text-[10px] text-yellow-300/80 mt-0.5">Live since {VIP_LIVE_SINCE}</p>
                       )}
+                      {bot.forwardTest && <ForwardTestClvLine ft={bot.forwardTest} />}
                       {isMaturing && (
                         <p className="text-[10px] text-muted-foreground mt-0.5">
                           {bot.settled > 0 ? `${bot.settled} settled — accumulating data` : "Active · no settled bets yet"}

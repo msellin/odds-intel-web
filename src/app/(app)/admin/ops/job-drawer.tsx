@@ -5,20 +5,25 @@
 // — only when the job is a feed's scheduler job with a run-now control (JOB_FEED) — a Run now that
 // posts to the same audited /api/admin/feed-control as /admin/feeds, with the same dialog words.
 // Every other job says plainly how it gets re-run instead of showing a button that cannot work.
+//
+// Answer-first fix round (2026-09-25): no developer instructions (file paths, job ids) — a job
+// without a button says when it runs again or "ask the developer to re-run it"; the Python error text
+// sits behind a "Technical detail" toggle; run statuses read OK / Failed / Running / Skipped.
 
 import { useEffect, useState } from "react";
 import { Hourglass, RotateCw } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { StatusBadge, type Tone } from "@/components/oi/status-badge";
-import { JOB_FEED, STATE_WORD, type JobRun, type JobState, type JobView } from "@/lib/admin-jobs-model";
+import { failingText, isRecentFailure, JOB_FEED, lastRunText, STATE_WORD, type JobRun, type JobState, type JobView } from "@/lib/admin-jobs-model";
 import type { JobFeed } from "@/lib/admin-jobs";
 import { ConfirmControlDialog } from "../bots/confirm-control-dialog";
 import { utcStamp } from "../bots/bot-board-format";
 import { timeAgo } from "@/lib/rel-time";
 import { feedActionSpec, useFeedAction } from "../feeds/feed-controls";
 
-const STATE_TONE: Record<JobState, Tone> = { failing: "danger", stuck: "warning", running: "info", quiet: "neutral", ok: "success" };
+const STATE_TONE: Record<JobState, Tone> = { failing: "danger", stuck: "warning", running: "success", quiet: "neutral", ok: "success" };
 const RUN_TONE: Record<string, Tone> = { completed: "success", failed: "danger", error: "danger", running: "info", skipped: "neutral" };
+const RUN_WORD: Record<string, string> = { completed: "OK", failed: "Failed", error: "Failed", running: "Running", skipped: "Skipped" };
 
 function ago(iso: string | null, now: number): string {
   return iso ? timeAgo(iso, now) : "—";
@@ -35,8 +40,8 @@ function rerunText(job: string): string {
   if (/^settlement_|^settle/.test(job)) return "It is part of settlement: the 15-minute sweep and the nightly run (21:00 UTC) run it again on their own.";
   if (/^fetch_|^betting_pipeline$|^morning_pipeline$/.test(job))
     return "It is a step of the morning pipeline (04:00 UTC), which runs it again tomorrow; the hourly betting refresh covers the day.";
-  if (job === "shadow_HHMM") return "The shadow scan runs every 30 minutes, so the next slot re-runs it within half an hour.";
-  return `It runs again at its next scheduled time. To run it sooner, it has to be started on the VPS scheduler (workers/scheduler.py, job “${job}”) — there is no button for it here.`;
+  if (job === "shadow_HHMM") return "The pick scan runs every 30 minutes, so the next one re-runs it within half an hour.";
+  return "It runs again at its next scheduled time. To run it sooner, ask the developer to re-run it.";
 }
 
 export function JobDrawer({ view, feeds, now, preview, onClose }: { view: JobView | null; feeds: JobFeed[]; now: number; preview: boolean; onClose: () => void }) {
@@ -77,14 +82,14 @@ function Body({ v, feeds, now, preview }: { v: JobView; feeds: JobFeed[]; now: n
       <SheetHeader className="border-b border-border">
         <SheetTitle className="flex flex-wrap items-center gap-2">
           {v.label}
-          <StatusBadge tone={STATE_TONE[v.state]}>{STATE_WORD[v.state]}</StatusBadge>
+          <StatusBadge tone={v.state === "failing" && !isRecentFailure(v, now) ? "warning" : STATE_TONE[v.state]}>{STATE_WORD[v.state]}</StatusBadge>
         </SheetTitle>
         <SheetDescription render={<div />} className="space-y-0.5 text-xs text-muted-foreground">
-          <span className="block font-mono">{v.job}</span>
           <span className="block">
-            {v.group} · last run {ago(v.lastRun, now)} · last success {ago(v.lastOk, now)}
-            {v.streak ? ` · ${v.streak} failed runs in a row` : ""}
+            {v.group} · {lastRunText(v, (iso) => ago(iso, now))} · last success {v.lastOk ? ago(v.lastOk, now) : "none in the last 35 days"}
           </span>
+          {failingText(v) && <span className="block text-foreground">{failingText(v)}</span>}
+          <span className="block font-mono text-[10px] text-muted-foreground/70">{v.job}</span>
         </SheetDescription>
       </SheetHeader>
       <div className="space-y-4 px-4 pb-6">
@@ -98,12 +103,12 @@ function Body({ v, feeds, now, preview }: { v: JobView; feeds: JobFeed[]; now: n
         </section>
 
         {lastError && (
-          <section>
-            <h3 className="mb-1 text-sm font-medium">Latest error</h3>
-            <pre className="max-h-60 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 font-mono text-[11px] text-danger/90">
+          <details className="rounded-lg border border-border px-3 py-2">
+            <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">Technical detail (the error the job reported)</summary>
+            <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap break-words rounded-md bg-danger/5 px-2 py-1.5 font-mono text-[11px] text-danger/90">
               {lastError}
             </pre>
-          </section>
+          </details>
         )}
 
         <section>
@@ -113,7 +118,7 @@ function Body({ v, feeds, now, preview }: { v: JobView; feeds: JobFeed[]; now: n
           ) : runs === null ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : runs.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No runs in the last 14 days of history (pipeline_runs keeps about two weeks).</p>
+            <p className="text-sm text-muted-foreground">No runs in the history we keep (about two weeks).</p>
           ) : (
             <ul className="divide-y divide-border/60 rounded-lg border border-border">
               {runs.map((r, i) => (
@@ -122,14 +127,13 @@ function Body({ v, feeds, now, preview }: { v: JobView; feeds: JobFeed[]; now: n
                     <span className="tabular-nums" title={utcStamp(r.started_at)}>
                       {ago(r.started_at, now)} <span className="text-muted-foreground">· {utcStamp(r.started_at)}</span>
                     </span>
-                    <StatusBadge tone={RUN_TONE[r.status] ?? "neutral"}>{r.status}</StatusBadge>
+                    <StatusBadge tone={RUN_TONE[r.status] ?? "neutral"}>{RUN_WORD[r.status] ?? r.status}</StatusBadge>
                   </div>
                   <div className="mt-0.5 text-muted-foreground">
                     took {duration(r.started_at, r.completed_at)}
                     {r.records_count != null ? ` · ${r.records_count.toLocaleString("en-US")} records` : ""}
-                    {v.job === "shadow_HHMM" ? ` · ${r.job_name}` : ""}
+                    {v.job === "shadow_HHMM" ? ` · slot ${r.job_name.slice(-4, -2)}:${r.job_name.slice(-2)}` : ""}
                   </div>
-                  {r.error_message && <div className="mt-0.5 line-clamp-2 break-words font-mono text-[11px] text-danger/90" title={r.error_message}>{r.error_message}</div>}
                 </li>
               ))}
             </ul>

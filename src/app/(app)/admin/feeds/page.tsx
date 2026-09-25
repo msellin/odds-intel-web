@@ -1,21 +1,22 @@
 export const dynamic = 'force-dynamic';
 
-import { feedHealth } from "@/lib/admin-feeds-model";
+import { allBlockStates, coolbetBlockRisk, feedHealth, feedsAnswer } from "@/lib/admin-feeds-model";
 import type { Metadata } from "next";
-import { AlertTriangle, CheckCircle2, CirclePause, CircleStop, Gauge, Server } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CirclePause, CircleStop, ShieldAlert, Server } from "lucide-react";
 import { AutoRefreshBadge } from "../ops/auto-refresh";
 import { Meter, shareTone } from "../ops/meter";
 import { FeedsBoard } from "./feeds-board";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
-import { AF_DAILY_BUDGET, budgetSentence, budgetView, loadFeedsPage, STATUS_STALE_MIN } from "@/lib/admin-feeds";
+import { AF_DAILY_BUDGET, budgetSentence, budgetView, loadFeedsPage, STATUS_STALE_MIN, type BudgetView } from "@/lib/admin-feeds";
 import { DqFindings } from "./dq-findings";
 import { isBotBoardDevPreview, loadControlState } from "@/lib/bot-board";
 import { FootprintControl } from "./footprint-control";
 import { CoverageChart } from "./feeds-charts";
 import { PageHeader, Panel, PanelHeader } from "@/components/oi/panel";
-import { StatCard } from "@/components/oi/stat-card";
+import { AnswerStrip, type Answer } from "@/components/oi/answer-strip";
 import { StatusBadge } from "@/components/oi/status-badge";
 import { fmtInt } from "@/components/oi/format";
+import { InfoTip } from "@/components/oi/info-tip";
 
 // FEEDS-DASHBOARD (#107). Data: feed_status / feed_book_stats, written every 5 min
 // by the engine (workers/jobs/feed_health.py, registry workers/registry/
@@ -51,21 +52,20 @@ export default async function FeedsPage() {
   const feeds = d.feeds.v;
   const updated = feeds.reduce<string | null>((a, f) => (!a || f.updated_at > a ? f.updated_at : a), null);
   const statusAgeMin = updated ? Math.round((now - new Date(updated).getTime()) / 60000) : null;
-  // an engine auto-pause (repeated failures) counts as Stopped, not Paused
-  const count = (s: string) => feeds.filter((f) => feedHealth(f) === s).length;
-  const fresh = count("ok");
-  const warn = count("warn");
-  const fail = count("fail");
-  const paused = count("paused");
-  const unknown = count("unknown");
   // A status check older than STATUS_STALE_MIN is not a claim we can make: the counts go "unknown" (grey).
   const statusStale = statusAgeMin == null || statusAgeMin > STATUS_STALE_MIN;
   const feedsUnknown = !!d.feeds.error || statusStale;
-  const staleFoot = statusAgeMin == null ? "no status check yet" : `the status check is ${statusAgeMin} min old`;
+  const paused = feeds.filter((f) => feedHealth(f) === "paused").length;
 
+  // ONE source for every "this hour" figure on the page: book_footprint through budgetView (answer-first
+  // fix round 2026-09-25 — the answer said 348/500 while the panel said 376/500).
+  const budgets = new Map<string, BudgetView>(
+    d.footprint.error ? [] : d.books.v.filter((b) => b.budget_1h != null).map((b) => [b.book, budgetView(b.book, b.budget_1h, d.footprint.v, now)]),
+  );
   const cb = d.books.v.find((b) => b.book === "Coolbet");
-  const cbShare = cb?.budget_1h ? (cb.requests_1h ?? 0) / cb.budget_1h : null;
-  const cbBudget = cb?.budget_1h != null && !d.footprint.error ? budgetView("Coolbet", cb.budget_1h, d.footprint.v, now) : null;
+  const cbBudget = budgets.get("Coolbet") ?? null;
+  const cbShare = cbBudget?.cap ? cbBudget.requests / cbBudget.cap : null;
+  const risk = coolbetBlockRisk(cbBudget);
   const s = d.snapshot.v;
   const afCalls = s?.af_calls_today ?? null;
   const afShare = afCalls != null ? afCalls / AF_DAILY_BUDGET : null;
@@ -74,8 +74,35 @@ export default async function FeedsPage() {
   const snapNote = d.snapshot.error
     ? `Unreadable: ${d.snapshot.error}`
     : !s
-      ? "No ops snapshot for today yet — the engine writes one every hour."
-      : `From the ops snapshot written ${snapAge} min ago (hourly).`;
+      ? "No summary for today yet — the engine writes one every hour."
+      : `Figures from ${snapAge} min ago (updated hourly).`;
+
+  // The Feeds answer is computed from the SAME block tones the board shows (Rule 1: a headline never
+  // contradicts the detail). Blocks, not the 23 internal checks, are what the owner sees and counts.
+  const blocks = allBlockStates(feeds, budgets, now, statusStale);
+  const fa = feedsAnswer(blocks, { error: !!d.feeds.error, stale: statusStale });
+  const answers: Answer[] = [
+    {
+      label: "Feeds",
+      ...fa,
+      href: fa.href === "#" ? undefined : fa.href,
+      icon: fa.tone === "danger" ? CircleStop : fa.tone === "warning" ? AlertTriangle : CheckCircle2,
+    },
+    feedsUnknown
+      ? { label: "Paused by us", text: "Can't tell — feed status unreadable", tone: "warning", icon: CirclePause }
+      : paused
+        ? { label: "Paused by us", text: `${paused} feed${paused === 1 ? "" : "s"} paused on purpose`, tone: "info", icon: CirclePause }
+        : { label: "Paused by us", text: "Nothing paused", tone: "neutral", icon: CirclePause },
+    { label: "Coolbet block risk", text: risk.word, sub: risk.sub, tone: risk.tone, icon: ShieldAlert, href: "#coolbet-footprint" },
+    {
+      label: "API-Football",
+      text: afShare == null ? "Unknown" : `${Math.round(afShare * 100)}% of today's calls used`,
+      sub: afCalls != null ? `${fmtInt(afCalls)} of ${fmtInt(AF_DAILY_BUDGET)} · resets 00:00 UTC` : undefined,
+      tone: afShare == null ? "neutral" : afShare > 0.8 ? "danger" : afShare > 0.5 ? "warning" : "success",
+      icon: Server,
+      href: "#af-budget",
+    },
+  ];
 
   return (
     <div className="space-y-4 lg:space-y-6">
@@ -84,16 +111,16 @@ export default async function FeedsPage() {
         title="Feeds"
         meta={
           <>
-            Is data coming in, and at what cost? Every odds sweeper and data feed, checked every 5 minutes by the engine.
-            {statusAgeMin !== null && (
-              <span className={statusAgeMin > STATUS_STALE_MIN ? " text-danger" : ""}>
-                {" "}Status checked {statusAgeMin < 1 ? "just now" : `${statusAgeMin} min ago`}
-                {statusAgeMin > STATUS_STALE_MIN ? " — the status job itself looks stuck, so the colours below are grey (unknown)." : "."}
+            Is odds data coming in?
+            {statusStale && (
+              <span className="text-danger">
+                {" "}
+                {statusAgeMin == null ? "No status check recorded yet" : `The status check is ${statusAgeMin} min late`} — colours below are grey (unknown).
               </span>
             )}
           </>
         }
-        actions={<AutoRefreshBadge intervalMs={60_000} checkedAt={now} />}
+        actions={<AutoRefreshBadge intervalMs={60_000} checkedAt={now} dataAt={updated} />}
       />
 
       {d.feeds.error && (
@@ -104,38 +131,8 @@ export default async function FeedsPage() {
         </Panel>
       )}
 
-      {/* ── KPI strip ── */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-6">
-        <StatCard label="Healthy" icon={CheckCircle2} tone="success" unknown={feedsUnknown} value={`${fresh}/${feeds.length}`} foot={statusStale ? staleFoot : unknown ? `${unknown} with no status yet` : "on schedule"} />
-        <StatCard label="Needs a look" icon={AlertTriangle} tone={warn ? "warning" : "success"} unknown={feedsUnknown} value={warn} foot={statusStale ? staleFoot : warn ? "a sweep missed or came back thin" : "none"} />
-        <StatCard label="Stopped" icon={CircleStop} tone={fail ? "danger" : "success"} unknown={feedsUnknown} value={fail} foot={statusStale ? staleFoot : fail ? "no data past its limit" : "none"} />
-        <StatCard label="Paused" icon={CirclePause} tone={paused ? "info" : "neutral"} unknown={feedsUnknown} value={paused} foot={statusStale ? staleFoot : paused ? "by us — see the block for why" : "none paused"} />
-        <StatCard
-          label="Coolbet requests · hour"
-          icon={Gauge}
-          tone={cbShare == null ? "neutral" : cbShare >= 1 ? "danger" : cbShare >= 0.8 ? "warning" : "success"}
-          unknown={!!d.books.error || cb?.requests_1h == null}
-          value={
-            <>
-              {fmtInt(cb?.requests_1h)}
-              {cb?.budget_1h ? <span className="text-sm font-normal text-muted-foreground"> / {fmtInt(cb.budget_1h)}</span> : null}
-            </>
-          }
-          foot={cb ? `bot-checks ${cb.challenges_1h ?? 0} · errors ${cb.errors_1h ?? 0} · this clock hour` : "no Coolbet row"}
-          href="#coolbet-footprint"
-          hrefLabel="Coolbet sweeping"
-        />
-        <StatCard
-          label="API-Football · today"
-          icon={Server}
-          tone={afShare == null ? "neutral" : afShare > 0.8 ? "danger" : afShare > 0.5 ? "warning" : "success"}
-          unknown={afCalls == null}
-          value={afShare != null ? `${Math.round(afShare * 100)}%` : "—"}
-          foot={afCalls != null ? `${fmtInt(afCalls)} of ${fmtInt(AF_DAILY_BUDGET)} calls · resets 00:00 UTC` : snapNote}
-          href="#af-budget"
-          hrefLabel="Budget"
-        />
-      </div>
+      {/* ── The answers first (answer-first pass 2026-09-25): which feeds are down, what they cost ── */}
+      <AnswerStrip answers={answers} />
 
       {/* ── Book blocks ── */}
       <Panel>
@@ -143,10 +140,10 @@ export default async function FeedsPage() {
           title="Bookmakers"
           description={
             <>
-              Time since each book&apos;s last odds — <span className="text-success">green</span> fresh,{" "}
-              <span className="text-warning">amber</span> a sweep missed, <span className="text-danger">red</span> stopped,{" "}
-              <span className="text-info">blue</span>{" "}paused, grey unknown. Click a block for its sweepers, Pause / Resume / Run now, and
-              today&apos;s numbers.
+              Time since each book&apos;s last odds. <span className="text-success">Green</span>: within its normal refresh;{" "}
+              <span className="text-warning">amber</span>: late; <span className="text-danger">red</span>: stopped;{" "}
+              <span className="text-info">blue</span>: paused by us; grey: unknown. Behind these {blocks.length} blocks are {feeds.length} separate
+              checks, run every 5 minutes. Click a block for details, Pause / Resume and Run now.
             </>
           }
         />
@@ -156,7 +153,7 @@ export default async function FeedsPage() {
               {d.feeds.error ? "Unreadable — see above." : "No status yet — the engine writes it every 5 minutes."}
             </p>
           ) : (
-            <FeedsBoard feeds={feeds} books={d.books.v} footprint={d.footprint.v} now={now} statusAgeMin={statusAgeMin} preview={isBotBoardDevPreview()} />
+            <FeedsBoard feeds={feeds} books={d.books.v} footprint={d.footprint.error ? null : d.footprint.v} now={now} statusAgeMin={statusAgeMin} preview={isBotBoardDevPreview()} />
           )}
         </div>
       </Panel>
@@ -166,33 +163,36 @@ export default async function FeedsPage() {
         <FootprintControl state={controls} now={now}>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
             <Meter
-              label="Requests · this hour"
-              value={cb?.requests_1h}
-              total={cb?.budget_1h}
+              label={
+                <span className="inline-flex items-center gap-1">
+                  Requests · this hour
+                  <InfoTip>
+                    At the hourly limit we stop sending requests until the next hour, so Coolbet does not block us.
+                    {cbBudget ? ` This hour: ${cbBudget.challenges} block checks, ${cbBudget.errors} errors; ${fmtInt(cbBudget.requests24h)} requests in the last 24 h.` : ""}
+                  </InfoTip>
+                </span>
+              }
+              value={cbBudget?.requests}
+              total={cbBudget?.cap}
               tone={cbShare == null ? "neutral" : cbShare >= 1 ? "danger" : cbShare >= 0.8 ? "warning" : "success"}
-              note="Over budget, requests are refused before they are sent, so our exit IP is not flagged again (#110)."
             />
             <Meter
-              label="Closes captured · 24 h"
+              label={
+                <span className="inline-flex items-center gap-1">
+                  Closing prices · last 24 h
+                  <InfoTip>Matches that kicked off in the last 24 h with a Coolbet price in the final 15 minutes before kick-off.</InfoTip>
+                </span>
+              }
               value={cb?.closing_captured_24h}
               total={cb?.closing_priced_24h}
               tone={shareTone(cb?.closing_captured_24h, cb?.closing_priced_24h, 0.8, 0.5)}
-              note="Kick-offs Coolbet priced that also have a price in the last 15 minutes (its close)."
             />
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">
-            {cb ? (
-              <>
-                {cbBudget && <span className="mb-1 block text-foreground/90">{budgetSentence(cbBudget)}</span>}
-                {fmtInt(cb.requests_24h)} requests in 24 h · bot-checks this hour {cb.challenges_1h ?? 0} · errors this hour {cb.errors_1h ?? 0}
-                {d.footprint.error && <span className="block text-warning">Hourly history unreadable ({d.footprint.error}).</span>}
-              </>
-            ) : d.books.error ? (
-              <span className="text-warning">Coolbet numbers unreadable ({d.books.error}).</span>
-            ) : (
-              "No Coolbet numbers yet."
-            )}
-          </p>
+          {d.footprint.error ? (
+            <p className="mt-2 text-xs text-warning">Coolbet request counts unreadable ({d.footprint.error}).</p>
+          ) : cbBudget && (cbBudget.lastSpent || cbBudget.strayRefusals || cbBudget.spentNow) ? (
+            <p className="mt-2 text-xs text-muted-foreground">{budgetSentence(cbBudget)}</p>
+          ) : null}
         </FootprintControl>
         <CoverageChart books={d.books.v} error={d.books.error} />
       </div>
@@ -201,27 +201,34 @@ export default async function FeedsPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel>
           <PanelHeader
-            title="Odds pipeline today"
-            description="Pre-match odds for today's matches, all books together. Bookmakers open lines through the day, so early-morning shares are low; about 75–80% by evening is typical — youth, reserve and small leagues are rarely priced."
+            title="Odds for today's matches"
+            description="Pre-match odds for today's matches, all books together. Bookmakers open prices through the day, so early-morning shares are low; about 75–80% by evening is typical — youth, reserve and small leagues are rarely priced."
             actions={s ? <StatusBadge tone="neutral" dot={false}>{fmtInt(s.matches_today)} matches</StatusBadge> : <StatusBadge tone="warning">No snapshot</StatusBadge>}
           />
           <div className="grid gap-3 p-4 pt-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
             <Meter label="Have odds" value={s?.matches_with_odds} total={s?.matches_today} tone={shareTone(s?.matches_with_odds, s?.matches_today)} note="At least one book prices the match." />
             <Meter
-              label="Have a sharp price"
+              label={
+                <span className="inline-flex items-center gap-1">
+                  Priced by the sharpest bookmaker
+                  <InfoTip>
+                    Pinnacle {s?.matches_with_pinnacle ?? "—"} · Betfair with enough money matched {s?.matches_with_exchange_liquid ?? "—"}. This price is
+                    what every expected advantage is measured against.
+                  </InfoTip>
+                </span>
+              }
               value={s?.matches_with_sharp ?? s?.matches_with_pinnacle}
               total={s?.matches_today}
               tone={shareTone(s?.matches_with_sharp ?? s?.matches_with_pinnacle, s?.matches_today, 0.6, 0.3)}
-              note={`Pinnacle ${s?.matches_with_pinnacle ?? "—"} · liquid Betfair ${s?.matches_with_exchange_liquid ?? "—"}. The sharp price is what edges are measured against.`}
             />
-            <Meter label="Match winner (1X2)" value={s?.odds_market_match_winner} total={s?.matches_today} tone={shareTone(s?.odds_market_match_winner, s?.matches_today)} />
-            <Meter label="Goals over/under 2.5" value={s?.odds_market_goals_ou} total={s?.matches_today} tone={shareTone(s?.odds_market_goals_ou, s?.matches_today)} />
-            <Meter label="Both teams to score" value={s?.odds_market_btts} total={s?.matches_today} tone={shareTone(s?.odds_market_btts, s?.matches_today)} />
+            <Meter label="Match result" value={s?.odds_market_match_winner} total={s?.matches_today} tone={shareTone(s?.odds_market_match_winner, s?.matches_today)} />
+            <Meter label="Over/under 2.5 goals" value={s?.odds_market_goals_ou} total={s?.matches_today} tone={shareTone(s?.odds_market_goals_ou, s?.matches_today)} />
+            <Meter label="Both teams score" value={s?.odds_market_btts} total={s?.matches_today} tone={shareTone(s?.odds_market_btts, s?.matches_today)} />
             <Meter
-              label="Bookmakers active"
+              label="Bookmakers with a price today"
               value={s?.distinct_bookmakers}
               tone={s?.distinct_bookmakers != null && s.distinct_bookmakers < 3 ? "danger" : "neutral"}
-              note={`${fmtInt(s?.odds_snapshots_today)} price rows stored today. Under 3 books is a data gap.`}
+              note={`Includes books we can't bet at · ${fmtInt(s?.odds_snapshots_today)} prices stored today`}
             />
           </div>
           <p className="px-4 pb-4 text-xs text-muted-foreground">{snapNote}</p>
@@ -231,7 +238,7 @@ export default async function FeedsPage() {
           <Panel id="af-budget">
             <PanelHeader
               title="API-Football daily budget"
-              description="Mega plan: 150,000 calls a day across every job, reset at midnight UTC. It carries fixtures, 9 books' odds (Pinnacle included), live scores and match data."
+              description="Our plan allows 150,000 calls a day across every job, reset at midnight UTC. It carries fixtures, 9 bookmakers' odds (the sharpest one, Pinnacle, included), live scores and match data."
             />
             <div className="p-4 pt-3">
               <Meter
@@ -241,7 +248,7 @@ export default async function FeedsPage() {
                 tone={afShare == null ? "neutral" : afShare > 0.8 ? "danger" : afShare > 0.5 ? "warning" : "success"}
                 note={
                   afCalls != null
-                    ? `${fmtInt(s?.af_budget_remaining)} left today. Amber past half, red past 80%.`
+                    ? `${fmtInt(s?.af_budget_remaining)} left today`
                     : snapNote
                 }
               />
@@ -253,21 +260,21 @@ export default async function FeedsPage() {
               description="Follows games in play for scores and events (used to settle bets). It polls about once a minute while games are on; outside match hours a long gap is normal."
             />
             <div className="grid gap-3 p-4 pt-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-              <Meter label="Games tracked today" value={s?.live_games_tracked} note={`${fmtInt(s?.live_snapshots_today)} snapshot rows today.`} />
+              <Meter label="Games followed today" value={s?.live_games_tracked} note={`${fmtInt(s?.live_snapshots_today)} live updates stored today`} />
               <Meter
-                label="Last live snapshot"
+                label="Last live update"
                 value={liveAge}
                 suffix={liveAge != null ? " min ago" : null}
                 tone={liveAge != null && liveAge > 60 ? "warning" : "neutral"}
-                note={d.lastLiveAt.error ? `Unreadable: ${d.lastLiveAt.error}` : "Over 60 min is normal only when no game is on."}
+                note={d.lastLiveAt.error ? `Unreadable: ${d.lastLiveAt.error}` : "Over 60 min is normal only when no game is on"}
               />
-              <Meter label="Games with xG" value={s?.live_games_with_xg} total={s?.live_games_tracked} tone="neutral" note="xG comes only from the top leagues' match stats." />
+              <Meter label="Games with expected goals" value={s?.live_games_with_xg} total={s?.live_games_tracked} tone="neutral" note="Only top leagues publish it" />
               <Meter
                 label="Games with live over/under odds"
                 value={s?.live_games_with_odds}
                 total={s?.live_games_tracked}
                 tone="neutral"
-                note="Only the in-play bots used these; in-play betting was retired on 2026-08-21."
+                note="Not used since in-play betting stopped (21 Aug)"
               />
             </div>
           </Panel>

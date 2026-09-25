@@ -3,6 +3,7 @@
 // look: dark tokens, borders not shadows, rounded-xl cards, mono uppercase eyebrow labels.
 
 import type { ReactNode } from "react";
+import { InfoTip } from "./info-tip";
 
 export function SectionLabel({ children, className = "" }: { children: ReactNode; className?: string }) {
   return <div className={`font-mono text-[11px] uppercase tracking-wider text-muted-foreground ${className}`}>{children}</div>;
@@ -28,8 +29,12 @@ export function PanelHeader({
   return (
     <div className="flex flex-wrap items-start justify-between gap-3 px-4 pt-4">
       <div className="min-w-0">
-        <h2 className="text-sm font-medium">{title}</h2>
-        {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
+        {/* answer-first pass (2026-09-25): the explanation is an ⓘ tip, not a paragraph under
+            every title — the owner found the admin read like a report */}
+        <h2 className="inline-flex items-center gap-1 text-sm font-medium">
+          {title}
+          {description && <InfoTip>{description}</InfoTip>}
+        </h2>
       </div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
     </div>

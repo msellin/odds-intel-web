@@ -21,6 +21,8 @@ import { placementPathReason } from "@/lib/bot-controls/placement-path";
 import { isBotBoardDevPreview, loadBotBoard, loadControlState, type BotWeeklyRow } from "@/lib/bot-board";
 import { MANUAL_RECONCILE_SINCE, buildAttention, type AttentionItem } from "@/lib/admin-attention";
 import { RETIRED_SERIES } from "@/lib/admin-overview-shared";
+import { buildJobViews, jobsAnswer } from "@/lib/admin-jobs-model";
+import { STATUS_STALE_MIN, allBlockStates, budgetView, coolbetBlockRisk, feedsAnswer, type BlockRisk, type BudgetView, type FootprintHour } from "@/lib/admin-feeds-model";
 import {
   CONTROL_BOT,
   FAMILY_INFO,
@@ -88,6 +90,12 @@ export interface OverviewData {
   canStake: "yes" | "no" | "unknown";
   /** feed_status not rewritten for > 15 min — every feed colour is stale (same rule as /admin/feeds). */
   feedsStale: boolean;
+  /** Same rule and source as the Feeds page answer (book_footprint this hour + feed_book_stats cap). */
+  coolbetRisk: BlockRisk;
+  /** The Feeds page's own headline (feedsAnswer over the same blocks), so the two pages never disagree. */
+  feedsAnswer: ReturnType<typeof feedsAnswer>;
+  /** The Jobs page's own headline (jobsAnswer over the same non-quiet job views); null = history unreadable. */
+  jobsAnswer: ReturnType<typeof jobsAnswer> | null;
   /** Cumulative flat 1-unit P/L per family (+ one 'retired' series). */
   pnlByFamily: Record<string, number | string | null>[];
   realBets: { rows: WeekRealBets[]; error: string | null; last30: RealWindow | null };
@@ -118,8 +126,11 @@ interface OverviewFixture {
   stale_pending?: number;
   dq_24h?: { check_name: string; n: number }[];
   unconfirmed_manual?: number;
+  unconfirmed_manual_oldest?: string | null;
   real_bets_weekly?: WeekRealBets[];
   real_bets_30d?: RealWindow;
+  coolbet_cap?: number | null;
+  footprint?: FootprintHour[];
 }
 
 async function readOverviewFixture(): Promise<OverviewFixture> {
@@ -180,31 +191,41 @@ async function read<T>(label: string, q: () => PromiseLike<{ data: unknown; erro
 async function readLive(now: number) {
   const db = createServerServiceClient();
   const since24 = new Date(now - 86_400_000).toISOString();
-  const [feeds, jobs, dq, pending, manual] = await Promise.all([
+  const since2h = new Date(now - 2 * 3_600_000).toISOString();
+  const [feeds, jobs, dq, pending, manual, cbCap, footprint] = await Promise.all([
     read<FeedStatus[]>("feed_status", () => db.from("feed_status").select("*"), []),
     read<JobLatest[]>("pipeline_job_latest", () => db.from("pipeline_job_latest").select("*"), []),
-    read<{ check_name: string }[]>("data_quality_findings", () => db.from("data_quality_findings").select("check_name").gte("found_at", since24).limit(5000), []),
+    read<{ check_name: string; match_id: string | null; bookmaker: string | null }[]>("data_quality_findings", () => db.from("data_quality_findings").select("check_name, match_id, bookmaker").gte("found_at", since24).limit(5000), []),
     read<{ match: { date: string } | null }[]>(
       "simulated_bets",
       () => db.from("simulated_bets").select("match:match_id(date)").eq("result", "pending").limit(5000),
       [],
     ),
-    read<{ id: string }[]>(
+    read<{ id: string; placed_at: string }[]>(
       "real_bets",
-      () => db.from("real_bets").select("id").is("placed_real", null).gte("placed_at", MANUAL_RECONCILE_SINCE).lt("placed_at", since24).limit(5000),
+      () => db.from("real_bets").select("id, placed_at").is("placed_real", null).gte("placed_at", MANUAL_RECONCILE_SINCE).lt("placed_at", since24).limit(5000),
       [],
     ),
+    read<{ budget_1h: number | null }[]>("feed_book_stats", () => db.from("feed_book_stats").select("budget_1h").eq("book", "Coolbet"), []),
+    read<FootprintHour[]>("book_footprint", () => db.from("book_footprint").select("book, hour, requests, refused, challenges, errors").eq("book", "Coolbet").gte("hour", since2h), []),
   ]);
   const cutoff = now - 2.5 * 3600_000; // same 150-min rule as getStalePendingBets (settlement sweep races below it)
   const stale = pending.v.filter((b) => b.match?.date && new Date(b.match.date).getTime() < cutoff).length;
-  const dqMap = new Map<string, number>();
-  for (const r of dq.v) dqMap.set(r.check_name, (dqMap.get(r.check_name) ?? 0) + 1);
+  // DISTINCT problems (UX test 2026-09-25: "74 findings" was mostly the same two Tonybet prices
+  // re-flagged every 30 minutes): one per check × match × book.
+  const dqSeen = new Map<string, Set<string>>();
+  for (const r of dq.v) {
+    const k = `${r.match_id ?? ""}|${r.bookmaker ?? ""}`;
+    dqSeen.set(r.check_name, (dqSeen.get(r.check_name) ?? new Set()).add(k));
+  }
+  const dqMap = new Map<string, number>([...dqSeen.entries()].map(([c, set]) => [c, set.size]));
   return {
     feeds,
     jobs,
     stale: { v: stale, error: pending.error },
     dq: { v: [...dqMap.entries()].map(([check_name, n]) => ({ check_name, n })), error: dq.error },
-    manual: { v: manual.v.length, error: manual.error },
+    manual: { v: manual.v.length, oldest: manual.v.reduce<string | null>((m, r) => (!m || r.placed_at < m ? r.placed_at : m), null), error: manual.error },
+    coolbet: { cap: cbCap.v[0]?.budget_1h ?? null, footprint: footprint.v, error: cbCap.error ?? footprint.error },
   };
 }
 
@@ -222,14 +243,15 @@ export async function loadOverview(viewerId: string | null): Promise<OverviewDat
           jobs: { v: fx.jobs ?? [], error: fx.jobs ? null : "pipeline_job_latest: not in fixture" },
           stale: { v: fx.stale_pending ?? 0, error: null },
           dq: { v: fx.dq_24h ?? [], error: null },
-          manual: { v: fx.unconfirmed_manual ?? 0, error: null },
+          manual: { v: fx.unconfirmed_manual ?? 0, oldest: fx.unconfirmed_manual_oldest ?? null, error: null },
+          coolbet: { cap: fx.coolbet_cap ?? null, footprint: fx.footprint ?? [], error: fx.footprint ? null : "book_footprint: not in fixture" },
         })
       : readLive(now),
     fx
       ? Promise.resolve({ rows: fx.real_bets_weekly ?? [], error: fx.real_bets_weekly ? null : "real_bets: not in fixture", last30: fx.real_bets_30d ?? null })
       : realBetsWeekly(now),
   ]);
-  const { feeds: feedsR, jobs: jobsR, stale: staleR, dq: dqR, manual: manualR } = live;
+  const { feeds: feedsR, jobs: jobsR, stale: staleR, dq: dqR, manual: manualR, coolbet: cbR } = live;
 
   // ── bots: the same view model as /admin/bots ──
   const cfgBy = new Map(board.config.rows.map((c) => [c.bot_name, c]));
@@ -329,12 +351,17 @@ export async function loadOverview(viewerId: string | null): Promise<OverviewDat
     dqLast24h: dqR.v,
     dqError: dqR.error,
     unconfirmedManual: manualR.v,
+    unconfirmedOldest: manualR.oldest,
     unconfirmedError: manualR.error,
     bots: issues.filter((x): x is typeof x & { bot: string } => !!x.bot),
   });
   // view-level errors (no bot) still belong in the inbox
   for (const x of issues) if (!x.bot) attention.push({ id: `bots-${x.text}`, severity: "warn", area: "bots", title: x.text, href: "/admin/bots" });
 
+  // same staleness rule as /admin/feeds: no status row at all, or the newest one older than STATUS_STALE_MIN
+  const newestStatus = feedsR.v.reduce<string | null>((m, x) => (x.updated_at && (!m || x.updated_at > m) ? x.updated_at : m), null);
+  const feedsStale = newestStatus == null || now - new Date(newestStatus).getTime() > STATUS_STALE_MIN * 60_000;
+  const cbBudget = cbR.error ? null : budgetView("Coolbet", cbR.cap, cbR.footprint, now);
   return {
     now,
     attention,
@@ -354,10 +381,17 @@ export async function loadOverview(viewerId: string | null): Promise<OverviewDat
     clvByFamily,
     clvFamilies,
     canStake: ladder.canStake,
-    feedsStale: (() => {
-      const u = feedsR.v.reduce<string | null>((m, x) => (x.updated_at && (!m || x.updated_at > m) ? x.updated_at : m), null);
-      return u != null && now - new Date(u).getTime() > 15 * 60_000;
+    feedsStale,
+    jobsAnswer: jobsR.error ? null : (() => {
+      const views = buildJobViews(jobsR.v, now);
+      return jobsAnswer(views.filter((v) => v.state !== "quiet"), now);
     })(),
+    coolbetRisk: coolbetBlockRisk(cbBudget),
+    feedsAnswer: feedsAnswer(
+      allBlockStates(feedsR.v, new Map<string, BudgetView>(cbBudget ? [["Coolbet", cbBudget]] : []), now, feedsStale),
+      { error: !!feedsR.error, stale: feedsStale },
+      "/admin/feeds",
+    ),
     pnlByFamily,
     realBets: { rows: realRows, error: realBets.error, last30: realBets.last30 },
     moneyBlockers: ladder.layers.filter((l) => l.state === "blocked").map((l) => BLOCKER_WORDS[l.key] ?? l.title),

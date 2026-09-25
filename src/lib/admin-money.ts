@@ -14,10 +14,12 @@
 import { createServerServiceClient } from "@/lib/supabase-server";
 import { readAdminFixture } from "@/lib/admin-fixture";
 import type { RealBet } from "@/lib/engine-data";
-import { MANUAL_RECONCILE_SINCE } from "@/lib/admin-attention";
+import { confirmState } from "@/lib/admin-money-format";
 // Pure helpers live in admin-money-format.ts so the client half of /admin/real-bets can use them
 // without importing this module's server-only reads; re-exported here as the one import point.
-export { moneyBotLabel } from "@/lib/admin-money-format";
+// RECONCILE_FROM (= MANUAL_RECONCILE_SINCE, the Overview's constant) and RECONCILE_AFTER_H moved
+// there with confirmState() (2026-09-25) so the to-do and the ledger column share one rule.
+export { moneyBotLabel, RECONCILE_FROM, RECONCILE_AFTER_H } from "@/lib/admin-money-format";
 
 /**
  * Daily blast-radius caps for the AUTOMATED placer. DEFAULTS ONLY — the engine reads
@@ -28,16 +30,9 @@ export { moneyBotLabel } from "@/lib/admin-money-format";
 export const DAILY_MAX_BETS = 80;
 export const DAILY_MAX_STAKE_EUR = 800;
 
-/**
- * Hand-logged bets before this date predate the account reconciler, so an unconfirmed row
- * from then is history, not a to-do (IA §3: "placed on/after 2026-09-10, older than 24 h").
- * The SAME constant the Overview's attention item counts with, so the bell and this page agree.
- */
-export const RECONCILE_FROM = `${MANUAL_RECONCILE_SINCE}T00:00:00Z`;
-export const RECONCILE_AFTER_H = 24;
-
 export interface MoneyBet extends RealBet {
-  /** TRUE = confirmed against the book account · NULL = hand-logged, not yet confirmed. */
+  /** TRUE = confirmed against the book account · NULL = hand-logged, not confirmed — or, before
+   *  RECONCILE_FROM, an old row written before the check existed (see confirmState). */
   placedReal: boolean | null;
   /** bots.display_name, raw. Render with `moneyBotLabel()` — `bot` (the id) is secondary text. */
   botDisplayName: string | null;
@@ -267,12 +262,8 @@ export function realMoneyWindow(rows: RealMoneyWindowRow[], now: number | Date, 
   return { days, from: new Date(from).toISOString(), bets, staked, settled, pnl };
 }
 
-/** Unconfirmed hand-logged bets the account reconciler has not matched (the to-do list). */
+/** Unconfirmed hand-logged bets the account reconciler has not matched (the to-do list) — the SAME
+ *  confirmState() rule the ledger's "Confirmed" column renders, so the count and the table agree. */
 export function unconfirmedToDo(bets: MoneyBet[], now = Date.now()): MoneyBet[] {
-  const from = Date.parse(RECONCILE_FROM);
-  const cutoff = now - RECONCILE_AFTER_H * 3600_000;
-  return bets.filter((b) => {
-    const t = Date.parse(b.placedAt);
-    return b.placedReal == null && t >= from && t < cutoff;
-  });
+  return bets.filter((b) => confirmState(b, now) === "unconfirmed");
 }

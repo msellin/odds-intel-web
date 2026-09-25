@@ -255,7 +255,7 @@ export function ChartCard({
     <Panel id={id}>
       <PanelHeader
         title={title}
-        description={description}
+        description={footer ? <>{description}{description ? <><br /><br /></> : null}{footer}</> : description}
         actions={ranges && <Segmented label="Range" options={ranges} value={range} onChange={setRange} />}
       />
       <Legend series={series} hidden={hidden} toggle={toggle} />
@@ -332,7 +332,7 @@ export function ChartCard({
           </ResponsiveContainer>
         )}
       </div>
-      {footer && <div className="border-t border-border px-4 py-2 text-xs text-muted-foreground">{footer}</div>}
+      {/* answer-first pass: the footer's small print joins the ⓘ tip (see PanelHeader) */}
     </Panel>
   );
 }

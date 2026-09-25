@@ -8,10 +8,15 @@ export const dynamic = "force-dynamic";
 // reconciliation to-do — hand-logged bets the account check has not confirmed after 24 h.
 // Was a SELF-USE-VALIDATION page fed by the old "Place real bets" page, deleted in IA move P8b.
 // Data: src/lib/admin-money.ts (paged past the 1,000-row cap).
+//
+// Answer-first round (2026-09-25): the page opens with four plain answers (last 30 days, all time,
+// open now, to do) before any card; the Staked / P&L / At-risk cards they replaced are gone, the
+// three cards left add something the answers do not (price vs the final price, won/lost, today's
+// limits). Every figure names its period; the technical terms sit behind ⓘ.
 
 import Link from "next/link";
 import type { Metadata } from "next";
-import { AlertTriangle, CalendarClock, Coins, Euro, LineChart, Scale, Wallet } from "lucide-react";
+import { AlertTriangle, CalendarClock, CheckCircle2, ClipboardCheck, Coins, Euro, History, LineChart, Scale } from "lucide-react";
 import { createSupabaseServer, createServerServiceClient } from "@/lib/supabase-server";
 import { isBotBoardDevPreview } from "@/lib/bot-board";
 import {
@@ -21,12 +26,15 @@ import {
   moneyBotLabel,
   realMoneyWindow,
   RECONCILE_AFTER_H,
+  RECONCILE_FROM,
   unconfirmedToDo,
   type MoneyBet,
 } from "@/lib/admin-money";
 import { MARKET_THRESHOLDS_V2_EPOCH } from "@/lib/engine-data";
 import { PageHeader, Panel, PanelHeader, SectionLabel } from "@/components/oi/panel";
-import { Sparkline, StatCard } from "@/components/oi/stat-card";
+import { StatCard } from "@/components/oi/stat-card";
+import { AnswerStrip, type Answer } from "@/components/oi/answer-strip";
+import { InfoTip } from "@/components/oi/info-tip";
 import { StatusBadge } from "@/components/oi/status-badge";
 import { fmtEur, fmtInt, fmtPct } from "@/components/oi/format";
 import { Promotions } from "@/components/shadow-bots/promotions";
@@ -40,6 +48,18 @@ const CLV_OUTLIER = 1;
 const SMALL_N = 30;
 
 const utcDay = (iso: string) => iso.slice(0, 10);
+const shortDate = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+const earliest = (bets: MoneyBet[]) => bets.reduce<string | null>((a, b) => (a == null || b.placedAt < a ? b.placedAt : a), null);
+const latest = (bets: MoneyBet[]) => bets.reduce<string | null>((a, b) => (a == null || b.placedAt > a ? b.placedAt : a), null);
+
+/** "Better than the final price?" in words — the sign and size of the average, not a raw %. */
+function clvVerdict(mean: number | null): string {
+  if (mean == null) return "No data yet";
+  const a = Math.abs(mean);
+  if (a < 0.005) return "About the same";
+  if (a < 0.02) return mean > 0 ? "Slightly better" : "Slightly worse";
+  return mean > 0 ? "Better" : "Worse";
+}
 const isSettled = (b: MoneyBet) => b.result !== "pending";
 
 interface Agg {
@@ -209,7 +229,6 @@ export default async function RealBetsPage() {
   const todo = unconfirmedToDo(bets, now.getTime());
   const days = cumulative(bets, now);
   const weeks = weekly(bets, now);
-  const pnlSpark = weeks.slice(-12).map((w) => w.pnl);
   const hitRate = overall.won + overall.lost > 0 ? overall.won / (overall.won + overall.lost) : null;
 
   // Paper vs real, on bets placed from a paper pick that have settled on both sides.
@@ -217,6 +236,8 @@ export default async function RealBetsPage() {
   const pvr = matched.length
     ? {
         n: matched.length,
+        from: earliest(matched) as string,
+        to: latest(matched) as string,
         real: matched.reduce((a, b) => a + (b.pnl ?? 0), 0),
         paper: matched.reduce((a, b) => a + (b.paper?.pnl ?? 0), 0),
         diverged: matched.filter((b) => Math.abs(b.stake - (b.paper?.stake ?? 0)) >= 0.01).length,
@@ -229,13 +250,42 @@ export default async function RealBetsPage() {
   const postV2 = aggregate(bets.filter((b) => Date.parse(b.placedAt) >= epoch));
 
   const hhmm = new Date(d.loadedAt).toISOString().slice(11, 16);
+  const nowMs = now.getTime();
+  const firstBet = earliest(bets);
+  const epochLabel = shortDate(MARKET_THRESHOLDS_V2_EPOCH);
+  // Hand-logged bets are all Coolbet today; name the book only when that is true.
+  const todoBooks = [...new Set(todo.map((b) => b.bookmaker))];
+  const todoAccount = todoBooks.length === 1 ? `your ${todoBooks[0]} account` : "your bookmaker accounts";
+  const todoText = `${todo.length} hand-placed ${todo.length === 1 ? "bet" : "bets"} not matched to ${todoAccount}`;
+  const autoUsed = todayAuto.length > 0 ? `${todayAuto.length} bets / ${fmtEur(autoStake)} used today` : "none used today";
+
+  const answers: Answer[] = unreadable
+    ? [{ label: "Real bets", text: "Can't tell — the real-bet ledger could not be read", tone: "warning", icon: AlertTriangle }]
+    : [
+        // SAME function + window as the Overview's "Real bets · 30 days" answer (realMoneyWindow)
+        { label: "Last 30 days", text: `${fmtEur(last30.pnl, { signed: true })} on ${fmtInt(last30.bets)} bets`, sub: `${fmtEur(last30.staked)} staked, open bets included`, tone: last30.pnl > 0 ? "success" : last30.pnl < 0 ? "danger" : "neutral", alarm: false, icon: Euro },
+        {
+          label: firstBet ? `All time · since ${shortDate(firstBet)}` : "All time",
+          text: `${fmtEur(overall.pnl, { signed: true })} on ${fmtEur(overall.staked)} staked`,
+          sub: `return ${fmtPct(overall.roi)} on settled bets`,
+          tone: overall.pnl > 0 ? "success" : overall.pnl < 0 ? "danger" : "neutral",
+          alarm: false,
+          icon: History,
+        },
+        atRisk > 0
+          ? { label: "Open now", text: `${fmtEur(atRisk)} at risk on ${fmtInt(open.length)} ${open.length === 1 ? "bet" : "bets"}`, sub: `pays up to ${fmtEur(maxPayout)} if all win`, tone: "info", icon: Scale }
+          : { label: "Open now", text: "Nothing at risk", tone: "neutral", icon: Scale },
+        todo.length > 0
+          ? { label: "To do", text: todoText, tone: "warning", icon: ClipboardCheck, href: "#todo" }
+          : { label: "To do", text: "Nothing — every hand-placed bet is matched", tone: "success", icon: CheckCircle2 },
+      ];
 
   return (
     <div className="space-y-4 lg:space-y-6">
       <PageHeader
         eyebrow="Money"
         title="Real bets"
-        meta={`What we actually staked, and how it went. Real money only — paper bets are not in here. Checked ${hhmm} UTC.`}
+        meta={`Real money only · checked ${hhmm} UTC`}
         actions={
           <Link href="/admin/shadow-bots" className="inline-flex h-8 items-center rounded-lg border border-border px-2.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
             Pick queue →
@@ -252,51 +302,33 @@ export default async function RealBetsPage() {
         </div>
       )}
 
-      {/* ── KPI strip ── */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-6">
+      <AnswerStrip answers={answers} />
+
+      {/* ── Three cards that add something the answers do not ── */}
+      <div className="grid gap-3 sm:grid-cols-3">
         <StatCard
-          label="Staked"
-          icon={Wallet}
-          tone="info"
-          unknown={unreadable}
-          value={fmtEur(overall.staked)}
-          foot={`Settled bets, all time · last 30 days: ${fmtEur(last30.staked)} on ${fmtInt(last30.bets)} bets (open included)`}
-        />
-        <StatCard
-          label="Profit / loss"
-          icon={Euro}
-          tone={overall.pnl > 0 ? "success" : overall.pnl < 0 ? "danger" : "neutral"}
-          unknown={unreadable}
-          value={<span className={overall.pnl > 0 ? "text-success" : overall.pnl < 0 ? "text-danger" : ""}>{fmtEur(overall.pnl, { signed: true })}</span>}
-          spark={<Sparkline values={pnlSpark} kind="bars" signed />}
-          foot={`Return on stake ${fmtPct(overall.roi)} · last 30 days ${fmtEur(last30.pnl, { signed: true })} (${fmtInt(last30.settled)} settled)`}
-        />
-        <StatCard
-          label="Beat the close?"
+          label="Price vs final price"
           icon={LineChart}
-          tone={clv.mean == null ? "neutral" : clv.mean > 0 ? "success" : "danger"}
+          tone={clv.mean == null || clv.n < SMALL_N ? "neutral" : clv.mean > 0 ? "success" : "danger"}
           unknown={unreadable || clv.mean == null}
-          value={fmtPct(clv.mean)}
+          value={clvVerdict(clv.mean)}
           foot={
-            clv.n < SMALL_N
-              ? `Only ${clv.n} bets with a closing price — too few to trust`
-              : `Avg vs the same book's closing price, ${fmtInt(clv.n)} bets · vs Pinnacle ${fmtPct(clvPin.mean)} (${fmtInt(clvPin.n)})`
+            <span className="inline-flex items-center gap-1">
+              {clv.n < SMALL_N ? `Only ${fmtInt(clv.n)} bets — too few to trust` : `${fmtPct(clv.mean)}, ${fmtInt(clv.n)} bets, all time`}
+              <InfoTip>
+                Average of our price ÷ the same bookmaker&apos;s final price before kickoff − 1 (closing-line value, CLV), settled bets since{" "}
+                {firstBet ? shortDate(firstBet) : "the first bet"}. Against the sharpest bookmaker&apos;s final price (Pinnacle, margin removed): {fmtPct(clvPin.mean)} on{" "}
+                {fmtInt(clvPin.n)} bets. Above 0 means we usually got a better price than the market settled on.
+              </InfoTip>
+            </span>
           }
         />
         <StatCard
-          label="Bets"
+          label="Bets · all time"
           icon={Coins}
           unknown={unreadable}
           value={fmtInt(overall.total)}
-          foot={`${fmtInt(overall.settled)} settled · ${fmtInt(overall.open)} open · won ${overall.won}, lost ${overall.lost}${overall.void ? `, void ${overall.void}` : ""}${hitRate != null ? ` (${fmtPct(hitRate).replace("+", "")} hit)` : ""}`}
-        />
-        <StatCard
-          label="At risk now"
-          icon={Scale}
-          tone={atRisk > 0 ? "warning" : "neutral"}
-          unknown={unreadable}
-          value={fmtEur(atRisk)}
-          foot={atRisk > 0 ? `${open.length} open bets · pays up to ${fmtEur(maxPayout)} if all win` : "No open bets"}
+          foot={`won ${fmtInt(overall.won)} · lost ${fmtInt(overall.lost)}${overall.void ? ` · void ${overall.void}` : ""}${hitRate != null ? ` · ${Math.round(hitRate * 100)}% won` : ""}`}
         />
         <StatCard
           label="Today (UTC)"
@@ -307,9 +339,15 @@ export default async function RealBetsPage() {
           foot={
             // LOGGED-PICKS-INVISIBLE (2026-09-15): a hand-logged bet is real exposure, so it is in the visible
             // number — but kept apart from the automatic placer's caps, which only count confirmed placements.
-            <span title="The caps are the automatic placer's DEFAULT limits — the engine reads COOLBET_MAX_BETS_PER_DAY / COOLBET_MAX_STAKE_PER_DAY from its env, so they are a reference, not necessarily the live limit.">
-              Automatic {todayAuto.length}/{DAILY_MAX_BETS} · {fmtEur(autoStake)}/{fmtEur(DAILY_MAX_STAKE_EUR)}
-              {todayHand.length > 0 ? ` · +${todayHand.length} by hand ${fmtEur(handStake)}` : ""}
+            <span className="inline-flex items-center gap-1">
+              <span>
+                Daily limit: {DAILY_MAX_BETS} bets / {fmtEur(DAILY_MAX_STAKE_EUR)} ({autoUsed})
+                {todayHand.length > 0 ? ` · +${todayHand.length} by hand ${fmtEur(handStake)}` : ""}
+              </span>
+              <InfoTip>
+                The automatic placer&apos;s daily limits (defaults — the engine reads COOLBET_MAX_BETS_PER_DAY / COOLBET_MAX_STAKE_PER_DAY, so the live limit may differ).
+                Bets logged by hand are counted in today&apos;s total but not against these limits.
+              </InfoTip>
             </span>
           }
         />
@@ -317,18 +355,18 @@ export default async function RealBetsPage() {
 
       {/* ── Reconciliation to-do ── */}
       {!unreadable && todo.length > 0 && (
-        <Panel className="min-w-0 border-warning/40">
+        <Panel id="todo" className="min-w-0 scroll-mt-20 border-warning/40">
           <PanelHeader
             title={
               <span className="inline-flex items-center gap-2">
                 <StatusBadge tone="warning">To do</StatusBadge>
-                {todo.length} hand-logged {todo.length === 1 ? "bet is" : "bets are"} still not confirmed on the account
+                {todoText}
               </span>
             }
-            description={`Logged by hand more than ${RECONCILE_AFTER_H} h ago (since 10 Sep), and the account check has not matched a ticket. Check each one at the book: if it was never placed, it is inflating every number on this page.`}
+            description={`Logged by hand on or after ${shortDate(RECONCILE_FROM)}, more than ${RECONCILE_AFTER_H} h ago, and the account check found no matching ticket. Check each one at the bookmaker: if it was never placed, it is inflating every number on this page. Older hand-logged bets show as "Old entry" in the table below — the check did not exist yet, so there is nothing to do for them.`}
           />
           <div className="p-4 pt-3">
-            <ToDoTable bets={todo} />
+            <ToDoTable bets={todo} now={nowMs} />
           </div>
         </Panel>
       )}
@@ -337,45 +375,62 @@ export default async function RealBetsPage() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Panel className="min-w-0 lg:col-span-2">
-          <PanelHeader title="Results by bot" description="Real money only. Return and average CLV under 30 bets are shown greyed — too few to say anything." />
+          <PanelHeader title={firstBet ? `Results by bot · since ${shortDate(firstBet)}` : "Results by bot"} description="Real money only, all time. The price comparison is greyed under 30 bets — too few to say anything." />
           <div className="p-4 pt-3">
             <BotMoneyTable rows={perBot(bets)} />
           </div>
         </Panel>
         <Panel className="min-w-0">
-          <PanelHeader title="Did we get the paper price?" description="Bets placed from a paper pick, settled on both sides." />
+          <PanelHeader
+            title="Did we get the paper price?"
+            description={
+              pvr
+                ? `Only real bets placed from a paper pick and settled on both sides: ${pvr.n} of the ${overall.settled} settled real bets, placed ${shortDate(pvr.from)} – ${shortDate(pvr.to)}. Because it is that subset, its real result differs from the all-time total (${fmtEur(overall.pnl, { signed: true })}). "Lost to worse prices" is the real result minus what the same picks made on paper.`
+                : "Real bets placed from a paper pick, settled on both sides."
+            }
+          />
           <div className="space-y-2 p-4 text-sm">
             {pvr ? (
               <>
+                <p className="text-xs text-muted-foreground">
+                  {shortDate(pvr.from)} – {shortDate(pvr.to)} · {fmtInt(pvr.n)} bets
+                </p>
                 <Row label="Real result" value={fmtEur(pvr.real, { signed: true })} tone={pvr.real} />
                 <Row label="Same picks on paper" value={fmtEur(pvr.paper, { signed: true })} tone={pvr.paper} />
                 <Row label="Lost to worse prices" value={fmtEur(pvr.real - pvr.paper, { signed: true })} tone={pvr.real - pvr.paper} />
                 <Row label="Stake matched the paper stake" value={`${pvr.n - pvr.diverged} of ${pvr.n}`} />
-                {pvr.n < SMALL_N && <p className="text-xs text-muted-foreground">Only {pvr.n} matched bets — a small sample.</p>}
+                {pvr.n < SMALL_N && <p className="text-xs text-muted-foreground">Only {pvr.n} bets — a small sample.</p>}
               </>
             ) : (
               <p className="text-muted-foreground">No real bet has a settled paper twin yet.</p>
             )}
             <details className="border-t border-border pt-2">
-              <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">Before / after the per-market thresholds ({MARKET_THRESHOLDS_V2_EPOCH.slice(0, 10)})</summary>
+              <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">Before / after the new per-market minimums ({epochLabel})</summary>
               <div className="mt-2 space-y-1 text-xs">
-                <Row label={`Before (${preV2.settled} settled)`} value={`${fmtEur(preV2.pnl, { signed: true })} · ${fmtPct(preV2.roi)}`} tone={preV2.pnl} />
-                <Row label={`After (${postV2.settled} settled)`} value={`${fmtEur(postV2.pnl, { signed: true })} · ${fmtPct(postV2.roi)}`} tone={postV2.pnl} />
+                <Row label={`Before ${epochLabel} (${preV2.settled} bets)`} value={`${fmtEur(preV2.pnl, { signed: true })} · ${fmtPct(preV2.roi)}`} tone={preV2.pnl} />
+                <Row label={`From ${epochLabel} (${postV2.settled} bets)`} value={`${fmtEur(postV2.pnl, { signed: true })} · ${fmtPct(postV2.roi)}`} tone={postV2.pnl} />
               </div>
             </details>
           </div>
         </Panel>
       </div>
 
-      <section className="space-y-2">
-        <SectionLabel>Promotions</SectionLabel>
-        <Promotions promos={d.promos} error={d.promoError} />
-      </section>
+      {/* Promotions: hidden while none is recorded (a read failure still shows — "none" and
+          "unreadable" must not look the same). */}
+      {(d.promos.length > 0 || d.promoError) && (
+        <section className="space-y-2">
+          <SectionLabel>Promotions</SectionLabel>
+          <Promotions promos={d.promos} error={d.promoError} />
+        </section>
+      )}
 
       <Panel>
-        <PanelHeader title="Every real bet" description="Newest first. Filter by bot, result, market or whether the account check has confirmed it; export what you see as CSV." />
+        <PanelHeader
+          title={firstBet ? `Every real bet · since ${shortDate(firstBet)}` : "Every real bet"}
+          description={`Newest first. Filter by bot, result, market or whether the account check has confirmed it; export what you see as CSV. Bets logged by hand before ${shortDate(RECONCILE_FROM)} show as "Old entry" — the account check did not exist yet.`}
+        />
         <div className="p-4 pt-3">
-          <BetLogTable bets={bets} />
+          <BetLogTable bets={bets} now={nowMs} />
         </div>
       </Panel>
 

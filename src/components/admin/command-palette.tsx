@@ -67,10 +67,10 @@ function actions(f: PaletteFleet): Entry[] {
   {
     id: "a-footprint",
     section: "Actions",
-    label: `${word(f.sweepingPaused, "Resume", "Pause")} Coolbet sweeping${word(f.sweepingPaused, " (paused now)", " (collecting now)")}`.replace(/^ Coolbet/, "Pause / resume Coolbet"),
+    label: `Turn Coolbet collection ${word(f.sweepingPaused, "on (it is off now)", "off (it is on now)")}`.replace(/ $/, " on / off"),
     hint: "Feeds",
     href: "/admin/feeds#coolbet-footprint",
-    keywords: "footprint imperva blocked odds collection stop",
+    keywords: "footprint sweeping imperva blocked odds collection stop pause resume",
   },
   { id: "a-feed", section: "Actions", label: "Pause or re-run one odds feed", hint: "Feeds", href: "/admin/feeds" },
   { id: "a-place", section: "Actions", label: "Place a bet by hand from today's picks", hint: "Pick queue", href: "/admin/shadow-bots" },

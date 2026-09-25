@@ -11,7 +11,7 @@ import type { FeedBookStats } from "@/lib/engine-data";
 const BOOK_LABEL: Record<string, string> = {
   "Unibet-Site": "Unibet",
   "Betfair-Exchange": "Betfair",
-  Pinnacle: "Pinnacle",
+  Pinnacle: "Sharpest book",
 };
 const ORDER = ["Coolbet", "Epicbet", "Unibet-Site", "Tonybet", "Betfair-Exchange", "Pinnacle"];
 
@@ -31,7 +31,7 @@ export function CoverageChart({ books, error }: { books: FeedBookStats[]; error:
   return (
     <ChartCard
       title="Coverage per book, today vs yesterday"
-      description={`Share of the day's fixtures each book priced at least once${fx?.fixtures_today ? ` (${fx.fixtures_today} fixtures today, ${fx.fixtures_yesterday ?? "?"} yesterday)` : ""}. Only these two days are kept, so this is a comparison, not a trend.`}
+      description={`Share of the day's matches each book priced at least once${fx?.fixtures_today ? ` (${fx.fixtures_today} matches today, ${fx.fixtures_yesterday ?? "?"} yesterday)` : ""}. Only these two days are kept, so this is a comparison, not a trend.`}
       kind="bar"
       data={data}
       xKey="book"
@@ -43,7 +43,7 @@ export function CoverageChart({ books, error }: { books: FeedBookStats[]; error:
       yFmt={(v) => `${v}%`}
       height={260}
       empty={error ? `Unreadable: ${error}` : "No coverage numbers yet — the engine writes them every 5 minutes."}
-      footer="Pinnacle comes through API-Football. Betfair counts fixtures the exchange lists, thin markets included — liquid ones are in its block's details."
+      footer="The sharpest book (Pinnacle) comes through API-Football. Betfair counts every match the exchange lists, including ones with little money on them — its block's details show the usable ones."
     />
   );
 }

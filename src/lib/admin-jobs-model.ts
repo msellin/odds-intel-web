@@ -46,43 +46,43 @@ export const JOB_GROUPS: { key: string; label: string; what: string; test: RegEx
   {
     key: "settle",
     label: "Settlement",
-    what: "Marks finished matches as won or lost, works out profit and closing-price value (CLV), and tidies up afterwards. Main run at night, plus a sweep every 15 minutes.",
-    test: /settle|clv_/,
+    what: "Marks finished bets won or lost and scores each price against the final price. Every 15 min, plus a nightly run.",
+    test: /settle|^clv_/,
   },
   {
     key: "odds",
     label: "Odds collection",
-    what: "Reads prices from API-Football and from each bookmaker we sweep ourselves, plus closing prices at kick-off, freshness and data-quality checks, and request budgets.",
+    what: "Reads prices from API-Football and each bookmaker, plus prices at kick-off and the price checks.",
     test: /board_audit|results_check|odds|closing|betfair|tonybet|epicbet|unibet|flaresolverr|feed_health|budget|price_sanity|price_fidelity|backfill_live_prices|drift_refresh/,
   },
   {
     key: "picks",
     label: "Picks & bots",
-    what: "Turns fresh prices into picks: the betting pipeline, trigger rules, the shadow scans every 30 minutes, paper bots, and publishing to /picks and Telegram.",
-    test: /^betting_|^pick_|^shadow_|publish|paper_pick|_shadow$|combined_1x2|coolbet_model/,
+    what: "Turns fresh prices into picks, runs the paper bots and publishes to /picks and Telegram.",
+    test: /^betting_|^pick_|^shadow_|publish|paper_pick|_shadow$|combined_1x2|coolbet_model|sharp_outlier|export_bot_config/,
   },
   {
     key: "enrich",
     label: "Fixtures & match data",
-    what: "Loads fixtures, standings, injuries, predictions and the per-team numbers the models read (ratings, form, scoring rates). Mostly early morning and overnight.",
+    what: "Loads fixtures, tables, injuries and the team numbers the models read. Mostly overnight and early morning.",
     test: /fixture|enrich|injur|standings|team_|league_|line_velocity|xg_|feature_|mfv_|backfill|predictions|rating_|morning_pipeline/,
   },
   {
     key: "models",
     label: "Model upkeep",
-    what: "Weekly retraining and checks that the models and thresholds still behave; monthly tuning.",
+    what: "Weekly retraining and checks that the models still behave; monthly tuning.",
     test: /retrain|weekly_|aln_|calibrator|threshold/,
   },
   {
     key: "alerts",
     label: "Alerts & reports",
-    what: "Telegram alerts, daily summaries and e-mails, the news checker, and the snapshots this admin reads.",
-    test: /alert|digest|summary|email|news|ops_snapshot|dashboard_cache|healthcheck|health_ping|coolbet_prekickoff/,
+    what: "Telegram alerts, daily summaries, e-mails, the news checker and the summaries this admin reads.",
+    test: /alert|digest|summary|email|news|ops_snapshot|dashboard_cache|healthcheck|health_ping|coolbet_prekickoff|observatory/,
   },
   {
     key: "house",
     label: "Housekeeping",
-    what: "Pruning old rows and small reconciliations.",
+    what: "Clearing out old data and small cross-checks.",
     test: /prune|stripe|cleanup/,
   },
 ];
@@ -92,10 +92,126 @@ export function jobGroup(name: string): string {
   return (JOB_GROUPS.find((g) => g.test.test(name)) ?? OTHER_GROUP).label;
 }
 
-/** "league_draw_rate" → "League draw rate". */
+/**
+ * Plain names for every job that logs to pipeline_runs (answer-first fix round, 2026-09-25: the
+ * tester found snake_case ids as the primary text). The raw id stays as small secondary text only.
+ * A job missing here falls back to title-cased words (humanJob) — add it here when you see one.
+ */
+export const JOB_LABELS: Record<string, string> = {
+  aln_auto_tune: "Monthly tuning of the confidence model",
+  backfill_half_scores: "Half-time scores fill-in",
+  backfill_live_prices: "Live prices at pick time fill-in",
+  betfair_exchange_snapshot: "Betfair exchange prices",
+  betting_pipeline: "Morning picks run",
+  betting_refresh: "Hourly picks refresh",
+  board_audit: "Price check-back (wrong or swapped prices)",
+  book_price_fidelity: "Bookmaker price accuracy check",
+  budget_attribution_flush: "API call counting",
+  budget_sync: "API-Football allowance sync",
+  closing_snap: "Prices at kick-off",
+  clv_sharp: "Price vs the final price, scoring",
+  combined_1x2_refresh: "Combined match-result model refresh",
+  coolbet_daemon_healthcheck: "Coolbet collector health check",
+  coolbet_daily_summary: "Coolbet daily summary",
+  coolbet_health_ping: "Coolbet health ping",
+  coolbet_model_1x2_shadow: "Coolbet match-result model (paper)",
+  coolbet_model_ou_shadow: "Coolbet over/under model (paper)",
+  coolbet_odds_freshness: "Coolbet odds freshness check",
+  coolbet_odds_snapshot: "Coolbet odds",
+  coolbet_prekickoff_alert: "Coolbet pre-kick-off alert",
+  coolbet_price_sanity: "Coolbet price sanity check",
+  corners_paper_pick: "Corners picks (paper)",
+  corners_paper_settle: "Corners picks settlement (paper)",
+  daily_real_perf_email: "Daily real-money e-mail",
+  dashboard_cache_refresh: "Public site numbers refresh",
+  enrichment_full: "Full match-data refresh",
+  epicbet_odds_freshness: "Epicbet odds freshness check",
+  epicbet_odds_snapshot: "Epicbet odds",
+  exchange_quotes_prune: "Old exchange prices clean-up",
+  export_bot_config: "Bot settings export",
+  feature_densify: "Model inputs fill-in",
+  feed_health: "Feed status check",
+  fetch_enrichment: "Morning match data",
+  fetch_fixtures: "Morning fixtures",
+  fetch_odds: "Morning odds",
+  fetch_predictions: "Morning predictions",
+  fh_1x2_paper_pick: "First-half result picks (paper)",
+  fh_1x2_paper_settle: "First-half result settlement (paper)",
+  fixture_refresh: "Fixtures refresh",
+  flaresolverr_sweep: "Browser helper clean-up",
+  health_alerts_feeds: "Feed alerts",
+  health_alerts_morning: "Morning health alerts",
+  health_alerts_settlement: "Settlement alerts",
+  injuries_morning: "Morning injuries",
+  injury_severity: "Injury impact scores",
+  league_clv_efficiency: "League price-accuracy scores",
+  league_draw_rate: "League draw rates",
+  league_season_phase: "League season stage",
+  line_velocity: "Price movement speed",
+  mfv_b_ml3_nightly_refresh: "Nightly model features refresh",
+  mfv_form_momentum_nightly_refresh: "Nightly form features refresh",
+  mfv_v3_signals_propagate: "Nightly extra signals refresh",
+  morning_pipeline: "Morning data load",
+  news_checker: "News checker",
+  observatory_metrics: "Daily data-quality metrics",
+  odds_api_fallback: "Backup Coolbet prices (The Odds API)",
+  odds_pre_kickoff: "Odds before kick-off",
+  odds_refresh: "API-Football odds",
+  odds_tomorrow: "Tomorrow's odds",
+  ops_snapshot_fallback: "Admin summary (backup)",
+  ou35_model_shadow: "Over/under 3.5 model (paper)",
+  ou_sharp_outlier: "Over/under price outliers (paper)",
+  pick_trigger_matcher: "Pick rule matching",
+  pick_triggers: "Pick rules",
+  pinnacle_drift_refresh: "Sharpest-book price movement",
+  pipeline_failure_alerter: "Job failure alerts",
+  pipeline_runs_failure_digest: "Job failure digest",
+  prune_live_snapshots: "Old live data clean-up",
+  publish_daily_picks: "Publish daily picks",
+  publish_picks_forward_test: "Publish /picks",
+  rating_1x2_shadow: "Team-rating match-result model (paper)",
+  results_check: "Results cross-check",
+  retrain_healthcheck: "Model retrain check",
+  settlement: "Nightly settlement",
+  settlement_blend: "Settlement: model blend refit",
+  settlement_dc_rho: "Settlement: low-score adjustment refit",
+  settlement_ml_etl: "Settlement: model training rows",
+  settlement_platt: "Settlement: probability recalibration",
+  settlement_prune: "Settlement: clean-up",
+  settle_ready: "15-minute settlement sweep",
+  settle_reconcile: "Settlement cross-check",
+  shadow_HHMM: "Half-hourly pick scan",
+  standings_nightly: "Nightly league tables",
+  stripe_reconcile: "Payments cross-check",
+  team_avg_player_rating: "Team player ratings",
+  team_scoring_rates: "Team scoring rates",
+  team_total_paper_pick: "Team goals picks (paper)",
+  team_total_paper_settle: "Team goals settlement (paper)",
+  tonybet_live: "Tonybet live data",
+  tonybet_odds_snapshot: "Tonybet odds",
+  tonybet_results: "Tonybet results",
+  trigger_calibrator_watch: "Pick-rule calibration watch",
+  unibet_kambi_odds: "Old Unibet feed (retired)",
+  unibet_site_odds: "Unibet odds",
+  weekly_bot_review: "Weekly bot review",
+  weekly_meta_retrain: "Weekly pick-filter retrain",
+  weekly_meta_validate: "Weekly pick-filter check",
+  weekly_retrain: "Weekly model retrain",
+  weekly_threshold_check: "Weekly threshold check",
+  write_ops_snapshot: "Admin summary",
+  xg_late_fill: "Expected goals fill-in",
+  xg_overperformance: "Expected goals over/under-performance",
+};
+
+/** A job's plain name: JOB_LABELS, else title-cased words ("league_draw_rate" → "League Draw Rate"). */
 export function humanJob(name: string): string {
-  const s = name.replace(/^job_/, "").replace(/_/g, " ").trim();
-  return s.charAt(0).toUpperCase() + s.slice(1);
+  if (JOB_LABELS[name]) return JOB_LABELS[name];
+  return name
+    .replace(/^job_/, "")
+    .split("_")
+    .filter(Boolean)
+    .map((w) => (/^(af|clv|ou|ml|xg|elo)$/i.test(w) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1)))
+    .join(" ");
 }
 
 export const STATE_RANK: Record<JobState, number> = { failing: 0, stuck: 1, running: 2, quiet: 3, ok: 4 };
@@ -129,7 +245,7 @@ export function buildJobViews(rows: JobLatestRow[], now: number): JobView[] {
     const lastOk = rs.map((r) => r.last_ok_at).filter((x): x is string => !!x).sort().pop() ?? null;
     out.push({
       job: key,
-      label: key === "shadow_HHMM" ? `Shadow scan (${rs.length} half-hourly slots)` : humanJob(key),
+      label: key === "shadow_HHMM" ? `${JOB_LABELS.shadow_HHMM} (${rs.length} slots)` : humanJob(key),
       group: jobGroup(key === "shadow_HHMM" ? "shadow_0000" : key),
       state: states[worstI],
       lastRun: newest.started_at,
@@ -145,13 +261,77 @@ export function buildJobViews(rows: JobLatestRow[], now: number): JobView[] {
   return out.sort((a, b) => STATE_RANK[a.state] - STATE_RANK[b.state] || b.streak - a.streak || a.label.localeCompare(b.label));
 }
 
+/**
+ * Four status words only (answer-first fix round, 2026-09-25). "Running · 8 min ago" read as
+ * "executing now" — a job in progress is OK until it has run 3 h (then Stuck), and says "running now"
+ * in its last-run text instead. "Retired" = its last run was fine but nothing for 8+ days; those sit
+ * under the collapsed "Old jobs". Jobs unregistered on purpose (engine table retired_jobs, migration
+ * 426) never reach this page at all.
+ */
 export const STATE_WORD: Record<JobState, string> = {
   failing: "Failing",
   stuck: "Stuck",
-  running: "Running",
-  quiet: "Quiet",
+  running: "OK",
+  quiet: "Retired",
   ok: "OK",
 };
+
+/** The ⓘ text that defines the four words. */
+export const STATE_WORDS_HELP =
+  "OK: its last run finished (or is running now, for under 3 h). Failing: its last run failed. Stuck: still marked running after 3 h — it probably died without saying so. Retired: its last run was fine but it has not run for over 8 days — probably no longer scheduled; listed under Old jobs.";
+
+/** A failure whose last run is within this many days is "failing now" (red); older = amber. Same rule as the Overview. */
+export const RECENT_FAILURE_D = 7;
+
+export const isRecentFailure = (v: Pick<JobView, "lastRun">, now: number) => now - new Date(v.lastRun).getTime() <= RECENT_FAILURE_D * 86_400_000;
+
+const DM = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const dm = (iso: string) => {
+  const d = new Date(iso);
+  return `${d.getUTCDate()} ${DM[d.getUTCMonth()]}`;
+};
+
+/**
+ * "Failed on 1 Sep — it has not run since" (one failed run since the last success) or
+ * "Failing since 3 Sep · 5 failed runs in a row". The old "Failing since: before 1 Sep" + "1 failed
+ * run in a row" said the same thing twice and read as a long outage.
+ */
+export function failingText(v: Pick<JobView, "state" | "failingSince" | "lastRun" | "streak" | "sinceFloor">): string | null {
+  if (v.state !== "failing") return null;
+  if (v.streak <= 1) return `Failed on ${dm(v.lastRun)} — it has not run since`;
+  const since = v.failingSince ? `${v.sinceFloor ? "Failing since before" : "Failing since"} ${dm(v.failingSince)}` : "Failing";
+  return `${since} · ${v.streak} failed runs in a row`;
+}
+
+/** "ran 8 min ago" / "running now · started 8 min ago" (`ago` = a timeAgo-style formatter). */
+export function lastRunText(v: Pick<JobView, "state" | "lastRun">, ago: (iso: string) => string): string {
+  return v.state === "running" ? `running now · started ${ago(v.lastRun)}` : `ran ${ago(v.lastRun)}`;
+}
+
+/**
+ * The Jobs answer, shared with the Overview (Rule 1: never "All running" while a failure is listed):
+ *   any job failing → "1 job failing — <plain name>", sub "since 1 Sep"; RED if any failing job's last
+ *   run is within RECENT_FAILURE_D days, else AMBER (a rarely-run job's old failure);
+ *   else stuck → amber; else green "All running".
+ */
+export function jobsAnswer(views: JobView[], now: number): { tone: "danger" | "warning" | "success"; text: string; sub: string; failing: JobView[] } {
+  const failing = views.filter((v) => v.state === "failing");
+  const stuck = views.filter((v) => v.state === "stuck");
+  const active = views.filter((v) => v.state !== "quiet").length;
+  if (failing.length) {
+    const first = [...failing].sort((a, b) => Number(isRecentFailure(b, now)) - Number(isRecentFailure(a, now)) || b.streak - a.streak)[0];
+    const more = failing.length > 1 ? ` and ${failing.length - 1} more` : "";
+    const since = first.streak <= 1 ? `failed on ${dm(first.lastRun)}, no run since` : `since ${dm(first.failingSince ?? first.lastRun)} · ${first.streak} failed runs in a row`;
+    return {
+      tone: failing.some((v) => isRecentFailure(v, now)) ? "danger" : "warning",
+      text: `${failing.length} job${failing.length === 1 ? "" : "s"} failing — ${first.label}${more}`,
+      sub: since,
+      failing,
+    };
+  }
+  if (stuck.length) return { tone: "warning", text: `${stuck.length} job${stuck.length === 1 ? "" : "s"} stuck — ${stuck[0].label}`, sub: "still marked running after 3 h", failing };
+  return { tone: "success", text: "All running", sub: `${active} jobs, last runs fine`, failing };
+}
 
 // ── #139 UX fix round (2026-09-24) ──────────────────────────────────────────────────────────────
 
@@ -176,18 +356,6 @@ export const JOB_FEED: Record<string, string> = {
 /** Anchor for one job row: id="job-<job_name>". The 48 shadow_HHMM slots share job-shadow_HHMM. */
 export function jobAnchor(jobName: string): string {
   return `job-${/^shadow_\d{4}$/.test(jobName) ? "shadow_HHMM" : jobName}`;
-}
-
-/** The failing job that has been failing the longest (earliest failingSince). */
-export function longestFailing(views: JobView[]): JobView | null {
-  const f = views.filter((v) => v.state === "failing" && v.failingSince);
-  return f.sort((a, b) => (a.failingSince as string).localeCompare(b.failingSince as string))[0] ?? null;
-}
-
-/** The failing job with the most failed runs in a row. */
-export function mostRepeats(views: JobView[]): JobView | null {
-  const f = views.filter((v) => v.state === "failing");
-  return f.sort((a, b) => b.streak - a.streak || a.label.localeCompare(b.label))[0] ?? null;
 }
 
 /** One pipeline_runs row, as the Jobs drawer shows it. */

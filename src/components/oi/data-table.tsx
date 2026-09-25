@@ -26,6 +26,7 @@ import {
   type VisibilityState,
   type Row,
 } from "@tanstack/react-table";
+import { InfoTip } from "./info-tip";
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Columns3, Download, PlusCircle, Search, X } from "lucide-react";
 
 declare module "@tanstack/react-table" {
@@ -37,6 +38,8 @@ declare module "@tanstack/react-table" {
     /** Value used for CSV export (defaults to the cell's raw value). */
     csv?: (row: TData) => string | number | null | undefined;
     className?: string;
+    /** ⓘ explanation beside the header — rendered OUTSIDE the sort button (a button may not hold a button). */
+    tip?: ReactNode;
   }
 }
 
@@ -279,6 +282,7 @@ export function DataTable<T>({
                       className={`h-9 whitespace-nowrap px-3 text-xs font-medium text-muted-foreground ${align === "right" ? "text-right" : align === "center" ? "text-center" : "text-left"} ${h.column.columnDef.meta?.className ?? ""}`}
                     >
                       {h.isPlaceholder ? null : canSort ? (
+                        <span className={`inline-flex items-center gap-0.5 ${align === "right" ? "flex-row-reverse" : ""}`}>
                         <button
                           type="button"
                           onClick={h.column.getToggleSortingHandler()}
@@ -287,8 +291,13 @@ export function DataTable<T>({
                           {flexRender(h.column.columnDef.header, h.getContext())}
                           {sort === "asc" ? <ArrowUp size={12} aria-hidden="true" /> : sort === "desc" ? <ArrowDown size={12} aria-hidden="true" /> : <ArrowUpDown size={12} className="opacity-40" aria-hidden="true" />}
                         </button>
+                        {h.column.columnDef.meta?.tip && <InfoTip>{h.column.columnDef.meta.tip}</InfoTip>}
+                        </span>
                       ) : (
-                        flexRender(h.column.columnDef.header, h.getContext())
+                        <span className="inline-flex items-center gap-0.5">
+                          {flexRender(h.column.columnDef.header, h.getContext())}
+                          {h.column.columnDef.meta?.tip && <InfoTip>{h.column.columnDef.meta.tip}</InfoTip>}
+                        </span>
                       )}
                     </th>
                   );

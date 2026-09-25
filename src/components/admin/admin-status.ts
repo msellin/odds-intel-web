@@ -41,6 +41,6 @@ export function fleetStatus(f: FleetState | null): StatusDot[] {
     { label: "Placement", word: paused == null ? "Unknown" : paused ? "Paused" : "Running", tone: paused == null ? "unknown" : paused ? "off" : "danger" },
     { label: "Real money", word: armed == null ? "Unknown" : armed ? "ARMED" : "Off", tone: armed == null ? "unknown" : armed ? "danger" : "off" },
     { label: "Picks channel", word: pub == null ? "Unknown" : pub ? "Paused" : "Sending", tone: pub == null ? "unknown" : pub ? "warn" : "ok" },
-    { label: "Coolbet sweeping", word: foot == null ? "Unknown" : foot ? "Paused" : "Collecting", tone: foot == null ? "unknown" : foot ? "idle" : "ok" },
+    { label: "Coolbet collection", word: foot == null ? "Unknown" : foot ? "Off" : "On", tone: foot == null ? "unknown" : foot ? "idle" : "ok" },
   ];
 }

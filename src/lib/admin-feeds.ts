@@ -96,7 +96,7 @@ export async function loadFeedsPage(): Promise<FeedsPageData> {
     ),
     read<FootprintHour[]>(
       "book_footprint",
-      () => db.from("book_footprint").select("book, hour, requests, refused").gte("hour", since25h).order("hour", { ascending: true }),
+      () => db.from("book_footprint").select("book, hour, requests, refused, challenges, errors").gte("hour", since25h).order("hour", { ascending: true }),
       [],
     ),
   ]);
@@ -113,4 +113,4 @@ export async function loadFeedsPage(): Promise<FeedsPageData> {
 
 // Pure, client-safe helpers live in admin-feeds-model.ts (a client component cannot import this
 // server module); re-exported so callers can import either.
-export { budgetView, budgetSentence, BUDGET_REASON_RE, STATUS_STALE_MIN, DQ_GROUPS, dqGroupLabel, type BudgetView } from "@/lib/admin-feeds-model";
+export { budgetView, budgetSentence, BUDGET_REASON_RE, STATUS_STALE_MIN, DQ_GROUPS, dqGroupLabel, coolbetBlockRisk, dqProblems, type BudgetView, type BlockRisk } from "@/lib/admin-feeds-model";

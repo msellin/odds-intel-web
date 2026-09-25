@@ -10,84 +10,59 @@
 // wrong match on the board / home-away or over-under swapped / results disagree — one badge per
 // category with the books it hit, instead of one badge per raw check × book.
 
+//
+// Answer-first fix round (#139, 2026-09-25): the tester read "74 in 24 h" when the checks had found a
+// handful of problems re-found every 30 min. The panel now counts DISTINCT problems (dqProblems in
+// src/lib/admin-feeds-model.ts: same match + book + kind = one), says "set aside automatically — no
+// action needed" when every one was already quarantined or corrected (nothing alarming that needs no
+// action), and writes the detail in plain words ("Handicap −0.75: away 1.25, other books 1.54", not
+// "ah:-0.75 … 4-book median … 15 pp"). The raw "Check" column is gone — "What was wrong" says it.
+
 import type { ColumnDef } from "@tanstack/react-table";
 import type { DataQualityFinding } from "@/lib/engine-data";
-import { dqGroupLabel } from "@/lib/admin-feeds-model";
+import { dqProblems, type DqProblem } from "@/lib/admin-feeds-model";
 import { DataTable } from "@/components/oi/data-table";
 import { Panel, PanelHeader } from "@/components/oi/panel";
 import { StatusBadge } from "@/components/oi/status-badge";
 
-const LABEL: Record<string, string> = {
-  wrong_fixture_board: "Wrong-match board",
-  mirrored_1x2: "Home/away swapped (1X2)",
-  swapped_two_way: "Over/under or yes/no swapped",
-  results_disagree: "Results disagree",
-  single_market_off: "One price far from the other books",
-  results_corrected: "Result corrected",
-};
-const label = (c: string) => LABEL[c] ?? c.replace(/_/g, " ");
-
-function short(f: DataQualityFinding): string {
-  const d = (f.detail ?? {}) as Record<string, unknown>;
-  if (f.check_name === "results_disagree") {
-    return `${d.match ?? ""}: API-Football ${d.api_football ?? "?"} vs Tonybet ${d.tonybet ?? "?"}`;
-  }
-  const off = d.offenses as unknown;
-  if (Array.isArray(off)) {
-    return off.map((o) => (Array.isArray(o) ? `${o[0]}: ${o[1]}` : String(o))).join(" · ");
-  }
-  return d.where ? `found at ${d.where}` : "";
-}
-
-interface Row {
-  id: number;
-  at: string;
-  check: string;
-  group: string;
-  book: string;
-  rows: number;
-  detail: string;
-}
+const stamp = (iso: string) => iso.slice(5, 16).replace("T", " ").replace(/^(\d\d)-(\d\d)/, "$2/$1");
 
 export function DqFindings({ findings, now, error }: { findings: DataQualityFinding[]; now: number; error: string | null }) {
-  const day = findings.filter((f) => now - new Date(f.found_at).getTime() < 86_400_000);
-  const counts = new Map<string, { n: number; books: Map<string, number> }>();
-  for (const f of day) {
-    const k = dqGroupLabel(f.check_name);
-    const g = counts.get(k) ?? { n: 0, books: new Map<string, number>() };
+  const problems = dqProblems(findings);
+  const day = problems.filter((p) => now - new Date(p.last).getTime() < 86_400_000);
+  const open = day.filter((p) => !p.handled);
+  const counts = new Map<string, { n: number; open: number; books: Set<string> }>();
+  for (const p of day) {
+    const g = counts.get(p.group) ?? { n: 0, open: 0, books: new Set<string>() };
     g.n += 1;
-    const b = f.bookmaker ?? "unknown book";
-    g.books.set(b, (g.books.get(b) ?? 0) + 1);
-    counts.set(k, g);
+    if (!p.handled) g.open += 1;
+    g.books.add(p.book);
+    counts.set(p.group, g);
   }
-  const data: Row[] = findings.map((f) => ({
-    id: f.id,
-    at: f.found_at,
-    check: f.check_name,
-    group: dqGroupLabel(f.check_name),
-    book: f.bookmaker ?? "—",
-    rows: f.rows_moved ?? 0,
-    detail: short(f),
-  }));
-  const columns: ColumnDef<Row>[] = [
+  const columns: ColumnDef<DqProblem>[] = [
     {
-      accessorKey: "at",
-      header: "When (UTC)",
-      cell: ({ row }) => <span className="whitespace-nowrap font-mono text-xs tabular-nums">{row.original.at.slice(5, 16).replace("T", " ")}</span>,
+      accessorKey: "last",
+      header: "Last seen (UTC)",
+      cell: ({ row }) => <span className="whitespace-nowrap font-mono text-xs tabular-nums">{stamp(row.original.last)}</span>,
     },
     { accessorKey: "group", header: "What was wrong", cell: ({ row }) => <span className="whitespace-nowrap">{row.original.group}</span> },
-    {
-      accessorKey: "check",
-      header: "Check",
-      meta: { csv: (r) => label(r.check) },
-      cell: ({ row }) => <span className="whitespace-nowrap text-xs text-muted-foreground">{label(row.original.check)}</span>,
-    },
     { accessorKey: "book", header: "Book" },
     {
-      accessorKey: "rows",
-      header: "Rows set aside",
+      accessorKey: "times",
+      header: "Times found",
       meta: { align: "right" },
-      cell: ({ row }) => (row.original.rows ? row.original.rows : "—"),
+      cell: ({ row }) => <span title={`First found ${stamp(row.original.first)} UTC; the checks re-run every 30 min`}>{row.original.times}</span>,
+    },
+    {
+      id: "handled",
+      accessorFn: (r) => (r.handled ? "Set aside" : "Needs a look"),
+      header: "Status",
+      cell: ({ row }) =>
+        row.original.handled ? (
+          <StatusBadge tone="neutral" dot={false}>Set aside</StatusBadge>
+        ) : (
+          <StatusBadge tone="warning">Needs a look</StatusBadge>
+        ),
     },
     {
       accessorKey: "detail",
@@ -100,53 +75,64 @@ export function DqFindings({ findings, now, error }: { findings: DataQualityFind
       ),
     },
   ];
+  const badge = error ? (
+    <StatusBadge tone="warning">Unreadable</StatusBadge>
+  ) : day.length === 0 ? (
+    <StatusBadge tone="success">None in 24 h</StatusBadge>
+  ) : open.length ? (
+    <StatusBadge tone="warning">{open.length} need{open.length === 1 ? "s" : ""} a look · last 24 h</StatusBadge>
+  ) : (
+    <StatusBadge tone="neutral" dot={false}>{day.length} in 24 h · set aside automatically</StatusBadge>
+  );
   return (
     <Panel id="dq">
       <PanelHeader
         title="Data quality"
-        description="Prices and results the checks caught: another match's board under our fixture, swapped sides, scores that disagree between sources. Refused or moved rows are kept in quarantine (reversible). Checked on write and every 30 min; the list covers 7 days."
-        actions={
-          error ? (
-            <StatusBadge tone="warning">Unreadable</StatusBadge>
-          ) : (
-            <StatusBadge tone={day.length ? "warning" : "success"}>{day.length ? `${day.length} in 24 h` : "None in 24 h"}</StatusBadge>
-          )
-        }
+        description="Prices and results the checks caught: another match's prices under ours, home and away swapped, a price far from every other book, scores that disagree between sources. Wrong prices are set aside (and can be restored); wrong results are corrected. Checked when prices are stored and every 30 min; the list covers 7 days, one row per problem however often it was re-found."
+        actions={badge}
       />
       <div className="space-y-3 p-4 pt-3">
         {error ? (
           <p className="text-sm text-warning">Could not read the data-quality findings ({error}) — this is not an all-clear.</p>
-        ) : findings.length === 0 ? (
+        ) : problems.length === 0 ? (
           <p className="text-sm text-muted-foreground">Nothing found in the last 7 days.</p>
         ) : (
           <>
+            {day.length > 0 && (
+              <p className="text-sm">
+                {day.length} problem{day.length === 1 ? "" : "s"} in the last 24 h —{" "}
+                {open.length === 0 ? (
+                  <span className="text-muted-foreground">set aside automatically, no action needed.</span>
+                ) : (
+                  <span className="text-warning">{open.length} not dealt with automatically — see “Needs a look” below.</span>
+                )}
+              </p>
+            )}
             {counts.size > 0 && (
               <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                 {[...counts.entries()]
                   .sort((a, b) => b[1].n - a[1].n)
                   .map(([k, g]) => (
-                    <div key={k} className="rounded-lg border border-warning/30 bg-warning/5 px-3 py-2">
+                    <div key={k} className={`rounded-lg border px-3 py-2 ${g.open ? "border-warning/30 bg-warning/5" : "border-border bg-muted/20"}`}>
                       <div className="flex items-center justify-between gap-2 text-sm">
                         <span>{k}</span>
-                        <span className="font-mono tabular-nums text-warning">{g.n}</span>
+                        <span className={`font-mono tabular-nums ${g.open ? "text-warning" : "text-muted-foreground"}`}>{g.n}</span>
                       </div>
-                      <div className="mt-0.5 text-xs text-muted-foreground">
-                        {[...g.books.entries()].map(([b, n]) => `${b} ${n}`).join(" · ")} · last 24 h
-                      </div>
+                      <div className="mt-0.5 text-xs text-muted-foreground">{[...g.books].join(", ")} · last 24 h</div>
                     </div>
                   ))}
               </div>
             )}
             <DataTable
-              data={data}
+              data={problems}
               columns={columns}
-              searchPlaceholder="Search findings…"
+              searchPlaceholder="Search problems…"
               facets={[
                 { column: "group", label: "What was wrong" },
-                { column: "check", label: "Check", format: label },
                 { column: "book", label: "Book" },
+                { column: "handled", label: "Status" },
               ]}
-              exportName="data-quality-findings"
+              exportName="data-quality-problems"
               pageSize={25}
               dense
               maxHeight="28rem"

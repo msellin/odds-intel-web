@@ -38,7 +38,7 @@ export function AdminTopbar({
     placementPaused: tri("Placement", "Paused", "Running"),
     armed: tri("Real money", "ARMED", "Off"),
     picksPaused: tri("Picks channel", "Paused", "Sending"),
-    sweepingPaused: tri("Coolbet sweeping", "Paused", "Collecting"),
+    sweepingPaused: tri("Coolbet collection", "Off", "On"),
   };
   const [palette, setPalette] = useState(false);
   const [bell, setBell] = useState(false);
@@ -127,6 +127,13 @@ export function AdminTopbar({
             {status.map((d) => (
               <span key={d.label} className={`block h-2 w-2 rounded-full ${DOT_CLS[d.tone]}`} aria-hidden="true" />
             ))}
+            {/* a word, not just dots (strict owner test: "four unlabelled dots mean nothing") */}
+            <span className="text-xs text-muted-foreground" aria-hidden="true">
+              {(() => {
+                const n = status.filter((d) => d.tone === "danger" || d.tone === "warn" || d.tone === "unknown").length;
+                return n === 0 ? "Status" : `${n} issue${n === 1 ? "" : "s"}`;
+              })()}
+            </span>
           </button>
           {legend && (
             <div className="absolute right-0 top-10 z-40 w-56 rounded-xl border border-border bg-popover p-2 shadow-2xl" role="dialog" aria-label="Status">

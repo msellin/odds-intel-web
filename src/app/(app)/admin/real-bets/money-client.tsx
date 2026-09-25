@@ -9,14 +9,10 @@ import { DataTable } from "@/components/oi/data-table";
 import { StatusBadge, type Tone } from "@/components/oi/status-badge";
 import { fmtEur, fmtInt, fmtPct } from "@/components/oi/format";
 import type { MoneyBet } from "@/lib/admin-money";
-import { moneyBotLabel } from "@/lib/admin-money-format";
-import { formatPickLabel } from "@/lib/shadow-bots/labels";
+import { CONFIRM_LABEL, confirmState, marketGroup, marketLabel, moneyBotLabel, type ConfirmState } from "@/lib/admin-money-format";
 
-/** Plain words for the bet ("1×2 Away", "Under 3.5"); the raw codes stay in the tooltip and CSV. */
-const betLabel = (b: MoneyBet) => {
-  const l = formatPickLabel(b.market, b.selection);
-  return b.market.toLowerCase() === "1x2" ? `1×2 ${l}` : l;
-};
+/** Plain words for the bet ("Match result: Away", "Under 2.5 goals"); the raw codes stay in the tooltip and CSV. */
+const betLabel = (b: MoneyBet) => marketLabel(b.market, b.selection);
 
 export interface DayPoint {
   day: string;
@@ -78,7 +74,7 @@ export function MoneyCharts({ daily, weekly }: { daily: DayPoint[]; weekly: Week
     <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
       <ChartCard
         title="Profit and loss, running total"
-        description="Real money, settled bets only, by the day they settled. The dashed line is what the same picks made on paper, where a real bet was placed from one."
+        description="Real money, settled bets only, by the day they settled, since the first real bet. The dashed line is what the same picks made on paper, where a real bet was placed from one."
         kind="line"
         data={daily}
         xKey="day"
@@ -103,7 +99,7 @@ export function MoneyCharts({ daily, weekly }: { daily: DayPoint[]; weekly: Week
         xKey="week"
         series={[
           { key: "staked", label: "Staked", color: "var(--chart-2)" },
-          { key: "pnl", label: "P/L (green win · red loss)", color: "var(--color-success)", signed: true },
+          { key: "pnl", label: "Won or lost", color: "var(--color-success)", signed: true },
         ]}
         ranges={weekRanges}
         defaultRange="26w"
@@ -120,19 +116,25 @@ export function MoneyCharts({ daily, weekly }: { daily: DayPoint[]; weekly: Week
 
 const RESULT_TONE: Record<string, Tone> = { won: "success", lost: "danger", void: "neutral", pending: "info" };
 const RESULT_LABEL: Record<string, string> = { won: "Won", lost: "Lost", void: "Void", pending: "Open" };
-const confirmLabel = (b: MoneyBet) => (b.placedReal === true ? "Confirmed" : "Not confirmed (by hand)");
+const CONFIRM_TONE: Record<ConfirmState, Tone> = { confirmed: "success", legacy: "neutral", waiting: "info", unconfirmed: "warning" };
+const CONFIRM_TIP: Record<ConfirmState, string> = {
+  confirmed: "Matched to a ticket on the bookmaker account.",
+  legacy: "Logged before 10 Sep, when the account check did not exist yet — nothing to do.",
+  waiting: "Logged by hand in the last 24 h; the account check has not had its chance yet.",
+  unconfirmed: "Logged by hand more than 24 h ago and the account check found no matching ticket. Check it at the bookmaker.",
+};
 
-
+/** The bot's name in plain words. The id (bots.name) is hover text and a CSV column, never on screen. */
 function BotName({ label, id }: { label: string; id: string | null }) {
   return (
-    <div className="min-w-0">
-      <div className="truncate text-xs">{label}</div>
-      {id && <div className="truncate font-mono text-[10px] text-muted-foreground/70">{id}</div>}
+    <div className="min-w-0 truncate text-xs" title={id ?? undefined}>
+      {label}
     </div>
   );
 }
 
-function betColumns(): ColumnDef<MoneyBet>[] {
+function betColumns(now: number): ColumnDef<MoneyBet>[] {
+  const confirmLabel = (b: MoneyBet) => CONFIRM_LABEL[confirmState(b, now)];
   return [
     {
       id: "placed",
@@ -161,14 +163,15 @@ function betColumns(): ColumnDef<MoneyBet>[] {
       // CSV keeps the id beside the name so an export can be joined back to the DB
       meta: { csv: (b) => (b.bot ? `${moneyBotLabel(b)} (${b.bot})` : moneyBotLabel(b)) },
     },
-    { id: "market", accessorFn: (b) => b.market, header: "Market", cell: ({ row }) => <span className="whitespace-nowrap text-xs" title={`${row.original.market} · ${row.original.selection}`}>{betLabel(row.original)}</span>, meta: { csv: (b) => `${b.market} ${b.selection}` } },
+    // the facet chips read this accessor, so it is the plain group ("Handicap"), not the code
+    { id: "market", accessorFn: (b) => marketGroup(b.market), header: "Market", cell: ({ row }) => <span className="whitespace-nowrap text-xs" title={`${row.original.market} · ${row.original.selection}`}>{betLabel(row.original)}</span>, meta: { csv: (b) => `${b.market} ${b.selection}` } },
     { id: "book", accessorFn: (b) => b.bookmaker, header: "Book", cell: ({ getValue }) => <span className="text-xs">{String(getValue())}</span> },
     { id: "odds", accessorFn: (b) => b.actualOdds, header: "Odds", meta: { align: "right" }, cell: ({ row }) => odds(row.original.actualOdds) },
     {
       id: "slip",
       accessorFn: (b) => b.slippagePct,
-      header: "Slip",
-      meta: { align: "right", label: "Slippage" },
+      header: () => <span>Price moved</span>,
+      meta: { tip: "How much the price moved between the pick and placing the bet (slippage): price shown → price we got.", align: "right", label: "Price moved" },
       cell: ({ row }) => {
         const s = row.original.slippagePct;
         return <span title={`Price shown ${odds(row.original.capturedOdds)} → taken ${odds(row.original.actualOdds)}`}>{s == null ? "—" : fmtPct(s / 100)}</span>;
@@ -177,15 +180,15 @@ function betColumns(): ColumnDef<MoneyBet>[] {
     {
       id: "edge",
       accessorFn: (b) => b.edgePctTaken,
-      header: () => <span title="The edge at the price we took: our probability × odds − 1">Edge</span>,
-      meta: { align: "right", label: "Edge" },
+      header: () => <span>Expected advantage</span>,
+      meta: { tip: "The expected advantage (edge) at the price we took: our probability × odds − 1.", align: "right", label: "Expected advantage" },
       cell: ({ row }) => fmtPct(row.original.edgePctTaken),
     },
     {
       id: "clv",
       accessorFn: (b) => b.clv,
-      header: () => <span title="Did we beat the price the same book closed at? (our odds ÷ its last price before kickoff) − 1. Blank when that book had no price within 60 min of kickoff.">CLV</span>,
-      meta: { align: "right", label: "CLV" },
+      header: () => <span>vs final price</span>,
+      meta: { tip: "Price vs the final price (CLV): our odds ÷ the same bookmaker's last price before kickoff − 1. Above 0 = we got a better price than the final one. Blank when that bookmaker had no price within 60 min of kickoff.", align: "right", label: "vs final price" },
       cell: ({ row }) => {
         const b = row.original;
         return (
@@ -198,8 +201,8 @@ function betColumns(): ColumnDef<MoneyBet>[] {
     {
       id: "clvPin",
       accessorFn: (b) => b.clvPinnacle,
-      header: () => <span title="Against Pinnacle's fair closing price (margin removed) — the sharpest yardstick.">Pinnacle CLV</span>,
-      meta: { align: "right", label: "Pinnacle CLV" },
+      header: () => <span>vs sharpest final</span>,
+      meta: { tip: "Against the sharpest bookmaker's final price with its margin removed (Pinnacle closing-line value) — the strictest yardstick.", align: "right", label: "vs sharpest final" },
       cell: ({ row }) => <span className={signTone(row.original.clvPinnacle)}>{fmtPct(row.original.clvPinnacle)}</span>,
     },
     { id: "stake", accessorFn: (b) => b.stake, header: "Stake", meta: { align: "right" }, cell: ({ row }) => fmtEur(row.original.stake) },
@@ -212,34 +215,33 @@ function betColumns(): ColumnDef<MoneyBet>[] {
     {
       id: "pnl",
       accessorFn: (b) => b.pnl,
-      header: "P/L",
+      header: "Profit",
       meta: { align: "right" },
       cell: ({ row }) => <span className={signTone(row.original.pnl)}>{row.original.result === "pending" ? "—" : fmtEur(row.original.pnl, { signed: true })}</span>,
     },
     {
       id: "confirmed",
       accessorFn: confirmLabel,
-      header: () => <span title="Has the account check matched this bet to a ticket at the book?">Confirmed</span>,
-      meta: { label: "Confirmed" },
-      cell: ({ row }) =>
-        row.original.placedReal === true ? (
-          <StatusBadge tone="success" dot={false} title="Matched to a ticket on the book account.">
-            Confirmed
+      header: () => <span>Confirmed</span>,
+      meta: { tip: "Has the account check matched this bet to a ticket on the bookmaker account? Bets logged before 10 Sep are old entries — the check did not exist yet.", label: "Confirmed" },
+      cell: ({ row }) => {
+        const st = confirmState(row.original, now);
+        return (
+          <StatusBadge tone={CONFIRM_TONE[st]} dot={false} title={CONFIRM_TIP[st]}>
+            {CONFIRM_LABEL[st]}
           </StatusBadge>
-        ) : (
-          <StatusBadge tone="warning" dot={false} title="Logged by hand; the account check has not matched it to a ticket yet.">
-            Not confirmed (by hand)
-          </StatusBadge>
-        ),
+        );
+      },
     },
   ];
 }
 
-export function BetLogTable({ bets, exportName = "real-bets" }: { bets: MoneyBet[]; exportName?: string }) {
+/** `now` comes from the server render so the "waiting / not confirmed" split cannot differ on hydration. */
+export function BetLogTable({ bets, now, exportName = "real-bets" }: { bets: MoneyBet[]; now: number; exportName?: string }) {
   return (
     <DataTable
       data={bets}
-      columns={betColumns()}
+      columns={betColumns(now)}
       searchPlaceholder="Search match, league, bot…"
       facets={[
         { column: "bot", label: "Bot" },
@@ -256,11 +258,11 @@ export function BetLogTable({ bets, exportName = "real-bets" }: { bets: MoneyBet
 }
 
 /** The reconciliation to-do: a short table, no paging, same columns. */
-export function ToDoTable({ bets }: { bets: MoneyBet[] }) {
+export function ToDoTable({ bets, now }: { bets: MoneyBet[]; now: number }) {
   return (
     <DataTable
       data={bets}
-      columns={betColumns()}
+      columns={betColumns(now)}
       searchPlaceholder={null}
       pageSize={0}
       exportName="real-bets-unconfirmed"
@@ -284,7 +286,7 @@ export function BotMoneyTable({ rows }: { rows: BotMoneyRow[] }) {
     { accessorKey: "staked", header: "Staked (settled)", meta: { align: "right" }, cell: ({ getValue }) => fmtEur(getValue() as number) },
     {
       accessorKey: "pnl",
-      header: "P/L",
+      header: "Profit",
       meta: { align: "right" },
       cell: ({ row }) => <span className={signTone(row.original.pnl)}>{row.original.settled > 0 ? fmtEur(row.original.pnl, { signed: true }) : "—"}</span>,
     },
@@ -296,12 +298,12 @@ export function BotMoneyTable({ rows }: { rows: BotMoneyRow[] }) {
     },
     {
       accessorKey: "clv",
-      header: () => <span title="Average closing-line value at the book we bet at. Under 30 bets it is too few to trust.">Avg CLV</span>,
-      meta: { align: "right", label: "Avg CLV" },
+      header: () => <span>vs final price</span>,
+      meta: { tip: "Average price vs the final price (closing-line value) at the bookmaker we bet at, all time. Greyed under 30 bets — too few to trust.", align: "right", label: "vs final price" },
       cell: ({ row }) => (
-        <span className={row.original.clvN < 30 ? "text-muted-foreground" : signTone(row.original.clv)} title={`${row.original.clvN} bets with a closing price${row.original.clvN < 30 ? " — too few to trust" : ""}`}>
+        <span className={row.original.clvN < 30 ? "text-muted-foreground" : signTone(row.original.clv)} title={row.original.clvN < 30 ? "Too few bets to trust" : undefined}>
           {fmtPct(row.original.clv)}
-          <span className="ml-1 text-[10px] text-muted-foreground">n={row.original.clvN}</span>
+          <span className="ml-1 text-[10px] text-muted-foreground">({fmtInt(row.original.clvN)} {row.original.clvN === 1 ? "bet" : "bets"})</span>
         </span>
       ),
     },
@@ -324,7 +326,7 @@ export function DailyTable({ rows }: { rows: DailyRow[] }) {
     { accessorKey: "staked", header: "Staked", meta: { align: "right" }, cell: ({ getValue }) => fmtEur(getValue() as number) },
     {
       accessorKey: "pnl",
-      header: "P/L",
+      header: "Profit",
       meta: { align: "right" },
       cell: ({ row }) => <span className={signTone(row.original.pnl)}>{row.original.settled > 0 ? fmtEur(row.original.pnl, { signed: true }) : "—"}</span>,
     },

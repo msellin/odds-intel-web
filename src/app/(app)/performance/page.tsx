@@ -53,6 +53,7 @@ import type { PublicBotStat, SanitizedBotBet } from "@/components/performance-le
 import {
   getPicksForwardTestSummary,
   getPicksForwardTestBets,
+  getForwardTestAnchorClv,
   PICKS_FORWARD_TEST_STAKE_EUR,
   PICKS_FORWARD_TEST_START_BANKROLL,
 } from "@/lib/engine-data";
@@ -228,20 +229,26 @@ async function LoggedInPerformanceSection({
   // and their results averaged — two different anchors in one number, which
   // describes neither, and is the exact confusion the 14 Sep reset existed to
   // prevent. The bot names match migration 372's CASE on `arm`.
+  // [[#156]] CURRENT RULE ONLY. Each row is scored on its current rule_version (as
+  // bot_scoreboard does), so its bet list and chart read the same version — otherwise
+  // the list a reader counts disagrees with the row (PICKS-ROW-RECONCILES). Earlier
+  // versions stay in the ledger and are named on the row itself.
+  const rv = (bot: string) => cachedBots.find((b) => b.name === bot)?.forwardTest?.ruleVersion;
   const picksBets = (
     await Promise.all([
       // [[#122]] split by market — the sharp arm's 1x2 and O/U halves are separate bots.
-      getPicksForwardTestBets("live", undefined, "1x2").then((rows) =>
+      getPicksForwardTestBets("live", undefined, "1x2", rv("bot_sharp_1x2_v1")).then((rows) =>
         rows.map((b) => ({ ...b, bot: "bot_sharp_1x2_v1" }))),
-      getPicksForwardTestBets("live", undefined, "over_under_25").then((rows) =>
+      getPicksForwardTestBets("live", undefined, "over_under_25", rv("bot_sharp_ou_v1")).then((rows) =>
         rows.map((b) => ({ ...b, bot: "bot_sharp_ou_v1" }))),
       // [[#095]] split by grade — B (beta) and C (testing) are separate bots.
-      getPicksForwardTestBets("consensus_anchor", "B").then((rows) =>
+      getPicksForwardTestBets("consensus_anchor", "B", undefined, rv("bot_consensus_b_v1")).then((rows) =>
         rows.map((b) => ({ ...b, bot: "bot_consensus_b_v1" }))),
-      getPicksForwardTestBets("consensus_anchor", "C").then((rows) =>
+      getPicksForwardTestBets("consensus_anchor", "C", undefined, rv("bot_consensus_c_v1")).then((rows) =>
         rows.map((b) => ({ ...b, bot: "bot_consensus_c_v1" }))),
-      // [[#098]] grade D = weak, no longer published; its earlier (published) picks stay visible.
-      getPicksForwardTestBets("consensus_anchor", "D").then((rows) =>
+      // [[#098]] grade D = weak, no longer published; its earlier (published) picks stay
+      // visible. [[#156]] its never-sent picks are dropped by the view (migration 430).
+      getPicksForwardTestBets("consensus_anchor", "D", undefined, rv("bot_consensus_d_v1")).then((rows) =>
         rows.map((b) => ({ ...b, bot: "bot_consensus_d_v1" }))),
     ])
   ).flat() as unknown as SanitizedBotBet[];
@@ -390,6 +397,8 @@ export default async function PerformancePage() {
   // A reader who expands the row and counts gets a different answer from the
   // page. That is indefensible whatever the statistics say, and the owner called
   // it out directly. The row now shows the pooled record.
+  // SUPERSEDED 2026-09-25 by [[#156]] below: the row shows the CURRENT rule only and
+  // its bet list is scoped to the same rule, which reconciles the two the other way.
   //
   // The pre-registered test is UNAFFECTED: its stopping rules still read
   // `current`, because pooling a closed rule's n into a running one would fire a
@@ -419,9 +428,33 @@ export default async function PerformancePage() {
     { arm: "consensus_anchor", grade: "C", bot: "bot_consensus_c_v1" },
     { arm: "consensus_anchor", grade: "D", bot: "bot_consensus_d_v1" },
   ];
-  for (const { arm, bot, grade, market } of PUBLISHED_ARM_BOTS) {
-  const picksSummary = (await getPicksForwardTestSummary(arm, grade, market))?.pooled ?? null;
+  // [[#156]] (2026-09-25, owner-approved) — TWO changes to what every row below reports:
+  //  * CURRENT rule_version only (`.current`, was `.pooled`). bot_sharp_1x2_v1 was pooling
+  //    8 picks of the closed rule v1 into its figures. A rule change starts a new test, and
+  //    bot_scoreboard scores the current version; this row now matches it. Earlier
+  //    versions are named on the row ("earlier v1: 8 settled … — not counted") and the bet
+  //    list is scoped to the same version, so row and list still reconcile.
+  //  * CLV = SHARP-ANCHOR (clv_sharp, else >=5-book clv_cons), read server-side from the
+  //    private view picks_forward_test_anchor_clv. The own-book margin-corrected figure is
+  //    negative by construction for these rules (ANALYSIS_GOTCHAS §85) and is shown only as
+  //    the labelled secondary.
+  const armRecords = await Promise.all(PUBLISHED_ARM_BOTS.map(async (x) => {
+    const [summary, anchor] = await Promise.all([
+      getPicksForwardTestSummary(x.arm, x.grade, x.market),
+      getForwardTestAnchorClv(x.arm, x.grade, x.market),
+    ]);
+    return { ...x, summary, anchor };
+  }));
+  const shortRule = (rv: string) => {
+    const m = /_v(\d+)_/.exec(rv);
+    return m ? `v${m[1]}` : rv;
+  };
+  for (const { bot, summary, anchor } of armRecords) {
+  const picksSummary = summary?.current ?? null;
   if (picksSummary && picksSummary.published > 0) {
+    const a = anchor?.get(picksSummary.ruleVersion) ?? null;
+    const sharp = a && a.nAnchor > 0 ? a.clvAnchor : null;
+    // own-book margin-corrected — the SECONDARY figure now
     const mc = picksSummary.clvMarginCorrected;
     // BOT-NAMES-AND-LABELS (migration 375, [[#069]]). Both the display name and
     // the maturity label now come from the `bots` row rather than being written
@@ -438,7 +471,8 @@ export default async function PerformancePage() {
       lost: isPro ? picksSummary.settled - picksSummary.won : 0,
       pnl: isPro ? picksSummary.pnlUnits : null,
       roi: picksSummary.roi == null ? null : picksSummary.roi * 100,
-      clvDirection: mc == null ? "neutral" : mc > 0 ? "positive" : "negative",
+      // [[#156]] direction and number follow the SHARP-ANCHOR CLV, not the own-book one.
+      clvDirection: sharp == null ? "neutral" : sharp > 0 ? "positive" : "negative",
       // RAW FRACTION, not percent (fixed 2026-09-22). The leaderboard renders
       // `avgClv * 100`, and every other row feeds it `b.avg_clv` raw — this one
       // pre-multiplied, so the two scalings compounded and the page published
@@ -448,7 +482,28 @@ export default async function PerformancePage() {
       // A CLV of -876% is arithmetically impossible (the floor is -100%), which
       // is what makes this the kind of number a reader spots before we do — the
       // owner did.
-      avgClv: isElite ? mc : null,
+      avgClv: isElite ? sharp : null,
+      forwardTest: {
+        ruleVersion: picksSummary.ruleVersion,
+        rule: shortRule(picksSummary.ruleVersion),
+        sharpClv: sharp,
+        nSharp: a?.nAnchor ?? 0,
+        nPinnacle: a?.nPinnacle ?? 0,
+        nConsensus: a?.nConsensus ?? 0,
+        ownClv: mc,
+        nOwn: picksSummary.nClvMc,
+        earlier: (summary?.closed ?? [])
+          .filter((c) => c.published > 0)
+          .map((c) => {
+            const e = anchor?.get(c.ruleVersion);
+            return {
+              rule: shortRule(c.ruleVersion),
+              settled: c.settled,
+              sharpClv: e && e.nAnchor > 0 ? e.clvAnchor : null,
+              nSharp: e?.nAnchor ?? 0,
+            };
+          }),
+      },
       // Same basis as every other row: EUR 1000 start, EUR 10 flat. The rule
       // stakes 1 unit; showing 1.03 next to EUR 1,339 would make the newest
       // strategy look like a rounding error. Scaling changes no stored value
