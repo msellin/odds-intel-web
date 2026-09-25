@@ -380,6 +380,11 @@ function BotModal({
             )}
           </DialogTitle>
         </DialogHeader>
+        {bot.forwardTest && (
+          <div className="rounded-lg border border-border/40 px-4 py-3 text-xs">
+            <ForwardTestClvLine ft={bot.forwardTest} />
+          </div>
+        )}
 
         {/* Chart */}
         {chartData.length > 1 ? (
@@ -599,77 +604,72 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
                 It is deliberately a plain statement rather than a disclaimer:
                 the numbers are what they are, and naming the window makes them
                 verifiable rather than weaker. */}
-            <p className="text-[11px] text-muted-foreground/70 mt-1">
-              Cumulative since{" "}
+            {/* 2026-09-25 (owner: "too much dense and small text"). ONE short context line, the two legends
+                as compact chip rows, and the long explanations behind a collapsed "How to read this".
+                History of each sentence (PERF-STATE-THE-PERIOD, PERF-BOT-FUNNEL, the two legends, #156 CLV)
+                is in git; the facts are unchanged, only the density. */}
+            <p className="text-xs text-muted-foreground mt-1">
+              Since{" "}
               <span className="text-foreground">
                 {new Date(`${CALIBRATED_SINCE}T00:00:00Z`).toLocaleDateString("en-GB", {
                   day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
                 })}
               </span>{" "}
               · flat stakes · logged before kickoff
+              {retiredBotCount > 0 && (
+                <>
+                  {" "}· <span className="text-foreground">{activeBots.length + underperformingBots.length + developingBots.length + retiredBotCount}</span>{" "}
+                  strategies tested, {retiredBotCount} retired
+                </>
+              )}
             </p>
-            {/* PERF-BOT-FUNNEL (2026-08-21) — surface the full strategy funnel
-                so visitors see how many total strategies we've tested, not
-                just the survivors. Only render when we have a retired count
-                to avoid a lonely "0 retired". */}
-            {retiredBotCount > 0 && (
-              <p className="text-[11px] text-muted-foreground/70 mt-1">
-                Tested to date:{" "}
-                <span className="text-foreground">{activeBots.length + underperformingBots.length + developingBots.length + retiredBotCount}</span>{" "}
-                strategies · <span className="text-muted-foreground">{retiredBotCount} retired</span>
-              </p>
-            )}
-            {/* Chip legend prose (2026-07-06) — replaces the previous
-                chip-and-inline-description row which read as a jargon
-                strip most visitors skipped. Same information, but as
-                one line of readable prose. */}
-            <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-              Every strategy is tagged by how much live evidence backs it —
-              <span className="mx-1 rounded bg-emerald-500/15 px-1 py-0.5 text-[9px] font-bold uppercase text-emerald-400">calibrated</span>
-              (proven),
-              <span className="mx-1 rounded bg-amber-500/15 px-1 py-0.5 text-[9px] font-bold uppercase text-amber-400">beta</span>
-              (early live results),
-              <span className="mx-1 rounded bg-zinc-500/15 px-1 py-0.5 text-[9px] font-bold uppercase text-zinc-400">testing</span>
-              (still collecting).{" "}
-              <span className="mx-1 rounded border border-yellow-400/40 bg-yellow-400/15 px-1 py-0.5 text-[9px] font-bold uppercase text-yellow-300">VIP</span>
-              — our paid-tier bot; its picks appear here once settled, each marked
-              EV8 (expected value ≥ 8%) or EV5 (5–8%).
-            </p>
-            {/* SECOND LEGEND, for the second chip (2026-09-22, owner: "those
-                labels need to be explained and have maybe separate shape?").
-                The square tag says how much EVIDENCE backs a bot; the pill says
-                WHAT IT PRICES AGAINST. Two different questions, so two different
-                shapes and two separate sentences.
-
-                Sharp and consensus are deliberately described as siblings rather
-                than a hierarchy — the owner asked "consensus is also based on
-                sharp then?" and the answer is that both price against the market
-                with the margin removed, differing only in how many books set the
-                fair price. Measured 2026-09-22 (n=11,419): a consensus EXCLUDING
-                our Pinnacle feed predicts as well as that feed alone, so the
-                consensus is an independent estimator, not a diluted sharp one. */}
-            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-              And by what sets its fair price —
-              <span className="mx-1 rounded-full border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-[9px] font-bold uppercase text-sky-300">model</span>
-              (our own probability model),
-              <span className="mx-1 rounded-full border border-violet-500/25 bg-violet-500/10 px-2 py-0.5 text-[9px] font-bold uppercase text-violet-300">sharp</span>
-              (the sharpest single line, margin removed),
-              <span className="mx-1 rounded-full border border-teal-500/25 bg-teal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase text-teal-300">consensus</span>
-              (several bookmakers agreeing, margin removed). The last two use no
-              model at all and differ only in how many books set the fair price;
-              they are tracked separately because they are different rules, not
-              different kinds of thing.
-            </p>
-            {/* [[#156]] 2026-09-25 — what CLV means on the SHARP / CONSENSUS rows. */}
-            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-              Closing-line value (CLV) on the sharp and consensus rows is measured{" "}
-              <span className="text-foreground">vs the sharp close</span>: our price against
-              Pinnacle&apos;s final line with the margin removed, or a 5+ bookmaker consensus
-              where Pinnacle has none. Positive means the price beat where the market
-              settled. The figure against the book&apos;s own close is shown beside it, but
-              it cannot judge these picks — they are chosen because that book&apos;s price is
-              off, and a price the book never corrects closes where it opened.
-            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-400">calibrated</span>proven
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-400">beta</span>early results
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="rounded bg-zinc-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-zinc-400">testing</span>collecting
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="rounded border border-yellow-400/40 bg-yellow-400/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-yellow-300">VIP</span>paid, shown once settled
+              </span>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="rounded-full border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-[10px] font-bold uppercase text-sky-300">model</span>our model
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="rounded-full border border-violet-500/25 bg-violet-500/10 px-2 py-0.5 text-[10px] font-bold uppercase text-violet-300">sharp</span>sharpest line
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="rounded-full border border-teal-500/25 bg-teal-500/10 px-2 py-0.5 text-[10px] font-bold uppercase text-teal-300">consensus</span>5+ bookmakers
+              </span>
+            </div>
+            <details className="mt-3 text-xs text-muted-foreground">
+              <summary className="cursor-pointer select-none text-foreground/80 hover:text-foreground">How to read this</summary>
+              <div className="mt-2 max-w-3xl space-y-2 leading-relaxed">
+                <p>
+                  The square tag says how much live evidence backs a strategy. VIP is our paid-tier bot: its
+                  picks appear here once settled, each marked EV8 (expected value ≥ 8%) or EV5 (5–8%).
+                </p>
+                <p>
+                  The round tag says what sets the fair price: our own probability model, the sharpest single
+                  line with its margin removed, or several bookmakers agreeing with the margin removed. The last
+                  two use no model and differ only in how many books set the price.
+                </p>
+                <p>
+                  Closing-line value (CLV) on the sharp and consensus rows is measured{" "}
+                  <span className="text-foreground">vs the sharp close</span>: our price against Pinnacle&apos;s
+                  final line with the margin removed, or a 5+ bookmaker consensus where Pinnacle has none.
+                  Positive means the price beat where the market settled. The figure against the book&apos;s own
+                  close is shown beside it, but it cannot judge these picks — they are chosen because that
+                  book&apos;s price is off, and a price the book never corrects closes where it opened.
+                </p>
+              </div>
+            </details>
           </div>
           {/* Pre-match / In-play tabs removed — in-play hidden from public,
               audit data lives in /admin. */}
@@ -718,15 +718,8 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
                         <VipChip isVip={bot.isVip} />
                         <AnchorChip bot={bot.name} />
                       </div>
-                      {bot.displayName && (
-                        <p className="font-mono text-[10px] text-muted-foreground/60 truncate">
-                          {bot.name}
-                        </p>
-                      )}
-                      {bot.isVip && (
-                        <p className="text-[10px] text-yellow-300/80">Live since {VIP_LIVE_SINCE}</p>
-                      )}
-                      {bot.forwardTest && <ForwardTestClvLine ft={bot.forwardTest} />}
+                      {/* 2026-09-25 (owner): the list shows name + labels only; technical name, VIP start
+                          date and the CLV breakdown live in the detail view (click the row). */}
                       <p className="mt-1 text-[11px] tabular-nums text-muted-foreground">
                         {isMaturing
                           ? bot.settled > 0
@@ -809,18 +802,7 @@ export function PerformanceLeaderboard({ bots, isPro, isElite, allBets, retiredB
                         <VipChip isVip={bot.isVip} />
                         <AnchorChip bot={bot.name} />
                       </div>
-                      {bot.displayName && (
-                        <p className="font-mono text-[10px] text-muted-foreground/60 mt-0.5">{bot.name}</p>
-                      )}
-                      {bot.isVip && (
-                        <p className="text-[10px] text-yellow-300/80 mt-0.5">Live since {VIP_LIVE_SINCE}</p>
-                      )}
-                      {bot.forwardTest && <ForwardTestClvLine ft={bot.forwardTest} />}
-                      {isMaturing && (
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
-                          {bot.settled > 0 ? `${bot.settled} settled — accumulating data` : "Active · no settled bets yet"}
-                        </p>
-                      )}
+                      {/* 2026-09-25 (owner): name + labels only — details are in the click-open view. */}
                     </td>
                     <td className="py-3 px-2 text-right text-sm tabular-nums">
                       {bot.settled > 0
