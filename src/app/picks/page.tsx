@@ -437,6 +437,16 @@ export default async function PicksPage() {
               ? `${picks.length} pick${picks.length === 1 ? "" : "s"} on the board`
               : "No picks on the board right now"}
           </h1>
+          {picks.length > 0 && (
+            <p className="text-xs text-neutral-500">
+              {/* PICKS-PAGE-GATE (2026-09-26): the page is a shortlist, not every bot's every pick. */}
+              The shortlist: our proven lines in full, newer bots only at their strongest prices.{" "}
+              <Link href="/performance" className="underline underline-offset-2 hover:text-neutral-300">
+                Every pick, and each bot&apos;s full record, is on the performance page
+              </Link>
+              .
+            </p>
+          )}
           {picks.length > 0 && startedCount > 0 && (
             <p className="font-mono text-[11px] uppercase tracking-wider text-neutral-500">
               {stillOpen === 0

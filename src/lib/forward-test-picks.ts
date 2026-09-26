@@ -261,8 +261,12 @@ export async function fetchPublicPicks(
 ): Promise<PublicPick[]> {
   const sb = createSupabasePublic();
   const now = Date.now();
+  // PICKS-PAGE-GATE (engine migration 469, owner 2026-09-26): /picks lists `picks_page` — picks_public_all
+  // filtered by the one-row rule picks_page_rule: the pre-registered sharp arm and ACTIVE bots always,
+  // TESTING bots only at EV >= testing_min_ev, one gated pick per match. Display only: every pick still
+  // counts in its bot's record on /performance. /api/v1/upcoming reads this same fetcher, so it serves the same shortlist.
   const { data, error } = await sb
-    .from("picks_public_all")
+    .from("picks_page")
     .select(
       `id, edge_kind, bot, match_id, market, selection, odds, bookmaker, edge,
        fair_prob, rule_version, alignment_gap_minutes, kickoff_utc, published_at,
