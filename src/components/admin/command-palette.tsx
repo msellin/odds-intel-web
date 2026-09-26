@@ -85,6 +85,7 @@ function actions(f: PaletteFleet): Entry[] {
   { id: "a-place", section: "Actions", label: "Place a bet by hand from today's picks", hint: "Pick queue", href: "/admin/shadow-bots" },
   { id: "a-attention", section: "Actions", label: "What needs my attention?", hint: "Overview", href: "/admin#attention" },
   { id: "a-activity", section: "Actions", label: "Who changed what?", hint: "Activity", href: "/admin/activity", keywords: "history audit log changes" },
+  { id: "a-models", section: "Actions", label: "How good are the models?", hint: "Models", href: "/admin/models", keywords: "model accuracy log-loss pinnacle calibration which bot uses" },
   ];
 }
 

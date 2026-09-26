@@ -6,6 +6,7 @@
 import {
   Activity,
   Bot,
+  BrainCircuit,
   History,
   ListChecks,
   LayoutDashboard,
@@ -36,6 +37,8 @@ export const ADMIN_NAV: AdminNavGroup[] = [
       // used): the money ledger is the "Real money" tab of Bots (/admin/bots?section=money, also in
       // the ⌘K Actions); the old URL redirects there.
       { href: "/admin/shadow-bots", label: "Pick queue", Icon: ListChecks },
+      // #153 (2026-09-26): which models exist, how accurate each is, which bot uses which
+      { href: "/admin/models", label: "Models", Icon: BrainCircuit },
     ],
   },
   {

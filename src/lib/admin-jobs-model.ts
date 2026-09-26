@@ -74,7 +74,7 @@ export const JOB_GROUPS: { key: string; label: string; what: string; test: RegEx
     key: "models",
     label: "Model upkeep",
     what: "Weekly retraining and checks that the models still behave; monthly tuning.",
-    test: /retrain|weekly_|aln_|calibrator|threshold/,
+    test: /retrain|weekly_|aln_|calibrator|threshold|model_accuracy/,
   },
   {
     key: "alerts",
@@ -155,6 +155,7 @@ export const JOB_LABELS: Record<string, string> = {
   mfv_b_ml3_nightly_refresh: "Nightly model features refresh",
   mfv_form_momentum_nightly_refresh: "Nightly form features refresh",
   mfv_v3_signals_propagate: "Nightly extra signals refresh",
+  model_accuracy: "Model accuracy scorecard (for /admin/models)",
   morning_pipeline: "Morning data load",
   news_checker: "News checker",
   observatory_metrics: "Daily data-quality metrics",
