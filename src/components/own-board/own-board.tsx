@@ -38,6 +38,7 @@ const REASON: Record<string, string> = {
   stale_quote: "price older than 60 min",
   no_fair_price: "no fair price to judge it",
   sharp_conflict: "Pinnacle and exchange disagree",
+  devig_sensitive: "only an edge under one de-vig method — a longshot artefact, not value",
   market_split: "our books and the market disagree on the whole match — likely news, not value",
   above_ceiling: "too good to be true (> 8%)",
   above_outlier_cap: "far off the market",
