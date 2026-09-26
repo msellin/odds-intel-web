@@ -99,7 +99,7 @@ function MethodBadge({ p }: { p: { edge_kind: "sharp" | "model"; arm: string | n
 
 /** [[#095]] — the consensus grade, shown ON the pick. Each grade is its own
  *  tracked bot on /performance, scored in the open so it can be retired on its
- *  own record. #162 W5.6: the status word ("testing", "beta") is the bot's
+ *  own record. #162 W5.6: the status word ("testing", "active") is the bot's
  *  CURRENT status (bot_status, read from bots), not typed here — same words as
  *  the Telegram post, which reads the same field. */
 function GradeBadge({ grade, status }: { grade: "B" | "C" | "D" | null; status?: string | null }) {

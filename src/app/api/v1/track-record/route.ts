@@ -7,8 +7,9 @@
  * market data exposed here.
  *
  * Filter scope (intentional, never widen without updating MODEL_WHITEPAPER):
- *   - bots.maturity_label IN ('calibrated','beta','active')  — production
- *     strategies only, excludes retired (failed experiments)
+ *   - bots.maturity_label = 'active' (HEADLINE_MATURITY_LABELS — the bots that count in the
+ *     headline totals; BETA + CALIBRATED merged into ACTIVE 2026-09-26, [[#175]]), not VIP,
+ *     excludes retired (failed experiments) and TESTING (own record only)
  *   - market IN ('1x2', 'over_under_25', 'o/u', 'btts')  (pre-match only)
  *   - result IN ('won', 'lost')  (settled, no pending/voided)
  *

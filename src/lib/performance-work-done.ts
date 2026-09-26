@@ -4,7 +4,7 @@
  *
  * Three labelled things, never mixed:
  *   1. WORK DONE — every strategy ever scored, retired included (engine view bot_public_work_done).
- *   2. ACTIVE ROI — the hero headline, unchanged: BETA + CALIBRATED bots, retired_at IS NULL
+ *   2. ACTIVE ROI — the hero headline, unchanged: ACTIVE bots (was BETA + CALIBRATED until #175), retired_at IS NULL
  *      (engine-data getPublicCohortBotNames). Nothing here feeds it.
  *   3. RETIRED — a collapsed section: one row per FAMILY aggregating EVERY retired bot in it
  *      (losers included) + up to 2 representative bots per family chosen by a rule that never

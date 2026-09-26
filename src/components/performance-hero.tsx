@@ -158,13 +158,14 @@ export function PerformanceHero({
           <Metric
             label="Model ROI · all-time (not a claim)"
             value={fmtRoi(calRoi)}
-            sub={`${calN.toLocaleString()} bets`}
+            // [[#175]] owner 2026-09-26: say plainly which bots the totals are made of.
+            sub={`${calN.toLocaleString()} bets · ACTIVE bots only`}
             accent={calRoi != null && calRoi > 0 ? "positive" : null}
           />
           <Metric
             label="Model ROI · last 30d"
             value={fmtRoi(cal30Roi)}
-            sub={`${cal30N.toLocaleString()} bets`}
+            sub={`${cal30N.toLocaleString()} bets · ACTIVE bots only`}
             accent={
               cal30Roi != null && cal30Roi > 0
                 ? "positive"

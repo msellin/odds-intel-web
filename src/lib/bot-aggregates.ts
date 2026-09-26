@@ -330,8 +330,8 @@ export const isLiveBot = (botName: string): boolean => botName.startsWith("inpla
  * picks readers actually receive, and its record is the one thing on the page a
  * reader can check against what was published.
  */
-// [[#155]] ONE STATUS DECIDES DISTRIBUTION (2026-09-25): the /performance set is TESTING, BETA and
-// CALIBRATED (lib/bot-status.ts PUBLIC_STATUSES = engine bot_distribution.on_performance). TESTING
+// [[#155]] ONE STATUS DECIDES DISTRIBUTION (2026-09-25; [[#175]] 2026-09-26 merged BETA + CALIBRATED
+// into ACTIVE): the /performance set is TESTING and ACTIVE (lib/bot-status.ts PUBLIC_STATUSES = engine bot_distribution.on_performance). TESTING
 // bots are listed marked TESTING (they are sent, so they are counted in their own record) but never
 // counted in the headline (HEADLINE_MATURITY_LABELS). The old second switch `show_on_performance`
 // is now derived from the status and is not read. VIP bots need a public status too ("VIP · TESTING").
@@ -341,7 +341,7 @@ export const PUBLIC_MATURITY_LABELS: ReadonlySet<string> = new Set<string>(PUBLI
  * Bots whose record lives in `picks_forward_test`, NOT `simulated_bets`. They
  * are injected into the leaderboard from their own ledger (PUBLISHED_ARM_BOTS in
  * /performance/page.tsx), so every simulated_bets-derived list must SKIP them —
- * otherwise a `beta` one appears twice, the second time as "no settled bets
+ * otherwise a public one appears twice, the second time as "no settled bets
  * yet". That is exactly what grade B did the hour it became its own bot
  * ([[#095]], 2026-09-23): 16 settled in one row, zero in its duplicate.
  */

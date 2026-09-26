@@ -1,7 +1,7 @@
 /**
  * [[#157]] "The work done" + the collapsed RETIRED section on /performance.
  *
- * Kept visibly apart from the headline: the hero ROI is today's BETA + CALIBRATED strategies only;
+ * Kept visibly apart from the headline: the hero ROI is today's ACTIVE strategies only;
  * everything here is every strategy we ever scored, retired included. Retired picks keep counting
  * in these totals (anything recorded is counted) and never in the active ROI. Figures come from
  * lib/performance-work-done.ts (engine views over bot_performance — the ONE ROI/CLV computation).

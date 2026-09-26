@@ -8,8 +8,10 @@
 //   EXPERIMENTAL  admins only (/admin/bots) · nothing sent · nothing public
 //   TESTING       /performance row marked TESTING · SENT to /picks + the public Telegram channel ·
 //                 own record · NOT in the headline totals
-//   BETA          sent · own record · headline totals
-//   CALIBRATED    same as BETA, with the strongest evidence
+//   ACTIVE        sent · own record · COUNTS IN THE HEADLINE TOTALS (the one proven status —
+//                 owner 2026-09-26 [[#175]] merged BETA + CALIBRATED into it; they differed in
+//                 nothing a reader saw or received). Promotion TESTING → ACTIVE: 50 settled picks
+//                 with sharp-anchor CLV > 0 (docs/SYSTEM_MAP.md "Lifecycle").
 //   ⭐ VIP        a CHANNEL on top of a public status ("VIP · TESTING"): live picks to the paid channel
 //                 only, the public sees settled picks, own record, never the headline
 //
@@ -17,11 +19,11 @@
 // (an update that contradicts the status is rejected) — never read them as a separate decision.
 
 /** Statuses that put a bot on /performance and (unless VIP) send its picks. */
-export const PUBLIC_STATUSES = ["testing", "beta", "calibrated"] as const;
+export const PUBLIC_STATUSES = ["testing", "active"] as const;
 /** Statuses whose picks count in the headline totals (VIP bots never do). */
-export const HEADLINE_STATUSES = ["calibrated", "beta"] as const;
+export const HEADLINE_STATUSES = ["active"] as const;
 
-export type BotStatus = "experimental" | "testing" | "beta" | "calibrated" | "retired";
+export type BotStatus = "experimental" | "testing" | "active" | "retired";
 
 interface StatusInput {
   maturityLabel?: string | null;
@@ -32,7 +34,7 @@ interface StatusInput {
 export function botStatus(b: StatusInput): BotStatus {
   if (b.retiredAt || b.maturityLabel === "retired") return "retired";
   const l = b.maturityLabel ?? "experimental";
-  return (["experimental", "testing", "beta", "calibrated"] as const).includes(l as never) ? (l as BotStatus) : "experimental";
+  return (["experimental", "testing", "active"] as const).includes(l as never) ? (l as BotStatus) : "experimental";
 }
 
 /** On /performance (VIP bots included — settled picks only). = bot_distribution.on_performance */

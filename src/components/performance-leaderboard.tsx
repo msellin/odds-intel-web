@@ -213,10 +213,11 @@ function ClvIcon({ dir }: { dir: "positive" | "negative" | "neutral" | null }) {
 }
 
 function MaturityChip({ label }: { label: string }) {
-  if (label === 'calibrated') return <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">calibrated</span>;
-  if (label === 'beta') return <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-400 border border-amber-500/25">beta</span>;
-  if (label === 'testing') return <span className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-zinc-500/15 text-zinc-400 border border-zinc-500/25">testing</span>;
-  return null; // 'active' shows no chip — it's the default
+  // [[#175]] (owner 2026-09-26): BETA + CALIBRATED merged into ONE status, ACTIVE — the bots whose
+  // picks count in the headline totals. The tooltip says so on every row.
+  if (label === 'active') return <span title="Counts in the headline totals" className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">active</span>;
+  if (label === 'testing') return <span title="Own record only — not in the headline totals" className="rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-zinc-500/15 text-zinc-400 border border-zinc-500/25">testing</span>;
+  return null;
 }
 
 /** VIP-PERFORMANCE-SETTLED-ONLY (#148). The paid-tier bot: its live picks go to
@@ -698,8 +699,8 @@ function BotModal({
 /** [[#159]] (f) rows are grouped by STATUS — how much evidence backs them — never by ROI. */
 type GroupKey = "live" | "testing" | "vip" | "developing";
 const GROUP_TITLE: Record<GroupKey, string> = {
-  live: "Calibrated & beta — counted in the headline totals",
-  testing: "Testing — sent to you, own record, not in the headline",
+  live: "Active — counts in the headline totals",
+  testing: "Testing — own record only, not in the headline totals",
   vip: "VIP — paid tier, shown once settled",
   developing: "In development — fewer than 5 settled",
 };
@@ -709,7 +710,7 @@ function groupOf(b: PublicBotStat): GroupKey {
   // (e) ONE row rule: < 5 settled is "in development" whatever the bot — forward-test rows included.
   if (!b.hasEnoughData) return "developing";
   if (b.isVip) return "vip";
-  if (b.maturityLabel === "calibrated" || b.maturityLabel === "beta") return "live";
+  if (b.maturityLabel === "active") return "live";
   return "testing";
 }
 
@@ -780,13 +781,10 @@ export function PerformanceLeaderboard({ bots, isElite, retiredBotCount = 0 }: P
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
               <span className="inline-flex items-center gap-1.5">
-                <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-400">calibrated</span>proven
+                <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-400">active</span>counts in the totals above
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-400">beta</span>early results
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span className="rounded bg-zinc-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-zinc-400">testing</span>sent, not in the headline
+                <span className="rounded bg-zinc-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-zinc-400">testing</span>own record only — not in totals
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <span className="rounded border border-yellow-400/40 bg-yellow-400/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-yellow-300">VIP · testing</span>paid, shown once settled
@@ -808,9 +806,11 @@ export function PerformanceLeaderboard({ bots, isElite, retiredBotCount = 0 }: P
               <div className="mt-2 max-w-3xl space-y-2 leading-relaxed">
                 <p>
                   The square tag is the strategy&apos;s status, and the status alone decides where its picks
-                  go. Testing, beta and calibrated strategies all send their picks to /picks and our Telegram
-                  channel, and every pick sent is counted in that strategy&apos;s own record here. Only beta and
-                  calibrated strategies count in the headline totals; a testing strategy has to earn that.
+                  go. Active and testing strategies both send their picks to /picks, and every pick sent is
+                  counted in that strategy&apos;s own record here. Only active strategies count in the headline
+                  totals and post every pick to our Telegram channel; a testing strategy posts only its
+                  strongest picks (expected value ≥ 5%) and becomes active after 50 settled picks that beat
+                  the sharp closing line on average.
                   VIP is our paid-tier channel on top of a status (&quot;VIP · testing&quot;): its picks appear
                   here once settled, each marked EV8 (expected value ≥ 8%) or EV5 (5–8%).
                 </p>

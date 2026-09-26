@@ -217,7 +217,7 @@ export default async function PerformancePage() {
   const recentSettled = !isLoggedIn ? await getRecentSettledBets(10) : null;
 
   // Which bots are listed — [[#155]] ONE STATUS DECIDES DISTRIBUTION (2026-09-25): the STATUS
-  // alone. TESTING / BETA / CALIBRATED are listed (lib/bot-status.ts = engine bot_distribution.
+  // alone. TESTING / ACTIVE are listed (lib/bot-status.ts = engine bot_distribution.
   // on_performance); EXPERIMENTAL is admin-only; VIP bots need a public status too ("VIP · TESTING",
   // settled rows only). The old second switches (bots.show_on_performance, "VIP whatever its label")
   // are gone — show_on_performance is now derived from the status by an engine trigger.

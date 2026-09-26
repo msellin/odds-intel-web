@@ -238,13 +238,6 @@ export interface LiveBet {
   matchMinuteAtPick: number | null;
   scoreHomeAtPick: number | null;
   scoreAwayAtPick: number | null;
-  // COHORT-TRANSPARENCY (2026-06-02): is the source bot in the calibrated
-  // subset (maturity_label='calibrated' AND is_active=true)? On Elite view,
-  // calibrated picks get a "Pro pick" badge so the user can tell at a glance
-  // which bets they'd also see on Pro tier vs which are Elite-only extras.
-  // Always true when fetched via cohort='calibrated' (Pro view); mixed on
-  // cohort='active' (Elite view).
-  isCalibrated: boolean;
 }
 
 // ─── Supabase row types ─────────────────────────────────────────────────────
@@ -593,11 +586,6 @@ function toBet(
     matchMinuteAtPick: row.match_minute_at_pick != null ? Number(row.match_minute_at_pick) : null,
     scoreHomeAtPick: row.score_home_at_pick != null ? Number(row.score_home_at_pick) : null,
     scoreAwayAtPick: row.score_away_at_pick != null ? Number(row.score_away_at_pick) : null,
-    // COHORT-TRANSPARENCY (2026-06-02): pre-compute the "is this bet from
-    // a calibrated bot" flag. Pro tier sees only calibrated picks; Elite
-    // tier sees all active bots, but renders a "Pro pick" badge on rows
-    // where isCalibrated=true so the user can tell them apart.
-    isCalibrated: bot?.maturity_label === "calibrated" && bot?.is_active === true,
   };
 }
 
@@ -856,9 +844,9 @@ export const CALIBRATED_SINCE = "2026-05-04";
 // strategy, excluding retired bots so failed experiments do not drag the
 // number. The anonymous picks cohort lives in upcoming-picks.ts and stays
 // narrower on purpose (PICKS-USER-GATE).
-// [[#155]] (2026-09-25): the headline is BETA + CALIBRATED only — TESTING bots are sent and keep
-// their own record but are NOT in the headline, VIP bots never are (getPublicCohortBotNames drops
-// them). `active` is gone: it is not an allowed status (bots_maturity_label_check). One source:
+// [[#155]]/[[#175]] (2026-09-26): the headline is ACTIVE bots only (BETA + CALIBRATED were merged
+// into ACTIVE by engine migration 462) — TESTING bots are sent and keep their own record but are
+// NOT in the headline, VIP bots never are (getPublicCohortBotNames drops them). One source:
 // lib/bot-status.ts HEADLINE_STATUSES = engine bot_distribution.in_headline.
 export const HEADLINE_MATURITY_LABELS = HEADLINE_STATUSES;
 export const CALIBRATED_PUBLIC_MARKETS = ["1x2", "o/u", "over_under_25", "btts"] as const;

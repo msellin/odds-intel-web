@@ -334,7 +334,7 @@ const GATE_LABEL: Record<string, string> = {
   require_pinnacle: "Requires Pinnacle",
   requires_no_pinnacle_price: "Requires no Pinnacle price",
   live_price_verify_min_edge: "Live price re-check edge",
-  public_telegram_if_maturity_calibrated: "Telegram once calibrated",
+  public_telegram_if_maturity_calibrated: "Telegram once active", // legacy key name — CALIBRATED merged into ACTIVE ([[#175]])
   tier_filter: "League tier filter",
   league_tiers: "League tiers",
   league_filter: "League filter",

@@ -136,18 +136,24 @@ export default function MethodologyPage() {
           same prediction backbone; the filters differ:
         </P>
         <ul className="mb-3 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-neutral-300">
+          {/* [[#175]] (owner 2026-09-26): BETA + CALIBRATED merged into ONE status, ACTIVE. The old
+              list (Calibrated / Beta / Active) described tiers that no longer exist. */}
           <li>
-            <strong>Calibrated</strong> — promotion-grade. The only tier
-            that places real money via the Coolbet placer. ~6 bots today.
+            <strong>Experimental</strong> — visible to us only; nothing is
+            sent or published.
           </li>
           <li>
-            <strong>Beta</strong> — paper-only, accumulating live evidence
-            after a backtest passes. Auto-promoted by{" "}
-            <Code>scripts/weekly_bot_review.py</Code> at ROI ≥ +10% / CLV
-            ≥ +5% on 60+ settled.
+            <strong>Testing</strong> — picks go to /picks and the strategy
+            keeps its own record on /performance, but it is{" "}
+            <em>not</em> counted in the headline totals. Promoted to Active
+            after 50 settled picks that beat the sharp closing line on
+            average.
           </li>
           <li>
-            <strong>Active</strong> — paper-only, observation tier.
+            <strong>Active</strong> — picks go to /picks and our Telegram
+            channel, own record on /performance, and{" "}
+            <strong>counted in the headline totals</strong>. Only Active
+            strategies make up the headline figures.
           </li>
           <li>
             <strong>Retired</strong> — strategies we stopped running.

@@ -11,8 +11,7 @@
  * mark states on /admin/shadow-bots), `breakEvenOdds` and
  * `placementTriggerOdds` (the model break-even and placement-trigger
  * arithmetic, pinned by PICKS-MIN-ODDS-WRONG-FORMULA and
- * FLOORS-ONE-SOURCE-CROSS-LANGUAGE), and `PUBLIC_MATURITY_LABELS` (still read
- * by the model-era ledger endpoint). Retained rather than deleted because the
+ * FLOORS-ONE-SOURCE-CROSS-LANGUAGE). Retained rather than deleted because the
  * model path is paused, not removed — but nothing below describes what a reader
  * sees on /picks today.
  *
@@ -183,8 +182,9 @@ export function placementTriggerOdds(
 
 const PRE_MATCH_MARKETS = ["1x2", "over_under_25", "o/u", "btts"];
 
-export const PUBLIC_MATURITY_LABELS = ["calibrated"];
-export const SIGNED_IN_MATURITY_LABELS = ["calibrated", "beta", "active"];
+// [[#175]] 2026-09-26: PUBLIC_MATURITY_LABELS / SIGNED_IN_MATURITY_LABELS deleted — nothing imported
+// them (the model-era ledger reads engine-data HEADLINE_MATURITY_LABELS), and their 'calibrated' /
+// 'beta' values no longer exist (merged into 'active', engine migration 462).
 
 interface BetRow {
   id: string;

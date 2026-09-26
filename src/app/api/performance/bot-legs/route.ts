@@ -7,7 +7,7 @@
  * so the list a reader counts reconciles with the row, on the one public price basis.
  *
  * Guards, all server-side:
- *   * only a bot /performance LISTS (calibrated / beta, VIP, show_on_performance, or a published
+ *   * only a bot /performance LISTS (testing / active, VIP, show_on_performance, or a published
  *     forward-test arm; never retired). Experimental bots are admin-only by design (#155) — a
  *     guessed name must not read their ledger through this public route.
  *   * VIP + hide_pending bots: SETTLED legs only. Their pending picks are the paid product
