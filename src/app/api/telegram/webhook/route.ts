@@ -268,21 +268,61 @@ async function handleResumeCommand(chatId: number): Promise<void> {
 // OWN-path verdict of 2026-09-14 flipped the placement flag and armed a
 // customer-feed outage nobody asked for. The operator keeps a deliberate
 // switch — this one — and it says what it does.
+//
+// #162 W5.5 (2026-09-26): both commands go through the audited admin_set_control (engine
+// migration 413, control 'publishing_paused', source 'telegram'), so every change to the
+// customer-feed switch lands in control_changes like the page's own writes. Before this they
+// were bare UPDATEs with no history — the last Telegram control write outside the log.
+// From Telegram both directions stay unconfirmed: the function demands a typed PAUSE PICKS +
+// reason only for source 'web'. The pause keeps a plain-update fallback (a STOP must never
+// depend on the audit path, same as /pause); the resume does NOT — it restarts sends to
+// customers, so if the audited call fails it reports the error instead of writing unlogged.
+async function setPublishingPausedAudited(
+  admin: ReturnType<typeof createAdmin>,
+  actor: string,
+  paused: boolean,
+  reason: string | null,
+): Promise<string | null> {
+  const { data, error } = await admin.rpc("admin_set_control", {
+    p_control: "publishing_paused",
+    p_bot: null,
+    p_value: paused,
+    p_reason: reason,
+    p_confirm: null,
+    p_actor: actor,
+    p_actor_user_id: null,
+    p_source: "telegram",
+    p_expected: null,
+    p_request_id: null,
+  });
+  if (!error) {
+    const res = data as { outcome?: string; refusal?: string | null } | null;
+    // noop = already in that state (a re-pause keeps the standing reason, as the trigger did for the old UPDATE)
+    return res?.outcome === "applied" || res?.outcome === "noop"
+      ? null
+      : `admin_set_control: ${res?.outcome ?? "no outcome"}${res?.refusal ? ` — ${res.refusal}` : ""}`;
+  }
+  if (!paused) return error.message;
+  console.error("admin_set_control (telegram /pausepicks) failed — applying the STOP without its audit row", error);
+  const { error: e2 } = await admin
+    .from("coolbet_session_state")
+    .update({
+      publishing_paused: true,
+      publishing_paused_at: new Date().toISOString(),
+      publishing_paused_reason: reason,
+    })
+    .eq("id", 1);
+  return e2 ? e2.message : null;
+}
+
 async function handlePausePicksCommand(
   chatId: number,
   admin: ReturnType<typeof createAdmin>,
   reason: string,
 ): Promise<void> {
-  const { error } = await admin
-    .from("coolbet_session_state")
-    .update({
-      publishing_paused: true,
-      publishing_paused_at: new Date().toISOString(),
-      publishing_paused_reason: reason || "operator /pausepicks",
-    })
-    .eq("id", 1);
-  if (error) {
-    await sendReply(chatId, `❌ Could not set publishing_paused: ${error.message}`);
+  const err = await setPublishingPausedAudited(admin, `telegram:${chatId}`, true, reason || "operator /pausepicks");
+  if (err) {
+    await sendReply(chatId, `❌ Could not set publishing_paused: ${err}`);
     return;
   }
   await sendReply(
@@ -298,16 +338,9 @@ async function handleResumePicksCommand(
   chatId: number,
   admin: ReturnType<typeof createAdmin>,
 ): Promise<void> {
-  const { error } = await admin
-    .from("coolbet_session_state")
-    .update({
-      publishing_paused: false,
-      publishing_paused_at: null,
-      publishing_paused_reason: null,
-    })
-    .eq("id", 1);
-  if (error) {
-    await sendReply(chatId, `❌ Could not clear publishing_paused: ${error.message}`);
+  const err = await setPublishingPausedAudited(admin, `telegram:${chatId}`, false, null);
+  if (err) {
+    await sendReply(chatId, `❌ Could not clear publishing_paused: ${err}`);
     return;
   }
   await sendReply(chatId, "📣 Pick publishing RESUMED — qualifying picks post to @oddsintelpicks again.");
