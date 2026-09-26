@@ -6,7 +6,7 @@
 //  * EXPERIMENTAL — admins only: not on /picks, not on Telegram, not on /performance.
 //  * TESTING / ACTIVE — sent to /picks, listed on /performance with its own record. Only ACTIVE
 //    counts in the headline totals ([[#175]], 2026-09-26: BETA + CALIBRATED merged into ACTIVE).
-//    Public Telegram ([[#174]]): every ACTIVE pick, TESTING picks only at EV >= 5%.
+//    Public Telegram ([[#174]]): every ACTIVE pick, TESTING picks only at EV >= 7% (5% until engine #184, 2026-09-26).
 //    Engine senders read the same view: the model signaler (coolbet_signaler, any SENT bot on the
 //    same match · market · selection, 1X2 / O/U 2.5 / BTTS) and the forward-test publisher
 //    (arm_bot_sends — grade D's bot is EXPERIMENTAL, so it is recorded, never sent).
@@ -93,7 +93,7 @@ export function channelLines(
     const what = fam === "forward_test"
       ? "the forward-test publisher posts its picks (at :05 and :35)"
       : "the channel posts customer-model picks a sent bot holds (match result, goals 2.5, both teams to score)";
-    telegram = { on: true, text: `On Telegram because its status is ${shown} — active bots post every pick, testing bots only picks at EV ≥ 5%; ${what}.${paused}` };
+    telegram = { on: true, text: `On Telegram because its status is ${shown} — active bots post every pick, testing bots only picks at EV ≥ 7%; ${what}.${paused}` };
     picks = { on: true, text: `On /picks because its status is ${shown} — every sent pick is also on /picks.` };
   } else {
     telegram = { on: false, text: `Not on Telegram because its status is ${shown} — experimental bots are admins only. ${CHANGE}` };
