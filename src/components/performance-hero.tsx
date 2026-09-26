@@ -20,7 +20,6 @@
 import type {
   TrackRecordStats,
   DashboardCache,
-  ModelV2Stats,
   CalibratedHeadlineStats,
 } from "@/lib/engine-data";
 // Value import, separate from the `import type` above: CALIBRATED_SINCE is a
@@ -31,11 +30,6 @@ interface Props {
   stats: TrackRecordStats;
   cache: DashboardCache | null;
   botsTracked?: number | null;
-  /** Retained in the signature so `PerformanceClient` doesn't need
-   *  churning while this hero rework settles; unused in the current
-   *  render. If Model-V2 provenance ends up wanted for Elite users
-   *  it can come back behind a tier gate. */
-  modelV2Stats?: ModelV2Stats | null;
   activeBotCount?: number | null;
   retiredBotCount?: number | null;
   calibrated?: CalibratedHeadlineStats | null;

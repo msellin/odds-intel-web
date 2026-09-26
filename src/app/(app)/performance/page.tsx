@@ -40,7 +40,6 @@ import {
   getAllBotsFromDB,
   getRecentSettledBets,
   getPublicPerformanceExtras,
-  getModelV2Stats,
   getCalibratedHeadlineStats,
   getPublicCohortBotNames,
   CALIBRATED_PUBLIC_MARKETS,
@@ -181,7 +180,7 @@ async function LoggedInHistorySection({ isElite, botsDB }: LoggedInSectionProps)
 
 export default async function PerformancePage() {
   // All fast fetches run in parallel — botsDB moved here since it doesn't need isPro.
-  const [authResult, trackStats, cache, extras, modelV2Stats, botsDB, calibrated, perf, workDone] = await Promise.all([
+  const [authResult, trackStats, cache, extras, botsDB, calibrated, perf, workDone] = await Promise.all([
     (async () => {
       const supabase = await createSupabaseServer();
       const {
@@ -194,7 +193,6 @@ export default async function PerformancePage() {
     getTrackRecordStats(),
     getDashboardCache(),
     getPublicPerformanceExtras(),
-    getModelV2Stats(),
     getAllBotsFromDB(),
     getCalibratedHeadlineStats(),
     // [[#159]] THE per-bot source for every row below.
@@ -303,7 +301,6 @@ export default async function PerformancePage() {
     isPro,
     isElite,
     botsDB,
-    modelV2Stats,
     calibrated,
   };
 

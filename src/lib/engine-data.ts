@@ -1314,7 +1314,6 @@ export interface PublicPerformanceExtras {
   cumulative: PublicPnlPoint[];
   calibration: CalibrationBucket[];
   streaks: Streaks;
-  botRecentRoi: Record<string, { roi: number; settled: number }>;
 }
 
 // LIGHTHOUSE-FIX-3: wrapped with unstable_cache (300s) — see export below.
@@ -1371,7 +1370,7 @@ const _getPublicPerformanceExtrasUncached = async (): Promise<PublicPerformanceE
   // CALIBRATION-COHORT-FIX (2026-07-06): previously the calibration table
   // included retired bots — post-audit query showed this leaked ~10-15%
   // more overconfidence-heavy legacy bets into the buckets vs. the
-  // headline ROI cohort. `getModelV2Stats` already filters retired; align
+  // headline ROI cohort. (The since-deleted getModelV2Stats filtered retired too); align
   // this query with the same rule. The public calibration display should
   // reflect currently-live strategies, not the graveyard.
   const rows = ((data ?? []) as Row[]).filter((r) => {
@@ -1451,32 +1450,9 @@ const _getPublicPerformanceExtrasUncached = async (): Promise<PublicPerformanceE
   else if (runKind === "lost") currentLoss = runLen;
   const streaks: Streaks = { currentWin, currentLoss, longestWin, longestLoss };
 
-  // Bot recent ROI — last 30 days, per bot.
-  const cutoff30 = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
-  const recentByBot = new Map<string, { staked: number; pnl: number; settled: number }>();
-  for (const r of rows) {
-    if (r.pick_time < cutoff30) continue;
-    const bot = Array.isArray(r.bot) ? r.bot[0] : r.bot;
-    const name = bot?.name;
-    if (!name) continue;
-    let agg = recentByBot.get(name);
-    if (!agg) {
-      agg = { staked: 0, pnl: 0, settled: 0 };
-      recentByBot.set(name, agg);
-    }
-    agg.staked += Number(r.stake);
-    agg.pnl += Number(r.pnl ?? 0);
-    agg.settled += 1;
-  }
-  const botRecentRoi: Record<string, { roi: number; settled: number }> = {};
-  for (const [name, agg] of recentByBot) {
-    botRecentRoi[name] = {
-      roi: agg.staked > 0 ? (agg.pnl / agg.staked) * 100 : 0,
-      settled: agg.settled,
-    };
-  }
-
-  return { cumulative, calibration, streaks, botRecentRoi };
+  // The per-bot 30-day ROI map DELETED 2026-09-26 (#162 audit C §7): computed here,
+  // rendered nowhere — performance-extras uses calibration + streaks only.
+  return { cumulative, calibration, streaks };
 };
 export const getPublicPerformanceExtras = unstable_cache(
   _getPublicPerformanceExtrasUncached,
@@ -1484,91 +1460,9 @@ export const getPublicPerformanceExtras = unstable_cache(
   CACHE_300S,
 );
 
-// ── Model v2 era stats ────────────────────────────────────────────────────────
-
-export interface ModelV2Stats {
-  settled: number;
-  roi: number | null;
-  avgClv: number | null;
-  prematchSettled: number;
-  prematchRoi: number | null;
-  inplaySettled: number;
-  inplayRoi: number | null;
-}
-
-const EXPERIMENTAL_BOTS_V2 = new Set([
-  "bot_acca_value", "bot_acca_proven", "bot_acca_coolbet",
-  "bot_combo_system", "bot_combo_proven_system", "bot_acca_leg_shadow",
-]);
-
-/**
- * Live stats for bets that literally used model v20260524_market (Model v2),
- * excluding retired and experimental bots. model_version tag is the correct
- * filter here — date would include early May 24 pipeline runs that still
- * carried v14 before the model file was swapped.
- */
-const _getModelV2StatsUncached = async (): Promise<ModelV2Stats> => {
-  const admin = createSupabaseAdmin();
-  const { data } = await admin
-    .from("simulated_bets")
-    .select("result, pnl, stake, clv, bot:bot_id(name, retired_at, maturity_label)")
-    .eq("model_version", "v20260524_market")
-    .in("result", ["won", "lost"]);
-
-  type Row = {
-    result: string;
-    pnl: number | string | null;
-    stake: number | string;
-    clv: number | null;
-    bot: { name: string; retired_at: string | null; maturity_label: string | null } | null
-       | { name: string; retired_at: string | null; maturity_label: string | null }[];
-  };
-
-  const rows = ((data ?? []) as Row[]).filter((r) => {
-    const bot = Array.isArray(r.bot) ? r.bot[0] : r.bot;
-    if (!bot) return true;
-    if (EXPERIMENTAL_BOTS_V2.has(bot.name)) return false;
-    if (bot.retired_at) return false;
-    return true;
-  });
-
-  const getBotName = (r: Row) => {
-    const bot = Array.isArray(r.bot) ? r.bot[0] : r.bot;
-    return bot?.name ?? "";
-  };
-
-  const prematch = rows.filter((r) => !getBotName(r).startsWith("inplay_"));
-  const inplay   = rows.filter((r) => getBotName(r).startsWith("inplay_"));
-
-  const calcRoi = (subset: Row[]) => {
-    const staked = subset.reduce((s, r) => s + Number(r.stake), 0);
-    const pnl    = subset.reduce((s, r) => s + Number(r.pnl ?? 0), 0);
-    return staked > 0 ? (pnl / staked) * 100 : null;
-  };
-
-  const staked = rows.reduce((s, r) => s + Number(r.stake), 0);
-  const pnl    = rows.reduce((s, r) => s + Number(r.pnl ?? 0), 0);
-  // CLV only meaningful for pre-match bets; inplay bots don't track it.
-  const clvValues = prematch.map((r) => r.clv).filter((c): c is number => c != null && Number.isFinite(c));
-
-  return {
-    settled:         rows.length,
-    roi:             staked > 0 ? (pnl / staked) * 100 : null,
-    avgClv:          clvValues.length > 0 ? clvValues.reduce((a, b) => a + b, 0) / clvValues.length : null,
-    prematchSettled: prematch.length,
-    prematchRoi:     calcRoi(prematch),
-    inplaySettled:   inplay.length,
-    inplayRoi:       calcRoi(inplay),
-  };
-};
-
-// PERF-VPS-2026-07-07: unstable_cache (1800s = 30min) — full simulated_bets
-// scan filtered by model_version. Expensive; results change slowly.
-export const getModelV2Stats = unstable_cache(
-  _getModelV2StatsUncached,
-  ["getModelV2Stats_v1"],
-  { revalidate: 1800 }
-);
+// ── Model v2 era stats — DELETED 2026-09-26 (#162 audit C §7) ─────────────────
+// getModelV2Stats scanned simulated_bets for model v20260524_market every 30 min and
+// fed PerformanceHero a prop it never rendered (dropped in the 2026-07-06 hero rework).
 
 // ─── WC roster strength (Wave 3 B3) ─────────────────────────────────────────
 //

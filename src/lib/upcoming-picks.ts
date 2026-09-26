@@ -4,8 +4,9 @@
  * ⚠️ NO LONGER ON THE /picks READ PATH (PICKS-PAGE-SHOW-FORWARD-TEST,
  * 2026-09-14). /picks and /api/v1/upcoming now read the pre-registered
  * sharp-edge forward test via `lib/forward-test-picks.ts`; migration 335
- * removed the O/U Platt calibrator and nothing clears the old model floors, so
- * `fetchUpcomingPicks` returns an empty list today.
+ * removed the O/U Platt calibrator and nothing clears the old model floors.
+ * `fetchUpcomingPicks` (the model-era simulated_bets feed) had no caller left
+ * and was DELETED 2026-09-26 (#162 W7.3); history is in git.
  *
  * What is still LIVE in this file: `fetchUserPickMarkStates` (the operator's
  * mark states on /admin/shadow-bots), `breakEvenOdds` and
@@ -180,37 +181,9 @@ export function placementTriggerOdds(
   return Math.max(1 / (cal - edgeFloor), oddsFloor);
 }
 
-const PRE_MATCH_MARKETS = ["1x2", "over_under_25", "o/u", "btts"];
-
 // [[#175]] 2026-09-26: PUBLIC_MATURITY_LABELS / SIGNED_IN_MATURITY_LABELS deleted — nothing imported
 // them (the model-era ledger reads engine-data HEADLINE_MATURITY_LABELS), and their 'calibrated' /
 // 'beta' values no longer exist (merged into 'active', engine migration 462).
-
-interface BetRow {
-  id: string;
-  match_id: string;
-  created_at: string;
-  market: string;
-  selection: string;
-  odds_at_pick: number | null;
-  /** MODEL-TRAINING-DEBT (f), 2026-09-21. Age in minutes of the quote the pick
-   *  was decided on. `odds_at_pick` is frozen at insert and never refreshed, so
-   *  without this a reader cannot tell a price quoted two minutes ago from one
-   *  quoted yesterday. Measured over 14 days: median 22.4 min, but 62 of 487
-   *  picks (12.7%) were decided on a quote more than SIX HOURS old. */
-  decision_quote_age_min: number | null;
-  edge_percent: number | null;
-  calibrated_prob: number | null;
-  recommended_bookmaker: string | null;
-  result: string | null;
-  matches: {
-    date: string;
-    leagues: { name: string; country: string } | null;
-    home_team: { name: string } | null;
-    away_team: { name: string } | null;
-  } | null;
-  bots: { name: string; maturity_label: string } | null;
-}
 
 function adminClient() {
   const url =
@@ -221,83 +194,6 @@ function adminClient() {
     process.env.SUPABASE_SECRET_KEY ??
     process.env.SUPABASE_SERVICE_ROLE_KEY!;
   return createClient(url, key, { auth: { persistSession: false } });
-}
-
-export async function fetchUpcomingPicks(
-  maturityLabels: readonly string[],
-): Promise<{ picks: UpcomingPick[]; windowStart: string; windowEnd: string }> {
-  const sb = adminClient();
-  const now = new Date();
-  const horizonHoursForward = 36;
-  const start = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0),
-  );
-  const end = new Date(now.getTime() + horizonHoursForward * 3600 * 1000);
-
-  const { data, error } = await sb
-    .from("simulated_bets")
-    .select(
-      `id, match_id, created_at, market, selection,
-       odds_at_pick, edge_percent, calibrated_prob, recommended_bookmaker, result,
-       decision_quote_age_min,
-       matches!inner (
-         date,
-         leagues ( name, country ),
-         home_team:teams!matches_home_team_id_fkey ( name ),
-         away_team:teams!matches_away_team_id_fkey ( name )
-       ),
-       bots!inner ( name, maturity_label )`,
-    )
-    .in("result", ["pending", "won", "lost", "void"])
-    .in("bots.maturity_label", maturityLabels as string[])
-    .is("bots.retired_at", null)
-    .not("bots.name", "like", "inplay_%")
-    .in("market", PRE_MATCH_MARKETS)
-    .gte("matches.date", start.toISOString())
-    .lte("matches.date", end.toISOString())
-    .order("matches(date)", { ascending: true })
-    .limit(300);
-
-  if (error) throw new Error(`upcoming picks: ${error.message}`);
-
-  const rows = (data ?? []) as unknown as BetRow[];
-
-  const dedup = new Map<string, BetRow>();
-  for (const r of rows) {
-    const key = `${r.match_id}|${r.market}|${r.selection}`;
-    const existing = dedup.get(key);
-    if (!existing || (r.edge_percent ?? 0) > (existing.edge_percent ?? 0)) {
-      dedup.set(key, r);
-    }
-  }
-
-  const picks: UpcomingPick[] = Array.from(dedup.values()).map((r) => ({
-    id: r.id,
-    match_id: r.match_id,
-    kickoff_utc: r.matches?.date ?? null,
-    league: r.matches?.leagues?.name ?? null,
-    country: r.matches?.leagues?.country ?? null,
-    home_team: r.matches?.home_team?.name ?? null,
-    away_team: r.matches?.away_team?.name ?? null,
-    market: r.market,
-    selection: r.selection,
-    odds: r.odds_at_pick,
-    quote_age_min: r.decision_quote_age_min,
-    edge_pct:
-      r.edge_percent != null
-        ? Number((Number(r.edge_percent) * 100).toFixed(2))
-        : null,
-    min_odds: breakEvenOdds(r.odds_at_pick, r.edge_percent, r.calibrated_prob),
-    bookmaker: r.recommended_bookmaker,
-    posted_at_utc: r.created_at,
-    result: (r.result ?? "pending") as UpcomingPick["result"],
-  }));
-
-  return {
-    picks,
-    windowStart: start.toISOString(),
-    windowEnd: end.toISOString(),
-  };
 }
 
 export async function fetchUserPickMarkStates(

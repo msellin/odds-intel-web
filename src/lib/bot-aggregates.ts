@@ -367,8 +367,10 @@ export function isPublicBot(maturityLabel?: string | null): boolean {
  * (`bots.vip`, migration 420 — only `bot_combined_1x2_ev5_v1`). Its LIVE picks
  * are the paid product (delivered privately before kickoff); its record is
  * public once settled. So it is listed on /performance whatever its maturity
- * label — but ONLY its settled rows ever reach the page (see
- * `dropVipUnsettled`), and it is NOT counted in the hero "strategies live"
+ * label — but ONLY its settled rows ever reach the page (since #159 the
+ * /api/performance/bot-legs route serves VIP legs settled-only; the uncalled
+ * `dropVipUnsettled` filter was deleted 2026-09-26, #162 W7.3), and it is NOT
+ * counted in the hero "strategies live"
  * number or in any HEADLINE_MATURITY_LABELS aggregate.
  *
  * Deliberately a SEPARATE gate rather than a new entry in
@@ -393,20 +395,4 @@ export function vipEvLabel(modelProb: number | null | undefined, odds: number | 
   const ev = pickEv(modelProb, odds);
   if (ev == null) return null;
   return ev >= 0.08 ? "EV8" : "EV5";
-}
-
-/**
- * Belt and braces on top of the RLS policy (migration 420): drop every VIP-bot
- * row that is not SETTLED (won/lost/void kept; pending and anything else
- * dropped) before bets reach a client component. Keys on the bot NAME because
- * bet rows carry the name, not the vip flag.
- */
-export function dropVipUnsettled<T extends { bot: string; result: string }>(
-  bets: T[],
-  vipBotNames: ReadonlySet<string>,
-): T[] {
-  if (vipBotNames.size === 0) return bets;
-  return bets.filter(
-    (b) => !vipBotNames.has(b.bot) || b.result === "won" || b.result === "lost" || b.result === "void",
-  );
 }

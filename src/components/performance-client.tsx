@@ -15,7 +15,7 @@
 import { PerformanceHero } from "./performance-hero";
 import { PerformanceLeaderboard } from "./performance-leaderboard";
 import type { PublicBotStat } from "./performance-leaderboard";
-import type { TrackRecordStats, DashboardCache, ModelV2Stats, CalibratedHeadlineStats } from "@/lib/engine-data";
+import type { TrackRecordStats, DashboardCache, CalibratedHeadlineStats } from "@/lib/engine-data";
 import { isLiveBot, isPublicBot } from "@/lib/bot-aggregates";
 
 interface BotDbRow {
@@ -31,7 +31,6 @@ interface Props {
   isPro: boolean;
   isElite: boolean;
   botsDB: BotDbRow[] | null;
-  modelV2Stats: ModelV2Stats | null;
   calibrated: CalibratedHeadlineStats | null;
 }
 
@@ -41,7 +40,6 @@ export function PerformanceClient({
   bots,
   isElite,
   botsDB,
-  modelV2Stats,
   calibrated,
 }: Props) {
   // VIP-PERFORMANCE-SETTLED-ONLY (#148): the VIP bot is listed in the table but never counted
@@ -63,7 +61,6 @@ export function PerformanceClient({
         stats={trackStats}
         cache={cache}
         botsTracked={botsTracked}
-        modelV2Stats={modelV2Stats}
         activeBotCount={activeBotCount}
         retiredBotCount={retiredBotCount}
         calibrated={calibrated}
