@@ -32,7 +32,7 @@ import { AlertTriangle, Copy, History, Info, MoreHorizontal, ArrowUpRight } from
 import { PageHeader } from "@/components/oi/panel";
 import { StatCard } from "@/components/oi/stat-card";
 import { StatusBadge } from "@/components/oi/status-badge";
-import type { BotBoardData, BotFunnelRow, BotMarketStatsRow, BotPicksResult, BotWeeklyRow, RetiredInfo } from "@/lib/bot-board";
+import type { BotBoardData, BotFunnelRow, BotMarketStatsRow, BotPicksResult, BotRuleRow, BotWeeklyRow, RetiredInfo } from "@/lib/bot-board";
 import type { ControlState } from "@/lib/bot-controls/types";
 import { placementPathReason } from "@/lib/bot-controls/placement-path";
 import {
@@ -161,7 +161,7 @@ export function BotsBoard({ data, controls }: { data: BotBoardData; controls: Co
 }
 
 function Board({ data }: { data: BotBoardData }) {
-  const { scoreboard, config, capabilities, retired, weekly, marketStats, reviewFlags, funnel, now } = data;
+  const { scoreboard, config, capabilities, retired, weekly, marketStats, reviewFlags, funnel, byRule, now } = data;
   const pathname = usePathname();
   const params = useSearchParams();
   const ctl = useControls();
@@ -233,6 +233,12 @@ function Board({ data }: { data: BotBoardData }) {
     for (const r of funnel.rows) m.set(r.bot, [...(m.get(r.bot) ?? []), r]);
     return m;
   }, [funnel]);
+  const byRuleBy = useMemo(() => {
+    if (byRule.error) return null; // migration 461 not deployed → the table is simply absent
+    const m = new Map<string, BotRuleRow[]>();
+    for (const r of byRule.rows) m.set(r.bot_name, [...(m.get(r.bot_name) ?? []), r]);
+    return m;
+  }, [byRule]);
   const control = useMemo(
     () => controlRef(sbBy.get(CONTROL_BOT), marketsBy ? marketsBy.get(CONTROL_BOT) ?? [] : null),
     [sbBy, marketsBy],
@@ -670,6 +676,7 @@ function Board({ data }: { data: BotBoardData }) {
         markets={selectedView && marketsBy ? marketsBy.get(selectedView.name) ?? [] : null}
         weekly={selectedView && weeklyBy ? weeklyBy.get(selectedView.name) ?? ([] as BotWeeklyRow[]) : null}
         funnel={selectedView && funnelBy ? funnelBy.get(selectedView.name) ?? [] : null}
+        byRule={selectedView && byRuleBy ? byRuleBy.get(selectedView.name) ?? [] : null}
         fleetPaused={livePaused}
         pulse={pulse}
         onClose={close}

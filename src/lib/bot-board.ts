@@ -248,6 +248,26 @@ export interface BotFunnelRow {
   last_seen: string | null;
 }
 
+/** #162 engine view bot_performance_by_rule (migration 461): one bot's record split by the
+ *  rule_version its picks were made under ("r0" = picked before tagging began 2026-09-25).
+ *  Same expressions as bot_performance, which still POOLS every version. Admin-only. */
+export interface BotRuleRow {
+  bot_name: string;
+  rule_version: string;
+  picks_total: number;
+  settled: number;
+  pnl_units_public: number | null;
+  roi_public: number | null;
+  clv_n: number | null;
+  clv_public: number | null;
+  first_pick_at: string | null;
+  last_pick_at: string | null;
+}
+
+/** The bot_performance_by_rule columns the sheet reads. */
+export const BOT_RULE_COLS =
+  "bot_name, rule_version, picks_total, settled, pnl_units_public, roi_public, clv_n, clv_public, first_pick_at, last_pick_at";
+
 export interface BotBoardData {
   scoreboard: Read<BotScoreboardRow>;
   config: Read<BotConfigRow>;
@@ -261,6 +281,8 @@ export interface BotBoardData {
   reviewFlags: Read<BotReviewFlagRow>;
   /** #162 W7.5 candidate_funnel_7d (migration 456); `error` set when unreadable. */
   funnel: Read<BotFunnelRow>;
+  /** #162 bot_performance_by_rule (migration 461); `error` set when unreadable. */
+  byRule: Read<BotRuleRow>;
   /** Render clock, read in the data layer (react-hooks/purity convention). */
   now: number;
 }
@@ -346,10 +368,11 @@ async function loadBotBoardUncached(): Promise<BotBoardData> {
       ? ok(f.review_flags)
       : { rows: [], error: "bot_review_flag: not in fixture" };
     const funnel: Read<BotFunnelRow> = { rows: [], error: "candidate_funnel_7d: not in fixture" };
+    const byRule: Read<BotRuleRow> = { rows: [], error: "bot_performance_by_rule: not in fixture" };
     return redactInplay({ scoreboard: ok(f.scoreboard), config: ok(f.config), capabilities: ok(f.capabilities),
-             retired: ok(f.retired), weekly, marketStats, reviewFlags, funnel, now: Date.now() });
+             retired: ok(f.retired), weekly, marketStats, reviewFlags, funnel, byRule, now: Date.now() });
   }
-  const [scoreboard, config, capabilities, retired, weekly, marketStats, reviewFlags, funnel] = await Promise.all([
+  const [scoreboard, config, capabilities, retired, weekly, marketStats, reviewFlags, funnel, byRule] = await Promise.all([
     readAll<BotScoreboardRow>("bot_scoreboard"),
     readAll<BotConfigRow>("bot_config", BOT_CONFIG_COLS),
     readAll<BotCapabilitiesRow>("bot_capabilities"),
@@ -363,8 +386,10 @@ async function loadBotBoardUncached(): Promise<BotBoardData> {
     // An aggregate (bots × sources × steps — a few hundred rows), so the whole thing ships with
     // the board and the sheet needs no extra round-trip.
     readAll<BotFunnelRow>("candidate_funnel_7d"),
+    // One row per (bot, rule_version) — ~2x the bot count, so it ships with the board too.
+    readAll<BotRuleRow>("bot_performance_by_rule", BOT_RULE_COLS),
   ]);
-  return redactInplay({ scoreboard, config, capabilities, retired, weekly, marketStats, reviewFlags, funnel, now: Date.now() });
+  return redactInplay({ scoreboard, config, capabilities, retired, weekly, marketStats, reviewFlags, funnel, byRule, now: Date.now() });
 }
 
 /** In-play bots are judged on lift, never CLV — drop their CLV before it leaves the server. */
@@ -395,7 +420,11 @@ function redactInplay(d: BotBoardData): BotBoardData {
       inplay.has(r.bot_name) ? { ...r, clv_mc_n: null, clv_mc_mean: null, clv_mc_sd: null } : r,
     ),
   };
-  return { ...d, scoreboard, weekly, marketStats };
+  const byRule = {
+    ...d.byRule,
+    rows: d.byRule.rows.map((r) => (inplay.has(r.bot_name) ? { ...r, clv_n: null, clv_public: null } : r)),
+  };
+  return { ...d, scoreboard, weekly, marketStats, byRule };
 }
 
 const redactLedgerRow = (r: BotLedgerRow): BotLedgerRow =>

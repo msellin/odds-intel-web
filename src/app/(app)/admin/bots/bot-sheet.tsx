@@ -14,7 +14,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { placementPathReason } from "@/lib/bot-controls/placement-path";
 import { fetchAudit } from "@/lib/bot-controls/client";
 import { TAKES_EFFECT, type BotControlRow, type ControlChange } from "@/lib/bot-controls/types";
-import type { BotFunnelRow, BotMarketStatsRow, BotWeeklyRow } from "@/lib/bot-board";
+import type { BotFunnelRow, BotMarketStatsRow, BotRuleRow, BotWeeklyRow } from "@/lib/bot-board";
 import { FunnelPanel } from "./funnel-panel";
 import { METRIC_SHORT, MIN_N, otherMetric, type BotView } from "./bot-board-model";
 import { ciHalf, count, dayMonth, pct, tStat } from "./bot-board-format";
@@ -46,6 +46,7 @@ export function BotSheet({
   markets,
   weekly,
   funnel,
+  byRule,
   fleetPaused,
   pulse,
   onClose,
@@ -65,6 +66,8 @@ export function BotSheet({
   weekly: BotWeeklyRow[] | null;
   /** #162 W7.5 this bot's candidate_funnel_7d rows (null = view unreadable) — "Why not picked". */
   funnel: BotFunnelRow[] | null;
+  /** #162 this bot's bot_performance_by_rule rows (null = view unreadable) — "By rule version". */
+  byRule: BotRuleRow[] | null;
   fleetPaused: boolean | null;
   pulse: boolean;
   onClose: () => void;
@@ -103,7 +106,7 @@ export function BotSheet({
                 {tab === "settings" && <SettingsTab v={v} now={now} />}
                 {tab === "performance" && (
                   <div className="space-y-4">
-                    <PerformanceTab v={v} markets={markets} weekly={weekly} />
+                    <PerformanceTab v={v} markets={markets} weekly={weekly} byRule={byRule} />
                     {/* Why not picked (last 7 days) — the first reader of candidate_funnel (#162 W7.5) */}
                     <FunnelPanel rows={funnel} />
                   </div>
@@ -293,7 +296,17 @@ function SettingsTab({ v, now }: { v: BotView; now: number }) {
   );
 }
 
-function PerformanceTab({ v, markets, weekly }: { v: BotView; markets: BotMarketStatsRow[] | null; weekly: BotWeeklyRow[] | null }) {
+function PerformanceTab({
+  v,
+  markets,
+  weekly,
+  byRule,
+}: {
+  v: BotView;
+  markets: BotMarketStatsRow[] | null;
+  weekly: BotWeeklyRow[] | null;
+  byRule: BotRuleRow[] | null;
+}) {
   const other = otherMetric(v.sb, v.metric.metric);
   const weeks = v.weeks ?? [];
   const inplay = v.metric.metric === "lift";
@@ -311,6 +324,11 @@ function PerformanceTab({ v, markets, weekly }: { v: BotView; markets: BotMarket
       ) : inplay ? null : (
         <p className="text-sm text-muted-foreground">No second CLV metric recorded for this bot.</p>
       )}
+
+      {/* #162 decision (b): a rule changes in place and each pick carries its rule_version. The
+          headline above POOLS every version (bot_performance); this splits it (migration 461's
+          bot_performance_by_rule — same expressions) so before/after a change is measurable. */}
+      {byRule && byRule.length > 1 && <ByRuleTable rows={byRule} inplay={inplay} />}
 
       {markets && markets.length > 0 && (
         <section className="space-y-1">
@@ -365,5 +383,42 @@ function PerformanceTab({ v, markets, weekly }: { v: BotView; markets: BotMarket
         </section>
       )}
     </div>
+  );
+}
+
+/** The record split by rule_version, newest version first. "r0" = picked before tagging began. */
+function ByRuleTable({ rows, inplay }: { rows: BotRuleRow[]; inplay: boolean }) {
+  const sorted = [...rows].sort((a, b) => (b.first_pick_at ?? "").localeCompare(a.first_pick_at ?? ""));
+  return (
+    <section className="space-y-1">
+      <h3 className={LABEL}>By rule version</h3>
+      <table className="w-full text-xs tabular-nums">
+        <thead>
+          <tr className="text-left text-muted-foreground">
+            <th className="py-1 pr-2 font-normal">Rule</th>
+            <th className="py-1 pr-2 font-normal">Since</th>
+            <th className="py-1 pr-2 text-right font-normal">Picks</th>
+            <th className="py-1 pr-2 text-right font-normal">Settled</th>
+            <th className="py-1 pr-2 text-right font-normal">ROI</th>
+            {!inplay && <th className="py-1 text-right font-normal">sharp CLV</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((r) => (
+            <tr key={r.rule_version} className="border-t border-border">
+              <td className="py-1 pr-2 font-mono" title={r.rule_version === "r0" ? "Picked before rule tagging began (2026-09-25)" : r.rule_version}>
+                {r.rule_version === "r0" ? "before tagging" : r.rule_version}
+              </td>
+              <td className="py-1 pr-2">{r.first_pick_at ? dayMonth(new Date(r.first_pick_at)) : "—"}</td>
+              <td className="py-1 pr-2 text-right">{count(r.picks_total)}</td>
+              <td className="py-1 pr-2 text-right">{count(r.settled)}</td>
+              <td className="py-1 pr-2 text-right">{r.settled ? pct(r.roi_public) : "—"}</td>
+              {!inplay && <td className="py-1 text-right">{r.clv_n ? `${pct(r.clv_public)} (n ${count(r.clv_n)})` : "—"}</td>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="text-xs text-muted-foreground">The headline figures pool every rule version; this table splits them.</p>
+    </section>
   );
 }
