@@ -47,13 +47,10 @@ const PERIOD_LABEL: Record<Period, string> = {
 const EVENTS: { iso: string; label: string; color: string }[] = [
   { iso: "2026-05-06", label: "Pipeline v2", color: "#f59e0b" },
   { iso: "2026-05-24", label: "Model v2", color: "#a855f7" },
-  // OU-CALIBRATOR-DOMAIN-MISMATCH. The O/U calibration curve shipped on 09-03
-  // was fitted on one probability and applied to another, which inflated every
-  // long-priced O/U selection and turned the 8% edge floor into a longshot
-  // filter. Removed 09-13. Both ends are marked because the drawdown between
-  // them is ours, not the market's, and a reader deserves to see which is which.
-  { iso: "2026-09-03", label: "Calibration bug", color: "#ef4444" },
-  { iso: "2026-09-13", label: "Bug fixed", color: "#22c55e" },
+  // 2026-09-26 (owner): the two calibration-bug markers (09-03 / 09-13) were removed — "they distract
+  // people". The bug is still disclosed where it belongs: the per-bot detail view flags affected picks
+  // and the "work behind it" card counts them (#157). The chart marks product milestones instead.
+  { iso: "2026-09-24", label: "New models", color: "#38bdf8" },
 ];
 
 function fmtEur(v: number): string {
@@ -174,9 +171,6 @@ export function PerformancePnlChartToggle({ curve30d, curve90d }: Props) {
   // matches a categorical x against the data and a miss renders nothing at all.
   const inWindow = new Set(activeCurve.map((p) => p.d));
   const visibleEvents = EVENTS.filter((e) => inWindow.has(e.iso));
-  const showsBugWindow =
-    visibleEvents.some((e) => e.iso === "2026-09-03") &&
-    visibleEvents.some((e) => e.iso === "2026-09-13");
 
   const strokeColor = positive ? "#22c55e" : "#ef4444";
 
@@ -280,28 +274,6 @@ export function PerformancePnlChartToggle({ curve30d, curve90d }: Props) {
         )}
       </div>
 
-      {/* What the two September markers mean, stated plainly.
-          The x-axis is the day a pick was MADE (settlement.py groups the curve by
-          DATE(pick_time)), so the two markers bracket exactly the picks generated
-          under the bug — which is the honest way to show it. Two caveats belong
-          here rather than in a footnote: both marker days are MIXED, because the
-          bug shipped mid-morning on the 3rd and was removed in the evening of the
-          13th; and the right-hand edge keeps filling in as newer bets settle, so
-          the last few days always read low until they catch up. */}
-      {hasData && showsBugWindow && (
-        <p className="mt-3 text-[11px] leading-relaxed text-neutral-500">
-          <span className="text-red-400">Sep 3</span> — a calibration bug began
-          inflating our own edge estimate on over/under picks, so the engine
-          published far more of them, at longer prices, than it should have.
-          Everything between the markers is a pick made under that bug, and the
-          drawdown there is ours, not variance.{" "}
-          <span className="text-emerald-400">Sep 13</span> — found and removed.
-          Both marker days are mixed (the bug shipped 10:49 UTC on the 3rd and was
-          removed 21:00 UTC on the 13th), and because a day only counts a bet once
-          it has settled, the newest days on the right keep filling in for a while
-          — so read the recovery once that edge has caught up, not on day one.
-        </p>
-      )}
 
       {/* Footer stat strip */}
       {hasData && (
