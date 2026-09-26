@@ -91,7 +91,7 @@ export interface ModelsData {
 }
 
 /** The model family a stored accuracy row belongs to ("ensemble 1X2 v20260830" → "ensemble"). */
-export type ModelFamily = "newplus" | "rating" | "ou_comb" | "ensemble" | "pinnacle" | "consensus" | "none";
+export type ModelFamily = "newplus" | "rating" | "ou_comb" | "ensemble" | "pinnacle" | "consensus" | "tonybet" | "af" | "none";
 
 export function familyOfModel(model: string): ModelFamily {
   if (model.startsWith("NEW+")) return "newplus";
@@ -99,6 +99,8 @@ export function familyOfModel(model: string): ModelFamily {
   if (model.startsWith("O/U combined")) return "ou_comb";
   if (model.startsWith("ensemble")) return "ensemble";
   if (model.startsWith("Pinnacle")) return "pinnacle";
+  if (model.startsWith("Tonybet fair")) return "tonybet";
+  if (model.startsWith("API-Football")) return "af";
   return "none";
 }
 
@@ -121,6 +123,8 @@ export const FAMILY_LABEL: Record<ModelFamily, string> = {
   ensemble: "Old ensemble (Poisson + XGBoost)",
   pinnacle: "Pinnacle's price (de-vigged)",
   consensus: "Other books' consensus",
+  tonybet: "Tonybet's fair price (Sportradar)",
+  af: "API-Football predictions",
   none: "No model (in-play / book's own price)",
 };
 
