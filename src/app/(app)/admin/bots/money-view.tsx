@@ -26,13 +26,11 @@ import { AlertTriangle, CalendarClock, CheckCircle2, ClipboardCheck, Coins, Euro
 import {
   DAILY_MAX_BETS,
   DAILY_MAX_STAKE_EUR,
-  LEDGER_RESET_AT,
   loadMoney,
   moneyBotLabel,
   realMoneyWindow,
   RECONCILE_AFTER_H,
   RECONCILE_FROM,
-  unconfirmedToDo,
   type MoneyBet,
 } from "@/lib/admin-money";
 import { MARKET_THRESHOLDS_V2_EPOCH } from "@/lib/engine-data";
@@ -196,11 +194,11 @@ function perBot(bets: MoneyBet[]): BotMoneyRow[] {
 }
 
 /** Rendered by /admin/bots/page.tsx for `?section=money`, after its superadmin check. */
-export async function RealMoneyView({ tabs, all = false }: { tabs: React.ReactNode; all?: boolean }) {
+export async function RealMoneyView({ tabs }: { tabs: React.ReactNode }) {
   const d = await loadMoney();
-  // [[#182]] ledger restart — older rows hidden unless ?all=1 (see LEDGER_RESET_AT)
-  const older = d.bets.filter((b) => b.placedAt < LEDGER_RESET_AT);
-  const bets = all ? d.bets : d.bets.filter((b) => b.placedAt >= LEDGER_RESET_AT);
+  // [[#182]] the ledger restarted 2026-09-26: every older row was DELETED (engine migration 475, owner) —
+  // nothing to hide or filter any more.
+  const bets = d.bets;
   const unreadable = d.betsError != null;
   const now = new Date();
   // Today in UTC — the engine and settlement run on UTC.
@@ -223,7 +221,10 @@ export async function RealMoneyView({ tabs, all = false }: { tabs: React.ReactNo
   const open = bets.filter((b) => !isSettled(b));
   const atRisk = open.reduce((a, b) => a + b.stake, 0);
   const maxPayout = open.reduce((a, b) => a + b.stake * b.actualOdds, 0);
-  const todo = unconfirmedToDo(bets, now.getTime());
+  // [[#182]] 2026-09-26: no "not matched to your account" to-do. No account check reads hand-placed bets, so the
+  // list could never clear (owner: "it's almost impossible to keep track of all the real-money bets"); the
+  // panel returns only if a bookmaker bet-history reader is built. Automatic placers confirm their own bets.
+  const todo: MoneyBet[] = [];
   const days = cumulative(bets, now);
   const weeks = weekly(bets, now);
   const hitRate = overall.won + overall.lost > 0 ? overall.won / (overall.won + overall.lost) : null;
@@ -281,22 +282,6 @@ export async function RealMoneyView({ tabs, all = false }: { tabs: React.ReactNo
   return (
     <div className="space-y-4 lg:space-y-6">
       {tabs}
-      <div className="rounded-xl border border-border px-4 py-2 text-xs text-muted-foreground">
-        {all ? (
-          <>
-            Showing every bet ever recorded, including {older.length} from before the ledger restart on{" "}
-            {shortDate(LEDGER_RESET_AT)} (not checked against a bookmaker account).{" "}
-            <Link href="/admin/bots?section=money" className="text-primary hover:underline">Show only since the restart</Link>
-          </>
-        ) : (
-          <>
-            Ledger restarted {shortDate(LEDGER_RESET_AT)}: bets you log from{" "}
-            <Link href="/admin/shadow-bots" className="text-primary hover:underline">Where to bet</Link>. {older.length} older bets
-            ({fmtEur(older.reduce((a, b) => a + b.stake, 0))} staked, never matched to an account) are hidden, not deleted.{" "}
-            <Link href="/admin/bots?section=money&all=1" className="text-primary hover:underline">Show them</Link>
-          </>
-        )}
-      </div>
       <PageHeader
         eyebrow="Bots & money"
         title="Real money"

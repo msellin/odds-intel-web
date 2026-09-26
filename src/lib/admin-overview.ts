@@ -20,7 +20,6 @@ import { computeLadder } from "@/lib/bot-controls/ladder";
 import { placementPathReason, splitStaleConfig } from "@/lib/bot-controls/placement-path";
 import { isBotBoardDevPreview, loadBotBoard, loadControlState, type BotWeeklyRow } from "@/lib/bot-board";
 import { MANUAL_RECONCILE_SINCE, buildAttention, type AttentionItem } from "@/lib/admin-attention";
-import { LEDGER_RESET_AT } from "@/lib/admin-money";
 import { RETIRED_SERIES } from "@/lib/admin-overview-shared";
 import { buildJobViews, jobsAnswer, type CadenceRun, jobCadence } from "@/lib/admin-jobs-model";
 import { loadJobCadenceCached, loadPostponedOpen } from "@/lib/admin-jobs";
@@ -157,9 +156,7 @@ async function realBetsWeekly(now: number): Promise<{ rows: WeekRealBets[]; erro
   try {
     const db = createServerServiceClient();
     // from whichever starts earlier: 12 weeks of buckets, or the 30-day window
-    // [[#182]] never before the ledger restart (LEDGER_RESET_AT) — the card, the chart and the Real money tab agree
-    const since = new Date(Math.max(Math.min(weekStart(now) - (WEEKS - 1) * 7 * 86_400_000, now - 30 * 86_400_000),
-                                    Date.parse(LEDGER_RESET_AT))).toISOString();
+    const since = new Date(Math.min(weekStart(now) - (WEEKS - 1) * 7 * 86_400_000, now - 30 * 86_400_000)).toISOString();
     const { data, error } = await db
       .from("real_bets")
       .select("placed_at, stake, pnl, result, placed_real")

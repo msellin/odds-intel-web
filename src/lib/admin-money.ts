@@ -29,16 +29,9 @@ export { moneyBotLabel, RECONCILE_FROM, RECONCILE_AFTER_H } from "@/lib/admin-mo
  */
 export const DAILY_MAX_BETS = 80;
 
-/**
- * [[#182]] The Real money ledger starts again here (owner, 2026-09-26: "it doesn't really align with the
- * money we have actually played at Unibet or Coolbet … should we reset it, as the data is wrong?").
- * Why: nothing reads the bookmaker accounts into real_bets, so the ledger held only what the placer wrote
- * or someone typed in (the last real Coolbet row was 13 Sep; bets placed by hand since were missing), plus
- * 354 May–June rows never checked against an account. From this instant every bet comes from the
- * "Where to bet" page's Log button. NOTHING is deleted — older rows stay in real_bets and show with
- * `?section=money&all=1`.
- */
-export const LEDGER_RESET_AT = "2026-09-26T00:00:00Z";
+// [[#182]] 2026-09-26: the Real money ledger restarted — every real_bets row placed before 2026-09-26 was
+// DELETED (engine migration 475, owner: "we really don't need the old rows"): nothing matched the bookmaker
+// accounts, 354 rows had never been checked, and none were still open. No date filter is needed any more.
 export const DAILY_MAX_STAKE_EUR = 800;
 
 export interface MoneyBet extends RealBet {
@@ -254,8 +247,7 @@ export interface RealMoneyWindow {
 }
 export function realMoneyWindow(rows: RealMoneyWindowRow[], now: number | Date, days: number): RealMoneyWindow {
   const end = typeof now === "number" ? now : now.getTime();
-  // [[#182]] never reaches back past the ledger restart — the Overview card and the ledger agree
-  const from = Math.max(end - days * 86_400_000, Date.parse(LEDGER_RESET_AT));
+  const from = end - days * 86_400_000;
   let bets = 0;
   let staked = 0;
   let settled = 0;

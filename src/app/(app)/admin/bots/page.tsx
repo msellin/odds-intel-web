@@ -42,7 +42,7 @@ export const metadata: Metadata = { title: "Bots · Admin · OddsIntel", robots:
 
 type Section = "board" | "money";
 
-export default async function BotsPage({ searchParams }: { searchParams: Promise<{ section?: string | string[]; all?: string | string[] }> }) {
+export default async function BotsPage({ searchParams }: { searchParams: Promise<{ section?: string | string[] }> }) {
   let viewerId: string | null = null;
   if (!isBotBoardDevPreview()) {
     const gate = await requireSuperadmin();
@@ -57,7 +57,7 @@ export default async function BotsPage({ searchParams }: { searchParams: Promise
   }
   const sp = await searchParams;
   const section: Section = sp.section === "money" ? "money" : "board";
-  if (section === "money") return <RealMoneyView tabs={<SectionTabs current="money" />} all={sp.all === "1"} />;
+  if (section === "money") return <RealMoneyView tabs={<SectionTabs current="money" />} />;
   const [data, controls] = await Promise.all([loadBotBoard(), loadControlState(viewerId)]);
   return (
     <div className="space-y-4">
