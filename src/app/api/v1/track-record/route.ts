@@ -31,6 +31,7 @@ import {
   getPublicCohortBotNames,
 } from "@/lib/engine-data";
 import { getHeadlineFlat, getPublicPrices } from "@/lib/bot-performance";
+import { LEDGER_BACKED_BOTS } from "@/lib/bot-aggregates";
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit } from "@/lib/rate-limit";
 
@@ -141,7 +142,70 @@ export async function GET(req: Request) {
       { status: 500 }
     );
   }
-  const rows = (rowsRaw ?? []) as unknown as BetRow[];
+  const simRows = (rowsRaw ?? []) as unknown as BetRow[];
+
+  // [[#183]] ACTIVE forward-test bots (bot_sharp_1x2_v1 since 2026-09-26) count in meta below
+  // (getHeadlineFlat sums bot_ledger source sim + forward_test), so their settled legs must be in
+  // the list too, or the rows stop reconciling with meta.roi_pct. Their legs live in
+  // picks_forward_test; the leg set is bot_ledger's (in_record — the same legs meta sums), the
+  // match detail comes from picks_forward_test's own match embed. Same cursor semantics
+  // (published_at = the pick's created_at); the two lists are merged newest-first and cut to `limit`.
+  const cohortForList = await getPublicCohortBotNames();
+  const ftBots = [...cohortForList].filter((b) => LEDGER_BACKED_BOTS.has(b));
+  const ftRows: BetRow[] = [];
+  if (ftBots.length > 0) {
+    let lq = sb
+      .from("bot_ledger")
+      .select("pick_id, pick_time, bot_name")
+      .eq("source", "forward_test")
+      .eq("in_record", true)
+      .in("bot_name", ftBots)
+      .in("market", PRE_MATCH_MARKETS)
+      .in("result", ["won", "lost"])
+      .gte("pick_time", `${since}T00:00:00Z`)
+      .order("pick_time", { ascending: false })
+      .limit(limit);
+    if (cursor) lq = lq.lt("pick_time", cursor);
+    const { data: legs, error: legErr } = await lq;
+    if (legErr) {
+      return NextResponse.json({ error: "DB error", detail: legErr.message }, { status: 500 });
+    }
+    const typedLegs = (legs ?? []) as Array<{ pick_id: string; bot_name: string }>;
+    const ids = typedLegs.map((l) => l.pick_id);
+    const botOf = new Map(typedLegs.map((l) => [l.pick_id, l.bot_name] as const));
+    for (let i = 0; i < ids.length; i += 100) {
+      const { data: ft, error: ftErr } = await sb
+        .from("picks_forward_test")
+        .select(
+          `id, match_id, published_at, market, selection, odds, bookmaker, outcome, closing_odds,
+           matches!inner ( date, home_team_id, away_team_id, score_home, score_away,
+             leagues ( name, country )
+           )`
+        )
+        .in("id", ids.slice(i, i + 100));
+      if (ftErr) {
+        return NextResponse.json({ error: "DB error", detail: ftErr.message }, { status: 500 });
+      }
+      for (const r of (ft ?? []) as unknown as Array<Record<string, unknown>>) {
+        ftRows.push({
+          id: String(r.id),
+          match_id: String(r.match_id),
+          created_at: String(r.published_at),
+          market: String(r.market),
+          selection: String(r.selection),
+          odds_at_pick: r.odds == null ? null : Number(r.odds),
+          recommended_bookmaker: (r.bookmaker as string | null) ?? null,
+          result: String(r.outcome),
+          closing_odds: r.closing_odds == null ? null : Number(r.closing_odds),
+          matches: r.matches as BetRow["matches"],
+          bots: { name: botOf.get(String(r.id)) ?? "", maturity_label: "active" },
+        } as BetRow);
+      }
+    }
+  }
+  const rows = [...simRows, ...ftRows]
+    .sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0))
+    .slice(0, limit);
 
   // 2) aggregate stats — full window, not just this page.
   // [[#159]] (2026-09-25, owner-approved): ONE definition. The aggregate is summed from the
@@ -153,9 +217,8 @@ export async function GET(req: Request) {
   // recorded odds and COUNTED (roi_recorded_price_n) — the rule every surface shares.
   // The legacy clv / clv_pinnacle columns are no longer read (CLV-PUBLIC-WITHDRAWN; #159).
   const FLAT_STAKE = FLAT_STAKE_EUR;
-  const cohort = await getPublicCohortBotNames();
   const head = await getHeadlineFlat({
-    bots: [...cohort],
+    bots: [...cohortForList],
     markets: PRE_MATCH_MARKETS,
     since: `${since}T00:00:00Z`,
   });

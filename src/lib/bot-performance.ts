@@ -37,6 +37,13 @@ export const PERF_FLAT_STAKE_EUR = 10;
 /** Chart origin for every bot — flat stakes, so every bot starts from the same bankroll. */
 export const PERF_START_BANKROLL = 1000;
 
+/** [[#183]] The ledger sources the HEADLINE (hero, track-record API) sums. Forward-test bots keep
+ *  their legs in picks_forward_test (bot_ledger source 'forward_test'), not simulated_bets — so
+ *  when one earns ACTIVE (bot_sharp_1x2_v1, 2026-09-26) its picks must count like any ACTIVE bot's.
+ *  The cohort (getPublicCohortBotNames) still decides WHICH bots; this only says where their legs
+ *  live. 'shadow' is never a headline source. Engine twin: settlement.py daily_pnl_curve. */
+export const HEADLINE_SOURCES = ["sim", "forward_test"] as const;
+
 export interface BotPerformance {
   bot: string;
   picksTotal: number;
@@ -317,7 +324,7 @@ export async function getHeadlineFlat(opts: {
     const { data, error } = await db
       .from("bot_ledger")
       .select("pick_id, pick_time, pnl_unit_public, public_basis")
-      .eq("source", "sim")
+      .in("source", HEADLINE_SOURCES as unknown as string[])
       .eq("in_record", true)
       .in("bot_name", opts.bots)
       .in("market", opts.markets as string[])
@@ -346,7 +353,7 @@ export async function getHeadlineFlat(opts: {
   };
 }
 
-/** Per-leg public price for a set of sim legs (the public track-record API's rows), from the
+/** Per-leg public price for a set of headline legs (sim + forward_test, [[#183]]) (the public track-record API's rows), from the
  *  same view column the rows and hero are summed from. Chunked: an IN list of UUIDs in a
  *  PostgREST GET must stay under the proxy's header limit. */
 export async function getPublicPrices(
@@ -358,7 +365,7 @@ export async function getPublicPrices(
     const { data, error } = await db
       .from("bot_ledger")
       .select("pick_id, odds_public, pnl_unit_public, public_basis")
-      .eq("source", "sim")
+      .in("source", HEADLINE_SOURCES as unknown as string[])
       .in("pick_id", ids.slice(i, i + 100));
     if (error || !data) {
       console.error("[getPublicPrices] read failed:", error?.message ?? "no data");
