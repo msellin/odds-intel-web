@@ -44,6 +44,15 @@ export const ENGINE_BOT_FLOORS: Record<string, {
   edgeUnit: "ev" | "pp";
 }> =
   {
+  "bot_ah_sharp_v1": {
+    "edgeFloor": null,
+    "oddsFloor": null,
+    "oddsCap": null,
+    "realMoney": false,
+    "anchor": "sharp",
+    "market": "asian handicap",
+    "edgeUnit": "ev"
+  },
   "bot_combined_1x2_ev5_v1": {
     "edgeFloor": null,
     "oddsFloor": null,
