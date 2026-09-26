@@ -39,8 +39,10 @@ import { StatCard } from "@/components/oi/stat-card";
 import { StatusBadge } from "@/components/oi/status-badge";
 import { prettyDisplayName } from "@/app/(app)/admin/bots/bot-board-format";
 import { fmtEur } from "@/components/oi/format";
+import { loadOwnBoard } from "@/lib/own-board";
+import { OwnBoard } from "@/components/own-board/own-board";
 
-export const metadata: Metadata = { title: "Pick queue · Admin · OddsIntel", robots: { index: false } };
+export const metadata: Metadata = { title: "Where to bet · Admin · OddsIntel", robots: { index: false } };
 
 async function load(userId: string | null): Promise<{ data: ShadowBotsPageData; state: SessionState; marks: Record<string, 1 | 2> }> {
   const fx = await readAdminFixture<{ page: ShadowBotsPageData; state: SessionState }>("queue");
@@ -69,7 +71,8 @@ export default async function PickQueuePage() {
     userId = user.id;
   }
 
-  const { data, state, marks } = await load(userId);
+  const [{ data, state, marks }, board] = await Promise.all([load(userId), loadOwnBoard()]);
+  const computedAt = board.rows.reduce<string | null>((a, r) => (a == null || r.computed_at > a ? r.computed_at : a), null);
   const rows = buildPickRows(data, state, marks);
   const c = queueCounts(rows);
   const t = data.todayRealBets;
@@ -87,10 +90,30 @@ export default async function PickQueuePage() {
     <div className="space-y-4 lg:space-y-6">
       <PageHeader
         eyebrow="Bots & money"
-        title="Pick queue"
-        meta={`What to place by hand today: every pending pick from the ${data.bots.length} active bots, placeable first, one row per bet. Prices checked ${loaded} UTC (refreshed every minute).`}
+        title="Where to bet"
+        meta="Where to put real money now: every pending bot pick, priced at the Estonian books we can bet (Coolbet, Unibet, Epicbet, Tonybet) against the fair price. Ready = a bot picked it AND a book beats the fair price by 3% or more. “Take at ≥” is the lowest price still worth taking — match it at your own book."
       />
 
+      {/* [[#182]] the OWN board — engine table own_bet_board (every 10 min) */}
+      <Panel className="p-4">
+        {board.error ? (
+          <p className="text-sm text-warning">The board could not be read ({board.error}). The per-bot queue below still works.</p>
+        ) : (
+          <OwnBoard rows={board.rows} placed={board.placed} computedAt={computedAt} />
+        )}
+        <p className="mt-3 text-xs text-muted-foreground">
+          Honest status: no bot has yet shown an edge that holds at Estonian books against an independent closing price
+          (#150, #172). The strongest pattern found so far is timing — the same picks made in the last 3 hours before
+          kick-off beat the closing price by about 5% (n = 190, #182 research), but their results so far have not. Treat this
+          as the best current read of the prices, not a promise.
+        </p>
+      </Panel>
+
+      <details className="group">
+        <summary className="cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground">
+          Per-bot pick queue (the previous view of this page)
+        </summary>
+        <div className="mt-4 space-y-4 lg:space-y-6">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard
           label="Picks waiting"
@@ -174,6 +197,8 @@ export default async function PickQueuePage() {
       </Panel>
 
       <HowItWorks />
+        </div>
+      </details>
     </div>
   );
 }

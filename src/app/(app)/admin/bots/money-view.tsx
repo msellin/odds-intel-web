@@ -26,6 +26,7 @@ import { AlertTriangle, CalendarClock, CheckCircle2, ClipboardCheck, Coins, Euro
 import {
   DAILY_MAX_BETS,
   DAILY_MAX_STAKE_EUR,
+  LEDGER_RESET_AT,
   loadMoney,
   moneyBotLabel,
   realMoneyWindow,
@@ -195,9 +196,11 @@ function perBot(bets: MoneyBet[]): BotMoneyRow[] {
 }
 
 /** Rendered by /admin/bots/page.tsx for `?section=money`, after its superadmin check. */
-export async function RealMoneyView({ tabs }: { tabs: React.ReactNode }) {
+export async function RealMoneyView({ tabs, all = false }: { tabs: React.ReactNode; all?: boolean }) {
   const d = await loadMoney();
-  const bets = d.bets;
+  // [[#182]] ledger restart — older rows hidden unless ?all=1 (see LEDGER_RESET_AT)
+  const older = d.bets.filter((b) => b.placedAt < LEDGER_RESET_AT);
+  const bets = all ? d.bets : d.bets.filter((b) => b.placedAt >= LEDGER_RESET_AT);
   const unreadable = d.betsError != null;
   const now = new Date();
   // Today in UTC — the engine and settlement run on UTC.
@@ -278,6 +281,22 @@ export async function RealMoneyView({ tabs }: { tabs: React.ReactNode }) {
   return (
     <div className="space-y-4 lg:space-y-6">
       {tabs}
+      <div className="rounded-xl border border-border px-4 py-2 text-xs text-muted-foreground">
+        {all ? (
+          <>
+            Showing every bet ever recorded, including {older.length} from before the ledger restart on{" "}
+            {shortDate(LEDGER_RESET_AT)} (not checked against a bookmaker account).{" "}
+            <Link href="/admin/bots?section=money" className="text-primary hover:underline">Show only since the restart</Link>
+          </>
+        ) : (
+          <>
+            Ledger restarted {shortDate(LEDGER_RESET_AT)}: bets you log from{" "}
+            <Link href="/admin/shadow-bots" className="text-primary hover:underline">Where to bet</Link>. {older.length} older bets
+            ({fmtEur(older.reduce((a, b) => a + b.stake, 0))} staked, never matched to an account) are hidden, not deleted.{" "}
+            <Link href="/admin/bots?section=money&all=1" className="text-primary hover:underline">Show them</Link>
+          </>
+        )}
+      </div>
       <PageHeader
         eyebrow="Bots & money"
         title="Real money"

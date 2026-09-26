@@ -36,7 +36,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
       // bookmarks). "Real bets" (/admin/real-bets) was dropped 2026-09-26 (#162 W6.8, owner: not
       // used): the money ledger is the "Real money" tab of Bots (/admin/bots?section=money, also in
       // the ⌘K Actions); the old URL redirects there.
-      { href: "/admin/shadow-bots", label: "Pick queue", Icon: ListChecks },
+      { href: "/admin/shadow-bots", label: "Where to bet", Icon: ListChecks },
       // #153 (2026-09-26): which models exist, how accurate each is, which bot uses which
       { href: "/admin/models", label: "Models", Icon: BrainCircuit },
     ],
