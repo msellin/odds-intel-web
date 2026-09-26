@@ -179,6 +179,15 @@ export const ENGINE_BOT_FLOORS: Record<string, {
     "market": "ou",
     "edgeUnit": "ev"
   },
+  "bot_own_1x2_v1": {
+    "edgeFloor": 0.03,
+    "oddsFloor": 1.01,
+    "oddsCap": null,
+    "realMoney": false,
+    "anchor": "sharp",
+    "market": "1x2 \u00b7 last 3 h",
+    "edgeUnit": "pp"
+  },
   "bot_rating_1x2_v1": {
     "edgeFloor": null,
     "oddsFloor": null,
