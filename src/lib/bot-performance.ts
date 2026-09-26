@@ -379,3 +379,40 @@ export async function getPublicPrices(
   }
   return out;
 }
+
+/** [[#183]] The second line on the /performance P&L chart: cumulative flat-€10 P&L of the ACTIVE
+ *  SHARP-LINE bots (bot_ledger source 'forward_test'), from their record start (v4, 2026-09-15).
+ *  Same per-leg figure and the same day bucketing (UTC date of pick_time) as the engine's
+ *  daily_pnl_curve, so the two lines are directly comparable; the main line already contains these
+ *  legs (ACTIVE = in the totals) — this one shows how much of it they are. */
+export async function getSharpDailyCurve(opts: {
+  bots: string[];
+  since: string;
+}): Promise<Array<{ d: string; cum: number }>> {
+  if (opts.bots.length === 0) return [];
+  const db = createServerServiceClient();
+  const { data, error } = await db
+    .from("bot_ledger")
+    .select("pick_time, pnl_unit_public")
+    .eq("source", "forward_test")
+    .eq("in_record", true)
+    .in("bot_name", opts.bots)
+    .in("result", ["won", "lost"])
+    .gte("pick_time", opts.since)
+    .order("pick_time", { ascending: true })
+    .limit(20000);
+  if (error || !data) {
+    console.error("[getSharpDailyCurve] read failed:", error?.message ?? "no data");
+    return [];
+  }
+  const byDay = new Map<string, number>();
+  for (const r of data as Array<{ pick_time: string; pnl_unit_public: number | string }>) {
+    const d = String(r.pick_time).slice(0, 10);
+    byDay.set(d, (byDay.get(d) ?? 0) + Number(r.pnl_unit_public) * PERF_FLAT_STAKE_EUR);
+  }
+  let cum = 0;
+  return [...byDay.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([d, v]) => {
+    cum += v;
+    return { d, cum: Number(cum.toFixed(2)) };
+  });
+}

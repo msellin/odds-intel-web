@@ -778,6 +778,10 @@ export const getTrackRecordStats = unstable_cache(
 // (e.g. "Pre-match ROI 30d -2.2%" when calibrated pre-match all-time is
 // +9.57%).
 
+/** [[#183]] The sharp-line rule's own record starts with its CURRENT rule (v4, 2026-09-15); the
+ *  eight 14 Sep picks were made under v1 and none passes v4 (#158 re-check), so they are not in it. */
+export const SHARP_RECORD_SINCE = "2026-09-15";
+
 export interface CalibratedHeadlineStats {
   allTime: {
     n: number;

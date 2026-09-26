@@ -44,6 +44,7 @@ import {
   getPublicCohortBotNames,
   CALIBRATED_PUBLIC_MARKETS,
   CALIBRATED_SINCE,
+  SHARP_RECORD_SINCE,
 } from "@/lib/engine-data";
 import { PerformanceClient } from "@/components/performance-client";
 import type { PublicBotStat } from "@/components/performance-leaderboard";
@@ -52,6 +53,7 @@ import { isPublicBot, isVipBot, LEDGER_BACKED_BOTS } from "@/lib/bot-aggregates"
 import {
   getBotPerformance,
   getCohortLegs,
+  getSharpDailyCurve,
   PERF_FLAT_STAKE_EUR,
   PERF_START_BANKROLL,
   type BotLeg,
@@ -180,7 +182,7 @@ async function LoggedInHistorySection({ isElite, botsDB }: LoggedInSectionProps)
 
 export default async function PerformancePage() {
   // All fast fetches run in parallel — botsDB moved here since it doesn't need isPro.
-  const [authResult, trackStats, cache, extras, botsDB, calibrated, perf, workDone] = await Promise.all([
+  const [authResult, trackStats, cache, extras, botsDB, calibrated, perf, workDone, sharpCurve] = await Promise.all([
     (async () => {
       const supabase = await createSupabaseServer();
       const {
@@ -199,6 +201,13 @@ export default async function PerformancePage() {
     getBotPerformance(),
     // [[#157]] every strategy ever scored (retired included) — NEVER feeds the headline above.
     getWorkDone(),
+    // [[#183]] the chart's second line: ACTIVE sharp-line bots (forward-test ledger) from their v4 start.
+    getPublicCohortBotNames().then((c) =>
+      getSharpDailyCurve({
+        bots: [...c].filter((b) => LEDGER_BACKED_BOTS.has(b)),
+        since: `${SHARP_RECORD_SINCE}T00:00:00Z`,
+      }),
+    ),
   ]);
 
   const { userId, isPro, isElite } = authResult as {
@@ -311,7 +320,7 @@ export default async function PerformancePage() {
           are rows in the leaderboard like every other bot (PUBLISHED-ARM-HAS-A-RECORD). */}
       <PerformanceClient {...clientProps} />
       <PerformanceWorkDone data={workDone} />
-      <PerformanceExtras data={extras} cache={cache} />
+      <PerformanceExtras data={extras} cache={cache} sharpCurve={sharpCurve} />
       {isLoggedIn ? (
         <Suspense
           fallback={

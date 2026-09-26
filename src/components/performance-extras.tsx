@@ -8,15 +8,18 @@ import type { PublicPerformanceExtras, CalibrationBucket, Streaks, DashboardCach
 interface Props {
   data: PublicPerformanceExtras;
   cache: DashboardCache | null;
+  /** [[#183]] cumulative P&L of the ACTIVE sharp-line bots since their record start. */
+  sharpCurve?: Array<{ d: string; cum: number }> | null;
 }
 
-export function PerformanceExtras({ data, cache }: Props) {
+export function PerformanceExtras({ data, cache, sharpCurve }: Props) {
   const { calibration, streaks } = data;
   return (
     <div className="space-y-4">
       <PerformancePnlChartToggle
         curve30d={cache?.daily_pnl_curve_30d ?? null}
         curve90d={cache?.daily_pnl_curve_90d ?? null}
+        sharpCurve={sharpCurve ?? null}
       />
 
       <StreaksCard streaks={streaks} />

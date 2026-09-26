@@ -24,6 +24,26 @@ type Period = "7d" | "30d" | "90d";
 interface Props {
   curve30d: CurvePoint[] | null;
   curve90d: CurvePoint[] | null;
+  /** [[#183]] Second line: ACTIVE sharp-line bots only, from their record start (15 Sep). Its legs
+   *  are ALSO inside the main line (ACTIVE = in the totals); this shows how much of it they are. */
+  sharpCurve?: CurvePoint[] | null;
+}
+
+const SHARP_COLOR = "#38bdf8";
+
+/** The sharp line on the main line's days: carried forward between its own settled days, null
+ *  before its first one, and rebased like the main line (7d) so both read as movement in-window. */
+function alignSharp(days: string[], sharp: CurvePoint[], rebase: boolean): Array<number | null> {
+  if (sharp.length === 0) return days.map(() => null);
+  let i = 0;
+  let last: number | null = null;
+  const out = days.map((d) => {
+    while (i < sharp.length && sharp[i].d <= d) last = sharp[i++].cum;
+    return last;
+  });
+  if (!rebase) return out;
+  const base = out.find((v) => v != null);
+  return base == null ? out : out.map((v) => (v == null ? null : Number((v - base).toFixed(2))));
 }
 
 const PERIOD_LABEL: Record<Period, string> = {
@@ -73,18 +93,24 @@ function CustomTooltip({
   label,
 }: {
   active?: boolean;
-  payload?: Array<{ value: number; payload: { d: string; cum: number } }>;
+  payload?: Array<{ value: number; payload: { d: string; cum: number; sharp?: number | null } }>;
   label?: string;
 }) {
   if (!active || !payload?.length) return null;
-  const v = payload[0].value;
-  const iso = payload[0].payload.d;
+  const p = payload[0].payload;
+  const v = p.cum;
+  const iso = p.d;
   return (
     <div className="rounded-lg border border-white/[0.1] bg-neutral-950/95 px-3 py-2 text-xs shadow-xl backdrop-blur">
       <div className="text-neutral-400 mb-1">{iso ? shortDate(iso) : label}</div>
       <div className={`font-mono text-sm font-bold ${v >= 0 ? "text-emerald-400" : "text-red-400"}`}>
         {fmtEur(v)}
       </div>
+      {p.sharp != null && (
+        <div className="mt-0.5 font-mono text-[11px]" style={{ color: SHARP_COLOR }}>
+          Sharp picks {fmtEur(p.sharp)}
+        </div>
+      )}
     </div>
   );
 }
@@ -126,7 +152,7 @@ function sliceByDays(curve: CurvePoint[], days: number): CurvePoint[] {
   return curve.filter((p) => p.d >= startIso);
 }
 
-export function PerformancePnlChartToggle({ curve30d, curve90d }: Props) {
+export function PerformancePnlChartToggle({ curve30d, curve90d, sharpCurve }: Props) {
   const [period, setPeriod] = useState<Period>("90d");
 
   const activeCurve: CurvePoint[] = useMemo(() => {
@@ -161,10 +187,13 @@ export function PerformancePnlChartToggle({ curve30d, curve90d }: Props) {
     if (dd > maxDrawdown) maxDrawdown = dd;
   }
 
-  const points = activeCurve.map((p) => ({
+  const sharpVals = alignSharp(activeCurve.map((p) => p.d), sharpCurve ?? [], period === "7d");
+  const hasSharp = sharpVals.some((v) => v != null);
+  const points = activeCurve.map((p, i) => ({
     d: p.d,
     date: shortDate(p.d),
     cum: p.cum,
+    sharp: sharpVals[i],
   }));
 
   // A marker is only drawn on a day the curve actually has, because Recharts
@@ -269,11 +298,38 @@ export function PerformancePnlChartToggle({ curve30d, curve90d }: Props) {
                 dot={false}
                 activeDot={{ r: 4, strokeWidth: 0 }}
               />
+              {hasSharp && (
+                <Area
+                  type="monotone"
+                  dataKey="sharp"
+                  stroke={SHARP_COLOR}
+                  strokeWidth={2}
+                  fill="none"
+                  dot={false}
+                  connectNulls={false}
+                  activeDot={{ r: 3, strokeWidth: 0 }}
+                  isAnimationActive={false}
+                />
+              )}
             </AreaChart>
           </ResponsiveContainer>
         )}
       </div>
 
+
+      {/* [[#183]] legend — only when the sharp line is on screen */}
+      {hasData && hasSharp && (
+        <div className="mt-2 flex flex-wrap items-center gap-4 text-[11px] text-neutral-400">
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-0.5 w-4" style={{ background: strokeColor }} />
+            All ACTIVE picks
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-0.5 w-4" style={{ background: SHARP_COLOR }} />
+            Sharp picks only · since 15 Sep (also inside the total)
+          </span>
+        </div>
+      )}
 
       {/* Footer stat strip */}
       {hasData && (
