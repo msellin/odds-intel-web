@@ -235,18 +235,10 @@ export function buildAttention(i: AttentionInputs): AttentionItem[] {
   }
   out.push(...jobItems(i));
   if (i.unconfirmedError) out.push(unreadable("manual-unreadable", "money", "Real-bet ledger", i.unconfirmedError, "/admin/bots?section=money"));
-  else if (i.unconfirmedManual > 0) {
-    const from = i.unconfirmedOldest ? new Date(i.unconfirmedOldest).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }) : null;
-    out.push({
-      id: "manual-unconfirmed",
-      severity: "warn",
-      area: "money",
-      title: `${i.unconfirmedManual} real bet${i.unconfirmedManual === 1 ? "" : "s"} placed by hand${from ? ` (from ${from})` : ""} still not matched to your Coolbet account — check ${i.unconfirmedManual === 1 ? "it" : "them"}`,
-      detail: "Logged from the Pick queue; the bookmaker-account check has not found them yet",
-      since: i.unconfirmedOldest,
-      href: "/admin/bots?section=money#todo",
-    });
-  }
+  // [[#182]] 2026-09-26: the "N real bets placed by hand still not matched to your Coolbet account" item is
+  // GONE. Nothing ever reads the bookmaker accounts for hand-placed bets, so it could never clear — it only
+  // nagged (owner: "it's almost impossible to keep track of all the real-money bets"). Hand bets are an
+  // optional log from Where to bet; the automatic placers confirm their own bets.
   if (i.dqError) out.push(unreadable("dq-unreadable", "data", "Data-quality findings", i.dqError, "/admin/feeds#dq"));
   // ONE rule with /admin/feeds (dqAdvice): only problems NOT set aside automatically ask for a look
   // (strict owner test 2026-09-25: Overview said "14 … worth a look", Feeds "12 … no action needed").
